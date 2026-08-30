@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <UserSecretsId>ProjectMgmt-Solution-Development</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Serilog.AspNetCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ProjectMgmt.AiAssignment\ProjectMgmt.AiAssignment.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.AiAssist\ProjectMgmt.AiAssist.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.AiCore\ProjectMgmt.AiCore.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.AiDataOps\ProjectMgmt.AiDataOps.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Core\ProjectMgmt.Core.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.IdentityAccess\ProjectMgmt.IdentityAccess.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.IssueTracking\ProjectMgmt.IssueTracking.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Notification\ProjectMgmt.Notification.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.ProjectManagement\ProjectMgmt.ProjectManagement.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.SprintBacklog\ProjectMgmt.SprintBacklog.csproj" />
+  </ItemGroup>
+
+</Project>

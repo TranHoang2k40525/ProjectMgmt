@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\ProjectMgmt.AiAssist.Contracts\ProjectMgmt.AiAssist.Contracts.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Core\ProjectMgmt.Core.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.IssueTracking.Contracts\ProjectMgmt.IssueTracking.Contracts.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Notification.Contracts\ProjectMgmt.Notification.Contracts.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.ProjectManagement.Contracts\ProjectMgmt.ProjectManagement.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+  </ItemGroup>
+
+</Project>

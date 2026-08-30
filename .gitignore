@@ -1,0 +1,13 @@
+.vs/
+**/bin/
+**/obj/
+**/node_modules/
+**/dist/
+**/.angular/
+**/coverage/
+.env
+appsettings.Local.json
+*.user
+*.suo
+.audit-tmp/
+TestResults/

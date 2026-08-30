@@ -1,0 +1,24 @@
+<Solution>
+  <Project Path="ProjectMgmt.AiAssignment.Contracts/ProjectMgmt.AiAssignment.Contracts.csproj" />
+  <Project Path="ProjectMgmt.AiAssignment/ProjectMgmt.AiAssignment.csproj" />
+  <Project Path="ProjectMgmt.AiAssist.Contracts/ProjectMgmt.AiAssist.Contracts.csproj" />
+  <Project Path="ProjectMgmt.AiAssist/ProjectMgmt.AiAssist.csproj" />
+  <Project Path="ProjectMgmt.AiCore/ProjectMgmt.AiCore.csproj" />
+  <Project Path="ProjectMgmt.AiDataOps.Contracts/ProjectMgmt.AiDataOps.Contracts.csproj" />
+  <Project Path="ProjectMgmt.AiDataOps/ProjectMgmt.AiDataOps.csproj" />
+  <Project Path="ProjectMgmt.Core/ProjectMgmt.Core.csproj" />
+  <Project Path="ProjectMgmt.IdentityAccess.Contracts/ProjectMgmt.IdentityAccess.Contracts.csproj" />
+  <Project Path="ProjectMgmt.IdentityAccess/ProjectMgmt.IdentityAccess.csproj" />
+  <Project Path="ProjectMgmt.IssueTracking.Contracts/ProjectMgmt.IssueTracking.Contracts.csproj" />
+  <Project Path="ProjectMgmt.IssueTracking/ProjectMgmt.IssueTracking.csproj" />
+  <Project Path="ProjectMgmt.Notification.Contracts/ProjectMgmt.Notification.Contracts.csproj" />
+  <Project Path="ProjectMgmt.Notification/ProjectMgmt.Notification.csproj" />
+  <Project Path="ProjectMgmt.ProjectManagement.Contracts/ProjectMgmt.ProjectManagement.Contracts.csproj" />
+  <Project Path="ProjectMgmt.ProjectManagement/ProjectMgmt.ProjectManagement.csproj" />
+  <Project Path="ProjectMgmt.Solution/ProjectMgmt.Solution.csproj" />
+  <Project Path="ProjectMgmt.SprintBacklog/ProjectMgmt.SprintBacklog.csproj" />
+  <Project Path="ProjectMgmt.Tests.Architecture/ProjectMgmt.Tests.Architecture.csproj" />
+  <Project Path="ProjectMgmt.Tests.Fakes/ProjectMgmt.Tests.Fakes.csproj" />
+  <Project Path="ProjectMgmt.Tests.Integration/ProjectMgmt.Tests.Integration.csproj" />
+  <Project Path="ProjectMgmt.Tests.Unit/ProjectMgmt.Tests.Unit.csproj" />
+</Solution>

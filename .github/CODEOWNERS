@@ -1,0 +1,25 @@
+# Shared foundation requires cross-review.
+* @tran-van-hoang @nguyen-the-hoai @hoang-tran-huy-hoang
+
+/ProjectMgmt.IdentityAccess*/ @tran-van-hoang
+/ProjectMgmt.Notification*/ @tran-van-hoang
+/ProjectMgmt.AiAssist*/ @tran-van-hoang
+/frontend/projectmgmt-web/src/app/features/auth/ @tran-van-hoang
+/frontend/projectmgmt-web/src/app/features/notifications/ @tran-van-hoang
+/frontend/projectmgmt-web/src/app/shared/ai-breakdown/ @tran-van-hoang
+
+/ProjectMgmt.ProjectManagement*/ @nguyen-the-hoai
+/ProjectMgmt.SprintBacklog*/ @nguyen-the-hoai
+/ProjectMgmt.AiAssignment*/ @nguyen-the-hoai
+/frontend/projectmgmt-web/src/app/features/projects/ @nguyen-the-hoai
+/frontend/projectmgmt-web/src/app/features/backlog/ @nguyen-the-hoai
+/frontend/projectmgmt-web/src/app/features/board/ @nguyen-the-hoai
+/frontend/projectmgmt-web/src/app/features/reports/ @nguyen-the-hoai
+
+/ProjectMgmt.IssueTracking*/ @hoang-tran-huy-hoang
+/ProjectMgmt.AiDataOps*/ @hoang-tran-huy-hoang
+/frontend/projectmgmt-web/src/app/features/issue-detail/ @hoang-tran-huy-hoang
+/frontend/projectmgmt-web/src/app/features/ai-dataops/ @hoang-tran-huy-hoang
+
+# AiCore changes require both logical owners.
+/ProjectMgmt.AiCore/ @tran-van-hoang @hoang-tran-huy-hoang

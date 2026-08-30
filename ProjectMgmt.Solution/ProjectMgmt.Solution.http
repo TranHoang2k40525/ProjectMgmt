@@ -1,0 +1,9 @@
+@ProjectMgmt.Solution_HostAddress = http://localhost:5083
+
+GET {{ProjectMgmt.Solution_HostAddress}}/health/live
+Accept: application/json
+
+###
+
+GET {{ProjectMgmt.Solution_HostAddress}}/api/system/info
+Accept: application/json

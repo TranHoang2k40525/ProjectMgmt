@@ -1,0 +1,24 @@
+<header class="topbar">
+  <a class="brand" routerLink="/projects" aria-label="ScrumAI home">
+    <span class="brand-mark">S</span>
+    <span>
+      <strong>ScrumAI</strong>
+      <small>Project Management</small>
+    </span>
+  </a>
+  <div class="health" [class.online]="health.status() === 'online'" [class.offline]="health.status() === 'offline'">
+    <span aria-hidden="true"></span>
+    Backend {{ health.status() }}
+  </div>
+</header>
+
+<div class="workspace">
+  <aside class="sidebar" aria-label="Điều hướng chính">
+    @for (item of navigation; track item.path) {
+      <a [routerLink]="item.path" routerLinkActive="active">{{ item.label }}</a>
+    }
+  </aside>
+  <main class="content">
+    <router-outlet />
+  </main>
+</div>
