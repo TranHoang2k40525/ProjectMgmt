@@ -1,11 +1,18 @@
 using ProjectMgmt.Notification.Contracts;
-using ProjectMgmt.Modules.IdentityExperience.Notification.Domain.Repositories;
+using ProjectMgmt.Modules.IdentityExperience.Notification.Domain.IRepositories;
 using NotificationEntity = ProjectMgmt.Modules.IdentityExperience.Notification.Domain.Entities.Notification;
 
 namespace ProjectMgmt.Modules.IdentityExperience.Notification.Application.Services;
 
-internal sealed class NotificationSender(INotificationRepository repository) : INotificationSender
+internal class NotificationSender : INotificationSender
 {
+    private readonly INotificationRepository _repository;
+
+    public NotificationSender(INotificationRepository repository)
+    {
+        _repository = repository;
+    }
+
     public async Task SendAsync(NotificationDto notification, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(notification);
@@ -27,7 +34,7 @@ internal sealed class NotificationSender(INotificationRepository repository) : I
             CreatedAt = DateTime.UtcNow
         };
 
-        await repository.AddAsync(entity, cancellationToken);
-        await repository.SaveChangesAsync(cancellationToken);
+        await _repository.AddAsync(entity, cancellationToken);
+        await _repository.SaveChangesAsync(cancellationToken);
     }
 }

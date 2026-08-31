@@ -1,12 +1,18 @@
 using System.Text.Json;
 using ProjectMgmt.AiAssignment.Contracts;
-using ProjectMgmt.Modules.Planning.AiAssignment.Domain.Repositories;
+using ProjectMgmt.Modules.Planning.AiAssignment.Domain.IRepositories;
 
 namespace ProjectMgmt.Modules.Planning.AiAssignment.Application.Services;
 
-internal sealed class AiAssignmentFeedbackExportService(IAiAssignmentRepository repository)
-    : IAiAssignmentFeedbackExportService
+internal class AiAssignmentFeedbackExportService : IAiAssignmentFeedbackExportService
 {
+    private readonly IAiAssignmentRepository _repository;
+
+    public AiAssignmentFeedbackExportService(IAiAssignmentRepository repository)
+    {
+        _repository = repository;
+    }
+
     public async Task<IReadOnlyList<AiAssignmentFeedbackSampleDto>> ExportAssignmentSamplesAsync(
         DateTimeOffset fromUtc,
         DateTimeOffset toUtc,
@@ -15,7 +21,7 @@ internal sealed class AiAssignmentFeedbackExportService(IAiAssignmentRepository 
         var rangeStart = fromUtc.UtcDateTime;
         var rangeEnd = toUtc.UtcDateTime;
 
-        var rows = await repository.GetFeedbackAsync(rangeStart, rangeEnd, cancellationToken);
+        var rows = await _repository.GetFeedbackAsync(rangeStart, rangeEnd, cancellationToken);
 
         return rows.Select(x => new AiAssignmentFeedbackSampleDto(
                 x.Decision.Id,

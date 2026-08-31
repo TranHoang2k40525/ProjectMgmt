@@ -1,6 +1,6 @@
 namespace ProjectMgmt.Modules.Planning.ProjectManagement.Domain.Entities;
 
-public sealed class Organization
+public class Organization
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
@@ -11,7 +11,7 @@ public sealed class Organization
     public DateTime? UpdatedAt { get; set; }
 }
 
-public sealed class Project
+public class Project
 {
     public Guid Id { get; set; }
     public Guid OrgId { get; set; }
@@ -26,7 +26,7 @@ public sealed class Project
     public DateTime? UpdatedAt { get; set; }
 }
 
-public sealed class ProjectComponent
+public class ProjectComponent
 {
     public Guid Id { get; set; }
     public Guid ProjectId { get; set; }
@@ -37,7 +37,7 @@ public sealed class ProjectComponent
     public DateTime CreatedAt { get; set; }
 }
 
-public sealed class ProjectVersion
+public class ProjectVersion
 {
     public Guid Id { get; set; }
     public Guid ProjectId { get; set; }
@@ -49,7 +49,7 @@ public sealed class ProjectVersion
     public DateTime CreatedAt { get; set; }
 }
 
-public sealed class WorkflowStatus
+public class WorkflowStatus
 {
     public Guid Id { get; set; }
     public Guid ProjectId { get; set; }
@@ -60,7 +60,7 @@ public sealed class WorkflowStatus
     public bool IsInitial { get; set; }
 }
 
-public sealed class WorkflowTransition
+public class WorkflowTransition
 {
     public Guid Id { get; set; }
     public Guid ProjectId { get; set; }
@@ -70,7 +70,7 @@ public sealed class WorkflowTransition
     public string? RequiredPermissionCode { get; set; }
 }
 
-public sealed class IssueType
+public class IssueType
 {
     public Guid Id { get; set; }
     public Guid ProjectId { get; set; }
@@ -82,7 +82,7 @@ public sealed class IssueType
     public int OrderIndex { get; set; }
 }
 
-public sealed class Priority
+public class Priority
 {
     public Guid Id { get; set; }
     public Guid? ProjectId { get; set; }
@@ -92,7 +92,7 @@ public sealed class Priority
     public string? IconKey { get; set; }
 }
 
-public sealed class Board
+public class Board
 {
     public Guid Id { get; set; }
     public Guid ProjectId { get; set; }
@@ -102,7 +102,7 @@ public sealed class Board
     public DateTime CreatedAt { get; set; }
 }
 
-public sealed class BoardColumn
+public class BoardColumn
 {
     public Guid Id { get; set; }
     public Guid BoardId { get; set; }

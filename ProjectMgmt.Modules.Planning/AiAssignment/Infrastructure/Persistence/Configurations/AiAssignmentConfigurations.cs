@@ -4,7 +4,7 @@ using ProjectMgmt.Modules.Planning.AiAssignment.Domain.Entities;
 
 namespace ProjectMgmt.Modules.Planning.AiAssignment.Infrastructure.Persistence.Configurations;
 
-internal sealed class UserWorkloadSnapshotConfiguration : IEntityTypeConfiguration<UserWorkloadSnapshot>
+internal class UserWorkloadSnapshotConfiguration : IEntityTypeConfiguration<UserWorkloadSnapshot>
 {
     public void Configure(EntityTypeBuilder<UserWorkloadSnapshot> builder)
     {
@@ -23,7 +23,7 @@ internal sealed class UserWorkloadSnapshotConfiguration : IEntityTypeConfigurati
     }
 }
 
-internal sealed class UserPerformanceMetricConfiguration : IEntityTypeConfiguration<UserPerformanceMetric>
+internal class UserPerformanceMetricConfiguration : IEntityTypeConfiguration<UserPerformanceMetric>
 {
     public void Configure(EntityTypeBuilder<UserPerformanceMetric> builder)
     {
@@ -44,7 +44,7 @@ internal sealed class UserPerformanceMetricConfiguration : IEntityTypeConfigurat
     }
 }
 
-internal sealed class AiAssignmentRunConfiguration : IEntityTypeConfiguration<AiAssignmentRun>
+internal class AiAssignmentRunConfiguration : IEntityTypeConfiguration<AiAssignmentRun>
 {
     public void Configure(EntityTypeBuilder<AiAssignmentRun> builder)
     {
@@ -63,7 +63,7 @@ internal sealed class AiAssignmentRunConfiguration : IEntityTypeConfiguration<Ai
     }
 }
 
-internal sealed class AiAssignmentCandidateConfiguration : IEntityTypeConfiguration<AiAssignmentCandidate>
+internal class AiAssignmentCandidateConfiguration : IEntityTypeConfiguration<AiAssignmentCandidate>
 {
     public void Configure(EntityTypeBuilder<AiAssignmentCandidate> builder)
     {
@@ -84,7 +84,7 @@ internal sealed class AiAssignmentCandidateConfiguration : IEntityTypeConfigurat
     }
 }
 
-internal sealed class AiAssignmentDecisionConfiguration : IEntityTypeConfiguration<AiAssignmentDecision>
+internal class AiAssignmentDecisionConfiguration : IEntityTypeConfiguration<AiAssignmentDecision>
 {
     public void Configure(EntityTypeBuilder<AiAssignmentDecision> builder)
     {

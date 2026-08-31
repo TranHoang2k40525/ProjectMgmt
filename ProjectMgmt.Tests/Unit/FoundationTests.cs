@@ -5,7 +5,7 @@ using ProjectMgmt.Tests.Fakes;
 
 namespace ProjectMgmt.Tests.Unit;
 
-public sealed class FoundationTests
+public class FoundationTests
 {
     [Fact]
     public void ResultSuccessExposesValue()

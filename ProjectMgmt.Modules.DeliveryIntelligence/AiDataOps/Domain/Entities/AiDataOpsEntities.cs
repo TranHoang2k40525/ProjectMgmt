@@ -1,6 +1,6 @@
 namespace ProjectMgmt.Modules.DeliveryIntelligence.AiDataOps.Domain.Entities;
 
-public sealed class AiDataset
+public class AiDataset
 {
     public Guid Id { get; set; }
     public string Code { get; set; } = string.Empty;
@@ -12,7 +12,7 @@ public sealed class AiDataset
     public DateTime CreatedAt { get; set; }
 }
 
-public sealed class AiDatasetVersion
+public class AiDatasetVersion
 {
     public Guid Id { get; set; }
     public Guid DatasetId { get; set; }
@@ -30,7 +30,7 @@ public sealed class AiDatasetVersion
     public DateTime CreatedAt { get; set; }
 }
 
-public sealed class AiDatasetSample
+public class AiDatasetSample
 {
     public Guid Id { get; set; }
     public Guid DatasetVersionId { get; set; }
@@ -54,7 +54,7 @@ public sealed class AiDatasetSample
     public DateTime? UpdatedAt { get; set; }
 }
 
-public sealed class AiDataCleaningRule
+public class AiDataCleaningRule
 {
     public Guid Id { get; set; }
     public string Code { get; set; } = string.Empty;
@@ -67,7 +67,7 @@ public sealed class AiDataCleaningRule
     public DateTime CreatedAt { get; set; }
 }
 
-public sealed class AiDataQualityFlag
+public class AiDataQualityFlag
 {
     public Guid Id { get; set; }
     public Guid SampleId { get; set; }
@@ -81,7 +81,7 @@ public sealed class AiDataQualityFlag
     public DateTime DetectedAt { get; set; }
 }
 
-public sealed class AiTrainingRun
+public class AiTrainingRun
 {
     public Guid Id { get; set; }
     public Guid DatasetVersionId { get; set; }
@@ -104,7 +104,7 @@ public sealed class AiTrainingRun
     public DateTime CreatedAt { get; set; }
 }
 
-public sealed class AiEvaluationResult
+public class AiEvaluationResult
 {
     public Guid Id { get; set; }
     public Guid? TrainingRunId { get; set; }

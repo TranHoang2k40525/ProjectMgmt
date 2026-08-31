@@ -1,6 +1,6 @@
 namespace ProjectMgmt.Modules.IdentityExperience.Notification.Domain.Entities;
 
-public sealed class Notification
+public class Notification
 {
     public Guid Id { get; set; }
     public Guid UserId { get; set; }

@@ -33,9 +33,15 @@ public static class WebCommonExtensions
     }
 }
 
-public sealed class CorrelationIdMiddleware(RequestDelegate next)
+public class CorrelationIdMiddleware
 {
     public const string HeaderName = "X-Correlation-ID";
+    private readonly RequestDelegate _next;
+
+    public CorrelationIdMiddleware(RequestDelegate next)
+    {
+        _next = next;
+    }
 
     public async Task InvokeAsync(HttpContext context)
     {
@@ -51,7 +57,7 @@ public sealed class CorrelationIdMiddleware(RequestDelegate next)
 
         using (LogContext.PushProperty("CorrelationId", correlationId))
         {
-            await next(context);
+            await _next(context);
         }
     }
 
@@ -60,13 +66,20 @@ public sealed class CorrelationIdMiddleware(RequestDelegate next)
             char.IsLetterOrDigit(character) || character is '-' or '_' or '.');
 }
 
-public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger) : IExceptionHandler
+public class GlobalExceptionHandler : IExceptionHandler
 {
     private static readonly Action<Microsoft.Extensions.Logging.ILogger, string, Exception?> LogUnhandledException =
         LoggerMessage.Define<string>(
             LogLevel.Error,
             new EventId(1000, nameof(GlobalExceptionHandler)),
             "Unhandled exception with code {ErrorCode}");
+
+    private readonly ILogger<GlobalExceptionHandler> _logger;
+
+    public GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger)
+    {
+        _logger = logger;
+    }
 
     public async ValueTask<bool> TryHandleAsync(
         HttpContext httpContext,
@@ -98,7 +111,7 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
 
         if (status >= StatusCodes.Status500InternalServerError)
         {
-            LogUnhandledException(logger, code, exception);
+            LogUnhandledException(_logger, code, exception);
         }
 
         if (exception is ValidationException validationException)

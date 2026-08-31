@@ -2,7 +2,7 @@ namespace ProjectMgmt.Modules.IdentityExperience.IdentityAccess.Domain.Entities;
 
 #pragma warning disable CA1711 // Entity names intentionally mirror the existing database schema.
 
-public sealed class User
+public class User
 {
     public Guid Id { get; set; }
     public string Email { get; set; } = string.Empty;
@@ -16,7 +16,7 @@ public sealed class User
     public DateTime? UpdatedAt { get; set; }
 }
 
-public sealed class UserProfile
+public class UserProfile
 {
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
@@ -32,7 +32,7 @@ public sealed class UserProfile
     public DateTime? UpdatedAt { get; set; }
 }
 
-public sealed class ExternalLogin
+public class ExternalLogin
 {
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
@@ -41,7 +41,7 @@ public sealed class ExternalLogin
     public DateTime LinkedAt { get; set; }
 }
 
-public sealed class OtpCode
+public class OtpCode
 {
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
@@ -53,7 +53,7 @@ public sealed class OtpCode
     public DateTime CreatedAt { get; set; }
 }
 
-public sealed class RefreshToken
+public class RefreshToken
 {
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
@@ -66,7 +66,7 @@ public sealed class RefreshToken
     public DateTime CreatedAt { get; set; }
 }
 
-public sealed class Role
+public class Role
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
@@ -75,7 +75,7 @@ public sealed class Role
     public string? Description { get; set; }
 }
 
-public sealed class Permission
+public class Permission
 {
     public Guid Id { get; set; }
     public string Code { get; set; } = string.Empty;
@@ -83,13 +83,13 @@ public sealed class Permission
     public string? Grouping { get; set; }
 }
 
-public sealed class RolePermission
+public class RolePermission
 {
     public Guid RoleId { get; set; }
     public Guid PermissionId { get; set; }
 }
 
-public sealed class UserRole
+public class UserRole
 {
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
@@ -101,7 +101,7 @@ public sealed class UserRole
     public Guid ScopeKey { get; set; }
 }
 
-public sealed class SkillCatalog
+public class SkillCatalog
 {
     public Guid Id { get; set; }
     public string Code { get; set; } = string.Empty;
@@ -110,7 +110,7 @@ public sealed class SkillCatalog
     public bool IsActive { get; set; } = true;
 }
 
-public sealed class UserSkill
+public class UserSkill
 {
     public Guid Id { get; set; }
     public Guid UserId { get; set; }

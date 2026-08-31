@@ -5,7 +5,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace ProjectMgmt.Tests.Integration;
 
-public sealed class SolutionHealthTests : IClassFixture<ProjectMgmtWebApplicationFactory>
+public class SolutionHealthTests : IClassFixture<ProjectMgmtWebApplicationFactory>
 {
     private readonly HttpClient _client;
 
@@ -38,7 +38,7 @@ public sealed class SolutionHealthTests : IClassFixture<ProjectMgmtWebApplicatio
     }
 }
 
-public sealed class ProjectMgmtWebApplicationFactory : WebApplicationFactory<Program>
+public class ProjectMgmtWebApplicationFactory : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {

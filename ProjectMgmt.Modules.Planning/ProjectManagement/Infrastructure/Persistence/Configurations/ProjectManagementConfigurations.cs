@@ -4,7 +4,7 @@ using ProjectMgmt.Modules.Planning.ProjectManagement.Domain.Entities;
 
 namespace ProjectMgmt.Modules.Planning.ProjectManagement.Infrastructure.Persistence.Configurations;
 
-internal sealed class OrganizationConfiguration : IEntityTypeConfiguration<Organization>
+internal class OrganizationConfiguration : IEntityTypeConfiguration<Organization>
 {
     public void Configure(EntityTypeBuilder<Organization> builder)
     {
@@ -20,7 +20,7 @@ internal sealed class OrganizationConfiguration : IEntityTypeConfiguration<Organ
     }
 }
 
-internal sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
+internal class ProjectConfiguration : IEntityTypeConfiguration<Project>
 {
     public void Configure(EntityTypeBuilder<Project> builder)
     {
@@ -40,7 +40,7 @@ internal sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
     }
 }
 
-internal sealed class ProjectComponentConfiguration : IEntityTypeConfiguration<ProjectComponent>
+internal class ProjectComponentConfiguration : IEntityTypeConfiguration<ProjectComponent>
 {
     public void Configure(EntityTypeBuilder<ProjectComponent> builder)
     {
@@ -54,7 +54,7 @@ internal sealed class ProjectComponentConfiguration : IEntityTypeConfiguration<P
     }
 }
 
-internal sealed class ProjectVersionConfiguration : IEntityTypeConfiguration<ProjectVersion>
+internal class ProjectVersionConfiguration : IEntityTypeConfiguration<ProjectVersion>
 {
     public void Configure(EntityTypeBuilder<ProjectVersion> builder)
     {
@@ -69,7 +69,7 @@ internal sealed class ProjectVersionConfiguration : IEntityTypeConfiguration<Pro
     }
 }
 
-internal sealed class WorkflowStatusConfiguration : IEntityTypeConfiguration<WorkflowStatus>
+internal class WorkflowStatusConfiguration : IEntityTypeConfiguration<WorkflowStatus>
 {
     public void Configure(EntityTypeBuilder<WorkflowStatus> builder)
     {
@@ -86,7 +86,7 @@ internal sealed class WorkflowStatusConfiguration : IEntityTypeConfiguration<Wor
     }
 }
 
-internal sealed class WorkflowTransitionConfiguration : IEntityTypeConfiguration<WorkflowTransition>
+internal class WorkflowTransitionConfiguration : IEntityTypeConfiguration<WorkflowTransition>
 {
     public void Configure(EntityTypeBuilder<WorkflowTransition> builder)
     {
@@ -103,7 +103,7 @@ internal sealed class WorkflowTransitionConfiguration : IEntityTypeConfiguration
     }
 }
 
-internal sealed class IssueTypeConfiguration : IEntityTypeConfiguration<IssueType>
+internal class IssueTypeConfiguration : IEntityTypeConfiguration<IssueType>
 {
     public void Configure(EntityTypeBuilder<IssueType> builder)
     {
@@ -120,7 +120,7 @@ internal sealed class IssueTypeConfiguration : IEntityTypeConfiguration<IssueTyp
     }
 }
 
-internal sealed class PriorityConfiguration : IEntityTypeConfiguration<Priority>
+internal class PriorityConfiguration : IEntityTypeConfiguration<Priority>
 {
     public void Configure(EntityTypeBuilder<Priority> builder)
     {
@@ -134,7 +134,7 @@ internal sealed class PriorityConfiguration : IEntityTypeConfiguration<Priority>
     }
 }
 
-internal sealed class BoardConfiguration : IEntityTypeConfiguration<Board>
+internal class BoardConfiguration : IEntityTypeConfiguration<Board>
 {
     public void Configure(EntityTypeBuilder<Board> builder)
     {
@@ -149,7 +149,7 @@ internal sealed class BoardConfiguration : IEntityTypeConfiguration<Board>
     }
 }
 
-internal sealed class BoardColumnConfiguration : IEntityTypeConfiguration<BoardColumn>
+internal class BoardColumnConfiguration : IEntityTypeConfiguration<BoardColumn>
 {
     public void Configure(EntityTypeBuilder<BoardColumn> builder)
     {

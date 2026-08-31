@@ -7,12 +7,12 @@ public interface IClock
     DateTimeOffset UtcNow { get; }
 }
 
-public sealed class SystemClock : IClock
+public class SystemClock : IClock
 {
     public DateTimeOffset UtcNow => DateTimeOffset.UtcNow;
 }
 
-public sealed record PageRequest
+public class PageRequest
 {
     public const int MaximumPageSize = 200;
 
@@ -45,12 +45,20 @@ public sealed record PageRequest
     public int Skip => (PageNumber - 1) * PageSize;
 }
 
-public sealed record PagedResult<T>(
-    IReadOnlyList<T> Items,
-    int PageNumber,
-    int PageSize,
-    long TotalCount)
+public class PagedResult<T>
 {
+    public PagedResult(IReadOnlyList<T> items, int pageNumber, int pageSize, long totalCount)
+    {
+        Items = items;
+        PageNumber = pageNumber;
+        PageSize = pageSize;
+        TotalCount = totalCount;
+    }
+
+    public IReadOnlyList<T> Items { get; }
+    public int PageNumber { get; }
+    public int PageSize { get; }
+    public long TotalCount { get; }
     public long TotalPages => PageSize == 0 ? 0 : (long)Math.Ceiling(TotalCount / (double)PageSize);
 }
 

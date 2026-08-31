@@ -4,7 +4,7 @@ using ProjectMgmt.Modules.IdentityExperience.AiAssist.Domain.Entities;
 
 namespace ProjectMgmt.Modules.IdentityExperience.AiAssist.Infrastructure.Persistence.Configurations;
 
-internal sealed class AiGenerationLogConfiguration : IEntityTypeConfiguration<AiGenerationLog>
+internal class AiGenerationLogConfiguration : IEntityTypeConfiguration<AiGenerationLog>
 {
     public void Configure(EntityTypeBuilder<AiGenerationLog> builder)
     {
@@ -28,7 +28,7 @@ internal sealed class AiGenerationLogConfiguration : IEntityTypeConfiguration<Ai
     }
 }
 
-internal sealed class AiSuggestedTaskConfiguration : IEntityTypeConfiguration<AiSuggestedTask>
+internal class AiSuggestedTaskConfiguration : IEntityTypeConfiguration<AiSuggestedTask>
 {
     public void Configure(EntityTypeBuilder<AiSuggestedTask> builder)
     {

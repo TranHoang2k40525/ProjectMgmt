@@ -1,12 +1,18 @@
 using System.Text.Json;
 using ProjectMgmt.AiAssist.Contracts;
-using ProjectMgmt.Modules.IdentityExperience.AiAssist.Domain.Repositories;
+using ProjectMgmt.Modules.IdentityExperience.AiAssist.Domain.IRepositories;
 
 namespace ProjectMgmt.Modules.IdentityExperience.AiAssist.Application.Services;
 
-internal sealed class AiBreakdownFeedbackExportService(IAiAssistRepository repository)
-    : IAiBreakdownFeedbackExportService
+internal class AiBreakdownFeedbackExportService : IAiBreakdownFeedbackExportService
 {
+    private readonly IAiAssistRepository _repository;
+
+    public AiBreakdownFeedbackExportService(IAiAssistRepository repository)
+    {
+        _repository = repository;
+    }
+
     public async Task<IReadOnlyList<AiBreakdownFeedbackSampleDto>> ExportBreakdownSamplesAsync(
         DateTimeOffset fromUtc,
         DateTimeOffset toUtc,
@@ -15,7 +21,7 @@ internal sealed class AiBreakdownFeedbackExportService(IAiAssistRepository repos
         var from = fromUtc.UtcDateTime;
         var to = toUtc.UtcDateTime;
 
-        var rows = await repository.GetReviewedTasksAsync(from, to, cancellationToken);
+        var rows = await _repository.GetReviewedTasksAsync(from, to, cancellationToken);
 
         return rows.Select(x => new AiBreakdownFeedbackSampleDto(
                 x.Id,

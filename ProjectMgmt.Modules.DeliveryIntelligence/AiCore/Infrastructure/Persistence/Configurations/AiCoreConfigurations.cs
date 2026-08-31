@@ -5,7 +5,7 @@ using ProjectMgmt.Modules.DeliveryIntelligence.AiDataOps.Domain.Entities;
 
 namespace ProjectMgmt.Modules.DeliveryIntelligence.AiCore.Infrastructure.Persistence.Configurations;
 
-internal sealed class AiModelConfiguration : IEntityTypeConfiguration<AiModel>
+internal class AiModelConfiguration : IEntityTypeConfiguration<AiModel>
 {
     public void Configure(EntityTypeBuilder<AiModel> builder)
     {
@@ -26,7 +26,7 @@ internal sealed class AiModelConfiguration : IEntityTypeConfiguration<AiModel>
     }
 }
 
-internal sealed class AiPromptTemplateConfiguration : IEntityTypeConfiguration<AiPromptTemplate>
+internal class AiPromptTemplateConfiguration : IEntityTypeConfiguration<AiPromptTemplate>
 {
     public void Configure(EntityTypeBuilder<AiPromptTemplate> builder)
     {

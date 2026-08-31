@@ -1,4 +1,5 @@
 using System.Xml.Linq;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using ProjectMgmt.Modules.DeliveryIntelligence.Infrastructure.Persistence;
 using ProjectMgmt.Modules.IdentityExperience.Infrastructure.Persistence;
@@ -6,7 +7,7 @@ using ProjectMgmt.Modules.Planning.Infrastructure.Persistence;
 
 namespace ProjectMgmt.Tests.Architecture;
 
-public sealed class ModuleBoundaryTests
+public class ModuleBoundaryTests
 {
     private static readonly string[] ModuleProjects =
     [
@@ -24,6 +25,19 @@ public sealed class ModuleBoundaryTests
         "ProjectMgmt.Modules.DeliveryIntelligence",
         "ProjectMgmt.Solution",
         "ProjectMgmt.Tests"
+    ];
+
+    private static readonly string[] LogicalModules =
+    [
+        "ProjectMgmt.Modules.IdentityExperience/IdentityAccess",
+        "ProjectMgmt.Modules.IdentityExperience/Notification",
+        "ProjectMgmt.Modules.IdentityExperience/AiAssist",
+        "ProjectMgmt.Modules.Planning/ProjectManagement",
+        "ProjectMgmt.Modules.Planning/SprintBacklog",
+        "ProjectMgmt.Modules.Planning/AiAssignment",
+        "ProjectMgmt.Modules.DeliveryIntelligence/IssueTracking",
+        "ProjectMgmt.Modules.DeliveryIntelligence/AiCore",
+        "ProjectMgmt.Modules.DeliveryIntelligence/AiDataOps"
     ];
 
     [Fact]
@@ -76,6 +90,63 @@ public sealed class ModuleBoundaryTests
     }
 
     [Fact]
+    public void WebApiUsesControllersDirectoryAndDoesNotUseApiDirectory()
+    {
+        var webApi = Path.Combine(FindRepositoryRoot(), "ProjectMgmt.Solution");
+
+        Assert.True(Directory.Exists(Path.Combine(webApi, "Controllers")));
+        Assert.False(Directory.Exists(Path.Combine(webApi, "Api")));
+    }
+
+    [Fact]
+    public void CoreDoesNotOwnDatabaseConfiguration()
+    {
+        var core = Path.Combine(FindRepositoryRoot(), "ProjectMgmt.Core");
+        var project = File.ReadAllText(Path.Combine(core, "ProjectMgmt.Core.csproj"));
+
+        Assert.False(Directory.Exists(Path.Combine(core, "Persistence")));
+        Assert.DoesNotContain("EntityFrameworkCore", project, StringComparison.Ordinal);
+        Assert.DoesNotContain("Pomelo", project, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LogicalModulesHaveTraditionalServiceAndRepositoryFolders()
+    {
+        var root = FindRepositoryRoot();
+
+        foreach (var logicalModule in LogicalModules)
+        {
+            Assert.True(Directory.Exists(Path.Combine(root, logicalModule, "Application", "IServices")));
+            Assert.True(Directory.Exists(Path.Combine(root, logicalModule, "Application", "Services")));
+            Assert.True(Directory.Exists(Path.Combine(root, logicalModule, "Domain", "IRepositories")));
+            Assert.True(Directory.Exists(Path.Combine(root, logicalModule, "Infrastructure", "Repositories")));
+        }
+    }
+
+    [Fact]
+    public void ProductionSourceUsesTraditionalClassDeclarations()
+    {
+        var root = FindRepositoryRoot();
+        var sourceRoots = ExpectedProjects
+            .Where(project => !string.Equals(project, "ProjectMgmt.Tests", StringComparison.Ordinal))
+            .Select(project => Path.Combine(root, project));
+        var violations = sourceRoots
+            .SelectMany(project => Directory.EnumerateFiles(project, "*.cs", SearchOption.AllDirectories))
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+            .Where(path =>
+            {
+                var source = File.ReadAllText(path);
+                return Regex.IsMatch(source, @"\bsealed\b")
+                    || Regex.IsMatch(source, @"\brecord\s+(?:(?:class|struct)\s+)?[A-Za-z_]\w*")
+                    || Regex.IsMatch(source, @"\bclass\s+[A-Za-z_]\w*(?:\s*<[^>{}\r\n]+>)?\s*\(");
+            })
+            .Select(path => Path.GetRelativePath(root, path))
+            .ToArray();
+
+        Assert.Empty(violations);
+    }
+
+    [Fact]
     public void ApplicationLayerDoesNotDependOnInfrastructure()
     {
         var root = FindRepositoryRoot();
@@ -104,12 +175,12 @@ public sealed class ModuleBoundaryTests
     {
         const string connection = "Server=localhost;Port=3306;Database=projectmgmt;User=test;Password=test;";
         var serverVersion = new MySqlServerVersion(new Version(8, 0, 16));
-        using var identity = new IdentityExperienceDbContext(
-            new DbContextOptionsBuilder<IdentityExperienceDbContext>().UseMySql(connection, serverVersion).Options);
-        using var planning = new PlanningDbContext(
-            new DbContextOptionsBuilder<PlanningDbContext>().UseMySql(connection, serverVersion).Options);
-        using var delivery = new DeliveryIntelligenceDbContext(
-            new DbContextOptionsBuilder<DeliveryIntelligenceDbContext>().UseMySql(connection, serverVersion).Options);
+        using var identity = new IdentityExperienceAppDbContext(
+            new DbContextOptionsBuilder<IdentityExperienceAppDbContext>().UseMySql(connection, serverVersion).Options);
+        using var planning = new PlanningAppDbContext(
+            new DbContextOptionsBuilder<PlanningAppDbContext>().UseMySql(connection, serverVersion).Options);
+        using var delivery = new DeliveryIntelligenceAppDbContext(
+            new DbContextOptionsBuilder<DeliveryIntelligenceAppDbContext>().UseMySql(connection, serverVersion).Options);
 
         var identityTables = GetTables(identity);
         var planningTables = GetTables(planning);

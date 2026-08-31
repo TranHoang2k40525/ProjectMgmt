@@ -5,7 +5,7 @@ using ProjectMgmt.Modules.DeliveryIntelligence.AiCore.Domain.Entities;
 
 namespace ProjectMgmt.Modules.DeliveryIntelligence.AiDataOps.Infrastructure.Persistence.Configurations;
 
-internal sealed class AiDatasetConfiguration : IEntityTypeConfiguration<AiDataset>
+internal class AiDatasetConfiguration : IEntityTypeConfiguration<AiDataset>
 {
     public void Configure(EntityTypeBuilder<AiDataset> builder)
     {
@@ -21,7 +21,7 @@ internal sealed class AiDatasetConfiguration : IEntityTypeConfiguration<AiDatase
     }
 }
 
-internal sealed class AiDatasetVersionConfiguration : IEntityTypeConfiguration<AiDatasetVersion>
+internal class AiDatasetVersionConfiguration : IEntityTypeConfiguration<AiDatasetVersion>
 {
     public void Configure(EntityTypeBuilder<AiDatasetVersion> builder)
     {
@@ -42,7 +42,7 @@ internal sealed class AiDatasetVersionConfiguration : IEntityTypeConfiguration<A
     }
 }
 
-internal sealed class AiDatasetSampleConfiguration : IEntityTypeConfiguration<AiDatasetSample>
+internal class AiDatasetSampleConfiguration : IEntityTypeConfiguration<AiDatasetSample>
 {
     public void Configure(EntityTypeBuilder<AiDatasetSample> builder)
     {
@@ -69,7 +69,7 @@ internal sealed class AiDatasetSampleConfiguration : IEntityTypeConfiguration<Ai
     }
 }
 
-internal sealed class AiDataCleaningRuleConfiguration : IEntityTypeConfiguration<AiDataCleaningRule>
+internal class AiDataCleaningRuleConfiguration : IEntityTypeConfiguration<AiDataCleaningRule>
 {
     public void Configure(EntityTypeBuilder<AiDataCleaningRule> builder)
     {
@@ -87,7 +87,7 @@ internal sealed class AiDataCleaningRuleConfiguration : IEntityTypeConfiguration
     }
 }
 
-internal sealed class AiDataQualityFlagConfiguration : IEntityTypeConfiguration<AiDataQualityFlag>
+internal class AiDataQualityFlagConfiguration : IEntityTypeConfiguration<AiDataQualityFlag>
 {
     public void Configure(EntityTypeBuilder<AiDataQualityFlag> builder)
     {
@@ -105,7 +105,7 @@ internal sealed class AiDataQualityFlagConfiguration : IEntityTypeConfiguration<
     }
 }
 
-internal sealed class AiTrainingRunConfiguration : IEntityTypeConfiguration<AiTrainingRun>
+internal class AiTrainingRunConfiguration : IEntityTypeConfiguration<AiTrainingRun>
 {
     public void Configure(EntityTypeBuilder<AiTrainingRun> builder)
     {
@@ -129,7 +129,7 @@ internal sealed class AiTrainingRunConfiguration : IEntityTypeConfiguration<AiTr
     }
 }
 
-internal sealed class AiEvaluationResultConfiguration : IEntityTypeConfiguration<AiEvaluationResult>
+internal class AiEvaluationResultConfiguration : IEntityTypeConfiguration<AiEvaluationResult>
 {
     public void Configure(EntityTypeBuilder<AiEvaluationResult> builder)
     {

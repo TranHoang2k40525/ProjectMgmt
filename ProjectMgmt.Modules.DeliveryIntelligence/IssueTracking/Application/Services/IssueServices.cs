@@ -3,19 +3,36 @@ using ProjectMgmt.BuildingBlocks.Results;
 using ProjectMgmt.IdentityAccess.Contracts;
 using ProjectMgmt.IssueTracking.Contracts;
 using ProjectMgmt.Modules.DeliveryIntelligence.IssueTracking.Domain.Entities;
-using ProjectMgmt.Modules.DeliveryIntelligence.IssueTracking.Domain.Repositories;
+using ProjectMgmt.Modules.DeliveryIntelligence.IssueTracking.Domain.IRepositories;
 using ProjectMgmt.ProjectManagement.Contracts;
 
 namespace ProjectMgmt.Modules.DeliveryIntelligence.IssueTracking.Application.Services;
 
-internal sealed class IssueService(
-    IIssueRepository repository,
-    IUserLookupService users,
-    IProjectLookupService projects,
-    ISprintLookupService sprints,
-    IWorkflowValidationService workflow,
-    IIssueNumberGenerator numberGenerator) : IIssueService
+internal class IssueService : IIssueService
 {
+    private readonly IIssueRepository _repository;
+    private readonly IUserLookupService _users;
+    private readonly IProjectLookupService _projects;
+    private readonly ISprintLookupService _sprints;
+    private readonly IWorkflowValidationService _workflow;
+    private readonly IIssueNumberGenerator _numberGenerator;
+
+    public IssueService(
+        IIssueRepository repository,
+        IUserLookupService users,
+        IProjectLookupService projects,
+        ISprintLookupService sprints,
+        IWorkflowValidationService workflow,
+        IIssueNumberGenerator numberGenerator)
+    {
+        _repository = repository;
+        _users = users;
+        _projects = projects;
+        _sprints = sprints;
+        _workflow = workflow;
+        _numberGenerator = numberGenerator;
+    }
+
     public async Task<Result<CreateIssueResultDto>> CreateIssueAsync(
         CreateIssueDto request,
         CancellationToken cancellationToken = default)
@@ -44,18 +61,18 @@ internal sealed class IssueService(
                 Error.Validation("issue.ai_log", "An AI-generated issue must reference its generation log."));
         }
 
-        if (!await projects.ExistsAsync(request.ProjectId, cancellationToken))
+        if (!await _projects.ExistsAsync(request.ProjectId, cancellationToken))
         {
             return Result<CreateIssueResultDto>.Failure(Error.NotFound("project.not_found", "Project was not found."));
         }
 
-        if (!await users.ExistsAsync(request.ReporterId, cancellationToken)
-            || request.AssigneeId is { } assigneeId && !await users.ExistsAsync(assigneeId, cancellationToken))
+        if (!await _users.ExistsAsync(request.ReporterId, cancellationToken)
+            || request.AssigneeId is { } assigneeId && !await _users.ExistsAsync(assigneeId, cancellationToken))
         {
             return Result<CreateIssueResultDto>.Failure(Error.NotFound("user.not_found", "Reporter or assignee was not found."));
         }
 
-        var issueTypes = await projects.GetIssueTypesAsync(request.ProjectId, cancellationToken);
+        var issueTypes = await _projects.GetIssueTypesAsync(request.ProjectId, cancellationToken);
         if (issueTypes.All(x => x.Id != request.IssueTypeId))
         {
             return Result<CreateIssueResultDto>.Failure(
@@ -64,7 +81,7 @@ internal sealed class IssueService(
 
         if (request.SprintId is { } sprintId)
         {
-            var sprint = await sprints.GetByIdAsync(sprintId, cancellationToken);
+            var sprint = await _sprints.GetByIdAsync(sprintId, cancellationToken);
             if (sprint is null || sprint.ProjectId != request.ProjectId || sprint.Status == "Completed")
             {
                 return Result<CreateIssueResultDto>.Failure(
@@ -74,7 +91,7 @@ internal sealed class IssueService(
 
         foreach (var relatedId in new[] { request.ParentId, request.EpicId }.OfType<Guid>())
         {
-            var related = await repository.GetByIdAsync(relatedId, cancellationToken);
+            var related = await _repository.GetByIdAsync(relatedId, cancellationToken);
             if (related is null || related.ProjectId != request.ProjectId)
             {
                 return Result<CreateIssueResultDto>.Failure(
@@ -82,20 +99,20 @@ internal sealed class IssueService(
             }
         }
 
-        var initialStatus = await workflow.GetInitialStatusAsync(request.ProjectId, cancellationToken);
+        var initialStatus = await _workflow.GetInitialStatusAsync(request.ProjectId, cancellationToken);
         if (initialStatus is null)
         {
             return Result<CreateIssueResultDto>.Failure(
                 Error.Conflict("workflow.initial_status_missing", "The project has no initial workflow status."));
         }
 
-        var projectKey = await projects.GetProjectKeyAsync(request.ProjectId, cancellationToken);
+        var projectKey = await _projects.GetProjectKeyAsync(request.ProjectId, cancellationToken);
         if (projectKey is null)
         {
             return Result<CreateIssueResultDto>.Failure(Error.NotFound("project.not_found", "Project was not found."));
         }
 
-        var issueNumber = await numberGenerator.NextAsync(request.ProjectId, cancellationToken);
+        var issueNumber = await _numberGenerator.NextAsync(request.ProjectId, cancellationToken);
         var now = DateTime.UtcNow;
         var issue = new Issue
         {
@@ -113,7 +130,7 @@ internal sealed class IssueService(
             Title = request.Title.Trim(),
             Description = request.Description,
             StoryPoints = request.StoryPoints,
-            RankOrder = await repository.GetNextRankAsync(request.ProjectId, request.SprintId, cancellationToken),
+            RankOrder = await _repository.GetNextRankAsync(request.ProjectId, request.SprintId, cancellationToken),
             DueDate = request.DueDate,
             IsAiGenerated = request.IsAiGenerated,
             AiGenerationLogId = request.AiGenerationLogId,
@@ -121,8 +138,8 @@ internal sealed class IssueService(
             CreatedAt = now
         };
 
-        await repository.AddAsync(issue, cancellationToken);
-        await repository.AddStatusHistoryAsync(new IssueStatusHistory
+        await _repository.AddAsync(issue, cancellationToken);
+        await _repository.AddStatusHistoryAsync(new IssueStatusHistory
         {
             Id = Guid.NewGuid(),
             IssueId = issue.Id,
@@ -131,18 +148,25 @@ internal sealed class IssueService(
             ChangedBy = request.ReporterId,
             ChangedAt = now
         }, cancellationToken);
-        await repository.SaveChangesAsync(cancellationToken);
+        await _repository.SaveChangesAsync(cancellationToken);
 
         return Result<CreateIssueResultDto>.Success(
             new CreateIssueResultDto(issue.Id, issueNumber, $"{projectKey}-{issueNumber}"));
     }
 }
 
-internal sealed class IssueReadService(IIssueRepository repository) : IIssueReadService
+internal class IssueReadService : IIssueReadService
 {
+    private readonly IIssueRepository _repository;
+
+    public IssueReadService(IIssueRepository repository)
+    {
+        _repository = repository;
+    }
+
     public async Task<Result<IssueDto>> GetByIdAsync(Guid issueId, CancellationToken cancellationToken = default)
     {
-        var issue = await repository.GetByIdAsync(issueId, cancellationToken);
+        var issue = await _repository.GetByIdAsync(issueId, cancellationToken);
         return issue is null
             ? Result<IssueDto>.Failure(Error.NotFound("issue.not_found", "Issue was not found."))
             : Result<IssueDto>.Success(ToDto(issue));
@@ -153,8 +177,8 @@ internal sealed class IssueReadService(IIssueRepository repository) : IIssueRead
         PageRequest page,
         CancellationToken cancellationToken = default)
     {
-        var rows = await repository.GetBySprintAsync(sprintId, page.Skip, page.PageSize, cancellationToken);
-        var count = await repository.CountBySprintAsync(sprintId, cancellationToken);
+        var rows = await _repository.GetBySprintAsync(sprintId, page.Skip, page.PageSize, cancellationToken);
+        var count = await _repository.CountBySprintAsync(sprintId, cancellationToken);
         return new PagedResult<IssueDto>(rows.Select(ToDto).ToList(), page.PageNumber, page.PageSize, count);
     }
 
@@ -163,15 +187,15 @@ internal sealed class IssueReadService(IIssueRepository repository) : IIssueRead
         PageRequest page,
         CancellationToken cancellationToken = default)
     {
-        var rows = await repository.GetOpenByAssigneeAsync(assigneeId, page.Skip, page.PageSize, cancellationToken);
-        var count = await repository.CountOpenByAssigneeAsync(assigneeId, cancellationToken);
+        var rows = await _repository.GetOpenByAssigneeAsync(assigneeId, page.Skip, page.PageSize, cancellationToken);
+        var count = await _repository.CountOpenByAssigneeAsync(assigneeId, cancellationToken);
         return new PagedResult<IssueDto>(rows.Select(ToDto).ToList(), page.PageNumber, page.PageSize, count);
     }
 
     public async Task<IReadOnlyList<IssueStatusHistoryDto>> GetStatusHistoryAsync(
         Guid issueId,
         CancellationToken cancellationToken = default) =>
-        (await repository.GetStatusHistoryAsync(issueId, cancellationToken))
+        (await _repository.GetStatusHistoryAsync(issueId, cancellationToken))
             .Select(x => new IssueStatusHistoryDto(
                 x.Id, x.IssueId, x.FromStatusId, x.ToStatusId, x.FromCategory, x.ToCategory,
                 x.ChangedBy, x.DurationSeconds, AsUtc(x.ChangedAt)))
@@ -180,7 +204,7 @@ internal sealed class IssueReadService(IIssueRepository repository) : IIssueRead
     public async Task<IReadOnlyList<IssueAssignmentHistoryDto>> GetAssignmentHistoryAsync(
         Guid issueId,
         CancellationToken cancellationToken = default) =>
-        (await repository.GetAssignmentHistoryAsync(issueId, cancellationToken))
+        (await _repository.GetAssignmentHistoryAsync(issueId, cancellationToken))
             .Select(x => new IssueAssignmentHistoryDto(
                 x.Id, x.IssueId, x.FromAssigneeId, x.ToAssigneeId, x.AssignmentSource, AsUtc(x.AssignedAt)))
             .ToList();
@@ -193,21 +217,30 @@ internal sealed class IssueReadService(IIssueRepository repository) : IIssueRead
         new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
 }
 
-internal sealed class IssueSprintService(IIssueRepository repository, ISprintLookupService sprints) : IIssueSprintService
+internal class IssueSprintService : IIssueSprintService
 {
+    private readonly IIssueRepository _repository;
+    private readonly ISprintLookupService _sprints;
+
+    public IssueSprintService(IIssueRepository repository, ISprintLookupService sprints)
+    {
+        _repository = repository;
+        _sprints = sprints;
+    }
+
     public async Task<Result> MoveToSprintAsync(
         IReadOnlyCollection<Guid> issueIds,
         Guid sprintId,
         CancellationToken cancellationToken = default)
     {
-        var sprint = await sprints.GetByIdAsync(sprintId, cancellationToken);
+        var sprint = await _sprints.GetByIdAsync(sprintId, cancellationToken);
         if (sprint is null || sprint.Status == "Completed")
         {
             return Result.Failure(Error.Validation("sprint.invalid", "Target sprint does not exist or is completed."));
         }
 
         var ids = issueIds.Distinct().ToArray();
-        var issues = await repository.GetByIdsAsync(ids, cancellationToken);
+        var issues = await _repository.GetByIdsAsync(ids, cancellationToken);
         if (issues.Count != ids.Length)
         {
             return Result.Failure(Error.NotFound("issue.not_found", "One or more issues were not found."));
@@ -218,7 +251,7 @@ internal sealed class IssueSprintService(IIssueRepository repository, ISprintLoo
             return Result.Failure(Error.Validation("sprint.project_mismatch", "All issues must belong to the sprint project."));
         }
 
-        var nextRank = await repository.GetNextRankAsync(sprint.ProjectId, sprintId, cancellationToken);
+        var nextRank = await _repository.GetNextRankAsync(sprint.ProjectId, sprintId, cancellationToken);
         foreach (var issue in issues.OrderBy(x => x.RankOrder))
         {
             issue.SprintId = sprintId;
@@ -226,7 +259,7 @@ internal sealed class IssueSprintService(IIssueRepository repository, ISprintLoo
             nextRank += 1000m;
         }
 
-        await repository.SaveChangesAsync(cancellationToken);
+        await _repository.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }
 
@@ -235,7 +268,7 @@ internal sealed class IssueSprintService(IIssueRepository repository, ISprintLoo
         CancellationToken cancellationToken = default)
     {
         var ids = issueIds.Distinct().ToArray();
-        var issues = await repository.GetByIdsAsync(ids, cancellationToken);
+        var issues = await _repository.GetByIdsAsync(ids, cancellationToken);
         if (issues.Count != ids.Length)
         {
             return Result.Failure(Error.NotFound("issue.not_found", "One or more issues were not found."));
@@ -243,7 +276,7 @@ internal sealed class IssueSprintService(IIssueRepository repository, ISprintLoo
 
         foreach (var projectGroup in issues.GroupBy(x => x.ProjectId))
         {
-            var nextRank = await repository.GetNextRankAsync(projectGroup.Key, null, cancellationToken);
+            var nextRank = await _repository.GetNextRankAsync(projectGroup.Key, null, cancellationToken);
             foreach (var issue in projectGroup.OrderBy(x => x.RankOrder))
             {
                 issue.SprintId = null;
@@ -252,17 +285,24 @@ internal sealed class IssueSprintService(IIssueRepository repository, ISprintLoo
             }
         }
 
-        await repository.SaveChangesAsync(cancellationToken);
+        await _repository.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }
 }
 
-internal sealed class IssueSkillService(IIssueRepository repository) : IIssueSkillService
+internal class IssueSkillService : IIssueSkillService
 {
+    private readonly IIssueRepository _repository;
+
+    public IssueSkillService(IIssueRepository repository)
+    {
+        _repository = repository;
+    }
+
     public async Task<IReadOnlyDictionary<Guid, IReadOnlyList<IssueRequiredSkillDto>>> GetRequiredSkillsAsync(
         IReadOnlyCollection<Guid> issueIds,
         CancellationToken cancellationToken = default) =>
-        (await repository.GetRequiredSkillsAsync(issueIds, cancellationToken))
+        (await _repository.GetRequiredSkillsAsync(issueIds, cancellationToken))
             .GroupBy(x => x.IssueId)
             .ToDictionary(
                 group => group.Key,
@@ -271,11 +311,18 @@ internal sealed class IssueSkillService(IIssueRepository repository) : IIssueSki
                     .ToList());
 }
 
-internal sealed class IssueWorkInProgressCounter(IIssueRepository repository) : IIssueWorkInProgressCounter
+internal class IssueWorkInProgressCounter : IIssueWorkInProgressCounter
 {
+    private readonly IIssueRepository _repository;
+
+    public IssueWorkInProgressCounter(IIssueRepository repository)
+    {
+        _repository = repository;
+    }
+
     public Task<int> CountByStatusAsync(
         Guid projectId,
         Guid statusId,
         CancellationToken cancellationToken = default) =>
-        repository.CountByStatusAsync(projectId, statusId, cancellationToken);
+        _repository.CountByStatusAsync(projectId, statusId, cancellationToken);
 }

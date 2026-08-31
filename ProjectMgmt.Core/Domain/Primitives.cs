@@ -7,11 +7,11 @@ public interface IDomainEvent
     DateTimeOffset OccurredAtUtc { get; }
 }
 
-public abstract record DomainEvent : IDomainEvent
+public abstract class DomainEvent : IDomainEvent
 {
-    public Guid EventId { get; init; } = Guid.NewGuid();
+    public Guid EventId { get; private set; } = Guid.NewGuid();
 
-    public DateTimeOffset OccurredAtUtc { get; init; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset OccurredAtUtc { get; private set; } = DateTimeOffset.UtcNow;
 }
 
 public interface IHasDomainEvents
@@ -29,13 +29,13 @@ public abstract class Entity<TId>
         Id = id;
     }
 
-    public TId Id { get; protected init; }
+    public TId Id { get; protected set; }
 }
 
 public abstract class AggregateRoot<TId> : Entity<TId>, IHasDomainEvents
     where TId : notnull
 {
-    private readonly List<IDomainEvent> _domainEvents = [];
+    private readonly List<IDomainEvent> _domainEvents = new List<IDomainEvent>();
 
     protected AggregateRoot(TId id)
         : base(id)

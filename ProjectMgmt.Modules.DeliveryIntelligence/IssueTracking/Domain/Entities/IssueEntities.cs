@@ -1,6 +1,6 @@
 namespace ProjectMgmt.Modules.DeliveryIntelligence.IssueTracking.Domain.Entities;
 
-public sealed class Issue
+public class Issue
 {
     public Guid Id { get; set; }
     public Guid ProjectId { get; set; }
@@ -30,7 +30,7 @@ public sealed class Issue
     public DateTime? UpdatedAt { get; set; }
 }
 
-public sealed class IssueLink
+public class IssueLink
 {
     public Guid Id { get; set; }
     public Guid SourceIssueId { get; set; }
@@ -40,14 +40,14 @@ public sealed class IssueLink
     public DateTime CreatedAt { get; set; }
 }
 
-public sealed class IssueWatcher
+public class IssueWatcher
 {
     public Guid IssueId { get; set; }
     public Guid UserId { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 
-public sealed class Comment
+public class Comment
 {
     public Guid Id { get; set; }
     public Guid IssueId { get; set; }
@@ -61,7 +61,7 @@ public sealed class Comment
     public DateTime? UpdatedAt { get; set; }
 }
 
-public sealed class Attachment
+public class Attachment
 {
     public Guid Id { get; set; }
     public Guid IssueId { get; set; }
@@ -73,7 +73,7 @@ public sealed class Attachment
     public DateTime CreatedAt { get; set; }
 }
 
-public sealed class ActivityLog
+public class ActivityLog
 {
     public Guid Id { get; set; }
     public Guid IssueId { get; set; }
@@ -87,7 +87,7 @@ public sealed class ActivityLog
     public DateTime CreatedAt { get; set; }
 }
 
-public sealed class IssueStatusHistory
+public class IssueStatusHistory
 {
     public Guid Id { get; set; }
     public Guid IssueId { get; set; }
@@ -100,7 +100,7 @@ public sealed class IssueStatusHistory
     public DateTime ChangedAt { get; set; }
 }
 
-public sealed class IssueAssignmentHistory
+public class IssueAssignmentHistory
 {
     public Guid Id { get; set; }
     public Guid IssueId { get; set; }
@@ -114,7 +114,7 @@ public sealed class IssueAssignmentHistory
     public DateTime AssignedAt { get; set; }
 }
 
-public sealed class Label
+public class Label
 {
     public Guid Id { get; set; }
     public Guid ProjectId { get; set; }
@@ -122,26 +122,26 @@ public sealed class Label
     public string ColorHex { get; set; } = "#DFE1E6";
 }
 
-public sealed class IssueLabel
+public class IssueLabel
 {
     public Guid IssueId { get; set; }
     public Guid LabelId { get; set; }
 }
 
-public sealed class IssueComponentLink
+public class IssueComponentLink
 {
     public Guid IssueId { get; set; }
     public Guid ComponentId { get; set; }
 }
 
-public sealed class IssueVersionLink
+public class IssueVersionLink
 {
     public Guid IssueId { get; set; }
     public Guid VersionId { get; set; }
     public string LinkType { get; set; } = "FixVersion";
 }
 
-public sealed class IssueRequiredSkill
+public class IssueRequiredSkill
 {
     public Guid Id { get; set; }
     public Guid IssueId { get; set; }
@@ -151,7 +151,7 @@ public sealed class IssueRequiredSkill
     public string Source { get; set; } = "Manual";
 }
 
-public sealed class AcceptanceCriteria
+public class AcceptanceCriteria
 {
     public Guid Id { get; set; }
     public Guid IssueId { get; set; }

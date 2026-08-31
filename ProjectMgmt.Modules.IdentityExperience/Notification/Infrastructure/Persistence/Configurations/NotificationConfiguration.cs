@@ -4,7 +4,7 @@ using NotificationEntity = ProjectMgmt.Modules.IdentityExperience.Notification.D
 
 namespace ProjectMgmt.Modules.IdentityExperience.Notification.Infrastructure.Persistence.Configurations;
 
-internal sealed class NotificationConfiguration : IEntityTypeConfiguration<NotificationEntity>
+internal class NotificationConfiguration : IEntityTypeConfiguration<NotificationEntity>
 {
     public void Configure(EntityTypeBuilder<NotificationEntity> builder)
     {

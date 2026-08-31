@@ -4,7 +4,7 @@ using ProjectMgmt.Modules.Planning.SprintBacklog.Domain.Entities;
 
 namespace ProjectMgmt.Modules.Planning.SprintBacklog.Infrastructure.Persistence.Configurations;
 
-internal sealed class SprintConfiguration : IEntityTypeConfiguration<Sprint>
+internal class SprintConfiguration : IEntityTypeConfiguration<Sprint>
 {
     public void Configure(EntityTypeBuilder<Sprint> builder)
     {
@@ -23,7 +23,7 @@ internal sealed class SprintConfiguration : IEntityTypeConfiguration<Sprint>
     }
 }
 
-internal sealed class SprintSnapshotConfiguration : IEntityTypeConfiguration<SprintSnapshot>
+internal class SprintSnapshotConfiguration : IEntityTypeConfiguration<SprintSnapshot>
 {
     public void Configure(EntityTypeBuilder<SprintSnapshot> builder)
     {
@@ -41,7 +41,7 @@ internal sealed class SprintSnapshotConfiguration : IEntityTypeConfiguration<Spr
     }
 }
 
-internal sealed class SprintMemberCapacityConfiguration : IEntityTypeConfiguration<SprintMemberCapacity>
+internal class SprintMemberCapacityConfiguration : IEntityTypeConfiguration<SprintMemberCapacity>
 {
     public void Configure(EntityTypeBuilder<SprintMemberCapacity> builder)
     {

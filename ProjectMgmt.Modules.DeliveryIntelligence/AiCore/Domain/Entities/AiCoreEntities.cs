@@ -1,6 +1,6 @@
 namespace ProjectMgmt.Modules.DeliveryIntelligence.AiCore.Domain.Entities;
 
-public sealed class AiModel
+public class AiModel
 {
     public Guid Id { get; set; }
     public string Code { get; set; } = string.Empty;
@@ -16,7 +16,7 @@ public sealed class AiModel
     public DateTime CreatedAt { get; set; }
 }
 
-public sealed class AiPromptTemplate
+public class AiPromptTemplate
 {
     public Guid Id { get; set; }
     public string Code { get; set; } = string.Empty;

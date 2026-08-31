@@ -1,6 +1,6 @@
 namespace ProjectMgmt.Modules.IdentityExperience.AiAssist.Domain.Entities;
 
-public sealed class AiGenerationLog
+public class AiGenerationLog
 {
     public Guid Id { get; set; }
     public Guid IssueId { get; set; }
@@ -26,7 +26,7 @@ public sealed class AiGenerationLog
     public DateTime? CompletedAt { get; set; }
 }
 
-public sealed class AiSuggestedTask
+public class AiSuggestedTask
 {
     public Guid Id { get; set; }
     public Guid AiGenerationLogId { get; set; }

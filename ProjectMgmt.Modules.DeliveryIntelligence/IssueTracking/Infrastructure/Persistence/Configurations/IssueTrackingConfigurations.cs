@@ -4,7 +4,7 @@ using ProjectMgmt.Modules.DeliveryIntelligence.IssueTracking.Domain.Entities;
 
 namespace ProjectMgmt.Modules.DeliveryIntelligence.IssueTracking.Infrastructure.Persistence.Configurations;
 
-internal sealed class IssueConfiguration : IEntityTypeConfiguration<Issue>
+internal class IssueConfiguration : IEntityTypeConfiguration<Issue>
 {
     public void Configure(EntityTypeBuilder<Issue> builder)
     {
@@ -32,7 +32,7 @@ internal sealed class IssueConfiguration : IEntityTypeConfiguration<Issue>
     }
 }
 
-internal sealed class IssueLinkConfiguration : IEntityTypeConfiguration<IssueLink>
+internal class IssueLinkConfiguration : IEntityTypeConfiguration<IssueLink>
 {
     public void Configure(EntityTypeBuilder<IssueLink> builder)
     {
@@ -47,7 +47,7 @@ internal sealed class IssueLinkConfiguration : IEntityTypeConfiguration<IssueLin
     }
 }
 
-internal sealed class IssueWatcherConfiguration : IEntityTypeConfiguration<IssueWatcher>
+internal class IssueWatcherConfiguration : IEntityTypeConfiguration<IssueWatcher>
 {
     public void Configure(EntityTypeBuilder<IssueWatcher> builder)
     {
@@ -59,7 +59,7 @@ internal sealed class IssueWatcherConfiguration : IEntityTypeConfiguration<Issue
     }
 }
 
-internal sealed class CommentConfiguration : IEntityTypeConfiguration<Comment>
+internal class CommentConfiguration : IEntityTypeConfiguration<Comment>
 {
     public void Configure(EntityTypeBuilder<Comment> builder)
     {
@@ -78,7 +78,7 @@ internal sealed class CommentConfiguration : IEntityTypeConfiguration<Comment>
     }
 }
 
-internal sealed class AttachmentConfiguration : IEntityTypeConfiguration<Attachment>
+internal class AttachmentConfiguration : IEntityTypeConfiguration<Attachment>
 {
     public void Configure(EntityTypeBuilder<Attachment> builder)
     {
@@ -93,7 +93,7 @@ internal sealed class AttachmentConfiguration : IEntityTypeConfiguration<Attachm
     }
 }
 
-internal sealed class ActivityLogConfiguration : IEntityTypeConfiguration<ActivityLog>
+internal class ActivityLogConfiguration : IEntityTypeConfiguration<ActivityLog>
 {
     public void Configure(EntityTypeBuilder<ActivityLog> builder)
     {
@@ -112,7 +112,7 @@ internal sealed class ActivityLogConfiguration : IEntityTypeConfiguration<Activi
     }
 }
 
-internal sealed class IssueStatusHistoryConfiguration : IEntityTypeConfiguration<IssueStatusHistory>
+internal class IssueStatusHistoryConfiguration : IEntityTypeConfiguration<IssueStatusHistory>
 {
     public void Configure(EntityTypeBuilder<IssueStatusHistory> builder)
     {
@@ -126,7 +126,7 @@ internal sealed class IssueStatusHistoryConfiguration : IEntityTypeConfiguration
     }
 }
 
-internal sealed class IssueAssignmentHistoryConfiguration : IEntityTypeConfiguration<IssueAssignmentHistory>
+internal class IssueAssignmentHistoryConfiguration : IEntityTypeConfiguration<IssueAssignmentHistory>
 {
     public void Configure(EntityTypeBuilder<IssueAssignmentHistory> builder)
     {
@@ -143,7 +143,7 @@ internal sealed class IssueAssignmentHistoryConfiguration : IEntityTypeConfigura
     }
 }
 
-internal sealed class LabelConfiguration : IEntityTypeConfiguration<Label>
+internal class LabelConfiguration : IEntityTypeConfiguration<Label>
 {
     public void Configure(EntityTypeBuilder<Label> builder)
     {
@@ -155,7 +155,7 @@ internal sealed class LabelConfiguration : IEntityTypeConfiguration<Label>
     }
 }
 
-internal sealed class IssueLabelConfiguration : IEntityTypeConfiguration<IssueLabel>
+internal class IssueLabelConfiguration : IEntityTypeConfiguration<IssueLabel>
 {
     public void Configure(EntityTypeBuilder<IssueLabel> builder)
     {
@@ -167,7 +167,7 @@ internal sealed class IssueLabelConfiguration : IEntityTypeConfiguration<IssueLa
     }
 }
 
-internal sealed class IssueComponentLinkConfiguration : IEntityTypeConfiguration<IssueComponentLink>
+internal class IssueComponentLinkConfiguration : IEntityTypeConfiguration<IssueComponentLink>
 {
     public void Configure(EntityTypeBuilder<IssueComponentLink> builder)
     {
@@ -178,7 +178,7 @@ internal sealed class IssueComponentLinkConfiguration : IEntityTypeConfiguration
     }
 }
 
-internal sealed class IssueVersionLinkConfiguration : IEntityTypeConfiguration<IssueVersionLink>
+internal class IssueVersionLinkConfiguration : IEntityTypeConfiguration<IssueVersionLink>
 {
     public void Configure(EntityTypeBuilder<IssueVersionLink> builder)
     {
@@ -190,7 +190,7 @@ internal sealed class IssueVersionLinkConfiguration : IEntityTypeConfiguration<I
     }
 }
 
-internal sealed class IssueRequiredSkillConfiguration : IEntityTypeConfiguration<IssueRequiredSkill>
+internal class IssueRequiredSkillConfiguration : IEntityTypeConfiguration<IssueRequiredSkill>
 {
     public void Configure(EntityTypeBuilder<IssueRequiredSkill> builder)
     {
@@ -205,7 +205,7 @@ internal sealed class IssueRequiredSkillConfiguration : IEntityTypeConfiguration
     }
 }
 
-internal sealed class AcceptanceCriteriaConfiguration : IEntityTypeConfiguration<AcceptanceCriteria>
+internal class AcceptanceCriteriaConfiguration : IEntityTypeConfiguration<AcceptanceCriteria>
 {
     public void Configure(EntityTypeBuilder<AcceptanceCriteria> builder)
     {

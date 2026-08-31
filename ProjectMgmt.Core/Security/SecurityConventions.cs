@@ -38,9 +38,16 @@ public interface ICurrentUser
     bool IsAuthenticated { get; }
 }
 
-public sealed class HttpCurrentUser(IHttpContextAccessor httpContextAccessor) : ICurrentUser
+public class HttpCurrentUser : ICurrentUser
 {
-    private ClaimsPrincipal? Principal => httpContextAccessor.HttpContext?.User;
+    private readonly IHttpContextAccessor _httpContextAccessor;
+
+    public HttpCurrentUser(IHttpContextAccessor httpContextAccessor)
+    {
+        _httpContextAccessor = httpContextAccessor;
+    }
+
+    private ClaimsPrincipal? Principal => _httpContextAccessor.HttpContext?.User;
 
     public bool IsAuthenticated => Principal?.Identity?.IsAuthenticated == true;
 

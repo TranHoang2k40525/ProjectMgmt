@@ -14,13 +14,26 @@ public enum ErrorType
     Unexpected
 }
 
-public record Error(
-    string Code,
-    string Message,
-    ErrorType Type = ErrorType.Failure,
-    IReadOnlyDictionary<string, string[]>? Details = null)
+public class Error
 {
-    public static readonly Error None = new(string.Empty, string.Empty);
+    public Error(
+        string code,
+        string message,
+        ErrorType type = ErrorType.Failure,
+        IReadOnlyDictionary<string, string[]>? details = null)
+    {
+        Code = code;
+        Message = message;
+        Type = type;
+        Details = details;
+    }
+
+    public string Code { get; }
+    public string Message { get; }
+    public ErrorType Type { get; }
+    public IReadOnlyDictionary<string, string[]>? Details { get; }
+
+    public static readonly Error None = new Error(string.Empty, string.Empty);
 
     public static Error Validation(string code, string message, IReadOnlyDictionary<string, string[]>? details = null) =>
         new(code, message, ErrorType.Validation, details);
@@ -38,22 +51,30 @@ public record Error(
     public static Error Unexpected(string code, string message) => new(code, message, ErrorType.Unexpected);
 }
 
-public sealed record ValidationError(
-    string Code,
-    string Message,
-    IReadOnlyDictionary<string, string[]> ValidationDetails)
-    : Error(Code, Message, ErrorType.Validation, ValidationDetails);
+public class ValidationError : Error
+{
+    public ValidationError(
+        string code,
+        string message,
+        IReadOnlyDictionary<string, string[]> validationDetails)
+        : base(code, message, ErrorType.Validation, validationDetails)
+    {
+        ValidationDetails = validationDetails;
+    }
+
+    public IReadOnlyDictionary<string, string[]> ValidationDetails { get; }
+}
 
 public class Result
 {
     protected Result(bool isSuccess, Error error)
     {
-        if (isSuccess && error != Error.None)
+        if (isSuccess && !ReferenceEquals(error, Error.None))
         {
             throw new ArgumentException("A successful result cannot contain an error.", nameof(error));
         }
 
-        if (!isSuccess && error == Error.None)
+        if (!isSuccess && ReferenceEquals(error, Error.None))
         {
             throw new ArgumentException("A failed result must contain an error.", nameof(error));
         }
@@ -77,7 +98,7 @@ public class Result
     public static Result<T> Failure<T>(Error error) => Result<T>.Failure(error);
 }
 
-public sealed class Result<T> : Result
+public class Result<T> : Result
 {
     private readonly T? _value;
 

@@ -1,6 +1,6 @@
 namespace ProjectMgmt.Modules.Planning.SprintBacklog.Domain.Entities;
 
-public sealed class Sprint
+public class Sprint
 {
     public Guid Id { get; set; }
     public Guid ProjectId { get; set; }
@@ -17,7 +17,7 @@ public sealed class Sprint
     public Guid? ActiveGuard { get; set; }
 }
 
-public sealed class SprintSnapshot
+public class SprintSnapshot
 {
     public Guid Id { get; set; }
     public Guid SprintId { get; set; }
@@ -31,7 +31,7 @@ public sealed class SprintSnapshot
     public DateTime CreatedAt { get; set; }
 }
 
-public sealed class SprintMemberCapacity
+public class SprintMemberCapacity
 {
     public Guid Id { get; set; }
     public Guid SprintId { get; set; }

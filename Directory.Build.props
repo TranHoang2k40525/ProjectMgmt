@@ -6,5 +6,7 @@
     <!-- Pomelo 9 is the latest stable provider; C# 13 avoids its known .NET 10 compiler incompatibility. -->
     <LangVersion>13.0</LangVersion>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <!-- The codebase intentionally uses inheritable traditional classes instead of sealed classes. -->
+    <NoWarn>$(NoWarn);CA1852</NoWarn>
   </PropertyGroup>
 </Project>

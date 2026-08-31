@@ -4,7 +4,7 @@ using ProjectMgmt.Modules.IdentityExperience.IdentityAccess.Domain.Entities;
 
 namespace ProjectMgmt.Modules.IdentityExperience.IdentityAccess.Infrastructure.Persistence.Configurations;
 
-internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
+internal class UserConfiguration : IEntityTypeConfiguration<User>
 {
     public void Configure(EntityTypeBuilder<User> builder)
     {
@@ -21,7 +21,7 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
     }
 }
 
-internal sealed class UserProfileConfiguration : IEntityTypeConfiguration<UserProfile>
+internal class UserProfileConfiguration : IEntityTypeConfiguration<UserProfile>
 {
     public void Configure(EntityTypeBuilder<UserProfile> builder)
     {
@@ -42,7 +42,7 @@ internal sealed class UserProfileConfiguration : IEntityTypeConfiguration<UserPr
     }
 }
 
-internal sealed class ExternalLoginConfiguration : IEntityTypeConfiguration<ExternalLogin>
+internal class ExternalLoginConfiguration : IEntityTypeConfiguration<ExternalLogin>
 {
     public void Configure(EntityTypeBuilder<ExternalLogin> builder)
     {
@@ -57,7 +57,7 @@ internal sealed class ExternalLoginConfiguration : IEntityTypeConfiguration<Exte
     }
 }
 
-internal sealed class OtpCodeConfiguration : IEntityTypeConfiguration<OtpCode>
+internal class OtpCodeConfiguration : IEntityTypeConfiguration<OtpCode>
 {
     public void Configure(EntityTypeBuilder<OtpCode> builder)
     {
@@ -74,7 +74,7 @@ internal sealed class OtpCodeConfiguration : IEntityTypeConfiguration<OtpCode>
     }
 }
 
-internal sealed class RefreshTokenConfiguration : IEntityTypeConfiguration<RefreshToken>
+internal class RefreshTokenConfiguration : IEntityTypeConfiguration<RefreshToken>
 {
     public void Configure(EntityTypeBuilder<RefreshToken> builder)
     {
@@ -92,7 +92,7 @@ internal sealed class RefreshTokenConfiguration : IEntityTypeConfiguration<Refre
     }
 }
 
-internal sealed class RoleConfiguration : IEntityTypeConfiguration<Role>
+internal class RoleConfiguration : IEntityTypeConfiguration<Role>
 {
     public void Configure(EntityTypeBuilder<Role> builder)
     {
@@ -106,7 +106,7 @@ internal sealed class RoleConfiguration : IEntityTypeConfiguration<Role>
     }
 }
 
-internal sealed class PermissionConfiguration : IEntityTypeConfiguration<Permission>
+internal class PermissionConfiguration : IEntityTypeConfiguration<Permission>
 {
     public void Configure(EntityTypeBuilder<Permission> builder)
     {
@@ -119,7 +119,7 @@ internal sealed class PermissionConfiguration : IEntityTypeConfiguration<Permiss
     }
 }
 
-internal sealed class RolePermissionConfiguration : IEntityTypeConfiguration<RolePermission>
+internal class RolePermissionConfiguration : IEntityTypeConfiguration<RolePermission>
 {
     public void Configure(EntityTypeBuilder<RolePermission> builder)
     {
@@ -131,7 +131,7 @@ internal sealed class RolePermissionConfiguration : IEntityTypeConfiguration<Rol
     }
 }
 
-internal sealed class UserRoleConfiguration : IEntityTypeConfiguration<UserRole>
+internal class UserRoleConfiguration : IEntityTypeConfiguration<UserRole>
 {
     public void Configure(EntityTypeBuilder<UserRole> builder)
     {
@@ -149,7 +149,7 @@ internal sealed class UserRoleConfiguration : IEntityTypeConfiguration<UserRole>
     }
 }
 
-internal sealed class SkillCatalogConfiguration : IEntityTypeConfiguration<SkillCatalog>
+internal class SkillCatalogConfiguration : IEntityTypeConfiguration<SkillCatalog>
 {
     public void Configure(EntityTypeBuilder<SkillCatalog> builder)
     {
@@ -163,7 +163,7 @@ internal sealed class SkillCatalogConfiguration : IEntityTypeConfiguration<Skill
     }
 }
 
-internal sealed class UserSkillConfiguration : IEntityTypeConfiguration<UserSkill>
+internal class UserSkillConfiguration : IEntityTypeConfiguration<UserSkill>
 {
     public void Configure(EntityTypeBuilder<UserSkill> builder)
     {

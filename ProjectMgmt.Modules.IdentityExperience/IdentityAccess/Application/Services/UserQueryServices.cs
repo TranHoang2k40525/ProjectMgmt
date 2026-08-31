@@ -1,18 +1,25 @@
 using ProjectMgmt.IdentityAccess.Contracts;
-using ProjectMgmt.Modules.IdentityExperience.IdentityAccess.Domain.Repositories;
+using ProjectMgmt.Modules.IdentityExperience.IdentityAccess.Domain.IRepositories;
 
 namespace ProjectMgmt.Modules.IdentityExperience.IdentityAccess.Application.Services;
 
-internal sealed class UserLookupService(IUserRepository repository) : IUserLookupService
+internal class UserLookupService : IUserLookupService
 {
+    private readonly IUserRepository _repository;
+
+    public UserLookupService(IUserRepository repository)
+    {
+        _repository = repository;
+    }
+
     public Task<bool> ExistsAsync(Guid userId, CancellationToken cancellationToken = default) =>
-        repository.ExistsActiveAsync(userId, cancellationToken);
+        _repository.ExistsActiveAsync(userId, cancellationToken);
 
     public async Task<UserDisplayInfo?> GetDisplayInfoAsync(
         Guid userId,
         CancellationToken cancellationToken = default)
     {
-        var profile = await repository.GetActiveProfileAsync(userId, cancellationToken);
+        var profile = await _repository.GetActiveProfileAsync(userId, cancellationToken);
         return profile is null ? null : new UserDisplayInfo(profile.UserId, profile.DisplayName, profile.AvatarUrl);
     }
 
@@ -25,14 +32,21 @@ internal sealed class UserLookupService(IUserRepository repository) : IUserLooku
             return [];
         }
 
-        return (await repository.GetActiveProfilesAsync(userIds, cancellationToken))
+        return (await _repository.GetActiveProfilesAsync(userIds, cancellationToken))
             .Select(profile => new UserDisplayInfo(profile.UserId, profile.DisplayName, profile.AvatarUrl))
             .ToList();
     }
 }
 
-internal sealed class UserSkillService(IUserRepository repository) : IUserSkillService
+internal class UserSkillService : IUserSkillService
 {
+    private readonly IUserRepository _repository;
+
+    public UserSkillService(IUserRepository repository)
+    {
+        _repository = repository;
+    }
+
     public async Task<IReadOnlyList<UserSkillInfo>> GetUserSkillsAsync(
         IReadOnlyCollection<Guid> userIds,
         CancellationToken cancellationToken = default)
@@ -42,7 +56,7 @@ internal sealed class UserSkillService(IUserRepository repository) : IUserSkillS
             return [];
         }
 
-        return (await repository.GetSkillsAsync(userIds, cancellationToken))
+        return (await _repository.GetSkillsAsync(userIds, cancellationToken))
             .Select(record => new UserSkillInfo(
                 record.UserSkill.UserId,
                 record.Skill.Code,
@@ -63,7 +77,7 @@ internal sealed class UserSkillService(IUserRepository repository) : IUserSkillS
             return [];
         }
 
-        return (await repository.GetActiveProfilesAsync(userIds, cancellationToken))
+        return (await _repository.GetActiveProfilesAsync(userIds, cancellationToken))
             .Select(profile => new UserProfileFeatures(
                 profile.UserId,
                 profile.JobTitle,

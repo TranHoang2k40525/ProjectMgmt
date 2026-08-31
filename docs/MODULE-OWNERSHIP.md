@@ -9,9 +9,9 @@
 Quy tắc làm việc:
 
 1. Mỗi entity/table/configuration chỉ có một project sở hữu.
-2. Không thêm project nghiệp vụ mới nếu logical module có thể nằm trong một trong ba khối trên.
+2. Mỗi nhóm quản lý `AppDbContext`, database configuration, repository và service của project mình.
 3. Giao tiếp liên nhóm chỉ qua interface/DTO trong `ProjectMgmt.Contracts`.
 4. Không truyền EF entity hoặc `DbContext` qua boundary.
-5. API và DI nằm trong `ProjectMgmt.Solution`; module tự cung cấp extension đăng ký dịch vụ của mình.
-6. Repository là kiểu truyền thống; không đưa CQRS/MediatR vào nếu chưa có quyết định kiến trúc mới.
+5. Controller và composition root nằm trong `ProjectMgmt.Solution`.
+6. Repository/service dùng class và constructor truyền thống; không dùng `record`, `sealed`, primary constructor, CQRS hoặc MediatR.
 7. Thay đổi contract phải ưu tiên additive và cập nhật `CONTRACTS-CHANGELOG.md`.

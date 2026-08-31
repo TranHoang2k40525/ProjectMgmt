@@ -6,7 +6,7 @@ using ProjectMgmt.ProjectManagement.Contracts;
 
 namespace ProjectMgmt.Tests.Fakes;
 
-public sealed class FakeIssueService : IIssueService
+public class FakeIssueService : IIssueService
 {
     private int _nextIssueNumber;
 
@@ -34,7 +34,7 @@ public sealed class FakeIssueService : IIssueService
     }
 }
 
-public sealed class FakeUserLookupService : IUserLookupService
+public class FakeUserLookupService : IUserLookupService
 {
     private readonly Dictionary<Guid, UserDisplayInfo> _users = [];
 
@@ -60,7 +60,7 @@ public sealed class FakeUserLookupService : IUserLookupService
             .ToArray());
 }
 
-public sealed class FakeProjectLookupService : IProjectLookupService
+public class FakeProjectLookupService : IProjectLookupService
 {
     public Dictionary<Guid, string> ProjectKeys { get; } = [];
     public Dictionary<Guid, IReadOnlyList<ProjectIssueTypeDto>> IssueTypes { get; } = [];
@@ -83,7 +83,7 @@ public sealed class FakeProjectLookupService : IProjectLookupService
         Task.FromResult(Statuses.GetValueOrDefault(projectId) ?? []);
 }
 
-public sealed class FakeIssueNumberGenerator : IIssueNumberGenerator
+public class FakeIssueNumberGenerator : IIssueNumberGenerator
 {
     private readonly ConcurrentDictionary<Guid, int> _counters = new();
 

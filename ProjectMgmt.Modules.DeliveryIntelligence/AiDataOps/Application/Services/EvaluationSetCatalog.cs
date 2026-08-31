@@ -1,13 +1,20 @@
 using ProjectMgmt.AiDataOps.Contracts;
-using ProjectMgmt.Modules.DeliveryIntelligence.AiDataOps.Domain.Repositories;
+using ProjectMgmt.Modules.DeliveryIntelligence.AiDataOps.Domain.IRepositories;
 
 namespace ProjectMgmt.Modules.DeliveryIntelligence.AiDataOps.Application.Services;
 
-internal sealed class EvaluationSetCatalog(IAiDatasetRepository repository) : IEvaluationSetCatalog
+internal class EvaluationSetCatalog : IEvaluationSetCatalog
 {
+    private readonly IAiDatasetRepository _repository;
+
+    public EvaluationSetCatalog(IAiDatasetRepository repository)
+    {
+        _repository = repository;
+    }
+
     public async Task<EvaluationSetDescriptor?> GetCurrentAsync(CancellationToken cancellationToken = default)
     {
-        var version = await repository.GetLatestFrozenVersionAsync(cancellationToken);
+        var version = await _repository.GetLatestFrozenVersionAsync(cancellationToken);
         if (version?.FrozenAt is null || version.Checksum is null)
         {
             return null;

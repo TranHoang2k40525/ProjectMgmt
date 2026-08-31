@@ -1,6 +1,6 @@
 namespace ProjectMgmt.Modules.Planning.AiAssignment.Domain.Entities;
 
-public sealed class UserWorkloadSnapshot
+public class UserWorkloadSnapshot
 {
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
@@ -17,7 +17,7 @@ public sealed class UserWorkloadSnapshot
     public DateTime CreatedAt { get; set; }
 }
 
-public sealed class UserPerformanceMetric
+public class UserPerformanceMetric
 {
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
@@ -37,7 +37,7 @@ public sealed class UserPerformanceMetric
     public DateTime CalculatedAt { get; set; }
 }
 
-public sealed class AiAssignmentRun
+public class AiAssignmentRun
 {
     public Guid Id { get; set; }
     public Guid ProjectId { get; set; }
@@ -57,7 +57,7 @@ public sealed class AiAssignmentRun
     public DateTime? CompletedAt { get; set; }
 }
 
-public sealed class AiAssignmentCandidate
+public class AiAssignmentCandidate
 {
     public Guid Id { get; set; }
     public Guid RunId { get; set; }
@@ -75,7 +75,7 @@ public sealed class AiAssignmentCandidate
     public DateTime CreatedAt { get; set; }
 }
 
-public sealed class AiAssignmentDecision
+public class AiAssignmentDecision
 {
     public Guid Id { get; set; }
     public Guid RunId { get; set; }
