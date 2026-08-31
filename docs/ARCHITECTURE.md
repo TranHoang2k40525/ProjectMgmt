@@ -1,70 +1,52 @@
-# Architecture
+# Kiến trúc backend
 
-## Shape
+## Quyết định chính
 
-The backend is a modular monolith hosted by `ProjectMgmt.Solution`. The pre-existing root layout is retained to avoid namespace churn. `ProjectMgmt.Core` is the BuildingBlocks-equivalent project; business modules consume types under `ProjectMgmt.BuildingBlocks.*`.
+`ProjectMgmt.Solution` là ASP.NET Core Web API và composition root duy nhất. Không có Web project `.Host`; tên `.Solution` được giữ theo yêu cầu và chứa controller, middleware, cấu hình, OpenAPI, health checks và đăng ký DI.
 
-The host is the only composition root and may reference implementations. An implementation may reference BuildingBlocks, its own Contracts, and another module's Contracts. Contracts may reference only the BCL and BuildingBlocks. Architecture tests enforce these project-reference rules and reject EF-facing types in Contracts.
+Backend gồm đúng 7 project. Ba project nghiệp vụ là ba khối lớn tương ứng ba người. Bên trong mỗi khối, các logical module vẫn có thư mục riêng và được chia theo:
 
-## Module ownership and data
+```text
+<LogicalModule>/
+├─ Domain/
+│  ├─ Entities/
+│  └─ Repositories/
+├─ Application/
+│  └─ Services/
+└─ Infrastructure/
+   └─ Persistence/
+      └─ Configurations/
+```
 
-| Code module | DDL ownership |
-|---|---|
-| IdentityAccess | User, profile/login/token/RBAC/skills (11) |
-| ProjectManagement | Organization, Project, component/version, workflow/configuration/board (10) |
-| SprintBacklog | Sprint, SprintSnapshot, SprintMemberCapacity (3) |
-| IssueTracking | Issue and 13 child/link/history tables (14) |
-| AiCore | AiModel, AiPromptTemplate (2) |
-| AiAssist | AiGenerationLog, AiSuggestedTask (2) |
-| AiAssignment | workload/performance/run/candidate/decision (5) |
-| AiDataOps | dataset/version/sample/cleaning/quality/training/evaluation (7) |
-| Notification | Notification (1) |
+Kiến trúc dùng repository/service truyền thống, không CQRS, không MediatR. `ProjectMgmt.Contracts` là cổng giao tiếp công khai; module implementation chỉ reference `Core` và `Contracts`, không reference implementation của nhóm khác.
 
-All contexts use the same logical `ConnectionStrings:ProjectMgmt` and database. Sprint 1 contexts are intentionally entity-free: later owners add only their own entities/configurations. No code auto-creates, auto-migrates, or deletes the database.
+## Quyền sở hữu dữ liệu
 
-Migration histories:
+| DbContext | Logical module | Số bảng |
+|---|---|---:|
+| `IdentityExperienceDbContext` | IdentityAccess 11 + Notification 1 + AiAssist 2 | 14 |
+| `PlanningDbContext` | ProjectManagement 10 + SprintBacklog 3 + AiAssignment 5 | 18 |
+| `DeliveryIntelligenceDbContext` | IssueTracking 14 + AiCore 2 + AiDataOps 7 | 23 |
 
-- `__EFMigrationsHistory_IdentityAccess`
-- `__EFMigrationsHistory_ProjectManagement`
-- `__EFMigrationsHistory_SprintBacklog`
-- `__EFMigrationsHistory_IssueTracking`
-- `__EFMigrationsHistory_AiCore`
-- `__EFMigrationsHistory_AiAssist`
-- `__EFMigrationsHistory_AiAssignment`
-- `__EFMigrationsHistory_AiDataOps`
-- `__EFMigrationsHistory_Notification`
+Tổng cộng 55 bảng, không trùng quyền sở hữu. Cả ba context dùng cùng database `projectmgmt` qua cùng connection-string key, nhưng có migrations-history name riêng:
 
-## XMOD rule
+- `__EFMigrationsHistory_IdentityExperience`
+- `__EFMigrationsHistory_Planning`
+- `__EFMigrationsHistory_DeliveryIntelligence`
 
-An XMOD column is a raw GUID reference across module boundaries. It has no physical foreign key. Validation goes through a provider Contract, not a cross-module SQL join. Every XMOD column needs a usable left-prefix index.
+Các GUID XMOD được giữ dạng scalar. Business validation qua contract service; không tạo navigation xuyên `DbContext`. Các foreign key vật lý đã có trong DDL vẫn do database bảo vệ.
 
-The four DDL views are the documented read-only exception for reporting/feature extraction. They are not allowed in transactional business logic. `scripts/validate-xmod-indexes.ps1` audits the supplied DDL without changing it or connecting to MySQL.
+## Đồng bộ code và database
 
-## Web foundation
+Database và code được phát triển song song, vì vậy runtime không tự tạo hoặc sửa schema. Không có `EnsureCreated`, `EnsureDeleted`, startup migration hay tự import DDL.
 
-- Global `IExceptionHandler` maps known application exceptions to RFC Problem Details.
-- Predicted business failures use `Result`/`Result<T>`.
-- Correlation IDs use `X-Correlation-ID` and flow into Serilog's log context.
-- `IClock` standardizes UTC time access.
-- CORS origins come from configuration; only Angular localhost is enabled in Development.
-- `/health/live` excludes readiness checks. `/health` runs a check for every module context.
-- Sensitive EF logging requires both Development and the explicit `Persistence:EnableSensitiveDataLogging` setting.
+Readiness gồm hai lớp cho từng context:
 
-## Provider compatibility decision ADR-001
+1. kết nối được MySQL;
+2. toàn bộ bảng/cột mà context sở hữu đang tồn tại trong schema hiện hành.
 
-Decision date: 2026-08-30.
+Kiểm tra thứ hai chỉ đọc `INFORMATION_SCHEMA.COLUMNS`. Khi DBA chưa áp dụng đủ DDL, `/health` trả 503 và liệt kê phần thiếu mà không thay đổi database.
 
-The intended stack is .NET 10 + EF Core 10 + Pomelo. The [Pomelo NuGet package](https://www.nuget.org/packages/Pomelo.EntityFrameworkCore.MySql) currently has 9.0.0 as its stable release, while the upstream [EF Core 10 support issue](https://github.com/PomeloFoundation/Pomelo.EntityFrameworkCore.MySql/issues/2007) remains open. Using EF Core 10 with Pomelo 9 creates an unsupported dependency conflict, while changing to Oracle's provider violates the selected stack.
+## Provider
 
-The working foundation therefore uses:
-
-- `net10.0`
-- EF Core 9.0.19
-- Pomelo 9.0.0
-- C# 13 language mode, the published workaround for Pomelo/EF9 under the .NET 10 SDK
-
-All provider setup is isolated in `AddProjectMgmtMySqlDbContext<TContext>`. When stable Pomelo 10 exists, update the two central package versions, remove the C# 13 workaround if no longer necessary, and run all integration/architecture tests. No module registration signature needs to change.
-
-## Deliberate Sprint 1 exclusions
-
-No generic repository, MediatR/CQRS, service locator, full auth, business CRUD, SignalR hub, Hangfire job, Ollama inference, migration, or 55-entity generation is included. These belong to owning sprints and must build on the frozen Contracts.
+Solution target .NET 10. Pomelo stable hiện dùng EF Core 9, nên package được pin tập trung tại `Directory.Packages.props`: EF Core 9.0.19 và Pomelo 9.0.0. Toàn bộ setup provider nằm trong `AddProjectMgmtMySqlDbContext<TContext>` để có thể nâng cấp tập trung sau này.

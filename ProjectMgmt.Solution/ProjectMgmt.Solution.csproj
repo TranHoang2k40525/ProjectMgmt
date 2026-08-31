@@ -10,16 +10,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ProjectMgmt.AiAssignment\ProjectMgmt.AiAssignment.csproj" />
-    <ProjectReference Include="..\ProjectMgmt.AiAssist\ProjectMgmt.AiAssist.csproj" />
-    <ProjectReference Include="..\ProjectMgmt.AiCore\ProjectMgmt.AiCore.csproj" />
-    <ProjectReference Include="..\ProjectMgmt.AiDataOps\ProjectMgmt.AiDataOps.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Contracts\ProjectMgmt.Contracts.csproj" />
     <ProjectReference Include="..\ProjectMgmt.Core\ProjectMgmt.Core.csproj" />
-    <ProjectReference Include="..\ProjectMgmt.IdentityAccess\ProjectMgmt.IdentityAccess.csproj" />
-    <ProjectReference Include="..\ProjectMgmt.IssueTracking\ProjectMgmt.IssueTracking.csproj" />
-    <ProjectReference Include="..\ProjectMgmt.Notification\ProjectMgmt.Notification.csproj" />
-    <ProjectReference Include="..\ProjectMgmt.ProjectManagement\ProjectMgmt.ProjectManagement.csproj" />
-    <ProjectReference Include="..\ProjectMgmt.SprintBacklog\ProjectMgmt.SprintBacklog.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Modules.DeliveryIntelligence\ProjectMgmt.Modules.DeliveryIntelligence.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Modules.IdentityExperience\ProjectMgmt.Modules.IdentityExperience.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Modules.Planning\ProjectMgmt.Modules.Planning.csproj" />
   </ItemGroup>
 
 </Project>

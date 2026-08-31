@@ -1,5 +1,7 @@
 # Sprint 1 Foundation Audit
 
+> Historical baseline from before the seven-project consolidation. See `README.md` and `ARCHITECTURE.md` for the current structure.
+
 Audit date: 2026-08-30 (Asia/Ho_Chi_Minh)
 
 ## Source-of-truth review

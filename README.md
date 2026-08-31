@@ -1,55 +1,53 @@
 # ScrumAI Project Management
 
-Sprint 1 foundation for a contract-first modular monolith: ASP.NET Core on .NET 10, MySQL, an Angular standalone SPA, SignalR-ready frontend infrastructure, local Ollama, and separate module persistence boundaries.
+Modular monolith dùng ASP.NET Core/.NET 10, EF Core + MySQL và Angular. Backend đã được thu gọn từ 22 xuống đúng 7 project để ba thành viên có ranh giới sở hữu rõ ràng.
 
-## Repository map
+## Cấu trúc backend
 
-- `ProjectMgmt.Solution` — API host/composition root.
-- `ProjectMgmt.Core` — retained legacy project name; this is the BuildingBlocks equivalent and exposes `ProjectMgmt.BuildingBlocks.*` namespaces.
-- `ProjectMgmt.<Module>` — nine module implementations and their `DbContext`/registration.
-- `ProjectMgmt.<Module>.Contracts` — cross-module DTOs/interfaces only.
-- `ProjectMgmt.Tests.Unit`, `.Integration`, `.Architecture`, `.Fakes` — test architecture.
-- `frontend/projectmgmt-web` — Angular standalone shell.
-- `data/ai-evaluation/v1` — frozen manual evaluation-set candidate and rubric.
-- `docs`, `scripts`, `.github`, `docker-compose.yml` — team/process/operations foundation.
+| Project | Vai trò |
+|---|---|
+| `ProjectMgmt.Solution` | ASP.NET Core Web API, controller, cấu hình và composition root/DI |
+| `ProjectMgmt.Core` | Building blocks dùng chung, persistence/web helpers |
+| `ProjectMgmt.Contracts` | DTO và interface giao tiếp liên module; không chứa EF entity |
+| `ProjectMgmt.Modules.IdentityExperience` | Nhóm A: IdentityAccess, Notification, AiAssist (14 bảng) |
+| `ProjectMgmt.Modules.Planning` | Nhóm B: ProjectManagement, SprintBacklog, AiAssignment (18 bảng) |
+| `ProjectMgmt.Modules.DeliveryIntelligence` | Nhóm C: IssueTracking, AiCore, AiDataOps (23 bảng) |
+| `ProjectMgmt.Tests` | Unit, architecture, integration và test fakes trong một project |
 
-## Prerequisites
+Mỗi project nghiệp vụ được tổ chức theo `Domain`, `Application`, `Infrastructure`; repository theo kiểu truyền thống, không dùng CQRS/MediatR. Các module không reference trực tiếp nhau mà giao tiếp qua `ProjectMgmt.Contracts`.
 
-- .NET SDK 10
-- Node.js 24 and npm 11
-- MySQL 8.0.16+ (existing database) or Docker for an isolated local service
-- Ollama when exercising later AI work
+## Database
 
-Pomelo has not published an EF Core 10-compatible stable package as of 2026-08-30. The solution therefore targets .NET 10 but pins Pomelo 9.0.0 and EF Core 9.0.19 behind one persistence extension. See [Architecture](docs/ARCHITECTURE.md) for the upgrade decision.
+Ba `DbContext` cùng đọc một key `ConnectionStrings:ProjectMgmt`:
 
-## Configure the existing database safely
+- `IdentityExperienceDbContext`
+- `PlanningDbContext`
+- `DeliveryIntelligenceDbContext`
 
-The API reads only `ConnectionStrings:ProjectMgmt`. No startup migration, `EnsureCreated`, or destructive DDL execution exists.
+Code chứa đủ 55 entity và EF configuration theo `projectmgmt_schema_mysql.sql`. Ứng dụng không gọi `EnsureCreated`, `EnsureDeleted`, `Migrate` hoặc tự chạy DDL.
 
-Development User Secrets:
+Lưu chuỗi kết nối bằng User Secrets, không ghi mật khẩu vào git:
 
 ```powershell
-dotnet user-secrets set "ConnectionStrings:ProjectMgmt" "Server=localhost;Port=3306;Database=projectmgmt;User=YOUR_USER;Password=YOUR_PASSWORD;CharSet=utf8mb4;" --project .\ProjectMgmt.Solution\ProjectMgmt.Solution.csproj
+dotnet user-secrets set "ConnectionStrings:ProjectMgmt" "Server=localhost;Port=3306;Database=projectmgmt;User ID=YOUR_USER;Password=YOUR_PASSWORD;SslMode=Preferred;AllowPublicKeyRetrieval=True" --project .\ProjectMgmt.Solution\ProjectMgmt.Solution.csproj
 ```
 
-The Host already contains a non-secret `UserSecretsId`; never commit the resulting local secret store.
+`/health/live` chỉ kiểm tra process. `/health` kiểm tra cả kết nối và độ tương thích bảng/cột của từng `DbContext`; endpoint trả 503 nếu database đang phát triển chưa đủ schema.
 
-Or set environment variable `ConnectionStrings__ProjectMgmt`. Do not put credentials in `appsettings*.json`.
-
-## Run
+## Chạy backend
 
 ```powershell
 dotnet restore .\ProjectMgmt.slnx
+dotnet build .\ProjectMgmt.slnx
+dotnet test .\ProjectMgmt.Tests\ProjectMgmt.Tests.csproj
 dotnet run --project .\ProjectMgmt.Solution\ProjectMgmt.Solution.csproj --launch-profile http
 ```
 
-Open:
+- Live health: `http://localhost:5083/health/live`
+- DB/schema readiness: `http://localhost:5083/health`
+- OpenAPI (Development): `http://localhost:5083/openapi/v1.json`
 
-- live process health: `http://localhost:5083/health/live`
-- readiness including all module DB checks: `http://localhost:5083/health`
-- OpenAPI in Development: `http://localhost:5083/openapi/v1.json`
-
-Frontend:
+## Chạy frontend
 
 ```powershell
 Set-Location .\frontend\projectmgmt-web
@@ -57,37 +55,4 @@ cmd /c npm ci
 cmd /c npm start
 ```
 
-Open `http://localhost:4200`.
-
-## Verify
-
-```powershell
-dotnet build .\ProjectMgmt.slnx -c Release
-dotnet test .\ProjectMgmt.slnx -c Release
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-ai-evaluation.ps1
-
-Set-Location .\frontend\projectmgmt-web
-cmd /c npm run lint
-cmd /c npm test -- --watch=false
-cmd /c npm run build
-```
-
-The XMOD audit is intentionally read-only and currently reports DDL findings with a non-zero exit code:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-xmod-indexes.ps1
-```
-
-## Local Docker services
-
-See [Local Docker](docs/LOCAL-DOCKER.md). Compose never mounts or runs the supplied destructive DDL. Do not start it on port 3306 if that would conflict with the existing MySQL instance.
-
-## Team rules
-
-- Branches: `feature/<module>/<short-description>`.
-- Cross-module calls use Contracts; never reference another implementation or its EF entities.
-- XMOD GUIDs do not have physical foreign keys and must have a usable index.
-- Each module owns its migration history table; AiCore migrations have one designated runner.
-- Contract removals/renames require team agreement and an entry in [CONTRACTS-CHANGELOG](CONTRACTS-CHANGELOG.md).
-
-Start with [Sprint 1 Audit](docs/Sprint1-Audit.md), [Architecture](docs/ARCHITECTURE.md), and [Contracts](docs/CONTRACTS.md).
+Xem thêm [kiến trúc](docs/ARCHITECTURE.md), [phân công module](docs/MODULE-OWNERSHIP.md), [contracts](docs/CONTRACTS.md) và [chiến lược test](docs/TEST-STRATEGY.md).

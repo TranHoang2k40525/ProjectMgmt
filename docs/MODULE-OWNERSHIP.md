@@ -1,21 +1,17 @@
-# Module ownership
+# Phân công module cho ba người
 
-| Owner | Backend | Frontend |
-|---|---|---|
-| A — Trần Văn Hoàng | IdentityAccess, Notification, AiAssist; AiPromptTemplate logic | auth, notifications, shared ai-breakdown |
-| B — Nguyễn Thế Hoài | ProjectManagement, SprintBacklog, AiAssignment | projects, backlog, board, reports |
-| C — Hoàng Trần Huy Hoàng | IssueTracking, AiDataOps; AiModel logic | issue-detail, ai-dataops |
+| Nhóm | Project lớn | Logical module | Bảng |
+|---|---|---|---:|
+| A | `ProjectMgmt.Modules.IdentityExperience` | IdentityAccess, Notification, AiAssist | 14 |
+| B | `ProjectMgmt.Modules.Planning` | ProjectManagement, SprintBacklog, AiAssignment | 18 |
+| C | `ProjectMgmt.Modules.DeliveryIntelligence` | IssueTracking, AiCore, AiDataOps | 23 |
 
-AiCore is shared at runtime but not ownerless: A owns prompt-template logic, C owns model-registry logic, and one designated person runs AiCore migrations. Every change to AiCore needs review from both logical owners.
+Quy tắc làm việc:
 
-Rules:
-
-1. One table/entity/configuration/migration has one owner.
-2. Cross-module reads/writes go through Contracts. No business SQL join or implementation reference crosses a boundary.
-3. XMOD columns keep raw GUIDs, no physical FK, and a usable index.
-4. Branch names use `feature/<module>/<short-description>`.
-5. A PR touching another owner's area needs that owner's review. Do not make unreviewed “quick fixes” in another module.
-6. Contract changes are additive within a sprint. Rename/removal requires prior coordination and a changelog entry.
-7. Fakes unblock consumers but are registered only in tests or explicitly configured development scenarios.
-
-The repository has no Git remote at Sprint 1 audit time. `.github/CODEOWNERS` uses expected handle-shaped placeholders and must be reconciled with actual GitHub usernames when the remote is created.
+1. Mỗi entity/table/configuration chỉ có một project sở hữu.
+2. Không thêm project nghiệp vụ mới nếu logical module có thể nằm trong một trong ba khối trên.
+3. Giao tiếp liên nhóm chỉ qua interface/DTO trong `ProjectMgmt.Contracts`.
+4. Không truyền EF entity hoặc `DbContext` qua boundary.
+5. API và DI nằm trong `ProjectMgmt.Solution`; module tự cung cấp extension đăng ký dịch vụ của mình.
+6. Repository là kiểu truyền thống; không đưa CQRS/MediatR vào nếu chưa có quyết định kiến trúc mới.
+7. Thay đổi contract phải ưu tiên additive và cập nhật `CONTRACTS-CHANGELOG.md`.

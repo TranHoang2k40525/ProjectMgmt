@@ -49,6 +49,11 @@ public static class MySqlPersistenceExtensions
             failureStatus: HealthStatus.Unhealthy,
             tags: ["db", "ready", moduleName]);
 
+        services.AddHealthChecks().AddCheck<ProjectMgmtSchemaHealthCheck<TContext>>(
+            name: $"schema-{moduleName.ToLowerInvariant()}",
+            failureStatus: HealthStatus.Unhealthy,
+            tags: ["db", "schema", "ready", moduleName]);
+
         return services;
     }
 }

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ProjectMgmt.Contracts\ProjectMgmt.Contracts.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Core\ProjectMgmt.Core.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Modules.DeliveryIntelligence\ProjectMgmt.Modules.DeliveryIntelligence.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Modules.IdentityExperience\ProjectMgmt.Modules.IdentityExperience.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Modules.Planning\ProjectMgmt.Modules.Planning.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Solution\ProjectMgmt.Solution.csproj" />
+  </ItemGroup>
+</Project>

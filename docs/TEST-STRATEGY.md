@@ -1,35 +1,25 @@
-# Test strategy
+# Chiến lược test
 
-## Test layers
+Toàn bộ backend test nằm trong một project `ProjectMgmt.Tests`, chia bằng thư mục thay vì nhiều `.csproj`:
 
-| Layer | Use when | Foundation command |
-|---|---|---|
-| Unit | Pure domain/application rules, validators, Result mappings, deterministic fakes | `dotnet test ProjectMgmt.Tests.Unit` |
-| Architecture | Project references, Contracts isolation, BuildingBlocks independence, no EF types in Contracts | `dotnet test ProjectMgmt.Tests.Architecture` |
-| Integration | API host/pipeline, persistence, MySQL/provider, external integration adapters | `dotnet test ProjectMgmt.Tests.Integration` |
-| Frontend unit | Components, guards, interceptors, signal stores, pure UI logic | `npm test -- --watch=false` |
-| E2E/smoke | Critical browser/API paths after real features and an environment exist | later sprint |
-| UAT | Product acceptance against agreed scenarios before release candidate | release sprint |
+```text
+ProjectMgmt.Tests/
+├─ Unit/
+├─ Architecture/
+├─ Integration/
+└─ Fakes/
+```
 
-Integration tests must not connect to a developer's real database implicitly. A database test must use an explicitly provisioned disposable/isolated target and must never run the supplied destructive DDL without an approved manual step.
+Chạy:
 
-## Required coverage by change
+```powershell
+dotnet test .\ProjectMgmt.Tests\ProjectMgmt.Tests.csproj
+```
 
-- Pure behavior: unit tests for success, boundary, and predicted failure.
-- Persistence/query/migration: integration test against compatible MySQL and an index/query review.
-- Contract/module reference: architecture suite must stay green.
-- API: status code, Problem Details shape, cancellation, authorization when introduced.
-- Frontend: lint/build plus unit tests for touched logic; E2E for critical end-to-end flows once available.
-- AI: frozen evaluation set, exact schema/JSON validation, qualitative rubric, model/prompt/dataset version, and no train/test leakage.
+Các lớp kiểm tra hiện có:
 
-## Test data and fakes
+- Unit: `Result`, security convention và contract fake.
+- Architecture: solution đúng 7 project; ba module không reference chéo; Web API là composition root; ba EF model sở hữu đúng 14/18/23 = 55 bảng và không trùng.
+- Integration: `/health/live`, readiness khi không có credential và `/api/system/info` qua `WebApplicationFactory<Program>`.
 
-`ProjectMgmt.Tests.Fakes` provides deterministic, configurable, no-network/no-database doubles. Production registration must never select them implicitly. Shared test records use synthetic GUIDs and data; no real email, credential, customer, or internal secret belongs in fixtures.
-
-## CI gates
-
-Backend restore/build/test, frontend install/lint/test/build, Compose syntax, and AI JSONL validation fail the workflow. A later quality-gate sprint will add real MySQL integration containers, secret/dependency scanning, browser E2E, and release artifacts.
-
-## Defect regression
-
-Every fixed High/Critical defect needs an automated regression test at the lowest reliable layer. Medium defects need a regression test unless the cost is disproportionate and documented. Low visual-only defects may use review evidence.
+CI không được tự kết nối database thật của developer. Test DB sau này phải dùng instance cô lập và không tự chạy file DDL có lệnh phá hủy. Schema readiness trong ứng dụng production/development là kiểm tra chỉ đọc, không phải migration.

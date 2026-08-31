@@ -1,14 +1,8 @@
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
-using ProjectMgmt.AiAssignment;
-using ProjectMgmt.AiAssist;
-using ProjectMgmt.AiCore;
-using ProjectMgmt.AiDataOps;
 using ProjectMgmt.BuildingBlocks.Web;
-using ProjectMgmt.IdentityAccess;
-using ProjectMgmt.IssueTracking;
-using ProjectMgmt.Notification;
-using ProjectMgmt.ProjectManagement;
-using ProjectMgmt.SprintBacklog;
+using ProjectMgmt.Modules.DeliveryIntelligence;
+using ProjectMgmt.Modules.IdentityExperience;
+using ProjectMgmt.Modules.Planning;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -32,15 +26,9 @@ builder.Services.AddCors(options => options.AddPolicy("AngularDevelopment", poli
 }));
 
 builder.Services
-    .AddIdentityAccessModule(builder.Configuration, builder.Environment)
-    .AddProjectManagementModule(builder.Configuration, builder.Environment)
-    .AddSprintBacklogModule(builder.Configuration, builder.Environment)
-    .AddIssueTrackingModule(builder.Configuration, builder.Environment)
-    .AddAiCoreModule(builder.Configuration, builder.Environment)
-    .AddAiAssistModule(builder.Configuration, builder.Environment)
-    .AddAiAssignmentModule(builder.Configuration, builder.Environment)
-    .AddAiDataOpsModule(builder.Configuration, builder.Environment)
-    .AddNotificationModule(builder.Configuration, builder.Environment);
+    .AddIdentityExperienceModule(builder.Configuration, builder.Environment)
+    .AddPlanningModule(builder.Configuration, builder.Environment)
+    .AddDeliveryIntelligenceModule(builder.Configuration, builder.Environment);
 
 var app = builder.Build();
 
@@ -60,7 +48,25 @@ if (!app.Environment.IsEnvironment("Testing"))
 
 app.UseAuthorization();
 app.MapControllers();
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        await context.Response.WriteAsJsonAsync(new
+        {
+            status = report.Status.ToString(),
+            checks = report.Entries.ToDictionary(
+                entry => entry.Key,
+                entry => new
+                {
+                    status = entry.Value.Status.ToString(),
+                    description = entry.Value.Description,
+                    data = entry.Value.Data
+                })
+        });
+    }
+});
 app.MapHealthChecks("/health/live", new HealthCheckOptions
 {
     Predicate = registration => !registration.Tags.Contains("ready")
@@ -68,7 +74,7 @@ app.MapHealthChecks("/health/live", new HealthCheckOptions
 app.MapGet("/api/system/info", () => Results.Ok(new
 {
     name = "ScrumAI Project Management",
-    version = "0.1.0-foundation",
+    version = "0.2.0-modular-monolith",
     utc = DateTimeOffset.UtcNow
 }));
 

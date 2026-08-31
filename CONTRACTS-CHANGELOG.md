@@ -1,5 +1,11 @@
 # Contracts changelog
 
+## 2026-08-31 — modular consolidation
+
+- Consolidated seven Contracts projects into `ProjectMgmt.Contracts` while retaining public namespaces for compatibility.
+- Added `ISprintLookupService` for sprint validation across module boundaries.
+- Added `IIssueWorkInProgressCounter` so Planning can enforce WIP limits without referencing IssueTracking implementation.
+
 ## 2026-08-30 — v1 foundation freeze
 
 - Added IdentityAccess user lookup/skill/profile contracts.
