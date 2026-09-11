@@ -14,9 +14,12 @@
   <ItemGroup>
     <ProjectReference Include="..\ProjectMgmt.Contracts\ProjectMgmt.Contracts.csproj" />
     <ProjectReference Include="..\ProjectMgmt.Core\ProjectMgmt.Core.csproj" />
-    <ProjectReference Include="..\ProjectMgmt.Modules.DeliveryIntelligence\ProjectMgmt.Modules.DeliveryIntelligence.csproj" />
-    <ProjectReference Include="..\ProjectMgmt.Modules.IdentityExperience\ProjectMgmt.Modules.IdentityExperience.csproj" />
-    <ProjectReference Include="..\ProjectMgmt.Modules.Planning\ProjectMgmt.Modules.Planning.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Modules.DeliveryIntelligence\Application\DeliveryIntelligence.Application.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Modules.DeliveryIntelligence\Infrastructure\DeliveryIntelligence.Infrastructure.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Modules.IdentityExperience\Application\IdentityExperience.Application.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Modules.IdentityExperience\Infrastructure\IdentityExperience.Infrastructure.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Modules.Planning\Application\Planning.Application.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Modules.Planning\Infrastructure\Planning.Infrastructure.csproj" />
     <ProjectReference Include="..\ProjectMgmt.Solution\ProjectMgmt.Solution.csproj" />
   </ItemGroup>
 </Project>

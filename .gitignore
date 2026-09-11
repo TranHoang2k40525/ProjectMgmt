@@ -11,3 +11,7 @@ appsettings.Local.json
 *.suo
 .audit-tmp/
 TestResults/
+**/__pycache__/
+**/.pytest_cache/
+*.py[cod]
+.tmp/

@@ -1,0 +1,340 @@
+PROJECTMGMT — KẾ HOẠCH CẤU TRÚC MODULAR MONOLITH
+Cập nhật: 12/09/2026
+Trạng thái: bộ khung sạch đã được áp dụng; các file C# khung đang để rỗng.
+
+======================================================================
+1. QUYẾT ĐỊNH KIẾN TRÚC
+======================================================================
+
+1.1. Hệ thống có đúng ba business module:
+     - DeliveryIntelligence
+     - IdentityExperience
+     - Planning
+
+1.2. Mỗi module được biểu diễn bằng một solution folder trong ProjectMgmt.slnx.
+     Solution folder chỉ dùng để nhóm project trong Visual Studio, không tạo DLL.
+
+1.3. Mỗi module có đúng ba class library thật:
+     - <Module>.Domain
+     - <Module>.Application
+     - <Module>.Infrastructure
+
+1.4. Không dùng project façade ProjectMgmt.Modules.<Module>.
+     Một .csproj không thể chứa các .csproj khác như project con trong Solution
+     Explorer. Dùng solution folder là cách đúng và phù hợp Modular Monolith.
+
+1.5. Không tạo solution con cho từng module. Một solution chính giúp restore,
+     build, test, debug và publish toàn hệ thống thống nhất. Tách solution con
+     không tạo thêm ranh giới runtime và làm quản lý reference phức tạp hơn.
+
+======================================================================
+2. CÂY HIỂN THỊ TRONG SOLUTION EXPLORER
+======================================================================
+
+ProjectMgmt
+├─ Foundation
+│  ├─ ProjectMgmt.Core
+│  └─ ProjectMgmt.Contracts
+├─ Modules
+│  ├─ DeliveryIntelligence             solution folder, không phải project
+│  │  ├─ DeliveryIntelligence.Domain
+│  │  ├─ DeliveryIntelligence.Application
+│  │  └─ DeliveryIntelligence.Infrastructure
+│  ├─ IdentityExperience              solution folder, không phải project
+│  │  ├─ IdentityExperience.Domain
+│  │  ├─ IdentityExperience.Application
+│  │  └─ IdentityExperience.Infrastructure
+│  └─ Planning                        solution folder, không phải project
+│     ├─ Planning.Domain
+│     ├─ Planning.Application
+│     └─ Planning.Infrastructure
+└─ Runtime
+   ├─ ProjectMgmt.Solution
+   └─ ProjectMgmt.Tests
+
+Tổng cộng có 13 project: 9 project thuộc ba business module và 4 project hỗ trợ.
+Số module nghiệp vụ vẫn là ba, không phải 13.
+
+======================================================================
+3. CẤU TRÚC VẬT LÝ ÁP DỤNG GIỐNG NHAU CHO BA MODULE
+======================================================================
+
+ProjectMgmt.Modules.<Module>/
+├─ Domain/
+│  ├─ <Module>.Domain.csproj
+│  ├─ Entities/
+│  │  └─ <Feature>Entity.cs
+│  ├─ IRepositories/
+│  │  └─ I<Feature>Repository.cs
+│  └─ UseCases/
+│     └─ <Feature>UseCase.cs
+├─ Application/
+│  ├─ <Module>.Application.csproj
+│  ├─ IServices/
+│  │  └─ I<Feature>Service.cs
+│  ├─ Services/
+│  │  └─ <Feature>Service.cs
+│  └─ Dto/
+│     └─ <Feature>Dto.cs
+└─ Infrastructure/
+   ├─ <Module>.Infrastructure.csproj
+   ├─ <Module>DbContext.cs
+   ├─ Configurations/
+   │  └─ <Entity>Configuration.cs
+   ├─ Repositories/
+   │  └─ <Feature>Repository.cs
+   └─ BusinessLogicLayer/
+      └─ <Feature>DatabaseRoutine.cs
+
+Hiện tại mỗi thư mục trên có một file .cs rỗng để Git lưu cây thư mục.
+Không có code mẫu, entity mẫu, repository mẫu hoặc service mẫu trong các file đó.
+
+Ngoại lệ là hai thư mục AI phải hoàn toàn rỗng:
+     - ProjectMgmt.Modules.IdentityExperience/AiAssist
+     - ProjectMgmt.Modules.Planning/AiAssignment
+
+Git không theo dõi thư mục hoàn toàn rỗng. Vì yêu cầu không dùng .gitkeep, hai thư
+mục AI chỉ tồn tại local cho đến khi có file AI thật. Không thêm file giả vào đó.
+
+======================================================================
+4. CÁCH TỔ CHỨC FILE VÀ NAMESPACE
+======================================================================
+
+4.1. Không tạo thư mục con cho từng feature như AiDataOps, IssueTracking,
+     IdentityAccess, Notification, ProjectManagement hoặc SprintBacklog.
+
+4.2. Mỗi feature nhỏ có thể là một file .cs trong thư mục chung. Một feature lớn
+     có thể gồm nhiều file cùng nằm trong thư mục chung. Chỉ tách thêm thư mục khi
+     số file thực tế đã lớn và việc nhóm mang lại giá trị rõ ràng.
+
+4.3. Mỗi Application chỉ có một IServices và một Services ở cấp gốc Application.
+     Không lặp Application/IServices/Services bên trong từng feature.
+
+4.4. Namespace nên ngắn theo project, không phản chiếu toàn bộ đường dẫn vật lý:
+     - DeliveryIntelligence.Domain
+     - DeliveryIntelligence.Application
+     - DeliveryIntelligence.Infrastructure
+     - IdentityExperience.Domain
+     - IdentityExperience.Application
+     - IdentityExperience.Infrastructure
+     - Planning.Domain
+     - Planning.Application
+     - Planning.Infrastructure
+
+======================================================================
+5. TRÁCH NHIỆM CỦA TỪNG TẦNG
+======================================================================
+
+Domain:
+     - Chứa entity và quy tắc nghiệp vụ cốt lõi.
+     - Chứa interface repository mà Application cần sử dụng.
+     - UseCases chứa mô hình/mapping nghiệp vụ và validation thuần khi phù hợp.
+     - Không tham chiếu EF Core, ASP.NET, Application hoặc Infrastructure.
+     - Không chứa mật khẩu, connection string hoặc mã truy vấn database.
+
+Application:
+     - IServices chứa contract của service trong module.
+     - Services chứa xử lý nghiệp vụ ứng dụng và điều phối use case.
+     - Dto chứa dữ liệu nhận vào/trả ra, mapping và validation biên ứng dụng.
+     - Chỉ biết Domain và ProjectMgmt.Contracts.
+     - Nhận repository interface qua constructor; không new repository/DbContext.
+
+Infrastructure:
+     - Phụ thuộc Domain và Application.
+     - Chứa <Module>DbContext.cs dùng EF Core + Pomelo MySQL + LINQ.
+     - Configurations chứa IEntityTypeConfiguration cho entity.
+     - Repositories chứa implementation truy cập dữ liệu thông thường.
+     - Có thể dùng generic repository cho CRUD thật sự đồng nhất; truy vấn có
+       ngữ nghĩa nghiệp vụ riêng vẫn cần method cụ thể để tránh abstraction yếu.
+     - BusinessLogicLayer chứa wrapper gọi procedure, view hoặc raw SQL cho truy
+       vấn nặng, nhiều bảng/nhiều điều kiện. Index, procedure, view và trigger thật
+       phải được version hóa trong SQL/migration, không chỉ nằm trong C#.
+
+======================================================================
+6. PROJECT REFERENCE VÀ DEPENDENCY INJECTION
+======================================================================
+
+Chiều reference bắt buộc:
+
+     <Module>.Application
+          ├─> <Module>.Domain
+          └─> ProjectMgmt.Contracts
+
+     <Module>.Infrastructure
+          ├─> <Module>.Domain
+          └─> <Module>.Application
+
+     ProjectMgmt.Solution
+          ├─> ba Application
+          ├─> ba Infrastructure
+          ├─> ProjectMgmt.Core
+          └─> ProjectMgmt.Contracts
+
+Application không tham chiếu Infrastructure. Nếu Application tham chiếu
+Infrastructure trong khi Infrastructure cũng tham chiếu Application sẽ tạo vòng
+tham chiếu và build thất bại. Thay vào đó:
+
+     1. Domain/Application khai báo interface.
+     2. Infrastructure viết implementation.
+     3. Program.cs đăng ký interface -> implementation.
+     4. Service nhận interface qua constructor.
+     5. DI container tạo object graph khi endpoint/controller yêu cầu service.
+
+Toàn bộ đăng ký DI được đặt trực tiếp tại ProjectMgmt.Solution/Program.cs theo
+yêu cầu dự án. Program.cs được phép dài; có thể chia thành các vùng comment theo
+ba module nhưng không bắt buộc tạo extension registration trong class library.
+
+Việc host có nhiều ProjectReference không tự làm solution hỏng. Các nguyên nhân
+thực tế gây lỗi là reference sai đường dẫn, framework/package không tương thích,
+type trùng không rõ namespace hoặc vòng tham chiếu. Composition root cần nhìn thấy
+interface và implementation nên sáu reference Application/Infrastructure là đúng.
+
+======================================================================
+7. GIAO TIẾP GIỮA BA MODULE
+======================================================================
+
+7.1. Không cho module A tham chiếu trực tiếp Infrastructure hoặc Domain nội bộ
+     của module B.
+
+7.2. ProjectMgmt.Contracts là nơi đặt contract dùng chung thực sự:
+     - request/response liên module;
+     - integration event;
+     - interface cổng công khai nếu cần gọi đồng bộ.
+
+7.3. Module cung cấp implementation cho contract của nó. Program.cs đăng ký DI.
+     Module tiêu thụ chỉ phụ thuộc contract và nhận interface qua constructor.
+
+7.4. Với giao tiếp đồng bộ trong cùng process:
+     Caller -> public contract -> DI -> Application service của module sở hữu.
+
+7.5. Với giao tiếp giảm liên kết:
+     Module phát integration event contract; handler của module khác xử lý sau.
+     Có thể bổ sung mediator/event dispatcher khi bắt đầu triển khai, chưa cần tạo
+     mã khung ở giai đoạn làm sạch này.
+
+7.6. Contracts không phải nơi gom toàn bộ service/repository nội bộ. Chỉ đưa loại
+     thực sự cần vượt qua ranh giới module vào Contracts.
+
+======================================================================
+8. MYSQL, DB CONTEXT VÀ APPSETTINGS
+======================================================================
+
+8.1. Schema chuẩn hiện tại:
+     docs/projectmgmt_schema_mysql_optimized.sql
+     Database được script tạo với tên: projectmgmt
+
+8.2. Mỗi module có một DbContext riêng để giữ ownership rõ ràng, nhưng cả ba có
+     thể dùng chung một MySQL database và cùng connection string trong giai đoạn
+     Modular Monolith.
+
+8.3. Connection string chỉ cấu hình tại host bằng khóa:
+     ConnectionStrings:ProjectMgmt
+
+8.4. appsettings.json commit vào Git chỉ giữ khóa rỗng hoặc giá trị không bí mật.
+     Không đặt host/user/password trong Domain/Application/Infrastructure.
+
+8.5. Cấu hình local cho tài khoản đã yêu cầu:
+     dotnet user-secrets --project .\ProjectMgmt.Solution set
+       "ConnectionStrings:ProjectMgmt"
+       "Server=localhost;Port=3306;Database=projectmgmt;User=root;Password=123456"
+
+8.6. Khi deploy IIS, đặt biến môi trường hoặc secret trên máy chủ:
+     ConnectionStrings__ProjectMgmt=<connection string môi trường thật>
+
+8.7. Package đã khai báo:
+     - Microsoft.EntityFrameworkCore
+     - Pomelo.EntityFrameworkCore.MySql
+     - FluentValidation.DependencyInjectionExtensions cho Application
+
+======================================================================
+9. PHÂN VÙNG DỮ LIỆU DỰ KIẾN THEO SCHEMA
+======================================================================
+
+IdentityExperience sở hữu nhóm danh tính/trải nghiệm người dùng:
+     User, UserProfile, ExternalLogin, OtpCode, RefreshToken, Role, Permission,
+     RolePermission, UserRole, SkillCatalog, UserSkill, Organization, Notification.
+
+Planning sở hữu nhóm lập kế hoạch và quản lý công việc:
+     Project, ProjectComponent, ProjectVersion, WorkflowStatus,
+     WorkflowTransition, IssueType, Priority, Board, BoardColumn, Sprint,
+     SprintSnapshot, SprintMemberCapacity, Issue, IssueLink, IssueWatcher,
+     Comment, Attachment, Label, IssueLabel, IssueComponentLink,
+     IssueVersionLink, IssueRequiredSkill, AcceptanceCriteria.
+
+DeliveryIntelligence sở hữu nhóm lịch sử, đo lường và dữ liệu hỗ trợ thông minh:
+     ActivityLog, IssueStatusHistory, IssueAssignmentHistory,
+     UserWorkloadSnapshot, UserPerformanceMetric, AiModel, AiPromptTemplate,
+     AiGenerationLog, AiSuggestedTask, AiDataset, AiDatasetVersion,
+     AiDatasetSample, AiDataCleaningRule, AiDataQualityFlag, AiTrainingRun,
+     AiEvaluationResult.
+
+Nhóm AiAssignmentRun, AiAssignmentCandidate và AiAssignmentDecision liên quan AI
+phân công. Ownership cuối cùng cần chốt khi AiAssignment được xây; hiện không tạo
+code AI và không kéo các bảng này vào file C# khung.
+
+======================================================================
+10. THƯ MỤC AI
+======================================================================
+
+AiAssist và AiAssignment là process/service AI độc lập trong tương lai, có thể dùng
+FastAPI hoặc công nghệ khác và cung cấp API ngay cho module tương ứng. Chúng:
+     - nằm ngang cấp Domain/Application/Infrastructure;
+     - không phải feature folder của Application;
+     - không phải class library .NET;
+     - hiện không có source, manifest, Dockerfile, test hoặc .gitkeep.
+
+DeliveryIntelligence chưa tạo thư mục AI riêng. Chỉ tạo khi phạm vi AI của module
+đó được xác định.
+
+======================================================================
+11. TRÌNH TỰ TRIỂN KHAI CODE SAU KHI DUYỆT BỘ KHUNG
+======================================================================
+
+Giai đoạn 1 — chốt ownership dữ liệu
+     - Chốt entity/table thuộc từng module.
+     - Chốt contract nào thực sự cần đi qua ranh giới module.
+
+Giai đoạn 2 — Domain
+     - Viết entity và rule thuần.
+     - Viết IRepositories và use case/model cần thiết.
+
+Giai đoạn 3 — Infrastructure
+     - Viết ba DbContext và mapping trong Configurations.
+     - Viết generic CRUD repository dùng chung trong phạm vi hợp lý.
+     - Viết repository/query cụ thể cho truy vấn có ngữ nghĩa riêng.
+     - Version hóa procedure/view/trigger/index bằng migration hoặc SQL script.
+
+Giai đoạn 4 — Application
+     - Viết service interface, service, DTO, mapping và validation.
+     - Chỉ inject abstraction qua constructor.
+
+Giai đoạn 5 — composition root
+     - Đặt toàn bộ AddDbContext/AddScoped/AddTransient/AddSingleton trong Program.cs.
+     - Bind ConnectionStrings:ProjectMgmt từ cấu hình host.
+     - Map controller/endpoint nhận và trả DTO của Application.
+
+Giai đoạn 6 — kiểm thử và triển khai
+     - Thêm architecture test kiểm tra chiều reference và ranh giới module.
+     - Thêm unit/integration test khi có nghiệp vụ.
+     - dotnet publish ProjectMgmt.Solution; deploy toàn bộ output publish lên IIS.
+     - Không chỉ chép một DLL thay đổi: dependency, .deps.json, .runtimeconfig.json,
+       appsettings và static content có thể thay đổi. Khi cập nhật nên publish lại,
+       dừng app pool/app_offline.htm, thay trọn output rồi khởi động lại.
+
+======================================================================
+12. CHECKLIST NGHIỆM THU BỘ KHUNG
+======================================================================
+
+[x] Git đang ở nhánh hoangtv.
+[x] Có đúng ba business module.
+[x] Mỗi module là solution folder, không phải façade project.
+[x] Mỗi module có ba class library Domain/Application/Infrastructure thật.
+[x] Ba module dùng cùng một cấu trúc thư mục tầng.
+[x] Application chỉ có một IServices, Services và Dto ở cấp gốc.
+[x] Đã xóa feature folder cũ và toàn bộ .gitkeep.
+[x] Mỗi thư mục khung không-AI có file .cs rỗng để Git theo dõi.
+[x] AiAssist và AiAssignment hoàn toàn rỗng.
+[x] Solution tham chiếu trực tiếp Application/Infrastructure để làm composition root.
+[x] plane.txt và project-structure-guide.html được khôi phục.
+[ ] Chỉ viết entity/repository/service/DbContext sau khi người phụ trách duyệt kế hoạch.
+

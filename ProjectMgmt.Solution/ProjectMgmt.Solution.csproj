@@ -5,16 +5,20 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
-    <PackageReference Include="Serilog.AspNetCore" />
+    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\ProjectMgmt.Contracts\ProjectMgmt.Contracts.csproj" />
     <ProjectReference Include="..\ProjectMgmt.Core\ProjectMgmt.Core.csproj" />
-    <ProjectReference Include="..\ProjectMgmt.Modules.DeliveryIntelligence\ProjectMgmt.Modules.DeliveryIntelligence.csproj" />
-    <ProjectReference Include="..\ProjectMgmt.Modules.IdentityExperience\ProjectMgmt.Modules.IdentityExperience.csproj" />
-    <ProjectReference Include="..\ProjectMgmt.Modules.Planning\ProjectMgmt.Modules.Planning.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Modules.DeliveryIntelligence\Application\DeliveryIntelligence.Application.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Modules.DeliveryIntelligence\Infrastructure\DeliveryIntelligence.Infrastructure.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Modules.IdentityExperience\Application\IdentityExperience.Application.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Modules.IdentityExperience\Infrastructure\IdentityExperience.Infrastructure.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Modules.Planning\Application\Planning.Application.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Modules.Planning\Infrastructure\Planning.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

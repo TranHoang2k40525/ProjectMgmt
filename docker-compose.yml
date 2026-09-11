@@ -30,20 +30,5 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-  ollama:
-    image: ollama/ollama:latest
-    ports:
-      - "${OLLAMA_PORT:-11434}:11434"
-    volumes:
-      - projectmgmt_ollama_data:/root/.ollama
-    healthcheck:
-      test: ["CMD", "ollama", "list"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 20s
-    restart: unless-stopped
-
 volumes:
   projectmgmt_mysql_data:
-  projectmgmt_ollama_data:
