@@ -88,6 +88,82 @@ internal class ProjectRepository : IProjectRepository
         return project.IssueCounter;
     }
 
+    public async Task<IReadOnlyList<Organization>> GetOrganizationsAsync(CancellationToken cancellationToken = default) =>
+        await _dbContext.Organizations.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.Name).ToListAsync(cancellationToken);
+
+    public async Task<Organization?> GetOrganizationByIdAsync(Guid orgId, CancellationToken cancellationToken = default) =>
+        await _dbContext.Organizations.SingleOrDefaultAsync(x => x.Id == orgId, cancellationToken);
+
+    public async Task AddOrganizationAsync(Organization organization, CancellationToken cancellationToken = default) =>
+        await _dbContext.Organizations.AddAsync(organization, cancellationToken);
+
+    public async Task<IReadOnlyList<Project>> GetAllProjectsAsync(Guid? orgId = null, CancellationToken cancellationToken = default)
+    {
+        var query = _dbContext.Projects.AsNoTracking().Where(x => !x.IsDeleted);
+        if (orgId.HasValue)
+        {
+            query = query.Where(x => x.OrgId == orgId.Value);
+        }
+        return await query.OrderByDescending(x => x.CreatedAt).ToListAsync(cancellationToken);
+    }
+
+    public void UpdateProject(Project project) =>
+        _dbContext.Projects.Update(project);
+
+    public async Task AddIssueTypesAsync(IEnumerable<IssueType> issueTypes, CancellationToken cancellationToken = default) =>
+        await _dbContext.IssueTypes.AddRangeAsync(issueTypes, cancellationToken);
+
+    public async Task AddWorkflowStatusesAsync(IEnumerable<WorkflowStatus> statuses, CancellationToken cancellationToken = default) =>
+        await _dbContext.WorkflowStatuses.AddRangeAsync(statuses, cancellationToken);
+
+    public async Task AddWorkflowTransitionsAsync(IEnumerable<WorkflowTransition> transitions, CancellationToken cancellationToken = default) =>
+        await _dbContext.WorkflowTransitions.AddRangeAsync(transitions, cancellationToken);
+
+    public async Task AddBoardAsync(Board board, CancellationToken cancellationToken = default) =>
+        await _dbContext.Boards.AddAsync(board, cancellationToken);
+
+    public async Task AddBoardColumnsAsync(IEnumerable<BoardColumn> columns, CancellationToken cancellationToken = default) =>
+        await _dbContext.BoardColumns.AddRangeAsync(columns, cancellationToken);
+
+    public async Task<IReadOnlyList<WorkflowTransition>> GetTransitionsByProjectAsync(Guid projectId, CancellationToken cancellationToken = default) =>
+        await _dbContext.WorkflowTransitions.AsNoTracking()
+            .Where(x => x.ProjectId == projectId)
+            .ToListAsync(cancellationToken);
+
+    public async Task<WorkflowTransition?> GetTransitionByIdAsync(Guid transitionId, CancellationToken cancellationToken = default) =>
+        await _dbContext.WorkflowTransitions.SingleOrDefaultAsync(x => x.Id == transitionId, cancellationToken);
+
+    public async Task AddWorkflowTransitionAsync(WorkflowTransition transition, CancellationToken cancellationToken = default) =>
+        await _dbContext.WorkflowTransitions.AddAsync(transition, cancellationToken);
+
+    public void DeleteWorkflowTransition(WorkflowTransition transition) =>
+        _dbContext.WorkflowTransitions.Remove(transition);
+
+    public async Task<IReadOnlyList<Board>> GetBoardsByProjectAsync(Guid projectId, CancellationToken cancellationToken = default) =>
+        await _dbContext.Boards.AsNoTracking()
+            .Where(x => x.ProjectId == projectId)
+            .OrderByDescending(x => x.IsDefault)
+            .ThenBy(x => x.Name)
+            .ToListAsync(cancellationToken);
+
+    public async Task<Board?> GetBoardByIdAsync(Guid boardId, CancellationToken cancellationToken = default) =>
+        await _dbContext.Boards.SingleOrDefaultAsync(x => x.Id == boardId, cancellationToken);
+
+    public async Task<IReadOnlyList<BoardColumn>> GetBoardColumnsAsync(Guid boardId, CancellationToken cancellationToken = default) =>
+        await _dbContext.BoardColumns.AsNoTracking()
+            .Where(x => x.BoardId == boardId)
+            .OrderBy(x => x.OrderIndex)
+            .ToListAsync(cancellationToken);
+
+    public async Task<BoardColumn?> GetBoardColumnByIdAsync(Guid columnId, CancellationToken cancellationToken = default) =>
+        await _dbContext.BoardColumns.SingleOrDefaultAsync(x => x.Id == columnId, cancellationToken);
+
+    public async Task AddBoardColumnAsync(BoardColumn column, CancellationToken cancellationToken = default) =>
+        await _dbContext.BoardColumns.AddAsync(column, cancellationToken);
+
+    public void DeleteBoardColumn(BoardColumn column) =>
+        _dbContext.BoardColumns.Remove(column);
+
     public async Task AddAsync(Project project, CancellationToken cancellationToken = default) =>
         await _dbContext.Projects.AddAsync(project, cancellationToken);
 

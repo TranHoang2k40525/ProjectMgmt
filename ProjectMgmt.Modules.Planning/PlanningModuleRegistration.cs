@@ -33,6 +33,7 @@ public static class PlanningModuleRegistration
         services.AddScoped<IIssueNumberGenerator, IssueNumberGenerator>();
         services.AddScoped<ISprintLookupService, SprintLookupService>();
         services.AddScoped<IAiAssignmentFeedbackExportService, AiAssignmentFeedbackExportService>();
+        services.AddScoped<ProjectMgmt.Modules.Planning.ProjectManagement.Application.IServices.IProjectManagementService, ProjectManagementService>();
 
         return services;
     }
