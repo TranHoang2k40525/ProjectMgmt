@@ -2,332 +2,171 @@
 <html lang="vi">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ProjectMgmt — Cấu trúc Modular Monolith</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ProjectMgmt — Báo cáo EF Core/MySQL và Modular Monolith</title>
   <style>
-    :root {
-      --ink: #172033;
-      --muted: #667085;
-      --paper: #f5f7fb;
-      --card: rgba(255, 255, 255, .94);
-      --line: #d9e0ec;
-      --blue: #275df5;
-      --violet: #7c3aed;
-      --green: #087a55;
-      --amber: #a15c00;
-      --navy: #111c44;
-      --shadow: 0 16px 44px rgba(25, 39, 80, .10);
-    }
-
-    * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; }
-    body {
-      margin: 0;
-      color: var(--ink);
-      background:
-        radial-gradient(circle at 15% 0%, rgba(39, 93, 245, .12), transparent 28rem),
-        radial-gradient(circle at 95% 10%, rgba(124, 58, 237, .10), transparent 26rem),
-        var(--paper);
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      line-height: 1.65;
-    }
-
-    a { color: var(--blue); }
-    code, pre, .mono { font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace; }
-    code { color: #4733a5; }
-
-    .hero {
-      color: white;
-      background: linear-gradient(125deg, #101b43 0%, #2449be 58%, #7232b8 100%);
-      padding: 72px 24px 88px;
-      overflow: hidden;
-      position: relative;
-    }
-
-    .hero::after {
-      content: "";
-      position: absolute;
-      width: 420px;
-      height: 420px;
-      right: -100px;
-      top: -180px;
-      border: 70px solid rgba(255,255,255,.07);
-      border-radius: 50%;
-    }
-
-    .wrap { width: min(1180px, calc(100% - 36px)); margin: 0 auto; }
-    .hero .wrap { position: relative; z-index: 1; }
-    .eyebrow { letter-spacing: .14em; text-transform: uppercase; font-weight: 800; font-size: .78rem; opacity: .78; }
-    h1 { max-width: 820px; margin: 12px 0 16px; font-size: clamp(2.25rem, 6vw, 4.6rem); line-height: 1.02; letter-spacing: -.045em; }
-    .lead { max-width: 780px; margin: 0; font-size: clamp(1rem, 2vw, 1.25rem); color: rgba(255,255,255,.82); }
-    .badges { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
-    .badge { padding: 8px 13px; border: 1px solid rgba(255,255,255,.25); border-radius: 999px; background: rgba(255,255,255,.10); font-size: .9rem; }
-
-    nav {
-      position: sticky;
-      top: 0;
-      z-index: 10;
-      background: rgba(245,247,251,.92);
-      backdrop-filter: blur(14px);
-      border-bottom: 1px solid rgba(217,224,236,.85);
-    }
-    nav .wrap { display: flex; gap: 22px; overflow-x: auto; padding: 13px 0; }
-    nav a { color: #38435a; text-decoration: none; font-size: .9rem; white-space: nowrap; font-weight: 650; }
-    nav a:hover { color: var(--blue); }
-
-    main { padding: 48px 0 88px; }
-    section { margin: 0 0 58px; scroll-margin-top: 78px; }
-    h2 { color: var(--navy); font-size: clamp(1.55rem, 3vw, 2.2rem); letter-spacing: -.025em; margin: 0 0 10px; }
-    h3 { color: var(--navy); margin: 0 0 10px; }
-    .section-intro { max-width: 820px; margin: 0 0 24px; color: var(--muted); }
-
-    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
-    .card {
-      background: var(--card);
-      border: 1px solid rgba(217,224,236,.9);
-      border-radius: 18px;
-      padding: 22px;
-      box-shadow: var(--shadow);
-    }
-    .number { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; color: white; background: var(--blue); font-weight: 800; margin-bottom: 16px; }
-    .card p { color: var(--muted); margin: 8px 0 0; }
-    .status { color: var(--green); font-weight: 750; }
-
-    .tree {
-      margin: 0;
-      padding: 26px;
-      color: #dbe7ff;
-      background: #10182e;
-      border: 1px solid #26365f;
-      border-radius: 18px;
-      overflow: auto;
-      box-shadow: var(--shadow);
-      font-size: .92rem;
-      line-height: 1.7;
-    }
-    .tree b { color: #9dc1ff; }
-    .tree em { color: #91dfc3; font-style: normal; }
-
-    .layers { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 16px; }
-    .layer { border-top: 5px solid var(--blue); }
-    .layer:nth-child(2) { border-top-color: var(--violet); }
-    .layer:nth-child(3) { border-top-color: var(--green); }
-    .layer ul, .rules ul { padding-left: 20px; margin-bottom: 0; }
-
-    .flow {
-      display: grid;
-      grid-template-columns: 1fr auto 1fr auto 1fr;
-      gap: 14px;
-      align-items: center;
-    }
-    .flow .node { min-height: 146px; display: grid; align-content: center; text-align: center; }
-    .arrow { color: var(--blue); font-size: 2rem; font-weight: 800; }
-    .small { color: var(--muted); font-size: .9rem; }
-
-    table { width: 100%; border-collapse: collapse; background: white; border-radius: 16px; overflow: hidden; box-shadow: var(--shadow); }
-    th, td { padding: 15px 16px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
-    th { color: var(--navy); background: #edf2ff; }
-    tr:last-child td { border-bottom: 0; }
-
-    .callout { border-left: 5px solid var(--amber); background: #fff8e8; border-radius: 12px; padding: 17px 20px; color: #5d420d; }
-    .good { border-left-color: var(--green); background: #ecfbf5; color: #174f3e; }
-
-    .plan-frame {
-      width: 100%;
-      height: 1100px;
-      border: 1px solid var(--line);
-      border-radius: 18px;
-      background: white;
-      box-shadow: var(--shadow);
-    }
-
-    footer { color: var(--muted); text-align: center; padding: 24px; border-top: 1px solid var(--line); }
-
-    @media (max-width: 850px) {
-      .grid, .layers { grid-template-columns: 1fr; }
-      .flow { grid-template-columns: 1fr; }
-      .arrow { transform: rotate(90deg); text-align: center; }
-      .hero { padding-top: 54px; }
-      th, td { display: block; }
-      th { display: none; }
-      td:first-child { font-weight: 800; padding-bottom: 4px; }
-    }
+    :root{--bg:#f4f7fb;--paper:#fff;--ink:#172033;--muted:#5d6b82;--line:#dce4ef;--blue:#275efe;--green:#087f5b;--navy:#132043}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 Inter,Segoe UI,Arial,sans-serif}
+    header{background:linear-gradient(135deg,#101b3d,#274caa);color:#fff;padding:56px 24px}header>div,main{max-width:1180px;margin:auto}
+    h1{font-size:clamp(2rem,4vw,3.3rem);line-height:1.13;margin:0 0 12px}h2{margin:0 0 12px;color:var(--navy);font-size:1.55rem}h3{margin:0 0 8px}.lead{max-width:850px;color:#dae4ff;font-size:1.08rem}
+    main{padding:28px 20px 64px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}.card,.section{background:var(--paper);border:1px solid var(--line);border-radius:14px;box-shadow:0 5px 22px rgba(22,38,78,.06)}.card{padding:20px}.section{padding:26px;margin-top:20px}
+    .number{font-size:2.15rem;font-weight:800;color:var(--blue);line-height:1}.label,.muted{color:var(--muted)}.ok{color:var(--green);font-weight:700}.warn{border-left:5px solid #e68719;background:#fff8e8;padding:16px 18px;border-radius:8px}.safe{border-left:5px solid var(--green);background:#edfdf7;padding:16px 18px;border-radius:8px}
+    table{width:100%;border-collapse:collapse;margin-top:12px}th,td{text-align:left;vertical-align:top;border-bottom:1px solid var(--line);padding:11px}th{background:#eef3ff;color:var(--navy)}code,pre{font-family:Cascadia Code,Consolas,monospace}code{background:#eef2f8;padding:.1em .35em;border-radius:4px}pre{background:#101827;color:#dce8ff;padding:17px;border-radius:10px;overflow:auto;white-space:pre-wrap}
+    .tags{display:flex;flex-wrap:wrap;gap:8px}.tag{background:#eaf0ff;color:#20479f;border-radius:999px;padding:5px 10px;text-decoration:none;font-size:.88rem}.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:18px}.plan-frame{width:100%;height:720px;border:1px solid var(--line);border-radius:10px;background:#fff}footer{text-align:center;color:var(--muted);padding:22px}@media(max-width:650px){.section{padding:18px}th,td{display:block}th{display:none}.plan-frame{height:560px}}
   </style>
 </head>
 <body>
-  <header class="hero">
-    <div class="wrap">
-      <div class="eyebrow">ProjectMgmt / Architecture guide</div>
-      <h1>Ba module, mỗi module ba class library thật.</h1>
-      <p class="lead">Bộ khung Modular Monolith sạch: solution folder dùng để nhóm project, tầng phụ thuộc một chiều, DI tập trung ở Program.cs và AI được để riêng hoàn toàn.</p>
-      <div class="badges">
-        <span class="badge">3 business modules</span>
-        <span class="badge">9 module projects</span>
-        <span class="badge">No façade project</span>
-        <span class="badge">Branch: hoangtv</span>
-      </div>
-    </div>
-  </header>
+  <header><div>
+    <p>PROJECTMGMT · 12/09/2026</p>
+    <h1>EF Core/MySQL đã được dựng đầy đủ từ schema</h1>
+    <p class="lead">Báo cáo vị trí Entity, Configuration, DbContext, migration, DI, connection string và hai chiều làm việc database ↔ code cho Modular Monolith ba module.</p>
+  </div></header>
+  <main>
+    <section class="grid" aria-label="Tổng quan">
+      <article class="card"><div class="number">55</div><div class="label">bảng và entity bảng</div></article>
+      <article class="card"><div class="number">4</div><div class="label">view được map keyless</div></article>
+      <article class="card"><div class="number">59</div><div class="label">Configuration + DbSet</div></article>
+      <article class="card"><div class="number">167</div><div class="label">index khai báo từ SQL</div></article>
+      <article class="card"><div class="number">55</div><div class="label">foreign key trong DB</div></article>
+      <article class="card"><div class="number">33</div><div class="label">CHECK constraint</div></article>
+      <article class="card"><div class="number">6</div><div class="label">migration theo module</div></article>
+      <article class="card"><div class="number">2</div><div class="label">trigger được version hóa</div></article>
+    </section>
 
-  <nav aria-label="Mục lục">
-    <div class="wrap">
-      <a href="#decision">Quyết định</a>
-      <a href="#solution">Solution tree</a>
-      <a href="#layers">Các tầng</a>
-      <a href="#dependencies">Reference & DI</a>
-      <a href="#database">Database</a>
-      <a href="#ai">AI</a>
-      <a href="#plan">Kế hoạch đầy đủ</a>
-    </div>
-  </nav>
-
-  <main class="wrap">
-    <section id="decision">
-      <h2>Quyết định đã chốt</h2>
-      <p class="section-intro">Cấu trúc này thay project façade bằng solution folder. Visual Studio sẽ hiển thị đúng ba project tầng dưới tên từng module mà không tạo thêm DLL trung gian.</p>
-      <div class="grid">
-        <article class="card">
-          <div class="number">1</div>
-          <h3>Module là ranh giới nghiệp vụ</h3>
-          <p>Chỉ có DeliveryIntelligence, IdentityExperience và Planning. Foundation/Runtime là hạ tầng hỗ trợ.</p>
-        </article>
-        <article class="card">
-          <div class="number">2</div>
-          <h3>Ba project thật mỗi module</h3>
-          <p>Domain, Application và Infrastructure đều có file .csproj riêng và tạo assembly riêng khi build.</p>
-        </article>
-        <article class="card">
-          <div class="number">3</div>
-          <h3>Một solution chính</h3>
-          <p>Không dựng solution con. Restore, build, test và publish từ ProjectMgmt.slnx để giữ dependency graph rõ ràng.</p>
-        </article>
+    <section class="section">
+      <h2>Mục lục</h2>
+      <div class="tags">
+        <a class="tag" href="#source">Nguồn & phạm vi</a><a class="tag" href="#modules">Phân module</a><a class="tag" href="#files">File đã viết</a><a class="tag" href="#mapping">Mapping</a><a class="tag" href="#connection">Kết nối</a><a class="tag" href="#migration">Migration</a><a class="tag" href="#workflow">DB ↔ code</a><a class="tag" href="#validation">Kiểm chứng</a><a class="tag" href="#plan">Kế hoạch TXT</a>
       </div>
     </section>
 
-    <section id="solution">
-      <h2>Cây Solution Explorer mục tiêu</h2>
-      <p class="section-intro"><span class="status">Đã áp dụng trong ProjectMgmt.slnx.</span> Tên module là solution folder; các node bên dưới là class library project thật.</p>
-      <pre class="tree">ProjectMgmt
-├─ Foundation
-│  ├─ ProjectMgmt.Core
-│  └─ ProjectMgmt.Contracts
-├─ <b>Modules</b>
-│  ├─ <b>DeliveryIntelligence</b>                 <em>solution folder</em>
-│  │  ├─ DeliveryIntelligence.Domain
-│  │  ├─ DeliveryIntelligence.Application
-│  │  └─ DeliveryIntelligence.Infrastructure
-│  ├─ <b>IdentityExperience</b>                  <em>solution folder</em>
-│  │  ├─ IdentityExperience.Domain
-│  │  ├─ IdentityExperience.Application
-│  │  └─ IdentityExperience.Infrastructure
-│  └─ <b>Planning</b>                            <em>solution folder</em>
-│     ├─ Planning.Domain
-│     ├─ Planning.Application
-│     └─ Planning.Infrastructure
-└─ Runtime
-   ├─ ProjectMgmt.Solution
-   └─ ProjectMgmt.Tests</pre>
-      <p class="callout good"><strong>Vì sao không dùng class library cha?</strong> ProjectReference chỉ tạo dependency; nó không biến project được tham chiếu thành node con. Solution folder là cơ chế đúng để biểu diễn cây nhóm project trong Visual Studio.</p>
+    <section class="section" id="source">
+      <h2>Nguồn dữ liệu và nguyên tắc</h2>
+      <p>Mô hình được tạo từ duy nhất file <code>docs/projectmgmt_schema_mysql_optimized.sql</code>, SHA-256 <code>9751F54E4F75550CEF96C5FED2F7C4170860917C850DFC6FCCC3811B6C7C39BF</code>. SQL yêu cầu MySQL 8.0.16+, InnoDB, <code>utf8mb4</code> và <code>utf8mb4_0900_ai_ci</code>.</p>
+      <div class="safe"><strong>Database thật được bảo vệ:</strong> toàn bộ migration được nghiệm thu trên database tạm độc lập. Database <code>projectmgmt</code> hiện hữu không bị apply migration hoặc thay dữ liệu.</div>
     </section>
 
-    <section id="layers">
-      <h2>Một template cho cả ba module</h2>
-      <p class="section-intro">Mỗi folder chức năng chung có một file .cs rỗng để Git lưu cấu trúc. Không tạo folder riêng cho từng feature, nhờ đó namespace không bị kéo dài.</p>
-      <div class="layers">
-        <article class="card layer">
-          <h3>Domain</h3>
-          <ul>
-            <li><code>Entities/</code></li>
-            <li><code>IRepositories/</code></li>
-            <li><code>UseCases/</code></li>
-          </ul>
-          <p>Thuần nghiệp vụ; không EF Core, ASP.NET, Application hay Infrastructure.</p>
-        </article>
-        <article class="card layer">
-          <h3>Application</h3>
-          <ul>
-            <li><code>IServices/</code></li>
-            <li><code>Services/</code></li>
-            <li><code>Dto/</code></li>
-          </ul>
-          <p>Mỗi module chỉ có một bộ thư mục chung này. Feature mới được viết thành file, không lồng thêm cây tầng.</p>
-        </article>
-        <article class="card layer">
-          <h3>Infrastructure</h3>
-          <ul>
-            <li><code>&lt;Module&gt;DbContext.cs</code></li>
-            <li><code>Configurations/</code></li>
-            <li><code>Repositories/</code></li>
-            <li><code>BusinessLogicLayer/</code></li>
-          </ul>
-          <p>EF Core + Pomelo, LINQ, repository và wrapper procedure/view/raw query.</p>
-        </article>
-      </div>
-    </section>
-
-    <section id="dependencies">
-      <h2>Reference một chiều và DI tại Program.cs</h2>
-      <p class="section-intro">Số lượng ProjectReference không phải rủi ro. Rủi ro là vòng tham chiếu hoặc cho một module chạm trực tiếp implementation nội bộ của module khác.</p>
-      <div class="flow">
-        <div class="card node"><strong>Application</strong><span class="small">interface, service, DTO</span></div>
-        <div class="arrow">→</div>
-        <div class="card node"><strong>Domain</strong><span class="small">entity, repository contract</span></div>
-        <div class="arrow">←</div>
-        <div class="card node"><strong>Infrastructure</strong><span class="small">repository implementation, DbContext</span></div>
-      </div>
-      <p class="callout"><strong>Lưu ý chiều mũi tên:</strong> Infrastructure tham chiếu Application + Domain; Application chỉ tham chiếu Domain + Contracts. Application không được tham chiếu ngược Infrastructure.</p>
+    <section class="section" id="modules">
+      <h2>Phân bảng đúng ba module</h2>
       <table>
-        <thead><tr><th>Project</th><th>Được tham chiếu</th><th>Lý do</th></tr></thead>
+        <thead><tr><th>Module</th><th>Project</th><th>Bảng sở hữu</th></tr></thead>
         <tbody>
-          <tr><td>Application</td><td>Domain, Contracts</td><td>Dùng model/abstraction nội bộ và contract liên module.</td></tr>
-          <tr><td>Infrastructure</td><td>Application, Domain</td><td>Implement abstraction và lưu dữ liệu cho module.</td></tr>
-          <tr><td>Solution</td><td>3 Application, 3 Infrastructure, Foundation</td><td>Composition root phải nhìn thấy interface lẫn implementation để đăng ký DI.</td></tr>
-          <tr><td>Module A</td><td>Contracts</td><td>Không tham chiếu trực tiếp implementation của Module B.</td></tr>
+          <tr><td><strong>IdentityExperience</strong><br>16 bảng</td><td><code>IdentityExperience.Domain</code><br><code>IdentityExperience.Infrastructure</code></td><td>User, UserProfile, ExternalLogin, OtpCode, RefreshToken, Role, Permission, RolePermission, UserRole, SkillCatalog, UserSkill, AiModel, AiPromptTemplate, AiGenerationLog, AiSuggestedTask, Notification.</td></tr>
+          <tr><td><strong>Planning</strong><br>18 bảng</td><td><code>Planning.Domain</code><br><code>Planning.Infrastructure</code></td><td>Organization, Project, ProjectComponent, ProjectVersion, WorkflowStatus, WorkflowTransition, IssueType, Priority, Board, BoardColumn, Sprint, SprintSnapshot, SprintMemberCapacity, UserWorkloadSnapshot, UserPerformanceMetric, AiAssignmentRun, AiAssignmentCandidate, AiAssignmentDecision.</td></tr>
+          <tr><td><strong>DeliveryIntelligence</strong><br>21 bảng + 4 view</td><td><code>DeliveryIntelligence.Domain</code><br><code>DeliveryIntelligence.Infrastructure</code></td><td>Issue, IssueLink, IssueWatcher, Comment, Attachment, ActivityLog, IssueStatusHistory, IssueAssignmentHistory, Label, IssueLabel, IssueComponentLink, IssueVersionLink, IssueRequiredSkill, AcceptanceCriteria, AiDataset, AiDatasetVersion, AiDatasetSample, AiDataCleaningRule, AiDataQualityFlag, AiTrainingRun, AiEvaluationResult.<br><br>View: vw_UserActiveWorkload, vw_SprintVelocity, vw_AiBreakdownQuality, vw_AiAssignmentAccuracy.</td></tr>
         </tbody>
       </table>
-      <p>Luồng runtime: endpoint yêu cầu service → DI đọc đăng ký tại <code>Program.cs</code> → tạo service → inject repository interface → dùng implementation trong Infrastructure. Theo yêu cầu dự án, toàn bộ <code>AddDbContext</code>/<code>AddScoped</code> được đặt trực tiếp tại Program.cs.</p>
     </section>
 
-    <section id="database">
-      <h2>MySQL và ownership dữ liệu</h2>
-      <p class="section-intro">Schema chuẩn là <code>projectmgmt_schema_mysql_optimized.sql</code>, database <code>projectmgmt</code>. Ba DbContext có thể dùng chung một connection string nhưng mỗi context chỉ map bảng do module sở hữu.</p>
-      <table>
-        <thead><tr><th>Module</th><th>Nhóm dữ liệu dự kiến</th></tr></thead>
-        <tbody>
-          <tr><td>IdentityExperience</td><td>User/profile/login/OTP/token, role-permission, skill, organization, notification.</td></tr>
-          <tr><td>Planning</td><td>Project/version/workflow, board/sprint, issue/comment/attachment/label/acceptance criteria.</td></tr>
-          <tr><td>DeliveryIntelligence</td><td>Activity/history, workload/performance, AI model/prompt/dataset/training/evaluation.</td></tr>
-        </tbody>
-      </table>
-      <p>Connection string chỉ đi qua <code>ConnectionStrings:ProjectMgmt</code> tại host. Local dùng User Secrets; IIS dùng <code>ConnectionStrings__ProjectMgmt</code> hoặc secret store. Không ghi mật khẩu vào class library hoặc commit vào appsettings.</p>
-    </section>
-
-    <section id="ai">
-      <h2>AI là process riêng, hiện để trống</h2>
-      <div class="grid">
-        <article class="card">
-          <h3>IdentityExperience/AiAssist</h3>
-          <p>Nằm ngang cấp ba project tầng. Sau này có thể là FastAPI/service riêng và cung cấp API cho IdentityExperience.</p>
-        </article>
-        <article class="card">
-          <h3>Planning/AiAssignment</h3>
-          <p>Nằm ngang cấp ba project tầng. Hiện không có source, manifest, Dockerfile, test hoặc .gitkeep.</p>
-        </article>
-        <article class="card">
-          <h3>Git và thư mục rỗng</h3>
-          <p>Git không theo dõi thư mục rỗng. Vì không dùng .gitkeep, hai folder AI chỉ hiện local cho đến khi có file AI thật.</p>
-        </article>
+    <section class="section" id="files">
+      <h2>Đã viết ở đâu?</h2>
+      <div class="two">
+        <article><h3>Domain — Entity thuần</h3><p>Mỗi bảng/view là một file trực tiếp tại:</p><pre>ProjectMgmt.Modules.&lt;Module&gt;/
+└─ Domain/Entities/&lt;Entity&gt;.cs</pre><p>Entity chỉ có kiểu CLR và nullability, không phụ thuộc EF Core. Namespace: <code>&lt;Module&gt;.Domain.Entities</code>.</p></article>
+        <article><h3>Infrastructure — Mapping</h3><p>Mỗi entity có một mapping trực tiếp tại:</p><pre>ProjectMgmt.Modules.&lt;Module&gt;/
+└─ Infrastructure/Configurations/
+   └─ &lt;Entity&gt;Configuration.cs</pre><p>Tất cả dùng <code>IEntityTypeConfiguration&lt;T&gt;</code>. Namespace: <code>&lt;Module&gt;.Infrastructure.Configurations</code>.</p></article>
+        <article><h3>DbContext và design-time</h3><pre>Infrastructure/
+├─ &lt;Module&gt;DbContext.cs
+└─ &lt;Module&gt;DbContextFactory.cs</pre><p>Factory cho phép <code>dotnet ef</code> tạo/update migration mà không hard-code secret.</p></article>
+        <article><h3>Migration</h3><pre>Infrastructure/Migrations/
+├─ &lt;timestamp&gt;_&lt;Migration&gt;.cs
+├─ &lt;timestamp&gt;_&lt;Migration&gt;.Designer.cs
+└─ &lt;Module&gt;DbContextModelSnapshot.cs</pre><p>Mỗi module có lịch sử migration riêng nhưng cùng kết nối một database vật lý.</p></article>
       </div>
     </section>
 
-    <section id="plan">
-      <h2>Kế hoạch thực hiện đầy đủ</h2>
-      <p class="section-intro">Khung bên dưới tải trực tiếp <a href="plane.txt">plane.txt</a>. Vì vậy nội dung kế hoạch trong TXT và trong HTML luôn là cùng một nguồn, không thể lệch phiên bản.</p>
+    <section class="section" id="mapping">
+      <h2>Những phần của schema đã được map</h2>
+      <ul>
+        <li>Toàn bộ cột, kiểu dữ liệu, precision/length, nullability và tên cột.</li>
+        <li><code>CHAR(36) → Guid</code>, text/JSON → string, <code>TINYINT(1) → bool</code>, số/date/datetime → CLR tương ứng.</li>
+        <li>Primary key, unique/composite/FULLTEXT index, thứ tự cột và comment của index.</li>
+        <li>Foreign key, tên constraint, delete/update behavior và 33 CHECK constraint.</li>
+        <li>Default SQL, <code>ON UPDATE CURRENT_TIMESTAMP(6)</code>, generated/computed column.</li>
+        <li>Table/column comment, charset, collation, InnoDB và ROW_FORMAT=DYNAMIC.</li>
+        <li>4 view là entity keyless; 2 trigger và nội dung view nằm trong migration.</li>
+        <li>Dữ liệu seed trong SQL cũng nằm trong migration: role, permission, role-permission, skill, priority, AI model, prompt và cleaning rule.</li>
+      </ul>
+      <p>Một FK liên module <code>AiEvaluationResult.ModelId → AiModel.Id</code> được giữ trong migration cuối thay vì tạo ProjectReference chéo giữa hai Domain.</p>
+    </section>
+
+    <section class="section" id="connection">
+      <h2>Kết nối MySQL và DI</h2>
+      <p>Các package dùng <strong>Pomelo.EntityFrameworkCore.MySql 9.0.0</strong> và EF Core 9.0.19. Local tool <code>dotnet-ef</code> 9.0.19 nằm trong <code>.config/dotnet-tools.json</code>. Không dùng đồng thời provider Oracle MySql.EntityFrameworkCore.</p>
+      <p><code>ProjectMgmt.Solution/appsettings.json</code> chỉ giữ khóa rỗng và phiên bản server, không chứa user/password:</p>
+      <pre>{
+  "ConnectionStrings": { "ProjectMgmt": "" },
+  "Database": {
+    "Provider": "Pomelo.EntityFrameworkCore.MySql",
+    "ServerVersion": "8.0.46"
+  }
+}</pre>
+      <p>Local dùng User Secrets:</p>
+      <pre>dotnet user-secrets --project .\ProjectMgmt.Solution set `
+  "ConnectionStrings:ProjectMgmt" `
+  "Server=127.0.0.1;Port=3306;Database=projectmgmt;User=root;Password=&lt;MẬT_KHẨU&gt;;SslMode=None"</pre>
+      <p>IIS/container dùng <code>ConnectionStrings__ProjectMgmt</code>. <code>SslMode=None</code> chỉ dành cho máy local; production nên dùng chứng thư và <code>VerifyCA</code>/<code>VerifyFull</code>.</p>
+      <p>Ba context được đăng ký trực tiếp trong <code>ProjectMgmt.Solution/Program.cs</code>, đúng yêu cầu composition root:</p>
+      <pre>builder.Services.AddDbContext&lt;IdentityExperienceDbContext&gt;(...);
+builder.Services.AddDbContext&lt;PlanningDbContext&gt;(...);
+builder.Services.AddDbContext&lt;DeliveryIntelligenceDbContext&gt;(...);</pre>
+      <p>Mỗi context có migration history riêng: <code>__EFMigrationsHistory_IdentityExperience</code>, <code>__EFMigrationsHistory_Planning</code>, <code>__EFMigrationsHistory_DeliveryIntelligence</code>.</p>
+    </section>
+
+    <section class="section" id="migration">
+      <h2>Sáu migration đã tạo</h2>
+      <table>
+        <thead><tr><th>Module</th><th>Migration</th><th>Vai trò</th></tr></thead>
+        <tbody>
+          <tr><td>IdentityExperience</td><td><code>20260911191023_InitialIdentityExperienceSchema</code><br><code>20260911191028_SeedIdentityReferenceData</code></td><td>16 bảng và dữ liệu danh tính/tham chiếu.</td></tr>
+          <tr><td>Planning</td><td><code>20260911191033_InitialPlanningSchema</code><br><code>20260911191039_SeedPlanningReferenceData</code></td><td>18 bảng và dữ liệu priority.</td></tr>
+          <tr><td>DeliveryIntelligence</td><td><code>20260911191045_InitialDeliveryIntelligenceSchema</code><br><code>20260911191050_FinalizeDeliveryDatabaseObjects</code></td><td>21 bảng, FK liên module, 4 view và 2 trigger.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section" id="workflow">
+      <h2>Hai chiều database ↔ code</h2>
+      <div class="two">
+        <article><h3>Code-first: code → database</h3><p>Đặt <code>ConnectionStrings__ProjectMgmt</code> cho terminal, sau đó chạy đúng thứ tự Identity → Planning → Delivery:</p><pre>dotnet ef database update --project .\ProjectMgmt.Modules.IdentityExperience\Infrastructure --context IdentityExperienceDbContext
+dotnet ef database update --project .\ProjectMgmt.Modules.Planning\Infrastructure --context PlanningDbContext
+dotnet ef database update --project .\ProjectMgmt.Modules.DeliveryIntelligence\Infrastructure --context DeliveryIntelligenceDbContext</pre><p>Khi đổi model: <code>dotnet ef migrations add &lt;Tên&gt; --project &lt;InfrastructurePath&gt; --context &lt;Module&gt;DbContext</code>.</p></article>
+        <article><h3>DB-first: database → code</h3><p>Scaffold đã được thử thành công với Pomelo. Luôn sinh vào thư mục tạm để review:</p><pre>dotnet ef dbcontext scaffold `
+  "&lt;CONNECTION_STRING&gt;" `
+  Pomelo.EntityFrameworkCore.MySql `
+  --project .\ProjectMgmt.Modules.DeliveryIntelligence\Infrastructure `
+  --output-dir &lt;THƯ_MỤC_TẠM&gt; `
+  --context ProjectMgmtScaffoldDbContext `
+  --no-onconfiguring</pre><p>Scaffold có thể biến bảng nối thuần thành many-to-many; phải phân lại entity về đúng module trước khi dùng.</p></article>
+      </div>
+      <div class="warn"><strong>Cảnh báo baseline:</strong> database <code>projectmgmt</code> đang tồn tại nhưng chưa có ba bảng lịch sử migration. Không chạy initial migration trực tiếp vì EF sẽ cố tạo lại bảng. Hãy backup, so sánh schema, baseline trên clone/staging rồi mới triển khai.</div>
+    </section>
+
+    <section class="section" id="validation">
+      <h2>Kết quả kiểm chứng thực tế</h2>
+      <p class="ok">Migration được apply đầy đủ trên MySQL 8.0.46 local và build đạt 0 warning, 0 error.</p>
+      <table>
+        <thead><tr><th>Đối tượng</th><th>SQL nguồn</th><th>Database từ migration</th></tr></thead>
+        <tbody>
+          <tr><td>Bảng nghiệp vụ</td><td>55</td><td>55</td></tr>
+          <tr><td>View</td><td>4</td><td>4</td></tr>
+          <tr><td>Trigger</td><td>2</td><td>2</td></tr>
+          <tr><td>Foreign key</td><td>55</td><td>55</td></tr>
+          <tr><td>CHECK</td><td>33</td><td>33</td></tr>
+          <tr><td>Index thực tế</td><td>173</td><td>173</td></tr>
+          <tr><td>ROW_FORMAT=DYNAMIC</td><td>55/55</td><td>55/55</td></tr>
+        </tbody>
+      </table>
+      <p>Đối chiếu <code>information_schema</code> không phát hiện chênh lệch ở cột/type/null/default/generated expression/charset/collation/comment, index, FK rule, CHECK, engine, row format và table comment. Database kiểm thử tạm được xóa sau nghiệm thu.</p>
+    </section>
+
+    <section class="section" id="plan">
+      <h2>Kế hoạch nguồn — plane.txt</h2>
+      <p class="muted">Khung bên dưới đọc trực tiếp <a href="plane.txt">plane.txt</a>; do đó phần kế hoạch trong HTML và TXT luôn cùng một nội dung nguồn.</p>
       <iframe class="plan-frame" src="plane.txt" title="Kế hoạch ProjectMgmt đầy đủ"></iframe>
     </section>
   </main>
-
-  <footer>ProjectMgmt · Cấu trúc thống nhất cho ba module · 12/09/2026</footer>
+  <footer>ProjectMgmt · Báo cáo sinh từ project và schema tại workspace</footer>
 </body>
 </html>
-
