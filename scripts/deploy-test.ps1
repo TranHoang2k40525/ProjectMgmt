@@ -15,10 +15,12 @@ param(
 
     [string]$LogPath = 'C:\Logs\ProjectMgmt\deploy-test.log',
 
-    [string]$HealthUrl = 'http://localhost:5101/health',
+    [string]$HealthUrl = 'http://ProjectMgmt.dev.com/health',
 
     [ValidateRange(1, 20)]
-    [int]$KeepBackups = 5
+    [int]$KeepBackups = 5,
+
+    [switch]$ValidateOnly
 )
 
 Set-StrictMode -Version Latest
@@ -169,6 +171,11 @@ if ([string]::IsNullOrWhiteSpace($connectionString) -or $connectionString.Contai
 
 if ($connectionString -notmatch '(?i)SslMode\s*=\s*(Required|VerifyCA|VerifyFull)') {
     throw 'The TEST connection string must require TLS using SslMode=Required, VerifyCA, or VerifyFull.'
+}
+
+if ($ValidateOnly) {
+    Write-Output 'Deployment inputs and safety checks are valid. No deployment changes were made.'
+    return
 }
 
 [void](New-Item -ItemType Directory -Path $resolvedApiTarget -Force)

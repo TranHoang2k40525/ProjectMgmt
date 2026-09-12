@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$HealthUrl = 'http://localhost:5101/health',
+    [string]$HealthUrl = 'http://ProjectMgmt.dev.com/health',
     [ValidateRange(1, 60)]
     [int]$RetryCount = 12,
     [ValidateRange(1, 30)]

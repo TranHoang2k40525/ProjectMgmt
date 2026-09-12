@@ -90,7 +90,7 @@ jobs:
         run: |
           $healthUrl = '${{ vars.TEST_API_HEALTH_URL }}'
           if ([string]::IsNullOrWhiteSpace($healthUrl)) {
-            $healthUrl = 'http://localhost:5101/health'
+            $healthUrl = 'http://ProjectMgmt.dev.com/health'
           }
 
           & .\scripts\deploy-test.ps1 `
