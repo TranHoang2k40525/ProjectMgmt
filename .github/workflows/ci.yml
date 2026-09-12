@@ -59,3 +59,41 @@ jobs:
 
       - name: Build frontend
         run: npm run build
+
+  container-ci:
+    name: container-ci
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate local Compose configuration
+        run: docker compose --env-file .env.example config --quiet
+
+      - name: Validate TEST Compose configuration
+        env:
+          PROJECTMGMT_TEST_CONFIG_PATH: ./ProjectMgmt.Solution/appsettings.Staging.example.json
+        run: docker compose -f docker-compose.test.yml config --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build API container
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ProjectMgmt.Solution/Dockerfile
+          push: false
+          tags: projectmgmt-api:ci
+          cache-from: type=gha,scope=projectmgmt-api
+          cache-to: type=gha,mode=max,scope=projectmgmt-api
+
+      - name: Build web container
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend/projectmgmt-web
+          file: frontend/projectmgmt-web/Dockerfile
+          push: false
+          tags: projectmgmt-web:ci
+          cache-from: type=gha,scope=projectmgmt-web
+          cache-to: type=gha,mode=max,scope=projectmgmt-web

@@ -1,0 +1,60 @@
+name: projectmgmt-test
+
+services:
+  api:
+    image: projectmgmt-api:test
+    build:
+      context: .
+      dockerfile: ProjectMgmt.Solution/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Staging
+      ASPNETCORE_HTTP_PORTS: 8080
+    volumes:
+      - type: bind
+        source: ${PROJECTMGMT_TEST_CONFIG_PATH:?Set PROJECTMGMT_TEST_CONFIG_PATH in .env.test}
+        target: /app/appsettings.Staging.json
+        read_only: true
+    ports:
+      - "${TEST_API_PORT:-5084}:8080"
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - --fail
+        - --silent
+        - http://127.0.0.1:8080/health/live
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - test_frontend
+    restart: unless-stopped
+
+  web:
+    image: projectmgmt-web:test
+    build:
+      context: ./frontend/projectmgmt-web
+      dockerfile: Dockerfile
+    ports:
+      - "${TEST_WEB_PORT:-4201}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --quiet
+        - --output-document=-
+        - http://127.0.0.1:8080/healthz
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - test_frontend
+    restart: unless-stopped
+
+networks:
+  test_frontend:
