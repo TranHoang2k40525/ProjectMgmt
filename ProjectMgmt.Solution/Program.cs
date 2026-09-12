@@ -1,5 +1,9 @@
 using DeliveryIntelligence.Infrastructure;
+using IdentityExperience.Application.IServices;
+using IdentityExperience.Application.Services;
 using IdentityExperience.Infrastructure;
+using IdentityExperience.Infrastructure.IRepository;
+using IdentityExperience.Infrastructure.Repository;
 using Microsoft.EntityFrameworkCore;
 using Planning.Infrastructure;
 
@@ -49,6 +53,10 @@ builder.Services.AddDbContext<DeliveryIntelligenceDbContext>(options =>
             mysql.MigrationsHistoryTable("__EFMigrationsHistory_DeliveryIntelligence");
             mysql.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null);
         }));
+// DI
+builder.Services.AddScoped<IIdentityRepository, IdentityRepository>();
+builder.Services.AddScoped<IAccountServices, AccountServices>();
+
 
 var app = builder.Build();
 
