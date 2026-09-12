@@ -98,7 +98,7 @@ jobs:
             -FrontendArtifactPath "$env:RUNNER_TEMP\projectmgmt-artifacts\frontend" `
             -ApiTargetPath 'C:\Users\hoang\Downloads\Test-ProjectMgmt\Api' `
             -WebTargetPath 'C:\Users\hoang\Downloads\Test-ProjectMgmt\Web' `
-            -ConfigPath 'C:\Config\ProjectMgmt\appsettings.Staging.json' `
+            -ConfigPath 'C:\Users\hoang\Downloads\Test-ProjectMgmt\Config\appsettings.Staging.json' `
             -BackupRoot 'C:\DeployBackup\ProjectMgmt-Test' `
             -LogPath 'C:\Logs\ProjectMgmt\deploy-test.log' `
             -HealthUrl $healthUrl `

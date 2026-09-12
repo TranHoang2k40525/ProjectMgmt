@@ -9,7 +9,7 @@ param(
 
     [string]$WebTargetPath = 'C:\Users\hoang\Downloads\Test-ProjectMgmt\Web',
 
-    [string]$ConfigPath = 'C:\Config\ProjectMgmt\appsettings.Staging.json',
+    [string]$ConfigPath = 'C:\Users\hoang\Downloads\Test-ProjectMgmt\Config\appsettings.Staging.json',
 
     [string]$BackupRoot = 'C:\DeployBackup\ProjectMgmt-Test',
 

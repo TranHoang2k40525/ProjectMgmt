@@ -11,7 +11,7 @@ param(
     [string]$RunnerName = "$env:COMPUTERNAME-ProjectMgmt-Test",
     [string]$WorkFolder = '_work',
     [string]$DeploymentRoot = 'C:\Users\hoang\Downloads\Test-ProjectMgmt',
-    [string]$ConfigRoot = 'C:\Config\ProjectMgmt',
+    [string]$ConfigRoot = 'C:\Users\hoang\Downloads\Test-ProjectMgmt\Config',
     [string]$BackupRoot = 'C:\DeployBackup\ProjectMgmt-Test',
     [string]$LogRoot = 'C:\Logs\ProjectMgmt'
 )

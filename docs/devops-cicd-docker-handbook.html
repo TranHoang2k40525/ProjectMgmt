@@ -228,7 +228,7 @@
         <div class="note warn">
           <strong>CD chưa được kích hoạt từ PR #1.</strong> Workflow CD chỉ chạy sau khi PR được merge vào
           <code>develop</code>. Trước khi merge phải chắc chắn file thật
-          <code>C:\Config\ProjectMgmt\appsettings.Staging.json</code> đã có mật khẩu Aiven hợp lệ.
+          <code>C:\Users\hoang\Downloads\Test-ProjectMgmt\Config\appsettings.Staging.json</code> đã có mật khẩu Aiven hợp lệ.
         </div>
 
         <p>
@@ -395,7 +395,7 @@
             <thead><tr><th>Môi trường</th><th>File được commit</th><th>Nơi giữ connection string thật</th></tr></thead>
             <tbody>
               <tr><td>Development</td><td><code>appsettings.json</code> và <code>appsettings.Development.json</code></td><td>.NET User Secrets hoặc <code>ConnectionStrings__ProjectMgmt</code>.</td></tr>
-              <tr><td>Staging / TEST</td><td><code>appsettings.Staging.example.json</code></td><td><code>C:\Config\ProjectMgmt\appsettings.Staging.json</code>.</td></tr>
+              <tr><td>Staging / TEST</td><td><code>appsettings.Staging.example.json</code></td><td><code>C:\Users\hoang\Downloads\Test-ProjectMgmt\Config\appsettings.Staging.json</code>.</td></tr>
               <tr><td>Production</td><td><code>appsettings.Production.example.json</code></td><td>Secret manager hoặc file ngoài thư mục publish với ACL chặt.</td></tr>
             </tbody>
           </table>
@@ -417,7 +417,7 @@
         </p>
 
         <h3>Cấu hình TEST thật</h3>
-        <pre><code>C:\Config\ProjectMgmt\appsettings.Staging.json
+        <pre><code>C:\Users\hoang\Downloads\Test-ProjectMgmt\Config\appsettings.Staging.json
 
 {
   "ConnectionStrings": {
@@ -560,7 +560,7 @@ docker compose --env-file .env up --build -d</code></pre>
         </p>
 
         <h3>Bước 1: kiểm tra file thật</h3>
-        <pre><code>C:\Config\ProjectMgmt\appsettings.Staging.json</code></pre>
+        <pre><code>C:\Users\hoang\Downloads\Test-ProjectMgmt\Config\appsettings.Staging.json</code></pre>
         <p>Đảm bảo không còn placeholder và có <code>SslMode=Required</code>.</p>
 
         <h3>Bước 2: tạo file điều khiển TEST</h3>
@@ -657,7 +657,7 @@ docker compose --env-file .env.test -f docker-compose.test.yml ps</code></pre>
           <li>Job gắn GitHub Environment <code>test</code>.</li>
           <li>API đích: <code>C:\Users\hoang\Downloads\Test-ProjectMgmt\Api</code>.</li>
           <li>Web đích: <code>C:\Users\hoang\Downloads\Test-ProjectMgmt\Web</code>.</li>
-          <li>Config thật: <code>C:\Config\ProjectMgmt\appsettings.Staging.json</code>.</li>
+          <li>Config thật: <code>C:\Users\hoang\Downloads\Test-ProjectMgmt\Config\appsettings.Staging.json</code>.</li>
         </ul>
 
         <h3>Bên trong deploy-test.ps1</h3>
