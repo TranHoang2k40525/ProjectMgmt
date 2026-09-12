@@ -20,3 +20,4 @@ TestResults/
 **/.pytest_cache/
 *.py[cod]
 .tmp/
+**plane (1).txt
