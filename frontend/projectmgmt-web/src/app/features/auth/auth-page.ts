@@ -3,7 +3,6 @@ import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { IdentityService } from '../../core/services/identity.service';
-import { DynamicBgComponent } from '../../shared/components/dynamic-bg/dynamic-bg';
 
 import { gsap } from 'gsap';
 
@@ -12,7 +11,7 @@ export type AuthMode = 'LOGIN' | 'SIGNUP' | 'OTP_REGISTER' | 'FORGOT' | 'OTP_FOR
 @Component({
   selector: 'app-auth-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, DynamicBgComponent],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule],
   templateUrl: './auth-page.html',
   styleUrls: ['./auth-page.scss']
 })
