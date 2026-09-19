@@ -1,28 +1,52 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject } from '@angular/core';
-import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { SystemHealthService } from '../../core/services/system-health.service';
+import { ChangeDetectionStrategy, Component, ElementRef, inject, AfterViewInit } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { RouterLink, RouterLinkActive, RouterOutlet, Router } from '@angular/router';
+import { IdentityService } from '../../core/services/identity.service';
+import { gsap } from 'gsap';
 
 @Component({
   selector: 'app-shell',
-  imports: [RouterLink, RouterLinkActive, RouterOutlet],
+  standalone: true,
+  imports: [CommonModule, RouterLink, RouterLinkActive, RouterOutlet],
   templateUrl: './app-shell.html',
   styleUrl: './app-shell.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class AppShellComponent implements OnInit {
-  protected readonly health = inject(SystemHealthService);
+export class AppShellComponent implements AfterViewInit {
+  protected readonly identity = inject(IdentityService);
+  private readonly router = inject(Router);
+  private readonly el = inject(ElementRef);
 
-  protected readonly navigation = [
-    { path: '/projects', label: 'Dự án' },
-    { path: '/backlog', label: 'Backlog' },
-    { path: '/board', label: 'Board' },
-    { path: '/reports', label: 'Báo cáo' },
-    { path: '/notifications', label: 'Thông báo' },
-    { path: '/ai-dataops', label: 'AI DataOps' },
-    { path: '/auth', label: 'Đăng nhập' }
+  protected searchQuery = '';
+
+  protected readonly mainNav = [
+    { path: '/projects', label: 'Tổng quan (Projects)', icon: 'space_dashboard' },
+    { path: '/board', label: 'Bảng Scrum (Board)', icon: 'view_kanban' },
+    { path: '/backlog', label: 'Kế hoạch Backlog', icon: 'splitscreen' },
+    { path: '/notifications', label: 'Thông báo Realtime', icon: 'notifications', badge: true },
   ];
 
-  ngOnInit(): void {
-    this.health.check();
+  protected readonly settingsNav = [
+    { path: '/profile', label: 'Hồ sơ & Bảo mật', icon: 'person' },
+    { path: '/admin/identity', label: 'Quản trị RBAC', icon: 'verified_user' },
+    { path: '/admin/ai-governance', label: 'Quản trị AI', icon: 'psychology' }
+  ];
+
+  ngAfterViewInit(): void {
+    gsap.context(() => {
+      // Smooth entrance stagger for sidebar links using GSAP
+      gsap.from('.jira-nav-link', {
+        opacity: 0,
+        x: -16,
+        duration: 0.4,
+        stagger: 0.05,
+        ease: 'power2.out'
+      });
+    }, this.el.nativeElement);
+  }
+
+  logout(): void {
+    this.identity.logout();
+    this.router.navigateByUrl('/auth');
   }
 }

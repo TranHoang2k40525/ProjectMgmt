@@ -1,24 +1,170 @@
-<header class="topbar">
-  <a class="brand" routerLink="/projects" aria-label="ScrumAI home">
-    <span class="brand-mark">S</span>
-    <span>
-      <strong>ScrumAI</strong>
-      <small>Project Management</small>
-    </span>
-  </a>
-  <div class="health" [class.online]="health.status() === 'online'" [class.offline]="health.status() === 'offline'">
-    <span aria-hidden="true"></span>
-    Backend {{ health.status() }}
+<header class="fixed top-0 w-full h-14 z-50 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between px-4 transition-all">
+  <!-- Topbar Left: Brand & Navigation -->
+  <div class="flex items-center gap-6">
+    <a routerLink="/projects" class="flex items-center gap-2.5 group select-none">
+      <img alt="Logo HUCE" class="w-8 h-8 rounded-lg object-contain bg-white p-0.5 shadow-sm ring-1 ring-primary/20 group-hover:scale-105 transition-transform" src="assets/images/huce-branding/huce-official-logo.png" />
+      <div class="flex flex-col">
+        <span class="font-headline font-bold text-slate-900 dark:text-white text-sm tracking-tight leading-tight">HUCE Scrum AI</span>
+        <span class="text-[10px] text-slate-500 font-medium tracking-wider uppercase leading-none">Enterprise Agile</span>
+      </div>
+    </a>
+
+    <nav class="hidden md:flex items-center gap-1">
+      <a routerLink="/projects" routerLinkActive="text-primary font-semibold bg-slate-100 dark:bg-slate-800" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+        <span class="material-symbols-outlined text-[16px]">grid_view</span>
+        Không gian làm việc
+      </a>
+      <a routerLink="/board" routerLinkActive="text-primary font-semibold bg-slate-100 dark:bg-slate-800" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+        <span class="material-symbols-outlined text-[16px]">history</span>
+        Gần đây
+      </a>
+      <a routerLink="/backlog" routerLinkActive="text-primary font-semibold bg-slate-100 dark:bg-slate-800" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+        <span class="material-symbols-outlined text-[16px]">star</span>
+        Đánh dấu
+      </a>
+    </nav>
+  </div>
+
+  <!-- Topbar Center: Quick Search -->
+  <div class="flex-1 max-w-md mx-6 hidden lg:block">
+    <div class="relative flex items-center w-full">
+      <span class="material-symbols-outlined absolute left-3 text-[18px] text-slate-400 pointer-events-none">search</span>
+      <input
+        type="text"
+        placeholder="Tìm kiếm công việc, sprint, tài liệu kỹ thuật... (Ctrl + K)"
+        class="w-full h-8 pl-9 pr-4 rounded-lg bg-slate-100 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 text-xs font-normal border border-transparent focus:border-primary focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all"
+      />
+    </div>
+  </div>
+
+  <!-- Topbar Right: Actions & User Avatar -->
+  <div class="flex items-center gap-3">
+    <a routerLink="/projects/new" class="hidden sm:flex items-center gap-1 h-8 px-3 rounded-lg bg-primary hover:bg-primary-container text-white font-medium text-xs shadow-sm transition-all hover:shadow">
+      <span class="material-symbols-outlined text-[16px]">add</span>
+      Tạo mới
+    </a>
+
+    <a routerLink="/ai-dataops" class="hidden md:flex items-center gap-1.5 h-8 px-3 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-medium text-xs hover:brightness-110 transition-all shadow-sm">
+      <span class="material-symbols-outlined text-[16px]">auto_awesome</span>
+      <span>AI Assistant</span>
+      <span class="px-1 py-0.2 bg-white/20 rounded text-[9px] uppercase font-bold">Beta</span>
+    </a>
+
+    <div class="flex items-center gap-1 text-slate-500 border-l border-slate-200 dark:border-slate-800 pl-3">
+      <a routerLink="/notifications" class="relative w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors">
+        <span class="material-symbols-outlined text-[20px]">notifications</span>
+        @if (identity.unreadCount() > 0) {
+          <span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-slate-900"></span>
+        }
+      </a>
+      <a routerLink="/profile" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors">
+        <span class="material-symbols-outlined text-[20px]">settings</span>
+      </a>
+    </div>
+
+    <!-- User Profile Dropdown Chip -->
+    @if (identity.authState().currentUser; as user) {
+      <div class="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-slate-800">
+        <a routerLink="/profile" class="flex items-center gap-2.5 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors group">
+          <div class="relative">
+            <img [src]="user.avatarUrl || 'https://lh3.googleusercontent.com/aida/AEtjO1XtHjbcVDz-UBjctM0LfVUGmqUeR39WQIoExjpXXhoH4Wu_I9_Qpk42NbzSi5dIoyYQuxC6PmMSr__bvB8G1iRv51zwwYHyLI9epDcSeaSJ_23pgMSoDqCavTtJMnh_VUr1XiaX_dfIJVrOpVNtqTGgwFT5FuXj3i9tQVUICLqvROYKaCksEl97aHgdr2n-KIVSDs0bZzIZ5hDOpx0AeyayjF5Y_iybOHjJnpBXyyQz40C4Rx5A_y32U-v-DZxAw_gb18RoyaUMMA'" [alt]="user.displayName" class="w-8 h-8 rounded-full object-cover ring-2 ring-primary/30" />
+            <span class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900"></span>
+          </div>
+          <div class="hidden xl:flex flex-col text-left">
+            <span class="text-xs font-semibold text-slate-900 dark:text-white leading-tight group-hover:text-primary transition-colors">{{ user.displayName }}</span>
+            <span class="text-[10px] text-slate-500 leading-none">{{ user.roleName }}</span>
+          </div>
+        </a>
+      </div>
+    }
   </div>
 </header>
 
-<div class="workspace">
-  <aside class="sidebar" aria-label="Điều hướng chính">
-    @for (item of navigation; track item.path) {
-      <a [routerLink]="item.path" routerLinkActive="active">{{ item.label }}</a>
-    }
+<div class="pt-14 flex min-h-screen bg-slate-50 dark:bg-slate-950">
+  <!-- Jira Left Sidebar Navigation -->
+  <aside class="w-64 fixed left-0 top-14 bottom-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-r border-slate-200/80 dark:border-slate-800 flex flex-col justify-between p-3 select-none">
+    <div class="flex flex-col gap-4">
+      <!-- Project Workspace Header -->
+      <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-100/70 dark:bg-slate-800/60 border border-slate-200/50 dark:border-slate-700/50">
+        <div class="flex items-center gap-2.5 overflow-hidden">
+          <div class="w-7 h-7 rounded-lg bg-primary text-white flex items-center justify-center font-bold shrink-0">
+            <span class="material-symbols-outlined text-[16px]">apartment</span>
+          </div>
+          <div class="flex flex-col truncate">
+            <span class="text-xs font-semibold text-slate-900 dark:text-white truncate">HUCE AI Lab Project</span>
+            <span class="text-[10px] text-slate-500 truncate">Scrum Agile · SCRUMAI</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation Section: Agile Planning -->
+      <div class="flex flex-col gap-1">
+        <div class="px-2 pt-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          Kế hoạch & Agile
+        </div>
+        <nav class="flex flex-col gap-0.5">
+          @for (item of mainNav; track item.path) {
+            <a
+              [routerLink]="item.path"
+              routerLinkActive="bg-primary/10 text-primary font-semibold shadow-xs"
+              class="jira-nav-link flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-all"
+            >
+              <div class="flex items-center gap-2.5">
+                <span class="material-symbols-outlined text-[18px]">{{ item.icon }}</span>
+                <span>{{ item.label }}</span>
+              </div>
+              @if (item.badge && identity.unreadCount() > 0) {
+                <span class="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-primary text-white">
+                  {{ identity.unreadCount() }}
+                </span>
+              }
+            </a>
+          }
+        </nav>
+      </div>
+
+      <!-- Navigation Section: Admin & Governance -->
+      <div class="flex flex-col gap-1 border-t border-slate-200/60 dark:border-slate-800 pt-3">
+        <div class="px-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          Hệ thống & Cài đặt
+        </div>
+        <nav class="flex flex-col gap-0.5">
+          @for (item of settingsNav; track item.path) {
+            <a
+              [routerLink]="item.path"
+              routerLinkActive="bg-primary/10 text-primary font-semibold shadow-xs"
+              class="jira-nav-link flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-all"
+            >
+              <span class="material-symbols-outlined text-[18px]">{{ item.icon }}</span>
+              <span>{{ item.label }}</span>
+            </a>
+          }
+        </nav>
+      </div>
+    </div>
+
+    <!-- AI Auto-Pilot Status Footer -->
+    <div class="flex flex-col gap-2 pt-3 border-t border-slate-200/60 dark:border-slate-800">
+      <div class="flex items-center justify-between p-2 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/40">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-[18px] text-indigo-600 dark:text-indigo-400">psychology</span>
+          <div class="flex flex-col">
+            <span class="text-[11px] font-semibold text-slate-900 dark:text-white">AI Sprint Auto-Pilot</span>
+            <span class="text-[9px] text-slate-500">Tối ưu 12 Tasks</span>
+          </div>
+        </div>
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+      </div>
+
+      <button (click)="logout()" class="flex items-center gap-2 w-full px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors">
+        <span class="material-symbols-outlined text-[18px]">logout</span>
+        Đăng xuất
+      </button>
+    </div>
   </aside>
-  <main class="content">
+
+  <!-- Main Content Area -->
+  <main class="pl-64 w-full min-h-[calc(100vh-3.5rem)] p-6">
     <router-outlet />
   </main>
 </div>

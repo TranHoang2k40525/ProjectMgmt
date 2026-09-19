@@ -1,0 +1,261 @@
+<div class="p-6 max-w-[1600px] mx-auto font-body-md text-on-surface">
+  <!-- Header & Breadcrumb from Stitch Screen 39cc24dfeb37497780f09aa6e9324e0c -->
+  <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6 pb-4 border-b border-surface-container-highest">
+    <div>
+      <div class="flex items-center gap-2 font-label-sm text-label-sm text-on-surface-variant mb-1">
+        <span>Không gian</span>
+        <span>›</span>
+        <span class="text-primary font-semibold">Scrum AI Project Management</span>
+        <span class="px-1.5 py-0.5 rounded bg-primary-container text-on-primary-container text-[10px] font-mono font-bold">SCRUMAI</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="font-headline-lg text-headline-lg font-bold tracking-tight text-on-surface">Kế hoạch Backlog & Phân rã AI</h1>
+        <span class="px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm font-semibold">
+          13 Work Items
+        </span>
+      </div>
+    </div>
+
+    <!-- Navigation View Switcher (Backlog, Board, Timeline, Calendar) -->
+    <div class="flex items-center gap-1.5 bg-surface-container-high/60 p-1.5 rounded-xl backdrop-blur-md">
+      <a routerLink="/backlog" class="px-3.5 py-1.5 rounded-lg bg-surface-container-lowest text-primary font-label-md text-label-md font-semibold shadow-sm flex items-center gap-1.5">
+        <span class="material-symbols-outlined text-[18px]">splitscreen</span>
+        <span>Backlog</span>
+      </a>
+      <a routerLink="/board" class="px-3.5 py-1.5 rounded-lg text-on-surface-variant hover:text-on-surface font-label-md text-label-md flex items-center gap-1.5 transition-colors">
+        <span class="material-symbols-outlined text-[18px]">view_kanban</span>
+        <span>Board</span>
+      </a>
+      <a routerLink="/projects" class="px-3.5 py-1.5 rounded-lg text-on-surface-variant hover:text-on-surface font-label-md text-label-md flex items-center gap-1.5 transition-colors">
+        <span class="material-symbols-outlined text-[18px]">timeline</span>
+        <span>Timeline</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Action Bar & AI Breakdown Toolbar -->
+  <div class="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 mb-6">
+    <div class="flex flex-wrap items-center gap-2.5">
+      <button type="button" (click)="toggleAiModal()" class="h-10 px-4 rounded-xl bg-gradient-to-r from-primary to-primary-container hover:brightness-110 text-on-primary font-label-md text-label-md font-bold flex items-center gap-2 shadow-sm transition-all active:scale-[0.98] cursor-pointer">
+        <span class="material-symbols-outlined text-[20px]">auto_awesome</span>
+        <span>Phân rã AI (Task Breakdown)</span>
+      </button>
+
+      <button type="button" class="h-10 px-3.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold flex items-center gap-1.5 transition-all">
+        <span class="material-symbols-outlined text-[18px]">file_upload</span>
+        <span>Nhập công việc</span>
+      </button>
+
+      <div class="h-6 w-px bg-surface-container-highest mx-1"></div>
+
+      <!-- Quick Filter Avatars -->
+      <div class="flex items-center gap-1">
+        <span class="font-label-sm text-label-sm text-on-surface-variant mr-1">Phân công:</span>
+        <div class="w-7 h-7 rounded-full bg-primary text-on-primary font-label-sm text-[11px] font-bold flex items-center justify-center ring-2 ring-surface">TH</div>
+        <div class="w-7 h-7 rounded-full bg-secondary text-on-secondary font-label-sm text-[11px] font-bold flex items-center justify-center ring-2 ring-surface">HH</div>
+        <div class="w-7 h-7 rounded-full bg-tertiary-container text-on-tertiary font-label-sm text-[11px] font-bold flex items-center justify-center ring-2 ring-surface">PH</div>
+      </div>
+    </div>
+
+    <!-- Search input inside Backlog -->
+    <div class="relative flex items-center max-w-md w-full">
+      <span class="material-symbols-outlined absolute left-3 text-[18px] text-outline pointer-events-none">search</span>
+      <input
+        type="text"
+        [(ngModel)]="searchQuery"
+        placeholder="Tìm kiếm công việc trong backlog..."
+        class="w-full h-10 pl-9 pr-4 rounded-xl bg-surface-container-low text-on-surface placeholder:text-outline font-body-sm text-body-sm focus:outline-none focus:bg-surface-container-lowest focus:shadow-[0_0_0_2px_#0052cc] transition-all" />
+    </div>
+  </div>
+
+  <!-- Main Backlog Container & Drawer Layout -->
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+    <!-- Left List: Sprint Groups (8 Cols when Drawer is open, 12 when closed) -->
+    <div [class]="selectedIssue() ? 'lg:col-span-7 space-y-6' : 'lg:col-span-12 space-y-6'">
+      
+      <!-- SPRINT 1 (ACTIVE) -->
+      <div class="rounded-2xl bg-surface-container-lowest border border-outline-variant/30 p-5 shadow-sm space-y-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <span class="material-symbols-outlined text-primary">expand_more</span>
+            <h3 class="font-headline-sm text-headline-sm font-bold text-on-surface">SCRUMAI Sprint 1</h3>
+            <span class="font-label-sm text-label-sm text-on-surface-variant">24 Thg 8 – 30 Thg 8 (3 items)</span>
+            <span class="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 font-label-sm text-[11px] font-bold">ĐANG CHẠY</span>
+          </div>
+
+          <button type="button" class="h-8 px-3 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-sm text-label-sm font-semibold transition-all">
+            Hoàn thành Sprint
+          </button>
+        </div>
+
+        <!-- Issue Table Rows -->
+        <div class="space-y-2">
+          @for (item of sprint1Items(); track item.id) {
+            <div
+              (click)="selectIssue(item)"
+              (keydown.enter)="selectIssue(item)"
+              role="button"
+              tabindex="0"
+              [class.ring-2]="selectedIssue()?.id === item.id"
+              [class.ring-primary]="selectedIssue()?.id === item.id"
+              class="flex items-center justify-between p-3 rounded-xl bg-surface-container-low/70 hover:bg-surface-container-low transition-all cursor-pointer group">
+              <div class="flex items-center gap-3 min-w-0">
+                <input type="checkbox" checked class="w-4 h-4 rounded accent-primary cursor-pointer" (click)="$event.stopPropagation()" />
+                <span class="font-mono text-label-md font-bold text-primary shrink-0">{{ item.key }}</span>
+                <span class="font-body-md text-body-md font-medium text-on-surface truncate group-hover:text-primary transition-colors">{{ item.title }}</span>
+              </div>
+
+              <div class="flex items-center gap-3 shrink-0">
+                <span class="px-2 py-0.5 rounded bg-surface-container-high font-label-sm text-[11px] text-on-surface-variant font-mono">{{ item.tag }}</span>
+                <span class="px-2.5 py-1 rounded-full bg-primary-container text-on-primary-container font-label-sm text-[11px] font-semibold">{{ item.status }}</span>
+                <div class="w-6 h-6 rounded-full bg-primary text-on-primary font-label-sm text-[10px] font-bold flex items-center justify-center">{{ item.assignee }}</div>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+
+      <!-- SPRINT 2 (PLANNING) -->
+      <div class="rounded-2xl bg-surface-container-lowest border border-outline-variant/30 p-5 shadow-sm space-y-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <span class="material-symbols-outlined text-outline">expand_more</span>
+            <h3 class="font-headline-sm text-headline-sm font-bold text-on-surface">SCRUMAI Sprint 2</h3>
+            <span class="font-label-sm text-label-sm text-on-surface-variant">31 Thg 8 – 6 Thg 9 (5 items)</span>
+            <span class="px-2.5 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-[11px] font-bold">Kế hoạch</span>
+          </div>
+
+          <button type="button" class="h-8 px-3 rounded-lg bg-primary-container text-on-primary-container hover:bg-primary hover:text-on-primary font-label-sm text-label-sm font-semibold transition-all">
+            Start Sprint
+          </button>
+        </div>
+
+        <div class="space-y-2">
+          @for (item of sprint2Items(); track item.id) {
+            <div
+              (click)="selectIssue(item)"
+              (keydown.enter)="selectIssue(item)"
+              role="button"
+              tabindex="0"
+              [class.ring-2]="selectedIssue()?.id === item.id"
+              [class.ring-primary]="selectedIssue()?.id === item.id"
+              class="flex items-center justify-between p-3 rounded-xl bg-surface-container-low/70 hover:bg-surface-container-low transition-all cursor-pointer group">
+              <div class="flex items-center gap-3 min-w-0">
+                <input type="checkbox" class="w-4 h-4 rounded accent-primary cursor-pointer" (click)="$event.stopPropagation()" />
+                <span class="font-mono text-label-md font-bold text-primary shrink-0">{{ item.key }}</span>
+                <span class="font-body-md text-body-md font-medium text-on-surface truncate group-hover:text-primary transition-colors">{{ item.title }}</span>
+              </div>
+
+              <div class="flex items-center gap-3 shrink-0">
+                @if (item.aiBreakdown) {
+                  <span class="px-2 py-0.5 rounded bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-[10px] font-bold flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[12px]">auto_awesome</span> AI Ready
+                  </span>
+                }
+                <span class="px-2 py-0.5 rounded bg-surface-container-high font-label-sm text-[11px] text-on-surface-variant font-mono">{{ item.tag }}</span>
+                <span class="px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-[11px] font-semibold">To Do</span>
+                <div class="w-6 h-6 rounded-full bg-secondary text-on-secondary font-label-sm text-[10px] font-bold flex items-center justify-center">{{ item.assignee }}</div>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Right Drawer: Jira Work Item Detail Screen matching Stitch 39cc24dfeb37497780f09aa6e9324e0c -->
+    @if (selectedIssue(); as issue) {
+      <div class="lg:col-span-5 rounded-2xl bg-surface-container-lowest border border-outline-variant/30 p-6 shadow-xl space-y-6 sticky top-20 animate-fade-in">
+        <div class="flex items-center justify-between pb-4 border-b border-surface-container-highest">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary text-[20px]">check_box</span>
+            <span class="font-label-md text-label-md font-bold text-on-surface">Jira Work Item</span>
+            <span class="font-mono font-bold text-primary text-label-md">• {{ issue.key }}</span>
+          </div>
+
+          <div class="flex items-center gap-1">
+            <button type="button" class="w-8 h-8 rounded-lg hover:bg-surface-container text-on-surface-variant flex items-center justify-center">
+              <span class="material-symbols-outlined text-[18px]">visibility</span>
+            </button>
+            <button type="button" class="w-8 h-8 rounded-lg hover:bg-surface-container text-on-surface-variant flex items-center justify-center">
+              <span class="material-symbols-outlined text-[18px]">share</span>
+            </button>
+            <button type="button" (click)="closeDrawer()" class="w-8 h-8 rounded-lg hover:bg-surface-container text-on-surface-variant flex items-center justify-center">
+              <span class="material-symbols-outlined text-[18px]">close</span>
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <h2 class="font-headline-sm text-headline-sm font-bold text-on-surface leading-snug mb-3">
+            {{ issue.title }}
+          </h2>
+
+          <div class="flex items-center gap-2 mb-4">
+            <span class="px-3 py-1 rounded-full bg-primary text-on-primary font-label-sm text-label-sm font-semibold flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-emerald-400"></span> {{ issue.status }}
+            </span>
+            <button type="button" (click)="generateAiSubtasks()" class="h-8 px-3 rounded-xl bg-tertiary-container hover:bg-tertiary hover:text-on-tertiary text-on-tertiary-container font-label-sm text-label-sm font-bold flex items-center gap-1.5 transition-all">
+              <span class="material-symbols-outlined text-[16px]">auto_awesome</span>
+              <span>AI Gợi ý Subtask</span>
+            </button>
+          </div>
+
+          <!-- Description -->
+          <div class="space-y-1.5 mb-6">
+            <div class="flex items-center justify-between font-label-md text-label-md font-bold text-on-surface">
+              <span>Mô tả nhiệm vụ (Description)</span>
+              <span class="font-label-sm text-[10px] text-on-surface-variant italic">Đã lưu tự động</span>
+            </div>
+            <p class="font-body-sm text-body-sm text-on-surface-variant bg-surface-container-low p-3.5 rounded-xl leading-relaxed">
+              {{ issue.description }}
+            </p>
+          </div>
+
+          <!-- Subtask Checklist -->
+          <div class="space-y-3 mb-6">
+            <div class="flex items-center justify-between">
+              <span class="font-label-md text-label-md font-bold text-on-surface">Danh sách Subtasks ({{ issue.subtasks.length }})</span>
+              <button type="button" class="font-label-sm text-label-sm text-primary hover:underline font-semibold">+ Thêm subtask</button>
+            </div>
+
+            <div class="space-y-2">
+              @for (st of issue.subtasks; track st.id) {
+                <div class="flex items-center justify-between p-2.5 rounded-xl bg-surface-container-low">
+                  <label class="flex items-center gap-2.5 cursor-pointer">
+                    <input type="checkbox" [checked]="st.done" class="w-4 h-4 rounded accent-primary cursor-pointer" />
+                    <span class="font-body-sm text-body-sm text-on-surface" [class.line-through]="st.done" [class.opacity-60]="st.done">{{ st.title }}</span>
+                  </label>
+                  <span class="px-2 py-0.5 rounded font-label-sm text-[10px] font-bold" [class.bg-emerald-500/15]="st.done" [class.text-emerald-600]="st.done" [class.bg-surface-container-high]="!st.done" [class.text-on-surface-variant]="!st.done">
+                    {{ st.done ? 'Done' : 'In Progress' }}
+                  </span>
+                </div>
+              }
+            </div>
+          </div>
+
+          <!-- Metadata Fields -->
+          <div class="pt-4 border-t border-surface-container-highest space-y-3 font-label-sm text-label-sm">
+            <div class="flex items-center justify-between">
+              <span class="text-on-surface-variant">Người thực hiện (Assignee)</span>
+              <div class="flex items-center gap-2 font-semibold text-on-surface">
+                <div class="w-5 h-5 rounded-full bg-primary text-on-primary text-[10px] flex items-center justify-center">{{ issue.assignee }}</div>
+                <span>Trần Văn Hoàng (TH)</span>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between">
+              <span class="text-on-surface-variant">Ước lượng (Story Points)</span>
+              <span class="font-bold text-primary px-2 py-0.5 bg-primary-container rounded">{{ issue.storyPoints }} SP</span>
+            </div>
+
+            <div class="flex items-center justify-between">
+              <span class="text-on-surface-variant">Mức độ ưu tiên</span>
+              <span class="font-bold text-error">❗ Cao (High)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    }
+  </div>
+</div>

@@ -98,10 +98,39 @@ if (!app.Environment.IsDevelopment() && !app.Environment.IsStaging())
     app.UseHttpsRedirection();
 }
 
+var frontendIndexPath = Path.Combine(app.Environment.WebRootPath ?? string.Empty, "index.html");
+var hasFrontendArtifact = File.Exists(frontendIndexPath);
+if (hasFrontendArtifact)
+{
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+}
+
 app.UseAuthorization();
 app.MapControllers();
 app.MapHealthChecks("/health");
 app.MapGet("/health/live", () => Results.Ok(new { status = "Healthy" }));
+
+if (hasFrontendArtifact)
+{
+    app.MapFallback(async context =>
+    {
+        var path = context.Request.Path;
+        var isBackendPath = path.StartsWithSegments("/api")
+            || path.StartsWithSegments("/health")
+            || path.StartsWithSegments("/swagger")
+            || path.StartsWithSegments("/hubs");
+
+        if (!HttpMethods.IsGet(context.Request.Method) || isBackendPath)
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        context.Response.ContentType = "text/html; charset=utf-8";
+        await context.Response.SendFileAsync(frontendIndexPath);
+    });
+}
 
 app.Run();
 

@@ -1,0 +1,128 @@
+<div class="ai-gov-container animate-fade-in">
+  <div class="title-bar">
+    <div>
+      <h2>Quản Trị AI & Giám Sát Mô Hình Generation</h2>
+      <p>Cấu hình mô hình AI LLM, giới hạn Token và theo dõi nhật ký chi phí theo thời gian thực</p>
+    </div>
+  </div>
+
+  @if (successMsg()) {
+    <div class="alert-banner">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+      <span>{{ successMsg() }}</span>
+    </div>
+  }
+
+  <!-- Summary Stats -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-icon purple">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg>
+      </div>
+      <div class="stat-text">
+        <span class="label">Tổng Token Đã Dùng</span>
+        <span class="value">{{ TotalTokenUsed | number }}</span>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon green">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+      </div>
+      <div class="stat-text">
+        <span class="label">Ước Tính Chi Phí AI</span>
+        <span class="value">${{ TotalCostEstimated | number:'1.4-4' }}</span>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon blue">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+      </div>
+      <div class="stat-text">
+        <span class="label">Mô Hình Đang Hoạt Động</span>
+        <span class="value">{{ models().length }} Active Models</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI Models Cards Grid -->
+  <div class="section-title">
+    <h3>Mô Hình AI LLM Hệ Thống</h3>
+  </div>
+
+  <div class="models-grid">
+    @for (m of models(); track m.id) {
+      <div class="model-card" [class.disabled]="!m.isEnabled">
+        <div class="card-head">
+          <div class="model-meta">
+            <h4>{{ m.modelName }}</h4>
+            <span class="provider-tag">{{ m.provider }}</span>
+          </div>
+
+          <label class="toggle-switch" [attr.aria-label]="'Toggle model ' + m.modelName">
+            <input type="checkbox" [checked]="m.isEnabled" (change)="toggleModelActive(m)" />
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="card-body">
+          <div class="setting-item">
+            <label [attr.for]="'temp-' + m.id">Nhiệt độ (Temperature): <strong>{{ m.temperature }}</strong></label>
+            <input [id]="'temp-' + m.id" type="range" min="0" max="1" step="0.1" [(ngModel)]="m.temperature" class="range-input" />
+          </div>
+
+          <div class="setting-item">
+            <label [attr.for]="'tokens-' + m.id">Giới hạn Token (Max Tokens): <strong>{{ m.maxTokens }}</strong></label>
+            <input [id]="'tokens-' + m.id" type="number" [(ngModel)]="m.maxTokens" class="number-input" />
+          </div>
+
+          <div class="quota-progress">
+            <div class="quota-meta">
+              <span>Hạn mức tháng: {{ m.monthlyTokenQuota | number }} tokens</span>
+            </div>
+            <div class="bar">
+              <div class="fill" style="width: 42%;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    }
+  </div>
+
+  <!-- Audit Log Table -->
+  <div class="section-title margin-top-2">
+    <h3>Nhật Ký Gọi AI Generation (Audit Logs)</h3>
+  </div>
+
+  <div class="logs-card">
+    <div class="table-responsive">
+      <table class="logs-table">
+        <thead>
+          <tr>
+            <th>Thời Gian</th>
+            <th>Người Dùng</th>
+            <th>Mô Hình</th>
+            <th>Prompt Yêu Cầu</th>
+            <th>Token Dùng</th>
+            <th>Độ Trễ</th>
+            <th>Chi Phí ($)</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (log of logs(); track log.id) {
+            <tr>
+              <td>{{ log.timestamp | date:'HH:mm:ss - dd/MM' }}</td>
+              <td><strong>{{ log.userDisplayName }}</strong></td>
+              <td><span class="model-pill">{{ log.modelName }}</span></td>
+              <td class="prompt-cell"><code>{{ log.promptSnippet }}</code></td>
+              <td><strong>{{ log.tokensUsed | number }}</strong></td>
+              <td>{{ log.latencyMs }} ms</td>
+              <td class="cost-cell">${{ log.costEstimate | number:'1.4-4' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

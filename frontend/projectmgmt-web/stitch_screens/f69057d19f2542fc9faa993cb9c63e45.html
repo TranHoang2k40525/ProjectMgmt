@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="vi"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><title>HUCE Jira Scrum AI</title><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet"/><style>@layer base { html, body { margin: 0; padding: 0; } body { overscroll-behavior: none; } main > :first-child { margin-top: 0 !important; } main > :last-child { margin-bottom: 0 !important; } } ::-webkit-scrollbar { display: none; }</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "secondary": "#4648d4", "surface-container": "#e9edff", "inverse-surface": "#1d3054", "on-secondary": "#ffffff", "surface-container-lowest": "#ffffff", "on-primary-container": "#c4d2ff", "on-tertiary-fixed": "#2b0052", "surface-container-high": "#e1e8ff", "tertiary-container": "#7c2ccd", "error-container": "#ffdad6", "on-primary-fixed": "#001848", "surface": "#faf9ff", "on-error-container": "#93000a", "on-secondary-fixed-variant": "#2f2ebe", "surface-container-low": "#f1f3ff", "surface-dim": "#ccdaff", "on-surface": "#051a3e", "on-tertiary-container": "#e4c8ff", "outline-variant": "#c3c6d6", "surface-variant": "#d8e2ff", "surface-bright": "#faf9ff", "on-primary": "#ffffff", "on-secondary-container": "#fffbff", "secondary-container": "#6063ee", "on-tertiary-fixed-variant": "#6600b7", "primary-fixed": "#dae2ff", "inverse-primary": "#b2c5ff", "background": "#faf9ff", "surface-tint": "#0c56d0", "error": "#ba1a1a", "secondary-fixed": "#e1e0ff", "primary": "#003d9b", "on-background": "#051a3e", "on-tertiary": "#ffffff", "on-primary-fixed-variant": "#0040a2", "secondary-fixed-dim": "#c0c1ff", "on-surface-variant": "#434654", "tertiary-fixed": "#efdbff", "inverse-on-surface": "#edf0ff", "tertiary": "#6100af", "tertiary-fixed-dim": "#dbb8ff", "outline": "#737685", "primary-fixed-dim": "#b2c5ff", "on-error": "#ffffff", "surface-container-highest": "#d8e2ff", "primary-container": "#0052cc", "on-secondary-fixed": "#07006c" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-xs": "0.25rem", "space-lg": "1.5rem", "margin": "1.5rem", "gutter": "1rem", "space-md": "1rem", "margin-mobile": "1rem", "space-sm": "0.5rem", "space-xl": "2rem", "gutter-compact": "0.5rem" }, "fontFamily": { "label-lg": ["Inter"], "headline-sm": ["Inter"], "display-lg-mobile": ["Inter"], "label-md": ["Inter"], "label-sm": ["Inter"], "headline-lg": ["Inter"], "headline-lg-mobile": ["Inter"], "body-md": ["Inter"], "headline-md": ["Inter"], "body-lg": ["Inter"], "display-lg": ["Inter"], "body-sm": ["Inter"] }, "fontSize": { "label-lg": ["14px", { "lineHeight": "20px", "letterSpacing": "0.005em", "fontWeight": "500" }], "headline-sm": ["16px", { "lineHeight": "24px", "letterSpacing": "-0.005em", "fontWeight": "600" }], "display-lg-mobile": ["30px", { "lineHeight": "38px", "letterSpacing": "-0.015em", "fontWeight": "700" }], "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600" }], "label-sm": ["11px", { "lineHeight": "14px", "letterSpacing": "0.04em", "fontWeight": "700" }], "headline-lg": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.015em", "fontWeight": "600" }], "headline-lg-mobile": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "body-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400" }], "headline-md": ["20px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "body-lg": ["16px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "400" }], "display-lg": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700" }], "body-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "400" }] } } } };</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><header class="fixed top-0 left-0 right-0 z-50 bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-14 w-full px-gutter flex items-center justify-between gap-space-md"><div class="flex items-center gap-space-md flex-shrink-0"><button class="flex items-center justify-center w-8 h-8 rounded text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]">apps</span></button><div class="flex items-center gap-space-xs"><div class="w-8 h-8 rounded-lg bg-primary-container flex items-center justify-center text-on-primary font-headline-sm text-headline-sm">H</div><div class="flex flex-col"><span class="font-headline-sm text-headline-sm leading-tight text-primary">HUCE Jira</span><span class="font-label-sm text-label-sm leading-none text-on-surface-variant">Scrum AI Studio</span></div></div><nav class="hidden xl:flex items-center gap-space-xs" data-active-classes="bg-surface-container-high text-primary font-label-lg font-semibold rounded-lg"><a class="px-3 py-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface font-label-lg text-label-lg transition-colors flex items-center gap-1" data-path="workspaces" href="#">Không gian làm việc <span class="material-symbols-outlined text-[16px]">expand_more</span></a><a class="px-3 py-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface font-label-lg text-label-lg transition-colors flex items-center gap-1" data-path="recent-issues" href="#">Gần đây <span class="material-symbols-outlined text-[16px]">expand_more</span></a><a class="px-3 py-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface font-label-lg text-label-lg transition-colors flex items-center gap-1" data-path="starred-boards" href="#">Đánh dấu <span class="material-symbols-outlined text-[16px]">expand_more</span></a><a class="px-3 py-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface font-label-lg text-label-lg transition-colors flex items-center gap-1" data-path="filters-view" href="#">Bộ lọc <span class="material-symbols-outlined text-[16px]">expand_more</span></a></nav><button class="px-3.5 py-1.5 rounded-lg bg-primary-container text-on-primary font-label-lg text-label-lg hover:bg-primary transition-colors flex items-center gap-1.5 shadow-sm"><span class="material-symbols-outlined text-[18px]">add</span><span>Tạo mới</span></button></div><div class="flex-1 max-w-md hidden md:block"><div class="relative flex items-center"><span class="material-symbols-outlined absolute left-3 text-outline text-[18px]">search</span><input class="w-full pl-9 pr-8 py-1.5 rounded-xl bg-surface-container-low text-on-surface placeholder:text-outline font-body-sm text-body-sm focus:outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary/20 transition-all" placeholder="Tìm kiếm đồ án, mã issue (HUCE-...), thành viên..." type="text"/><span class="absolute right-2.5 px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm">/</span></div></div><div class="flex items-center gap-space-xs flex-shrink-0"><button class="px-3 py-1 rounded-full bg-gradient-to-r from-secondary to-tertiary-container text-on-primary font-label-md text-label-md flex items-center gap-1.5 shadow-[0_0_12px_rgba(99,102,241,0.25)] hover:opacity-95 transition-opacity"><span class="material-symbols-outlined text-[16px]">auto_awesome</span><span>Trợ lý AI</span><span class="px-1 py-0.2 rounded bg-surface-container-lowest/20 font-label-sm text-label-sm uppercase">BETA</span></button><div class="h-4 w-px bg-outline-variant mx-1 hidden sm:block"></div><button class="relative p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" title="Thông báo"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-error"></span></button><button class="p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" title="Trợ giúp & Hướng dẫn HUCE"><span class="material-symbols-outlined text-[20px]">help_outline</span></button><button class="p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" title="Cài đặt hệ thống"><span class="material-symbols-outlined text-[20px]">settings</span></button><div class="ml-1 flex items-center gap-2"><img alt="Profile" class="w-8 h-8 rounded-full object-cover ring-1 ring-outline-variant/40" src="https://lh3.googleusercontent.com/aida/AEtjO1XtHjbcVDz-UBjctM0LfVUGmqUeR39WQIoExjpXXhoH4Wu_I9_Qpk42NbzSi5dIoyYQuxC6PmMSr__bvB8G1iRv51zwwYHyLI9epDcSeaSJ_23pgMSoDqCavTtJMnh_VUr1XiaX_dfIJVrOpVNtqTGgwFT5FuXj3i9tQVUICLqvROYKaCksEl97aHgdr2n-KIVSDs0bZzIZ5hDOpx0AeyayjF5Y_iybOHjJnpBXyyQz40C4Rx5A_y32U-v-DZxAw_gb18RoyaUMMA"/></div></div></div></header><aside class="fixed left-0 top-14 bottom-0 w-64 bg-surface-container-low/95 backdrop-blur-xl z-40 flex flex-col justify-between overflow-y-auto"><div class="p-space-sm"><div class="px-3 py-2.5 mb-2 rounded-xl bg-surface-container flex items-center gap-space-sm"><div class="w-7 h-7 rounded bg-primary text-on-primary flex items-center justify-center font-label-md text-label-md font-bold">DA</div><div class="flex flex-col min-w-0 flex-1"><span class="font-label-md text-label-md font-semibold text-on-surface truncate">Đồ án Tốt nghiệp K65</span><span class="font-label-sm text-label-sm text-on-surface-variant truncate">Phần mềm Scrum HUCE</span></div><span class="material-symbols-outlined text-outline text-[18px]">unfold_more</span></div><div class="mb-3"><div class="px-3 py-1 font-label-sm text-label-sm uppercase tracking-wider text-outline">Dự án & Không gian</div><nav class="flex flex-col gap-0.5" data-active-classes="bg-surface-container-high text-primary font-semibold rounded-lg"><a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface font-label-md text-label-md transition-colors" data-path="kanban-board" href="#"><span class="material-symbols-outlined text-[18px] text-primary">view_kanban</span><span>Bảng Kanban</span></a><a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface font-label-md text-label-md transition-colors" data-path="sprint-backlog" href="#"><span class="material-symbols-outlined text-[18px]">list_alt</span><span>Backlog & Sprint</span></a><a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface font-label-md text-label-md transition-colors" data-path="timeline-gantt" href="#"><span class="material-symbols-outlined text-[18px]">timeline</span><span>Tiến độ Timeline</span></a><a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface font-label-md text-label-md transition-colors" data-path="burndown-reports" href="#"><span class="material-symbols-outlined text-[18px]">insights</span><span>Báo cáo Burndown</span></a></nav></div><div class="mb-3"><div class="px-3 py-1 font-label-sm text-label-sm uppercase tracking-wider text-outline">Trí tuệ Nhân tạo HUCE</div><nav class="flex flex-col gap-0.5" data-active-classes="bg-surface-container-high text-primary font-semibold rounded-lg"><a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface font-label-md text-label-md transition-colors" data-path="ai-task-breakdown" href="#"><span class="material-symbols-outlined text-[18px] text-secondary-container">psychology</span><span>Tự động rã Task (AI)</span></a><a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface font-label-md text-label-md transition-colors" data-path="ai-sprint-forecast" href="#"><span class="material-symbols-outlined text-[18px] text-secondary-container">smart_toy</span><span>Dự báo Tốc độ Velocity</span></a></nav></div><div><div class="px-3 py-1 font-label-sm text-label-sm uppercase tracking-wider text-outline">Quản trị & Cấu hình</div><nav class="flex flex-col gap-0.5" data-active-classes="bg-surface-container-high text-primary font-semibold rounded-lg"><a aria-current="page" class="flex items-center gap-2.5 px-3 py-2 transition-colors bg-surface-container-high text-primary font-semibold rounded-lg" data-path="project-settings" href="#"><span class="material-symbols-outlined text-[18px]">tune</span><span>Cài đặt dự án</span></a><a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface font-label-md text-label-md transition-colors" data-path="system-admin" href="#"><span class="material-symbols-outlined text-[18px]">admin_panel_settings</span><span>Quản trị hệ thống</span></a></nav></div></div><div class="p-space-sm"><div class="p-3 rounded-xl bg-surface-container-high/60 flex items-center justify-between"><div class="flex items-center gap-2 min-w-0"><span class="material-symbols-outlined text-primary text-[18px]">school</span><span class="font-label-sm text-label-sm text-on-surface truncate">HUCE Tech Portal</span></div><span class="material-symbols-outlined text-outline text-[16px]">open_in_new</span></div></div></aside><div class="pl-64"><main class="relative w-full pt-14 px-gutter bg-surface min-h-screen"><div class="flex flex-col w-full pb-16">
+<!-- Top Breadcrumb & Project Header Banner -->
+<div class="relative overflow-hidden rounded-xl bg-surface-container-low p-6 mb-6 shadow-sm">
+<div class="absolute -right-16 -top-16 w-80 h-80 rounded-full bg-gradient-to-br from-primary-fixed/40 via-secondary-fixed/30 to-tertiary-fixed/20 blur-3xl pointer-events-none"></div>
+<div class="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div class="flex items-start gap-4">
+<div class="w-14 h-14 rounded-xl bg-primary-container text-on-primary flex items-center justify-center font-headline-lg text-headline-lg shadow-md flex-shrink-0">
+<span class="material-symbols-outlined text-[32px]">schema</span>
+</div>
+<div>
+<div class="flex items-center gap-2 text-on-surface-variant font-label-sm text-label-sm mb-1">
+<span>Dự án</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span>SCRUMAI</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span class="text-primary font-semibold">Cài đặt quy trình</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">
+            Cài đặt dự án: Scrum AI Project Management
+          </h1>
+<div class="flex items-center gap-3 mt-1.5 flex-wrap">
+<span class="px-2.5 py-0.5 rounded-full bg-surface-container text-primary font-label-sm text-label-sm font-semibold">
+              Mã: SCRUMAI
+            </span>
+<span class="flex items-center gap-1 text-on-surface-variant font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-[16px] text-tertiary">psychology</span>
+              Quy trình kết hợp Claude 3.5 Sonnet Engine
+            </span>
+<span class="px-2 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm">
+              Mục 7.3 Kỹ thuật HUCE
+            </span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-2 self-start md:self-auto">
+<button class="px-3.5 py-2 rounded-xl bg-surface-container-highest text-on-surface font-label-md text-label-md hover:bg-surface-container-high transition-colors flex items-center gap-1.5 shadow-sm" id="import-template-btn">
+<span class="material-symbols-outlined text-[18px]">download</span>
+<span>Nhập mẫu Scrum chuẩn</span>
+</button>
+<button class="px-4 py-2 rounded-xl bg-primary-container text-on-primary font-label-md text-label-md hover:bg-primary transition-all flex items-center gap-1.5 shadow-md">
+<span class="material-symbols-outlined text-[18px]">save</span>
+<span>Lưu thay đổi</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Main Settings Grid: Sub-sidebar + Workflow Engine Canvas -->
+<div class="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+<!-- LEFT SETTINGS SIDEBAR (4 Cols on xl) -->
+<div class="xl:col-span-3 flex flex-col gap-4">
+<div class="bg-surface-container-lowest rounded-xl p-4 shadow-sm">
+<div class="px-3 py-2 text-outline font-label-sm text-label-sm uppercase tracking-wider">
+          Cấu hình Dự án (Settings)
+        </div>
+<nav class="flex flex-col gap-1 mt-1 font-label-md text-label-md">
+<!-- 1. Details -->
+<a class="flex items-center justify-between px-3 py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-colors group" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[20px] text-outline group-hover:text-primary transition-colors">info</span>
+<span>Chi tiết dự án (Details)</span>
+</div>
+<span class="material-symbols-outlined text-[16px] text-outline opacity-0 group-hover:opacity-100">chevron_right</span>
+</a>
+<!-- 2. Workflows (ACTIVE) -->
+<a class="flex items-center justify-between px-3 py-2.5 rounded-lg bg-surface-container-high text-primary font-semibold shadow-xs" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[20px] text-primary" style="font-variation-settings: 'FILL' 1;">account_tree</span>
+<span>Quy trình làm việc (Workflows)</span>
+</div>
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+</a>
+<!-- 3. Issue Types -->
+<a class="flex items-center justify-between px-3 py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-colors group" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[20px] text-outline group-hover:text-primary transition-colors">category</span>
+<div class="flex flex-col">
+<span>Loại công việc</span>
+<span class="text-[10px] text-outline font-normal">Epic, Story, Task, Bug...</span>
+</div>
+</div>
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-[11px] text-on-surface-variant">5</span>
+</a>
+<!-- 4. People & Scoped RBAC -->
+<a class="flex items-center justify-between px-3 py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-colors group" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[20px] text-outline group-hover:text-primary transition-colors">group_add</span>
+<span>Thành viên & Phân quyền</span>
+</div>
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-[11px] text-on-surface-variant">RBAC</span>
+</a>
+<!-- 5. AI Assistant Config -->
+<a class="flex items-center justify-between px-3 py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-colors group" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[20px] text-secondary-container">psychology_alt</span>
+<div class="flex flex-col">
+<span class="text-on-surface">Cấu hình AI Assistant</span>
+<span class="text-[10px] text-secondary font-medium">Claude Prompt & Token</span>
+</div>
+</div>
+<span class="px-1.5 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed text-[10px] font-bold">AI</span>
+</a>
+<!-- 6. Versions & Releases -->
+<a class="flex items-center justify-between px-3 py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-colors group" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[20px] text-outline group-hover:text-primary transition-colors">rocket_launch</span>
+<span>Phiên bản phát hành</span>
+</div>
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-[11px] text-on-surface-variant">v2.4.0</span>
+</a>
+<!-- 7. Components -->
+<a class="flex items-center justify-between px-3 py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-colors group" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[20px] text-outline group-hover:text-primary transition-colors">widgets</span>
+<span>Module kỹ thuật</span>
+</div>
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-[11px] text-on-surface-variant">8</span>
+</a>
+</nav>
+</div>
+<!-- Quick AI Automation Insight Card -->
+<div class="rounded-xl p-4 bg-gradient-to-br from-surface-container-low to-surface-container shadow-sm relative overflow-hidden">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-secondary text-[20px]">auto_awesome</span>
+<span class="font-headline-sm text-headline-sm text-on-surface">Scrum AI Guardrails</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-3 leading-relaxed">
+          Hệ thống AI tự động kiểm tra Definition of Done (DoD) và độ phủ unit test trước khi cho phép Issue chuyển sang cột <span class="font-semibold text-primary">DONE</span>.
+        </p>
+<div class="flex items-center justify-between bg-surface-container-lowest p-2.5 rounded-lg">
+<span class="font-label-sm text-label-sm text-on-surface font-medium">Tự động rà soát Pull Request</span>
+<div class="w-8 h-4 bg-primary-container rounded-full relative cursor-pointer flex items-center justify-end px-0.5">
+<div class="w-3 h-3 rounded-full bg-on-primary"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- RIGHT CONTENT AREA (9 Cols on xl) -->
+<div class="xl:col-span-9 flex flex-col gap-6">
+<!-- Action Topbar for Workflow Section -->
+<div class="bg-surface-container-lowest rounded-xl p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+<div>
+<div class="flex items-center gap-2">
+<h2 class="font-headline-md text-headline-md text-on-surface font-semibold">Quy trình: HUCE Standard Agile Scrum Scheme</h2>
+<span class="px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm font-bold uppercase">Mặc định</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">
+            Được gán cho tất cả 5 Issue Types: Epic, User Story, Kỹ thuật Task, Lỗi Bug và Nhiệm vụ con Sub-task.
+          </p>
+</div>
+<div class="flex items-center gap-2 flex-wrap">
+<button class="px-3.5 py-2 rounded-lg bg-surface-container-high text-primary hover:bg-surface-container transition-colors font-label-md text-label-md font-semibold flex items-center gap-1.5" id="add-status-btn">
+<span class="material-symbols-outlined text-[18px]">add_circle</span>
+<span>Thêm trạng thái</span>
+</button>
+<button class="px-3.5 py-2 rounded-lg bg-secondary text-on-secondary hover:bg-secondary-container transition-colors font-label-md text-label-md font-semibold flex items-center gap-1.5 shadow-sm">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+<span>Chỉnh sửa quy trình</span>
+</button>
+</div>
+</div>
+<!-- VISUAL WORKFLOW STATUS DIAGRAM (Mục 7.3 Sơ đồ trực quan) -->
+<div class="bg-surface-container-lowest rounded-xl p-6 shadow-sm">
+<div class="flex items-center justify-between mb-4">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[22px]">route</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Sơ đồ Trực quan Vòng đời Nhiệm vụ (Workflow Status Lifecycle)</h3>
+</div>
+<span class="font-label-sm text-label-sm text-outline">Luồng tuần tự & Tái thẩm định</span>
+</div>
+<!-- Visual Flow Pipeline -->
+<div class="relative bg-surface-container-low/60 rounded-xl p-6 overflow-x-auto">
+<div class="flex items-center justify-between min-w-[760px] gap-2">
+<!-- Node 1: TO DO -->
+<div class="flex-1 flex flex-col items-center group">
+<div class="w-full max-w-[170px] p-3.5 rounded-xl bg-surface-container text-on-surface flex flex-col gap-1 shadow-sm hover:shadow-md transition-all">
+<div class="flex items-center justify-between">
+<span class="w-2.5 h-2.5 rounded-full bg-outline"></span>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase">TO DO</span>
+</div>
+<span class="font-headline-sm text-headline-sm font-semibold">CẦN LÀM</span>
+<span class="text-[11px] text-on-surface-variant">Khởi tạo backlog</span>
+</div>
+<div class="mt-2 text-center">
+<span class="px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-[10px]">Category: Open</span>
+</div>
+</div>
+<!-- Transition Arrow 1 -->
+<div class="flex flex-col items-center justify-center px-1">
+<span class="font-label-sm text-[10px] text-primary font-semibold mb-1">Kéo vào Sprint</span>
+<div class="flex items-center text-primary">
+<div class="h-0.5 w-12 bg-primary"></div>
+<span class="material-symbols-outlined text-[18px] -ml-2">arrow_forward</span>
+</div>
+<span class="text-[10px] text-outline mt-0.5">Tất cả role</span>
+</div>
+<!-- Node 2: IN PROGRESS -->
+<div class="flex-1 flex flex-col items-center group">
+<div class="w-full max-w-[170px] p-3.5 rounded-xl bg-primary-container text-on-primary flex flex-col gap-1 shadow-sm hover:shadow-md transition-all">
+<div class="flex items-center justify-between">
+<span class="w-2.5 h-2.5 rounded-full bg-on-primary-container"></span>
+<span class="font-label-sm text-label-sm text-on-primary-container uppercase">IN PROGRESS</span>
+</div>
+<span class="font-headline-sm text-headline-sm font-semibold">ĐANG THỰC HIỆN</span>
+<span class="text-[11px] text-on-primary-container">Commit code / Dev</span>
+</div>
+<div class="mt-2 text-center">
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-primary font-label-sm text-[10px]">Category: In Progress</span>
+</div>
+</div>
+<!-- Transition Arrow 2 -->
+<div class="flex flex-col items-center justify-center px-1">
+<span class="font-label-sm text-[10px] text-secondary font-semibold mb-1">Mở PR / Đẩy Git</span>
+<div class="flex items-center text-secondary">
+<div class="h-0.5 w-12 bg-secondary"></div>
+<span class="material-symbols-outlined text-[18px] -ml-2">arrow_forward</span>
+</div>
+<span class="text-[10px] text-outline mt-0.5">Dev / Assignee</span>
+</div>
+<!-- Node 3: IN REVIEW -->
+<div class="flex-1 flex flex-col items-center group">
+<div class="w-full max-w-[170px] p-3.5 rounded-xl bg-surface-container-highest text-on-surface flex flex-col gap-1 shadow-sm hover:shadow-md transition-all">
+<div class="flex items-center justify-between">
+<span class="w-2.5 h-2.5 rounded-full bg-tertiary-container"></span>
+<span class="font-label-sm text-label-sm text-tertiary font-bold uppercase">IN REVIEW</span>
+</div>
+<span class="font-headline-sm text-headline-sm font-semibold">ĐANG KIỂM THỬ</span>
+<span class="text-[11px] text-on-surface-variant">Peer Review & QA</span>
+</div>
+<div class="mt-2 text-center">
+<span class="px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-[10px]">Category: Testing</span>
+</div>
+</div>
+<!-- Transition Arrow 3 -->
+<div class="flex flex-col items-center justify-center px-1">
+<span class="font-label-sm text-[10px] text-primary font-semibold mb-1">Pass DoD & QA</span>
+<div class="flex items-center text-primary">
+<div class="h-0.5 w-12 bg-primary"></div>
+<span class="material-symbols-outlined text-[18px] -ml-2">arrow_forward</span>
+</div>
+<span class="text-[10px] text-primary font-bold mt-0.5">Tech Lead / QA</span>
+</div>
+<!-- Node 4: DONE -->
+<div class="flex-1 flex flex-col items-center group">
+<div class="w-full max-w-[170px] p-3.5 rounded-xl bg-inverse-surface text-inverse-on-surface flex flex-col gap-1 shadow-sm hover:shadow-md transition-all">
+<div class="flex items-center justify-between">
+<span class="w-2.5 h-2.5 rounded-full bg-primary-fixed"></span>
+<span class="font-label-sm text-label-sm text-primary-fixed uppercase">DONE</span>
+</div>
+<span class="font-headline-sm text-headline-sm font-semibold">HOÀN THÀNH</span>
+<span class="text-[11px] text-outline-variant">Nghiệm thu Sprint</span>
+</div>
+<div class="mt-2 text-center">
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-on-surface font-label-sm text-[10px]">Category: Done</span>
+</div>
+</div>
+</div>
+<!-- Rollback Sub-path Visual Note -->
+<div class="mt-6 pt-4 bg-surface-container-lowest/70 rounded-lg p-3 flex items-center justify-between text-on-surface-variant font-body-sm text-body-sm">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-outline text-[18px]">replay</span>
+<span>Luồng trả về (Rollback): Khi kiểm thử thất bại, <strong>[ĐANG KIỂM THỬ]</strong> có thể chuyển ngược về <strong>[ĐANG THỰC HIỆN]</strong> kèm ghi chú bug.</span>
+</div>
+<span class="text-[11px] font-semibold text-primary">Quy tắc nghiêm ngặt</span>
+</div>
+</div>
+</div>
+<!-- WORKFLOW CATEGORIES TABLE -->
+<div class="bg-surface-container-lowest rounded-xl p-6 shadow-sm">
+<div class="flex items-center justify-between mb-4">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">palette</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Danh sách Trạng thái & Phân loại Màu sắc (WorkflowStatus)</h3>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Tổng cộng: 4 trạng thái cốt lõi</span>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left font-body-sm text-body-sm">
+<thead class="bg-surface-container text-on-surface-variant font-label-md text-label-md">
+<tr>
+<th class="py-3 px-4 rounded-l-lg">Tên trạng thái</th>
+<th class="py-3 px-4">Mã hiển thị</th>
+<th class="py-3 px-4">Danh mục (Category)</th>
+<th class="py-3 px-4">Mô tả nghiệp vụ HUCE</th>
+<th class="py-3 px-4 text-right rounded-r-lg">Thao tác</th>
+</tr>
+</thead>
+<tbody class="divide-y-0">
+<!-- Row 1 -->
+<tr class="hover:bg-surface-container-low/50 transition-colors">
+<td class="py-3.5 px-4 font-headline-sm text-headline-sm text-on-surface flex items-center gap-2.5">
+<span class="w-3 h-3 rounded-full bg-outline"></span>
+<span>Cần làm (To Do)</span>
+</td>
+<td class="py-3.5 px-4 font-mono text-[13px] text-on-surface-variant">STATUS_TODO</td>
+<td class="py-3.5 px-4">
+<span class="px-2.5 py-1 rounded-full bg-surface-container text-on-surface font-label-sm text-label-sm font-medium">
+                    To Do (Xám / Xanh nhạt)
+                  </span>
+</td>
+<td class="py-3.5 px-4 text-on-surface-variant">Hạng mục đã được phê duyệt trong Product Backlog và sẵn sàng phân bổ vào Sprint.</td>
+<td class="py-3.5 px-4 text-right">
+<button class="p-1 rounded hover:bg-surface-container text-outline hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[18px]">tune</span>
+</button>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-surface-container-low/50 transition-colors bg-surface-container-low/20">
+<td class="py-3.5 px-4 font-headline-sm text-headline-sm text-on-surface flex items-center gap-2.5">
+<span class="w-3 h-3 rounded-full bg-primary-container"></span>
+<span>Đang thực hiện (In Progress)</span>
+</td>
+<td class="py-3.5 px-4 font-mono text-[13px] text-on-surface-variant">STATUS_IN_PROGRESS</td>
+<td class="py-3.5 px-4">
+<span class="px-2.5 py-1 rounded-full bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm font-medium">
+                    In Progress (Xanh dương)
+                  </span>
+</td>
+<td class="py-3.5 px-4 text-on-surface-variant">Kỹ sư / Sinh viên đang chủ động viết mã, dựng mô hình hoặc giải quyết sự cố.</td>
+<td class="py-3.5 px-4 text-right">
+<button class="p-1 rounded hover:bg-surface-container text-outline hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[18px]">tune</span>
+</button>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-surface-container-low/50 transition-colors">
+<td class="py-3.5 px-4 font-headline-sm text-headline-sm text-on-surface flex items-center gap-2.5">
+<span class="w-3 h-3 rounded-full bg-tertiary"></span>
+<span>Đang kiểm thử (In Review)</span>
+</td>
+<td class="py-3.5 px-4 font-mono text-[13px] text-on-surface-variant">STATUS_IN_REVIEW</td>
+<td class="py-3.5 px-4">
+<span class="px-2.5 py-1 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm font-medium">
+                    In Review (Tím / Vàng cam)
+                  </span>
+</td>
+<td class="py-3.5 px-4 text-on-surface-variant">Đang qua khâu Peer Review trên GitHub hoặc kiểm thử chấp nhận người dùng (UAT).</td>
+<td class="py-3.5 px-4 text-right">
+<button class="p-1 rounded hover:bg-surface-container text-outline hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[18px]">tune</span>
+</button>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-surface-container-low/50 transition-colors bg-surface-container-low/20">
+<td class="py-3.5 px-4 font-headline-sm text-headline-sm text-on-surface flex items-center gap-2.5">
+<span class="w-3 h-3 rounded-full bg-inverse-surface"></span>
+<span>Hoàn thành (Done)</span>
+</td>
+<td class="py-3.5 px-4 font-mono text-[13px] text-on-surface-variant">STATUS_DONE</td>
+<td class="py-3.5 px-4">
+<span class="px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface font-label-sm text-label-sm font-medium">
+                    Done (Xanh lá Atlassian)
+                  </span>
+</td>
+<td class="py-3.5 px-4 text-on-surface-variant">Đã merge nhánh main, vượt qua bộ kiểm thử tự động CI/CD và được Tech Lead ký duyệt.</td>
+<td class="py-3.5 px-4 text-right">
+<button class="p-1 rounded hover:bg-surface-container text-outline hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[18px]">tune</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- WORKFLOW TRANSITIONS MATRIX (Mục 7.3 Bảng ma trận chuyển đổi & Phân quyền) -->
+<div class="bg-surface-container-lowest rounded-xl p-6 shadow-sm">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+<div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[22px]">swap_horiz</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Ma trận Chuyển đổi Trạng thái & Phân quyền (WorkflowTransition Rules)</h3>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+              Ràng buộc bảo mật RBAC: Chỉ định vai trò được phép kéo thẻ giữa các cột để đảm bảo tính kỷ luật Scrum HUCE.
+            </p>
+</div>
+<button class="self-start sm:self-auto px-3 py-1.5 rounded-lg bg-surface-container-high text-primary hover:bg-surface-container font-label-md text-label-md flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">add</span>
+<span>Thêm quy tắc</span>
+</button>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left font-body-sm text-body-sm">
+<thead class="bg-surface-container text-on-surface-variant font-label-md text-label-md">
+<tr>
+<th class="py-3 px-4 rounded-l-lg">Trạng thái nguồn (From)</th>
+<th class="py-3 px-4">Trạng thái đích (To)</th>
+<th class="py-3 px-4">Tên bước chuyển (Transition Name)</th>
+<th class="py-3 px-4">Quyền hạn thực hiện (Scoped Role)</th>
+<th class="py-3 px-4">Điều kiện tiên quyết (Guards / AI)</th>
+<th class="py-3 px-4 text-right rounded-r-lg">Hiệu lực</th>
+</tr>
+</thead>
+<tbody class="divide-y-0">
+<!-- Transition 1 -->
+<tr class="hover:bg-surface-container-low/50 transition-colors">
+<td class="py-3.5 px-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-surface-container text-on-surface font-label-sm text-label-sm">
+<span class="w-2 h-2 rounded-full bg-outline"></span> CẦN LÀM
+                  </span>
+</td>
+<td class="py-3.5 px-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm">
+<span class="w-2 h-2 rounded-full bg-primary"></span> ĐANG THỰC HIỆN
+                  </span>
+</td>
+<td class="py-3.5 px-4 font-medium text-on-surface">Start Progress</td>
+<td class="py-3.5 px-4">
+<span class="px-2 py-0.5 rounded bg-surface-container-high text-on-surface font-label-sm text-label-sm">
+                    Mọi thành viên (Developer, Tech Lead)
+                  </span>
+</td>
+<td class="py-3.5 px-4 text-on-surface-variant">Task đã được gán Assignee & trong Active Sprint</td>
+<td class="py-3.5 px-4 text-right">
+<span class="material-symbols-outlined text-primary text-[20px]" style="font-variation-settings: 'FILL' 1;">toggle_on</span>
+</td>
+</tr>
+<!-- Transition 2 -->
+<tr class="hover:bg-surface-container-low/50 transition-colors bg-surface-container-low/20">
+<td class="py-3.5 px-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm">
+<span class="w-2 h-2 rounded-full bg-primary"></span> ĐANG THỰC HIỆN
+                  </span>
+</td>
+<td class="py-3.5 px-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span> ĐANG KIỂM THỬ
+                  </span>
+</td>
+<td class="py-3.5 px-4 font-medium text-on-surface">Submit for Review</td>
+<td class="py-3.5 px-4">
+<span class="px-2 py-0.5 rounded bg-surface-container-high text-on-surface font-label-sm text-label-sm">
+                    Chỉ Assignee hoặc Reporter
+                  </span>
+</td>
+<td class="py-3.5 px-4 text-on-surface-variant">Bắt buộc đính kèm link Git PR / Tài liệu test</td>
+<td class="py-3.5 px-4 text-right">
+<span class="material-symbols-outlined text-primary text-[20px]" style="font-variation-settings: 'FILL' 1;">toggle_on</span>
+</td>
+</tr>
+<!-- Transition 3: STRICT GUARD (Tech Lead / QA only) -->
+<tr class="hover:bg-surface-container-low/50 transition-colors bg-secondary-fixed/20">
+<td class="py-3.5 px-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span> ĐANG KIỂM THỬ
+                  </span>
+</td>
+<td class="py-3.5 px-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-inverse-surface text-inverse-on-surface font-label-sm text-label-sm">
+<span class="w-2 h-2 rounded-full bg-primary-fixed"></span> HOÀN THÀNH
+                  </span>
+</td>
+<td class="py-3.5 px-4 font-medium text-primary">Verify & Close Task</td>
+<td class="py-3.5 px-4">
+<span class="px-2.5 py-1 rounded-full bg-error-container text-on-error-container font-label-sm text-label-sm font-bold flex items-center gap-1 w-fit">
+<span class="material-symbols-outlined text-[14px]">lock</span>
+                    Chỉ Tech Lead / QA Lead
+                  </span>
+</td>
+<td class="py-3.5 px-4 text-on-surface">
+<div class="flex items-center gap-1 text-[12px] font-semibold text-secondary">
+<span class="material-symbols-outlined text-[14px]">smart_toy</span>
+                    AI DoD Check: 100% Tiêu chí hoàn thành
+                  </div>
+</td>
+<td class="py-3.5 px-4 text-right">
+<span class="material-symbols-outlined text-primary text-[20px]" style="font-variation-settings: 'FILL' 1;">toggle_on</span>
+</td>
+</tr>
+<!-- Transition 4: Rollback -->
+<tr class="hover:bg-surface-container-low/50 transition-colors">
+<td class="py-3.5 px-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span> ĐANG KIỂM THỬ
+                  </span>
+</td>
+<td class="py-3.5 px-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm">
+<span class="w-2 h-2 rounded-full bg-primary"></span> ĐANG THỰC HIỆN
+                  </span>
+</td>
+<td class="py-3.5 px-4 font-medium text-error">Reject / Request Changes</td>
+<td class="py-3.5 px-4">
+<span class="px-2 py-0.5 rounded bg-surface-container-high text-on-surface font-label-sm text-label-sm">
+                    Tech Lead, QA Tester, Reviewer
+                  </span>
+</td>
+<td class="py-3.5 px-4 text-on-surface-variant">Bắt buộc nhập lý do từ chối (Comment log)</td>
+<td class="py-3.5 px-4 text-right">
+<span class="material-symbols-outlined text-primary text-[20px]" style="font-variation-settings: 'FILL' 1;">toggle_on</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- ISSUE TYPE SCHEME MAPPING (IssueType Integration) -->
+<div class="bg-surface-container-lowest rounded-xl p-6 shadow-sm">
+<div class="flex items-center justify-between mb-4">
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Loại Công Việc Áp Dụng (Associated Issue Types)</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Các đối tượng thừa kế quy tắc chuyển đổi trên trong dự án Scrum AI.</p>
+</div>
+<span class="px-2.5 py-1 rounded-full bg-surface-container text-primary font-label-sm text-label-sm font-semibold">5 Loại hoạt động</span>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+<!-- Epic -->
+<div class="p-3 rounded-xl bg-surface-container-low flex flex-col gap-2 hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded bg-tertiary text-on-tertiary flex items-center justify-center">
+<span class="material-symbols-outlined text-[16px]">bolt</span>
+</div>
+<span class="font-label-md text-label-md font-semibold text-on-surface">Epic</span>
+</div>
+<span class="text-[11px] text-on-surface-variant">Khung giải pháp lớn</span>
+</div>
+<!-- User Story -->
+<div class="p-3 rounded-xl bg-surface-container-low flex flex-col gap-2 hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded bg-secondary text-on-secondary flex items-center justify-center">
+<span class="material-symbols-outlined text-[16px]">bookmark</span>
+</div>
+<span class="font-label-md text-label-md font-semibold text-on-surface">Story</span>
+</div>
+<span class="text-[11px] text-on-surface-variant">Yêu cầu người dùng</span>
+</div>
+<!-- Task -->
+<div class="p-3 rounded-xl bg-surface-container-low flex flex-col gap-2 hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded bg-primary-container text-on-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[16px]">check_box</span>
+</div>
+<span class="font-label-md text-label-md font-semibold text-on-surface">Task</span>
+</div>
+<span class="text-[11px] text-on-surface-variant">Nhiệm vụ kỹ thuật</span>
+</div>
+<!-- Bug -->
+<div class="p-3 rounded-xl bg-surface-container-low flex flex-col gap-2 hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded bg-error text-on-error flex items-center justify-center">
+<span class="material-symbols-outlined text-[16px]">bug_report</span>
+</div>
+<span class="font-label-md text-label-md font-semibold text-on-surface">Bug</span>
+</div>
+<span class="text-[11px] text-on-surface-variant">Lỗi kiểm thử & hệ thống</span>
+</div>
+<!-- Sub-task -->
+<div class="p-3 rounded-xl bg-surface-container-low flex flex-col gap-2 hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded bg-outline text-on-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[16px]">subdirectory_arrow_right</span>
+</div>
+<span class="font-label-md text-label-md font-semibold text-on-surface">Sub-task</span>
+</div>
+<span class="text-[11px] text-on-surface-variant">Được AI rã việc tự động</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Interactive Modal: Add New Status (Hidden by default, triggered via JS) -->
+<div class="fixed inset-0 z-50 bg-inverse-surface/40 backdrop-blur-sm flex items-center justify-center p-4 hidden" id="add-status-modal">
+<div class="w-full max-w-lg bg-surface-container-lowest rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+<div class="p-6 bg-surface-container-low flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-lg bg-primary-container text-on-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">add_task</span>
+</div>
+<div>
+<h4 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Tạo trạng thái mới (WorkflowStatus)</h4>
+<span class="text-[11px] text-on-surface-variant">Chuẩn hóa danh mục trạng thái Jira HUCE</span>
+</div>
+</div>
+<button class="p-1 rounded-lg text-outline hover:text-on-surface hover:bg-surface-container transition-colors" id="close-modal-btn">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<div class="p-6 flex flex-col gap-4">
+<div>
+<label class="block font-label-md text-label-md text-on-surface mb-1.5 font-medium">Tên trạng thái hiển thị *</label>
+<input class="w-full px-3.5 py-2 rounded-xl bg-surface-container-low text-on-surface placeholder:text-outline font-body-sm text-body-sm focus:outline-none focus:ring-2 focus:ring-primary/30" placeholder="Ví dụ: Đang Triển Khai (Deploying), Chờ Kiểm Tra..." type="text"/>
+</div>
+<div>
+<label class="block font-label-md text-label-md text-on-surface mb-1.5 font-medium">Danh mục Category màu sắc *</label>
+<div class="grid grid-cols-2 gap-2">
+<label class="flex items-center gap-2 p-2.5 rounded-xl bg-surface-container-low cursor-pointer hover:bg-surface-container transition-colors">
+<input checked="" class="text-primary" name="status-cat" type="radio"/>
+<div class="flex items-center gap-1.5 font-label-sm text-label-sm text-on-surface">
+<span class="w-2.5 h-2.5 rounded-full bg-outline"></span>
+<span>To Do (Mở mới)</span>
+</div>
+</label>
+<label class="flex items-center gap-2 p-2.5 rounded-xl bg-surface-container-low cursor-pointer hover:bg-surface-container transition-colors">
+<input class="text-primary" name="status-cat" type="radio"/>
+<div class="flex items-center gap-1.5 font-label-sm text-label-sm text-on-surface">
+<span class="w-2.5 h-2.5 rounded-full bg-primary"></span>
+<span>In Progress (Tiến hành)</span>
+</div>
+</label>
+<label class="flex items-center gap-2 p-2.5 rounded-xl bg-surface-container-low cursor-pointer hover:bg-surface-container transition-colors">
+<input class="text-primary" name="status-cat" type="radio"/>
+<div class="flex items-center gap-1.5 font-label-sm text-label-sm text-on-surface">
+<span class="w-2.5 h-2.5 rounded-full bg-tertiary"></span>
+<span>Testing (Kiểm tra)</span>
+</div>
+</label>
+<label class="flex items-center gap-2 p-2.5 rounded-xl bg-surface-container-low cursor-pointer hover:bg-surface-container transition-colors">
+<input class="text-primary" name="status-cat" type="radio"/>
+<div class="flex items-center gap-1.5 font-label-sm text-label-sm text-on-surface">
+<span class="w-2.5 h-2.5 rounded-full bg-inverse-surface"></span>
+<span>Done (Hoàn thành)</span>
+</div>
+</label>
+</div>
+</div>
+<div>
+<label class="block font-label-md text-label-md text-on-surface mb-1.5 font-medium">Mô tả mục đích trạng thái</label>
+<textarea class="w-full px-3.5 py-2 rounded-xl bg-surface-container-low text-on-surface placeholder:text-outline font-body-sm text-body-sm focus:outline-none focus:ring-2 focus:ring-primary/30" placeholder="Nêu rõ điều kiện nhiệm vụ khi nằm ở cột trạng thái này..." rows="2"></textarea>
+</div>
+</div>
+<div class="p-4 bg-surface-container-low flex items-center justify-end gap-2">
+<button class="px-4 py-2 rounded-xl bg-surface-container text-on-surface font-label-md text-label-md hover:bg-surface-container-high transition-colors" id="cancel-modal-btn">
+          Hủy bỏ
+        </button>
+<button class="px-4 py-2 rounded-xl bg-primary-container text-on-primary font-label-md text-label-md hover:bg-primary transition-colors flex items-center gap-1.5" id="save-status-btn">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span>Xác nhận thêm</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<script>
+  (function() {
+    const addStatusBtn = document.getElementById('add-status-btn');
+    const modal = document.getElementById('add-status-modal');
+    const closeModalBtn = document.getElementById('close-modal-btn');
+    const cancelModalBtn = document.getElementById('cancel-modal-btn');
+    const saveStatusBtn = document.getElementById('save-status-btn');
+    const importBtn = document.getElementById('import-template-btn');
+
+    function openModal() {
+      modal.classList.remove('hidden');
+    }
+
+    function closeModal() {
+      modal.classList.add('hidden');
+    }
+
+    if (addStatusBtn) addStatusBtn.addEventListener('click', openModal);
+    if (closeModalBtn) closeModalBtn.addEventListener('click', closeModal);
+    if (cancelModalBtn) cancelModalBtn.addEventListener('click', closeModal);
+    if (saveStatusBtn) {
+      saveStatusBtn.addEventListener('click', function() {
+        alert('Trạng thái mới đã được thêm vào lược đồ quy trình SCRUMAI thành công!');
+        closeModal();
+      });
+    }
+
+    if (importBtn) {
+      importBtn.addEventListener('click', function() {
+        const confirmed = confirm('Tải mẫu quy trình chuẩn Scrum HUCE (To Do -> In Progress -> In Review -> Done)?');
+        if (confirmed) {
+          alert('Đã áp dụng mẫu quy trình Scrum chuẩn Atlassian thành công!');
+        }
+      });
+    }
+  })();
+</script></main></div></body></html>
