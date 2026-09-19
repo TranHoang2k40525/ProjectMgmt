@@ -6,8 +6,18 @@
 **/.angular/
 **/coverage/
 .env
+.env.*
+!.env.example
+!.env.test.example
 appsettings.Local.json
+**/appsettings.Staging.json
+**/appsettings.Production.json
 *.user
 *.suo
 .audit-tmp/
 TestResults/
+**/__pycache__/
+**/.pytest_cache/
+*.py[cod]
+.tmp/
+**plane (1).txt

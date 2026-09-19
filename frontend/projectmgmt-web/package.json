@@ -27,6 +27,8 @@
     "@angular/build": "^21.2.12",
     "@angular/cli": "^21.2.12",
     "@angular/compiler-cli": "^21.2.0",
+    "@emnapi/core": "^1.11.3",
+    "@emnapi/runtime": "^1.11.3",
     "@eslint/js": "^10.0.0",
     "angular-eslint": "^21.0.0",
     "eslint": "^10.0.0",

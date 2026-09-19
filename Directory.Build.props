@@ -7,6 +7,7 @@
     <LangVersion>13.0</LangVersion>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
     <!-- The codebase intentionally uses inheritable traditional classes instead of sealed classes. -->
-    <NoWarn>$(NoWarn);CA1852</NoWarn>
+    <!-- Entity names follow the database table names (Permission/RolePermission). -->
+    <NoWarn>$(NoWarn);CA1711;CA1852;CA1861</NoWarn>
   </PropertyGroup>
 </Project>

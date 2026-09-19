@@ -1,0 +1,105 @@
+name: Deploy TEST
+
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: projectmgmt-test
+  cancel-in-progress: false
+
+jobs:
+  build-deployment-artifacts:
+    name: build-deployment-artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore backend
+        run: dotnet restore ProjectMgmt.slnx
+
+      - name: Publish backend artifact
+        run: dotnet publish ProjectMgmt.Solution/ProjectMgmt.Solution.csproj --configuration Release --no-restore --output "${{ runner.temp }}/backend-test"
+
+      - name: Upload backend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test
+          path: ${{ runner.temp }}/backend-test
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/projectmgmt-web/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend/projectmgmt-web
+        run: npm ci
+
+      - name: Build frontend artifact
+        working-directory: frontend/projectmgmt-web
+        run: npm run build
+
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-test
+          path: frontend/projectmgmt-web/dist/projectmgmt-web/browser
+          if-no-files-found: error
+          retention-days: 7
+
+  deploy-test-iis:
+    name: deploy-test-iis
+    needs: build-deployment-artifacts
+    runs-on: [self-hosted, windows, x64, projectmgmt-test]
+    environment: test
+    timeout-minutes: 20
+    steps:
+      - name: Checkout trusted deployment scripts
+        uses: actions/checkout@v4
+
+      - name: Download backend artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-test
+          path: ${{ runner.temp }}\projectmgmt-artifacts\backend
+
+      - name: Download frontend artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-test
+          path: ${{ runner.temp }}\projectmgmt-artifacts\frontend
+
+      - name: Deploy artifacts to IIS TEST
+        shell: powershell
+        run: |
+          $healthUrl = '${{ vars.TEST_API_HEALTH_URL }}'
+          if ([string]::IsNullOrWhiteSpace($healthUrl)) {
+            $healthUrl = 'http://ProjectMgmt.dev.com/health'
+          }
+
+          & .\scripts\deploy-test.ps1 `
+            -BackendArtifactPath "$env:RUNNER_TEMP\projectmgmt-artifacts\backend" `
+            -FrontendArtifactPath "$env:RUNNER_TEMP\projectmgmt-artifacts\frontend" `
+            -ApiTargetPath 'C:\Users\hoang\Downloads\Test-ProjectMgmt\Api' `
+            -WebTargetPath 'C:\Users\hoang\Downloads\Test-ProjectMgmt\Web' `
+            -ConfigPath 'C:\Users\hoang\Downloads\Test-ProjectMgmt\Config\appsettings.Staging.json' `
+            -BackupRoot 'C:\DeployBackup\ProjectMgmt-Test' `
+            -LogPath 'C:\Logs\ProjectMgmt\deploy-test.log' `
+            -HealthUrl $healthUrl `
+            -KeepBackups 5

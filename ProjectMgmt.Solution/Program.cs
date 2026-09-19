@@ -1,82 +1,107 @@
-using Microsoft.AspNetCore.Diagnostics.HealthChecks;
-using ProjectMgmt.BuildingBlocks.Web;
-using ProjectMgmt.Modules.DeliveryIntelligence;
-using ProjectMgmt.Modules.IdentityExperience;
-using ProjectMgmt.Modules.Planning;
-using Serilog;
+using DeliveryIntelligence.Infrastructure;
+using IdentityExperience.Application.IServices;
+using IdentityExperience.Application.Services;
+using IdentityExperience.Infrastructure;
+using IdentityExperience.Infrastructure.IRepository;
+using IdentityExperience.Infrastructure.Repository;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.OpenApi;
+using Planning.Infrastructure;
+using ProjectMgmt.IdentityAccess.Contracts;
+using ProjectMgmt.Modules.IdentityExperience.Application.Services;
+using ProjectMgmt.Modules.Planning.ProjectManagement.Application.IServices;
+using ProjectMgmt.Modules.Planning.ProjectManagement.Application.Services;
+using ProjectMgmt.Modules.Planning.ProjectManagement.Domain.IRepositories;
+using ProjectMgmt.Modules.Planning.ProjectManagement.Infrastructure.Repositories;
+using ProjectMgmt.ProjectManagement.Contracts;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Host.UseSerilog((context, logger) => logger
-    .ReadFrom.Configuration(context.Configuration)
-    .Enrich.FromLogContext());
+var connectionString = builder.Configuration.GetConnectionString("ProjectMgmt");
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    throw new InvalidOperationException(
+        "Missing ConnectionStrings:ProjectMgmt. Configure it with User Secrets or ConnectionStrings__ProjectMgmt.");
+}
+
+var serverVersionText = builder.Configuration["Database:ServerVersion"] ?? "8.0.46";
+var serverVersion = new MySqlServerVersion(Version.Parse(serverVersionText));
 
 builder.Services.AddControllers();
-builder.Services.AddOpenApi();
-builder.Services.AddAuthorization();
-builder.Services.AddProjectMgmtWebCommon();
-
-var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
-builder.Services.AddCors(options => options.AddPolicy("AngularDevelopment", policy =>
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(options =>
 {
-    if (allowedOrigins.Length > 0)
+    options.SwaggerDoc("v1", new OpenApiInfo
     {
-        policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials();
-    }
-}));
+        Title = "ProjectMgmt API",
+        Version = "v1",
+        Description = "API cho hệ thống quản lý dự án ProjectMgmt."
+    });
+});
+builder.Services.AddAuthorization();
+builder.Services.AddHealthChecks();
 
-builder.Services
-    .AddIdentityExperienceModule(builder.Configuration, builder.Environment)
-    .AddPlanningModule(builder.Configuration, builder.Environment)
-    .AddDeliveryIntelligenceModule(builder.Configuration, builder.Environment);
+builder.Services.AddDbContext<IdentityExperienceDbContext>(options =>
+    options.UseMySql(
+        connectionString,
+        serverVersion,
+        mysql =>
+        {
+            mysql.MigrationsHistoryTable("__EFMigrationsHistory_IdentityExperience");
+            mysql.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null);
+        }));
+
+builder.Services.AddDbContext<PlanningDbContext>(options =>
+    options.UseMySql(
+        connectionString,
+        serverVersion,
+        mysql =>
+        {
+            mysql.MigrationsHistoryTable("__EFMigrationsHistory_Planning");
+            mysql.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null);
+        }));
+
+builder.Services.AddDbContext<DeliveryIntelligenceDbContext>(options =>
+    options.UseMySql(
+        connectionString,
+        serverVersion,
+        mysql =>
+        {
+            mysql.MigrationsHistoryTable("__EFMigrationsHistory_DeliveryIntelligence");
+            mysql.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null);
+        }));
+
+// DI
+builder.Services.AddScoped<IIdentityRepository, IdentityRepository>();
+builder.Services.AddScoped<IAccountServices, AccountServices>();
+builder.Services.AddScoped<IProjectRepository, ProjectRepository>();
+builder.Services.AddScoped<IProjectManagementService, ProjectManagementService>();
+builder.Services.AddScoped<IProjectLookupService, ProjectLookupService>();
+builder.Services.AddScoped<IUserLookupService, UserLookupService>();
+builder.Services.AddScoped<IUserSkillService, UserLookupService>();
 
 var app = builder.Build();
 
-app.UseProjectMgmtWebCommon();
-
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
 {
-    app.MapOpenApi();
+    app.UseSwagger();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "ProjectMgmt API v1");
+        options.RoutePrefix = "swagger";
+        options.DocumentTitle = "ProjectMgmt API - Swagger";
+    });
 }
 
-app.UseCors("AngularDevelopment");
-
-if (!app.Environment.IsEnvironment("Testing"))
+if (!app.Environment.IsDevelopment() && !app.Environment.IsStaging())
 {
     app.UseHttpsRedirection();
 }
 
 app.UseAuthorization();
 app.MapControllers();
-app.MapHealthChecks("/health", new HealthCheckOptions
-{
-    ResponseWriter = async (context, report) =>
-    {
-        context.Response.ContentType = "application/json";
-        await context.Response.WriteAsJsonAsync(new
-        {
-            status = report.Status.ToString(),
-            checks = report.Entries.ToDictionary(
-                entry => entry.Key,
-                entry => new
-                {
-                    status = entry.Value.Status.ToString(),
-                    description = entry.Value.Description,
-                    data = entry.Value.Data
-                })
-        });
-    }
-});
-app.MapHealthChecks("/health/live", new HealthCheckOptions
-{
-    Predicate = registration => !registration.Tags.Contains("ready")
-});
-app.MapGet("/api/system/info", () => Results.Ok(new
-{
-    name = "ScrumAI Project Management",
-    version = "0.2.0-modular-monolith",
-    utc = DateTimeOffset.UtcNow
-}));
+app.MapHealthChecks("/health");
+app.MapGet("/health/live", () => Results.Ok(new { status = "Healthy" }));
 
 app.Run();
 
