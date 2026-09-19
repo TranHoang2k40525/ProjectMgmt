@@ -1,261 +1,935 @@
-<div class="p-6 max-w-[1600px] mx-auto font-body-md text-on-surface">
-  <!-- Header & Breadcrumb from Stitch Screen 39cc24dfeb37497780f09aa6e9324e0c -->
-  <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6 pb-4 border-b border-surface-container-highest">
-    <div>
-      <div class="flex items-center gap-2 font-label-sm text-label-sm text-on-surface-variant mb-1">
-        <span>Không gian</span>
-        <span>›</span>
-        <span class="text-primary font-semibold">Scrum AI Project Management</span>
-        <span class="px-1.5 py-0.5 rounded bg-primary-container text-on-primary-container text-[10px] font-mono font-bold">SCRUMAI</span>
-      </div>
-      <div class="flex items-center gap-3">
-        <h1 class="font-headline-lg text-headline-lg font-bold tracking-tight text-on-surface">Kế hoạch Backlog & Phân rã AI</h1>
-        <span class="px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm font-semibold">
-          13 Work Items
-        </span>
-      </div>
+<!-- Transparent Backdrop Overlay to Close Popups on Outside Click -->
+@if (isFilterMenuOpen() || isEpicPanelOpen() || activeMenuTaskId() || activeStatusDropdownTaskId() || activeEpicDropdownTaskId()) {
+  <div class="fixed inset-0 z-30 bg-transparent" (click)="closeAllPopups()"></div>
+}
+
+<div class="p-3 sm:p-5 max-w-[1750px] mx-auto font-body text-slate-900 dark:text-slate-100 space-y-3">
+
+  <!-- Header Context & Title with Action Buttons -->
+  <div class="flex flex-wrap items-center justify-between gap-3 pb-2.5 border-b border-slate-200 dark:border-slate-800">
+    <div class="flex items-center gap-3">
+      <h1 class="text-xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2 font-headline">
+        <span class="material-symbols-outlined text-primary text-[22px]">format_list_bulleted</span>
+        <span>Kế Hoạch Sprint & Backlog</span>
+      </h1>
+      <span class="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium">
+        {{ workItems().length }} công việc
+      </span>
+      <span class="px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 text-xs font-medium">
+        {{ epics().length }} Epics
+      </span>
     </div>
 
-    <!-- Navigation View Switcher (Backlog, Board, Timeline, Calendar) -->
-    <div class="flex items-center gap-1.5 bg-surface-container-high/60 p-1.5 rounded-xl backdrop-blur-md">
-      <a routerLink="/backlog" class="px-3.5 py-1.5 rounded-lg bg-surface-container-lowest text-primary font-label-md text-label-md font-semibold shadow-sm flex items-center gap-1.5">
-        <span class="material-symbols-outlined text-[18px]">splitscreen</span>
-        <span>Backlog</span>
-      </a>
-      <a routerLink="/board" class="px-3.5 py-1.5 rounded-lg text-on-surface-variant hover:text-on-surface font-label-md text-label-md flex items-center gap-1.5 transition-colors">
-        <span class="material-symbols-outlined text-[18px]">view_kanban</span>
-        <span>Board</span>
-      </a>
-      <a routerLink="/projects" class="px-3.5 py-1.5 rounded-lg text-on-surface-variant hover:text-on-surface font-label-md text-label-md flex items-center gap-1.5 transition-colors">
-        <span class="material-symbols-outlined text-[18px]">timeline</span>
-        <span>Timeline</span>
-      </a>
+    <!-- Right Header Action CTAs -->
+    <div class="flex items-center gap-2">
+      <button
+        (click)="triggerAiBreakdown()"
+        class="h-8 px-2.5 rounded-lg bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 hover:bg-purple-100 font-semibold text-xs transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer"
+        title="Phân rã AI tự động User Story thành Subtasks"
+      >
+        <span class="material-symbols-outlined text-[16px]">auto_awesome</span>
+        <span>Phân rã AI</span>
+      </button>
+
+      <button
+        (click)="exportExcel()"
+        class="h-8 px-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 font-semibold text-xs transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer"
+        title="Xuất báo cáo công việc ra file CSV/Excel"
+      >
+        <span class="material-symbols-outlined text-[16px]">download</span>
+        <span>Xuất Excel</span>
+      </button>
+
+      <button
+        (click)="createSprint()"
+        class="h-8 px-3 rounded-lg bg-primary hover:bg-primary-container text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+        title="Tạo mới Sprint"
+      >
+        <span class="material-symbols-outlined text-[16px]">add_circle</span>
+        <span>+ Tạo Sprint</span>
+      </button>
     </div>
   </div>
 
-  <!-- Action Bar & AI Breakdown Toolbar -->
-  <div class="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 mb-6">
-    <div class="flex flex-wrap items-center gap-2.5">
-      <button type="button" (click)="toggleAiModal()" class="h-10 px-4 rounded-xl bg-gradient-to-r from-primary to-primary-container hover:brightness-110 text-on-primary font-label-md text-label-md font-bold flex items-center gap-2 shadow-sm transition-all active:scale-[0.98] cursor-pointer">
-        <span class="material-symbols-outlined text-[20px]">auto_awesome</span>
-        <span>Phân rã AI (Task Breakdown)</span>
-      </button>
-
-      <button type="button" class="h-10 px-3.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold flex items-center gap-1.5 transition-all">
-        <span class="material-symbols-outlined text-[18px]">file_upload</span>
-        <span>Nhập công việc</span>
-      </button>
-
-      <div class="h-6 w-px bg-surface-container-highest mx-1"></div>
-
-      <!-- Quick Filter Avatars -->
-      <div class="flex items-center gap-1">
-        <span class="font-label-sm text-label-sm text-on-surface-variant mr-1">Phân công:</span>
-        <div class="w-7 h-7 rounded-full bg-primary text-on-primary font-label-sm text-[11px] font-bold flex items-center justify-center ring-2 ring-surface">TH</div>
-        <div class="w-7 h-7 rounded-full bg-secondary text-on-secondary font-label-sm text-[11px] font-bold flex items-center justify-center ring-2 ring-surface">HH</div>
-        <div class="w-7 h-7 rounded-full bg-tertiary-container text-on-tertiary font-label-sm text-[11px] font-bold flex items-center justify-center ring-2 ring-surface">PH</div>
-      </div>
-    </div>
-
-    <!-- Search input inside Backlog -->
-    <div class="relative flex items-center max-w-md w-full">
-      <span class="material-symbols-outlined absolute left-3 text-[18px] text-outline pointer-events-none">search</span>
-      <input
-        type="text"
-        [(ngModel)]="searchQuery"
-        placeholder="Tìm kiếm công việc trong backlog..."
-        class="w-full h-10 pl-9 pr-4 rounded-xl bg-surface-container-low text-on-surface placeholder:text-outline font-body-sm text-body-sm focus:outline-none focus:bg-surface-container-lowest focus:shadow-[0_0_0_2px_#0052cc] transition-all" />
-    </div>
-  </div>
-
-  <!-- Main Backlog Container & Drawer Layout -->
-  <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-    <!-- Left List: Sprint Groups (8 Cols when Drawer is open, 12 when closed) -->
-    <div [class]="selectedIssue() ? 'lg:col-span-7 space-y-6' : 'lg:col-span-12 space-y-6'">
+  <!-- Search & Filter Toolbar (Sticky locks cleanly below top sub-header) -->
+  <div class="sticky top-14 z-20 flex flex-wrap items-center justify-between gap-2.5 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-2 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs transition-all">
+    <div class="flex items-center gap-2 flex-wrap flex-1">
       
-      <!-- SPRINT 1 (ACTIVE) -->
-      <div class="rounded-2xl bg-surface-container-lowest border border-outline-variant/30 p-5 shadow-sm space-y-4">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <span class="material-symbols-outlined text-primary">expand_more</span>
-            <h3 class="font-headline-sm text-headline-sm font-bold text-on-surface">SCRUMAI Sprint 1</h3>
-            <span class="font-label-sm text-label-sm text-on-surface-variant">24 Thg 8 – 30 Thg 8 (3 items)</span>
-            <span class="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 font-label-sm text-[11px] font-bold">ĐANG CHẠY</span>
-          </div>
-
-          <button type="button" class="h-8 px-3 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-sm text-label-sm font-semibold transition-all">
-            Hoàn thành Sprint
-          </button>
-        </div>
-
-        <!-- Issue Table Rows -->
-        <div class="space-y-2">
-          @for (item of sprint1Items(); track item.id) {
-            <div
-              (click)="selectIssue(item)"
-              (keydown.enter)="selectIssue(item)"
-              role="button"
-              tabindex="0"
-              [class.ring-2]="selectedIssue()?.id === item.id"
-              [class.ring-primary]="selectedIssue()?.id === item.id"
-              class="flex items-center justify-between p-3 rounded-xl bg-surface-container-low/70 hover:bg-surface-container-low transition-all cursor-pointer group">
-              <div class="flex items-center gap-3 min-w-0">
-                <input type="checkbox" checked class="w-4 h-4 rounded accent-primary cursor-pointer" (click)="$event.stopPropagation()" />
-                <span class="font-mono text-label-md font-bold text-primary shrink-0">{{ item.key }}</span>
-                <span class="font-body-md text-body-md font-medium text-on-surface truncate group-hover:text-primary transition-colors">{{ item.title }}</span>
-              </div>
-
-              <div class="flex items-center gap-3 shrink-0">
-                <span class="px-2 py-0.5 rounded bg-surface-container-high font-label-sm text-[11px] text-on-surface-variant font-mono">{{ item.tag }}</span>
-                <span class="px-2.5 py-1 rounded-full bg-primary-container text-on-primary-container font-label-sm text-[11px] font-semibold">{{ item.status }}</span>
-                <div class="w-6 h-6 rounded-full bg-primary text-on-primary font-label-sm text-[10px] font-bold flex items-center justify-center">{{ item.assignee }}</div>
-              </div>
-            </div>
-          }
-        </div>
+      <!-- Search Input (Font 14px) -->
+      <div class="relative flex items-center w-full max-w-xs">
+        <span class="material-symbols-outlined absolute left-2.5 text-[18px] text-slate-400 pointer-events-none">search</span>
+        <input
+          type="text"
+          [ngModel]="searchQuery()"
+          (ngModelChange)="searchQuery.set($event)"
+          placeholder="Tìm theo tên công việc, mã SCRUMAI..."
+          class="w-full h-8 pl-8 pr-3 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:border-primary font-normal"
+        />
       </div>
 
-      <!-- SPRINT 2 (PLANNING) -->
-      <div class="rounded-2xl bg-surface-container-lowest border border-outline-variant/30 p-5 shadow-sm space-y-4">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <span class="material-symbols-outlined text-outline">expand_more</span>
-            <h3 class="font-headline-sm text-headline-sm font-bold text-on-surface">SCRUMAI Sprint 2</h3>
-            <span class="font-label-sm text-label-sm text-on-surface-variant">31 Thg 8 – 6 Thg 9 (5 items)</span>
-            <span class="px-2.5 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-[11px] font-bold">Kế hoạch</span>
-          </div>
+      <!-- Filter Button with Popup Dropdown right next to search -->
+      <div class="relative">
+        <button
+          type="button"
+          (click)="isFilterMenuOpen.update(v => !v)"
+          [class.bg-primary]="hasActiveFilters()"
+          [class.text-white]="hasActiveFilters()"
+          [class.border-primary]="hasActiveFilters()"
+          [class.bg-slate-100]="!hasActiveFilters()"
+          [class.text-slate-700]="!hasActiveFilters()"
+          class="h-8 px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 font-medium text-xs flex items-center gap-1 transition-all cursor-pointer shrink-0"
+        >
+          <span class="material-symbols-outlined text-[16px]">filter_list</span>
+          <span>Bộ lọc</span>
+          @if (hasActiveFilters()) {
+            <span class="w-1.5 h-1.5 rounded-full bg-white"></span>
+          }
+        </button>
 
-          <button type="button" class="h-8 px-3 rounded-lg bg-primary-container text-on-primary-container hover:bg-primary hover:text-on-primary font-label-sm text-label-sm font-semibold transition-all">
-            Start Sprint
-          </button>
-        </div>
+        <!-- Filter Popover Popup Modal -->
+        @if (isFilterMenuOpen()) {
+          <div class="absolute left-0 top-10 z-40 w-80 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl p-3.5 space-y-2.5 font-body text-xs animate-fade-in">
+            <div class="flex items-center justify-between pb-1.5 border-b border-slate-100 dark:border-slate-800">
+              <span class="font-medium text-slate-900 dark:text-white">Bộ lọc công việc</span>
+              <button (click)="resetFilters()" class="text-xs text-primary font-medium hover:underline cursor-pointer">Xóa bộ lọc</button>
+            </div>
 
-        <div class="space-y-2">
-          @for (item of sprint2Items(); track item.id) {
-            <div
-              (click)="selectIssue(item)"
-              (keydown.enter)="selectIssue(item)"
-              role="button"
-              tabindex="0"
-              [class.ring-2]="selectedIssue()?.id === item.id"
-              [class.ring-primary]="selectedIssue()?.id === item.id"
-              class="flex items-center justify-between p-3 rounded-xl bg-surface-container-low/70 hover:bg-surface-container-low transition-all cursor-pointer group">
-              <div class="flex items-center gap-3 min-w-0">
-                <input type="checkbox" class="w-4 h-4 rounded accent-primary cursor-pointer" (click)="$event.stopPropagation()" />
-                <span class="font-mono text-label-md font-bold text-primary shrink-0">{{ item.key }}</span>
-                <span class="font-body-md text-body-md font-medium text-on-surface truncate group-hover:text-primary transition-colors">{{ item.title }}</span>
-              </div>
+            <!-- Filter by Assignee -->
+            <div class="space-y-1">
+              <label class="text-[11px] font-medium text-slate-500 uppercase">Người xử lý</label>
+              <select
+                [ngModel]="selectedAssigneeFilter()"
+                (ngModelChange)="selectedAssigneeFilter.set($event)"
+                class="w-full h-8 px-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-normal text-slate-800 dark:text-slate-200"
+              >
+                <option [ngValue]="null">Tất cả người xử lý</option>
+                <option value="Trần Văn Hoàng">Trần Văn Hoàng (Lead)</option>
+                <option value="Nguyễn Thanh Hà">Nguyễn Thanh Hà</option>
+                <option value="Phạm Đức Anh">Phạm Đức Anh</option>
+                <option value="Lê Minh Khiêm">Lê Minh Khiêm</option>
+              </select>
+            </div>
 
-              <div class="flex items-center gap-3 shrink-0">
-                @if (item.aiBreakdown) {
-                  <span class="px-2 py-0.5 rounded bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-[10px] font-bold flex items-center gap-1">
-                    <span class="material-symbols-outlined text-[12px]">auto_awesome</span> AI Ready
-                  </span>
+            <!-- Filter by Type -->
+            <div class="space-y-1">
+              <label class="text-[11px] font-medium text-slate-500 uppercase">Loại công việc</label>
+              <select
+                [ngModel]="selectedTypeFilter()"
+                (ngModelChange)="selectedTypeFilter.set($event)"
+                class="w-full h-8 px-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-normal text-slate-800 dark:text-slate-200"
+              >
+                <option [ngValue]="null">Tất cả loại công việc</option>
+                <option value="Story">Story</option>
+                <option value="Task">Task</option>
+                <option value="Bug">Bug</option>
+                <option value="Use-Case">Use-Case</option>
+                <option value="Epic">Epic</option>
+                <option value="Sub-task">Sub-task</option>
+              </select>
+            </div>
+
+            <!-- Filter by Priority -->
+            <div class="space-y-1">
+              <label class="text-[11px] font-medium text-slate-500 uppercase">Mức độ ưu tiên</label>
+              <select
+                [ngModel]="selectedPriorityFilter()"
+                (ngModelChange)="selectedPriorityFilter.set($event)"
+                class="w-full h-8 px-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-normal text-slate-800 dark:text-slate-200"
+              >
+                <option [ngValue]="null">Tất cả mức ưu tiên</option>
+                <option value="Urgent">Urgent (Khẩn cấp)</option>
+                <option value="High">High (Cao)</option>
+                <option value="Medium">Medium (Trung bình)</option>
+                <option value="Low">Low (Thấp)</option>
+              </select>
+            </div>
+
+            <!-- Filter by Epic -->
+            <div class="space-y-1">
+              <label class="text-[11px] font-medium text-slate-500 uppercase">Epic</label>
+              <select
+                [ngModel]="selectedEpicFilter()"
+                (ngModelChange)="selectedEpicFilter.set($event)"
+                class="w-full h-8 px-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-normal text-slate-800 dark:text-slate-200"
+              >
+                <option [ngValue]="null">Tất cả Epic</option>
+                @for (epic of epics(); track epic.id) {
+                  <option [value]="epic.name">{{ epic.name }}</option>
                 }
-                <span class="px-2 py-0.5 rounded bg-surface-container-high font-label-sm text-[11px] text-on-surface-variant font-mono">{{ item.tag }}</span>
-                <span class="px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-[11px] font-semibold">To Do</span>
-                <div class="w-6 h-6 rounded-full bg-secondary text-on-secondary font-label-sm text-[10px] font-bold flex items-center justify-center">{{ item.assignee }}</div>
+              </select>
+            </div>
+          </div>
+        }
+      </div>
+
+      <!-- Only Mine quick button -->
+      <button
+        type="button"
+        (click)="onlyMineFilter.update(v => !v)"
+        [class.bg-slate-900]="onlyMineFilter()"
+        [class.text-white]="onlyMineFilter()"
+        [class.bg-slate-100]="!onlyMineFilter()"
+        [class.text-slate-700]="!onlyMineFilter()"
+        class="h-8 px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 font-medium text-xs flex items-center gap-1 transition-all cursor-pointer shrink-0"
+      >
+        <span class="material-symbols-outlined text-[16px]">person</span>
+        <span>Của tôi</span>
+      </button>
+
+      <!-- Epics Panel Toggle Button -->
+      <button
+        type="button"
+        (click)="isEpicPanelOpen.update(v => !v)"
+        [class.bg-purple-100]="isEpicPanelOpen()"
+        [class.text-purple-700]="isEpicPanelOpen()"
+        class="h-8 px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 font-medium text-xs flex items-center gap-1 transition-all cursor-pointer shrink-0"
+      >
+        <span class="material-symbols-outlined text-[16px]">view_column</span>
+        <span>Epics Panel {{ isEpicPanelOpen() ? '(Hiển thị)' : '(Ẩn)' }}</span>
+      </button>
+
+      @if (hasActiveFilters()) {
+        <button (click)="resetFilters()" class="text-xs text-slate-500 hover:text-red-500 font-normal transition-colors cursor-pointer">
+          Xóa lọc
+        </button>
+      }
+    </div>
+  </div>
+
+  <!-- 2-COLUMN LAYOUT: LEFT EPIC SIDEBAR PANEL + RIGHT SPRINTS & BACKLOG -->
+  <div class="flex items-start gap-4 w-full">
+
+    <!-- LEFT SIDEBAR: JIRA-STYLE EPICS PANEL (Bảng Epic bên trái) -->
+    @if (isEpicPanelOpen()) {
+      <div class="w-72 shrink-0 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-xl p-3 shadow-2xs space-y-3 font-body text-xs sticky top-28 z-10 animate-fade-in">
+        <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+          <div class="flex items-center gap-1.5 font-bold text-slate-900 dark:text-white uppercase tracking-wider text-[11px] font-headline">
+            <span class="material-symbols-outlined text-[16px] text-purple-600">view_column</span>
+            <span>Bảng Epics</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <button (click)="showNewEpicModal.set(true)" class="p-1 rounded text-purple-700 hover:bg-purple-50 transition-colors flex items-center gap-1 text-xs font-bold cursor-pointer" title="Tạo Epic mới">
+              <span class="material-symbols-outlined text-[16px]">add</span>
+              <span>Tạo</span>
+            </button>
+            <button (click)="isEpicPanelOpen.set(false)" class="p-1 text-slate-400 hover:text-slate-700 rounded cursor-pointer" title="Đóng Bảng Epic">
+              <span class="material-symbols-outlined text-[16px]">close</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- All Issues Option -->
+        <div
+          (click)="filterByEpic(null)"
+          [class.ring-2]="!selectedEpicFilter()"
+          [class.ring-purple-500]="!selectedEpicFilter()"
+          [class.bg-purple-50/50]="!selectedEpicFilter()"
+          class="p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-purple-50/40 transition-all cursor-pointer flex items-center justify-between font-semibold text-slate-700 dark:text-slate-300"
+        >
+          <span>Tất cả công việc (All)</span>
+          <span class="font-mono text-xs text-slate-500">{{ workItems().length }}</span>
+        </div>
+
+        <!-- Epics Cards List with Progress Bars -->
+        <div class="space-y-2 max-h-[calc(100vh-240px)] overflow-y-auto pr-0.5">
+          @for (epic of epics(); track epic.id) {
+            @let stats = getEpicProgress(epic.name);
+            <div
+              (click)="filterByEpic(epic.name)"
+              [class.ring-2]="selectedEpicFilter() === epic.name"
+              [class.ring-purple-500]="selectedEpicFilter() === epic.name"
+              [class.bg-purple-50/60]="selectedEpicFilter() === epic.name"
+              class="p-2.5 rounded-lg border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 hover:bg-purple-50/40 transition-all cursor-pointer space-y-1.5"
+            >
+              <div class="flex items-center justify-between text-xs">
+                <span class="font-bold text-purple-700 dark:text-purple-300 font-mono">{{ epic.key }}</span>
+                <span class="font-mono text-slate-500 text-[11px] font-semibold">{{ stats.points }} SP</span>
+              </div>
+
+              <div class="text-xs font-bold text-slate-900 dark:text-white truncate">{{ epic.name }}</div>
+
+              <div class="space-y-1">
+                <div class="flex justify-between text-[11px] text-slate-500">
+                  <span>{{ stats.done }}/{{ stats.total }} hoàn thành</span>
+                  <span class="font-bold text-purple-600">{{ stats.percent }}%</span>
+                </div>
+                <div class="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                  <div class="h-full bg-purple-600 transition-all" [style.width.%]="stats.percent"></div>
+                </div>
               </div>
             </div>
           }
-        </div>
-      </div>
-
-    </div>
-
-    <!-- Right Drawer: Jira Work Item Detail Screen matching Stitch 39cc24dfeb37497780f09aa6e9324e0c -->
-    @if (selectedIssue(); as issue) {
-      <div class="lg:col-span-5 rounded-2xl bg-surface-container-lowest border border-outline-variant/30 p-6 shadow-xl space-y-6 sticky top-20 animate-fade-in">
-        <div class="flex items-center justify-between pb-4 border-b border-surface-container-highest">
-          <div class="flex items-center gap-2">
-            <span class="material-symbols-outlined text-primary text-[20px]">check_box</span>
-            <span class="font-label-md text-label-md font-bold text-on-surface">Jira Work Item</span>
-            <span class="font-mono font-bold text-primary text-label-md">• {{ issue.key }}</span>
-          </div>
-
-          <div class="flex items-center gap-1">
-            <button type="button" class="w-8 h-8 rounded-lg hover:bg-surface-container text-on-surface-variant flex items-center justify-center">
-              <span class="material-symbols-outlined text-[18px]">visibility</span>
-            </button>
-            <button type="button" class="w-8 h-8 rounded-lg hover:bg-surface-container text-on-surface-variant flex items-center justify-center">
-              <span class="material-symbols-outlined text-[18px]">share</span>
-            </button>
-            <button type="button" (click)="closeDrawer()" class="w-8 h-8 rounded-lg hover:bg-surface-container text-on-surface-variant flex items-center justify-center">
-              <span class="material-symbols-outlined text-[18px]">close</span>
-            </button>
-          </div>
-        </div>
-
-        <div>
-          <h2 class="font-headline-sm text-headline-sm font-bold text-on-surface leading-snug mb-3">
-            {{ issue.title }}
-          </h2>
-
-          <div class="flex items-center gap-2 mb-4">
-            <span class="px-3 py-1 rounded-full bg-primary text-on-primary font-label-sm text-label-sm font-semibold flex items-center gap-1">
-              <span class="w-2 h-2 rounded-full bg-emerald-400"></span> {{ issue.status }}
-            </span>
-            <button type="button" (click)="generateAiSubtasks()" class="h-8 px-3 rounded-xl bg-tertiary-container hover:bg-tertiary hover:text-on-tertiary text-on-tertiary-container font-label-sm text-label-sm font-bold flex items-center gap-1.5 transition-all">
-              <span class="material-symbols-outlined text-[16px]">auto_awesome</span>
-              <span>AI Gợi ý Subtask</span>
-            </button>
-          </div>
-
-          <!-- Description -->
-          <div class="space-y-1.5 mb-6">
-            <div class="flex items-center justify-between font-label-md text-label-md font-bold text-on-surface">
-              <span>Mô tả nhiệm vụ (Description)</span>
-              <span class="font-label-sm text-[10px] text-on-surface-variant italic">Đã lưu tự động</span>
-            </div>
-            <p class="font-body-sm text-body-sm text-on-surface-variant bg-surface-container-low p-3.5 rounded-xl leading-relaxed">
-              {{ issue.description }}
-            </p>
-          </div>
-
-          <!-- Subtask Checklist -->
-          <div class="space-y-3 mb-6">
-            <div class="flex items-center justify-between">
-              <span class="font-label-md text-label-md font-bold text-on-surface">Danh sách Subtasks ({{ issue.subtasks.length }})</span>
-              <button type="button" class="font-label-sm text-label-sm text-primary hover:underline font-semibold">+ Thêm subtask</button>
-            </div>
-
-            <div class="space-y-2">
-              @for (st of issue.subtasks; track st.id) {
-                <div class="flex items-center justify-between p-2.5 rounded-xl bg-surface-container-low">
-                  <label class="flex items-center gap-2.5 cursor-pointer">
-                    <input type="checkbox" [checked]="st.done" class="w-4 h-4 rounded accent-primary cursor-pointer" />
-                    <span class="font-body-sm text-body-sm text-on-surface" [class.line-through]="st.done" [class.opacity-60]="st.done">{{ st.title }}</span>
-                  </label>
-                  <span class="px-2 py-0.5 rounded font-label-sm text-[10px] font-bold" [class.bg-emerald-500/15]="st.done" [class.text-emerald-600]="st.done" [class.bg-surface-container-high]="!st.done" [class.text-on-surface-variant]="!st.done">
-                    {{ st.done ? 'Done' : 'In Progress' }}
-                  </span>
-                </div>
-              }
-            </div>
-          </div>
-
-          <!-- Metadata Fields -->
-          <div class="pt-4 border-t border-surface-container-highest space-y-3 font-label-sm text-label-sm">
-            <div class="flex items-center justify-between">
-              <span class="text-on-surface-variant">Người thực hiện (Assignee)</span>
-              <div class="flex items-center gap-2 font-semibold text-on-surface">
-                <div class="w-5 h-5 rounded-full bg-primary text-on-primary text-[10px] flex items-center justify-center">{{ issue.assignee }}</div>
-                <span>Trần Văn Hoàng (TH)</span>
-              </div>
-            </div>
-
-            <div class="flex items-center justify-between">
-              <span class="text-on-surface-variant">Ước lượng (Story Points)</span>
-              <span class="font-bold text-primary px-2 py-0.5 bg-primary-container rounded">{{ issue.storyPoints }} SP</span>
-            </div>
-
-            <div class="flex items-center justify-between">
-              <span class="text-on-surface-variant">Mức độ ưu tiên</span>
-              <span class="font-bold text-error">❗ Cao (High)</span>
-            </div>
-          </div>
         </div>
       </div>
     }
+
+    <!-- RIGHT MAIN CONTENT: SPRINTS & BACKLOG LIST -->
+    <div class="flex-1 min-w-0 space-y-3.5 w-full">
+
+    @for (sprint of sprints(); track sprint.id) {
+      @let sprintTasks = getSprintItems(sprint.id);
+      @let sprintAssignees = getSprintAssignees(sprint.id);
+
+      <div class="rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-2.5 sm:p-3 shadow-2xs space-y-2 w-full">
+
+        <!-- Sprint Header with Pencil Hover Edit Icon for Name & Dates -->
+        <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800 flex-wrap gap-2">
+          
+          <!-- Left: Title, Dates (Inline Editable with Pencil Hover Icon) & Dynamic Status Badge -->
+          <div class="flex items-center gap-2 flex-wrap">
+            
+            @if (editingSprintId() === sprint.id) {
+              <!-- Inline Sprint Edit Controls -->
+              <div class="flex items-center gap-1.5 flex-wrap animate-fade-in">
+                <input
+                  type="text"
+                  [(ngModel)]="editingSprintName"
+                  placeholder="Tên Sprint..."
+                  class="h-7 px-2 rounded border border-primary bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white focus:outline-none"
+                />
+                <input
+                  type="date"
+                  [(ngModel)]="editingStartDate"
+                  class="h-7 px-1.5 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-[11px] text-slate-700 dark:text-slate-300"
+                />
+                <span class="text-xs text-slate-400">&rarr;</span>
+                <input
+                  type="date"
+                  [(ngModel)]="editingEndDate"
+                  class="h-7 px-1.5 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-[11px] text-slate-700 dark:text-slate-300"
+                />
+                <button (click)="saveEditingSprint(sprint.id)" class="h-7 px-2.5 rounded bg-primary text-white text-xs font-bold cursor-pointer">Lưu</button>
+                <button (click)="editingSprintId.set(null)" class="h-7 px-2 rounded text-slate-500 hover:bg-slate-100 text-xs cursor-pointer">Hủy</button>
+              </div>
+            } @else {
+              <!-- Normal Sprint Display with Pencil Icon on Hover -->
+              <div (click)="startEditingSprint(sprint, $event)" title="Di chuột vào và bấm để sửa tên & thời gian Sprint" class="flex items-center gap-1.5 cursor-pointer group py-0.5 px-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                <h2 class="text-xs font-bold text-slate-900 dark:text-white font-headline">{{ sprint.name }}</h2>
+                <span class="material-symbols-outlined text-[15px] text-slate-400 group-hover:text-primary transition-colors">edit</span>
+                <span class="text-[11px] text-slate-500">({{ sprint.startDate || 'N/A' }} &rarr; {{ sprint.endDate || 'N/A' }})</span>
+              </div>
+            }
+
+            <!-- Sprint Status Badge (Dynamic Color per Status) -->
+            <span
+              [class.bg-blue-600]="sprint.status === 'active'"
+              [class.bg-emerald-600]="sprint.status === 'completed'"
+              [class.bg-amber-500]="sprint.status === 'future'"
+              class="px-2 py-0.5 rounded-full text-[10px] font-bold text-white uppercase tracking-wide flex items-center gap-1 shadow-2xs transition-all"
+            >
+              <span
+                class="w-1.5 h-1.5 rounded-full bg-white"
+                [class.animate-pulse]="sprint.status === 'active'"
+              ></span>
+              <span>
+                {{ sprint.status === 'active' ? 'Đang chạy' : (sprint.status === 'completed' ? 'Hoàn thành' : 'Kế hoạch') }}
+              </span>
+            </span>
+
+            <span class="text-[11px] font-mono text-slate-500">({{ sprintTasks.length }} việc)</span>
+          </div>
+
+          <!-- Right: Assignee Avatars Stack + Story Points + Dynamic Status Action Button + Create Task Button -->
+          <div class="flex items-center gap-1.5 shrink-0">
+            
+            <!-- Sprint Member Assignee Avatar Stack -->
+            <div class="flex items-center -space-x-1 mr-1" [title]="'Thành viên làm việc trong sprint: ' + sprintAssignees.join(', ')">
+              @for (assignee of sprintAssignees; track assignee) {
+                <div class="w-5 h-5 rounded-full bg-primary text-white text-[9px] font-bold flex items-center justify-center ring-1 ring-white dark:ring-slate-900 shadow-2xs">
+                  {{ getAssigneeInitials(assignee) }}
+                </div>
+              }
+            </div>
+
+            <!-- Total Story Points Badge -->
+            <span class="text-[11px] font-mono font-medium text-primary px-2 py-0.5 rounded bg-primary/10">
+              {{ sprint.totalStoryPoints }} SP
+            </span>
+
+            <!-- Sprint Action Button (Dynamic Color matching target state transition) -->
+            <button
+              type="button"
+              (click)="toggleSprintStatus(sprint, $event)"
+              [class.bg-blue-600]="sprint.status === 'future'"
+              [class.hover:bg-blue-700]="sprint.status === 'future'"
+              [class.text-white]="sprint.status === 'future'"
+              [class.bg-emerald-600]="sprint.status === 'active'"
+              [class.hover:bg-emerald-700]="sprint.status === 'active'"
+              [class.text-white]="sprint.status === 'active'"
+              [class.bg-slate-200]="sprint.status === 'completed'"
+              [class.hover:bg-slate-300]="sprint.status === 'completed'"
+              [class.text-slate-800]="sprint.status === 'completed'"
+              [class.dark:bg-slate-800]="sprint.status === 'completed'"
+              [class.dark:text-slate-200]="sprint.status === 'completed'"
+              class="h-7 px-2.5 rounded-lg font-semibold text-xs flex items-center gap-1 transition-all shadow-2xs hover:shadow cursor-pointer"
+              [title]="sprint.status === 'future' ? 'Chuyển trạng thái sang Đang chạy' : (sprint.status === 'active' ? 'Chuyển trạng thái sang Hoàn thành' : 'Mở lại Sprint về Kế hoạch')"
+            >
+              <span class="material-symbols-outlined text-[15px]">
+                {{ sprint.status === 'future' ? 'play_arrow' : (sprint.status === 'active' ? 'check_circle' : 'restart_alt') }}
+              </span>
+              <span>{{ sprint.status === 'future' ? 'Bắt đầu' : (sprint.status === 'active' ? 'Hoàn thành' : 'Mở lại') }}</span>
+            </button>
+
+            <button
+              type="button"
+              (click)="activeInlineSprintId.set(activeInlineSprintId() === sprint.id ? null : sprint.id)"
+              class="h-7 px-2.5 rounded-lg bg-primary text-white font-medium text-xs flex items-center gap-1 hover:bg-primary-container transition-all cursor-pointer"
+            >
+              <span class="material-symbols-outlined text-[15px]">add</span>
+              <span>Tạo việc</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Inline Task Input Field (Font 14px) -->
+        @if (activeInlineSprintId() === sprint.id) {
+          <div class="flex items-center gap-2 p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 animate-fade-in">
+            <input
+              type="text"
+              [(ngModel)]="inlineTaskTitleMap[sprint.id]"
+              (keyup.enter)="createInlineSprintTask(sprint.id, sprint.name)"
+              placeholder="Nhập tên công việc mới rồi nhấn Enter..."
+              class="flex-1 h-8 px-2.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-primary font-normal"
+            />
+            <button (click)="createInlineSprintTask(sprint.id, sprint.name)" class="h-8 px-3 rounded bg-primary text-white text-xs font-medium cursor-pointer">
+              Thêm
+            </button>
+            <button (click)="activeInlineSprintId.set(null)" class="h-8 px-2.5 text-slate-500 text-xs hover:bg-slate-200 rounded cursor-pointer">
+              Hủy
+            </button>
+          </div>
+        }
+
+        <div class="overflow-x-auto w-full no-scrollbar">
+          
+          <!-- Strict Compact Column Header (Reduced Padding & Space) -->
+          @if (sprintTasks.length > 0) {
+            <div class="flex items-center gap-1.5 px-2 py-1.5 bg-slate-100/60 dark:bg-slate-800/40 rounded text-[11px] font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200/50 dark:border-slate-800 min-w-[850px] font-headline">
+              <div class="w-5 text-center shrink-0">#</div>
+              <div class="w-7 text-center shrink-0" title="Loại công việc (Icon)">Icon</div>
+              <div class="w-24 shrink-0">Mã Jira</div>
+              <div class="flex-1 min-w-[140px]">Tên công việc</div>
+              <div class="w-28 shrink-0">Epic</div>
+              <div class="w-14 shrink-0 text-center">Subs</div>
+              <div class="w-14 shrink-0 text-center">Ưu tiên</div>
+              <div class="w-8 shrink-0 text-center">SP</div>
+              <div class="w-28 shrink-0 text-center">Trạng thái</div>
+              <div class="w-28 shrink-0">Người xử lý</div>
+              <div class="w-5 shrink-0 text-center"></div>
+            </div>
+          }
+
+          <!-- Backlog WorkItem Rows (Reduced Padding, Icon-Only Type Badge, Direct Editable Fields) -->
+          <div class="divide-y divide-slate-100 dark:divide-slate-800 min-w-[850px]">
+            @for (item of sprintTasks; track item.id) {
+              @let subtasks = getSubtasks(item.id);
+              @let subProgress = getSubtaskProgress(item.id);
+
+              <div class="py-0.5 space-y-0.5">
+                <!-- Compact Row Item (py-1 px-2) -->
+                <div
+                  (click)="selectIssue(item, $event)"
+                  [class.bg-slate-100]="isTaskSelected(item.id)"
+                  class="backlog-row-item flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-slate-100/70 dark:hover:bg-slate-800/80 transition-colors cursor-pointer group text-xs border border-transparent hover:border-slate-200 dark:hover:border-slate-800"
+                >
+                  <!-- 1. Checkbox / Expand Arrow -->
+                  <div class="w-5 flex items-center justify-center shrink-0">
+                    @if (subtasks.length > 0) {
+                      <button (click)="toggleSubtasks(item.id, $event)" class="text-slate-400 hover:text-slate-700 no-drawer cursor-pointer">
+                        <span class="material-symbols-outlined text-[16px]">
+                          {{ expandedSubtasks()[item.id] ? 'keyboard_arrow_down' : 'keyboard_arrow_right' }}
+                        </span>
+                      </button>
+                    } @else {
+                      <input
+                        type="checkbox"
+                        [checked]="isTaskSelected(item.id)"
+                        (change)="toggleTaskSelection(item.id, $event)"
+                        class="w-3.5 h-3.5 rounded text-primary focus:ring-primary cursor-pointer no-drawer"
+                      />
+                    }
+                  </div>
+
+                  <!-- 2. Type Badge: Icon-Only with Matching Color (No Text Label!) -->
+                  <div class="w-7 flex items-center justify-center shrink-0">
+                    @if (item.issueType === 'Story') {
+                      <span title="Story" class="w-5 h-5 rounded bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                        <span class="material-symbols-outlined text-[13px]">bookmark</span>
+                      </span>
+                    } @else if (item.issueType === 'Task') {
+                      <span title="Task" class="w-5 h-5 rounded bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                        <span class="material-symbols-outlined text-[13px]">check_box</span>
+                      </span>
+                    } @else if (item.issueType === 'Bug') {
+                      <span title="Bug" class="w-5 h-5 rounded bg-red-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                        <span class="material-symbols-outlined text-[13px]">bug_report</span>
+                      </span>
+                    } @else if (item.issueType === 'Use-Case') {
+                      <span title="Use-Case" class="w-5 h-5 rounded bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                        <span class="material-symbols-outlined text-[13px]">schema</span>
+                      </span>
+                    } @else {
+                      <span title="Sub-task" class="w-5 h-5 rounded bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                        <span class="material-symbols-outlined text-[13px]">account_tree</span>
+                      </span>
+                    }
+                  </div>
+
+                  <!-- 3. Key (Width 96px, font-mono text-xs) -->
+                  <div class="w-24 shrink-0 font-mono text-xs font-semibold text-primary truncate">
+                    {{ item.issueKey }}
+                  </div>
+
+                  <!-- 4. Title (Flex-1, Direct Editable on Pencil Click or Double Click!) -->
+                  <div class="flex-1 min-w-[140px] text-xs font-normal text-slate-800 dark:text-slate-200 truncate group-hover:text-primary transition-colors flex items-center gap-1">
+                    @if (editingTaskId() === item.id) {
+                      <div class="flex items-center gap-1 w-full no-drawer" (click)="$event.stopPropagation()">
+                        <input
+                          type="text"
+                          [(ngModel)]="editingTaskTitle"
+                          (keyup.enter)="saveEditingTaskTitle(item.id)"
+                          class="flex-1 h-7 px-2 rounded border border-primary bg-white dark:bg-slate-900 text-xs font-medium text-slate-900 dark:text-white focus:outline-none"
+                        />
+                        <button (click)="saveEditingTaskTitle(item.id)" class="px-2 py-1 rounded bg-primary text-white text-[11px] font-bold">Lưu</button>
+                        <button (click)="editingTaskId.set(null)" class="px-1.5 py-1 rounded text-slate-500 text-[11px]">Hủy</button>
+                      </div>
+                    } @else {
+                      <span (dblclick)="startEditingTaskTitle(item, $event)" class="truncate">{{ item.title }}</span>
+                      <button (click)="startEditingTaskTitle(item, $event)" class="no-drawer p-0.5 text-slate-400 opacity-0 group-hover:opacity-100 hover:text-primary transition-all">
+                        <span class="material-symbols-outlined text-[14px]">edit</span>
+                      </button>
+                    }
+                  </div>
+
+                  <!-- 5. Epic Tag Pill (Fixed & Clean Display with Dropdown Popover Picker) -->
+                  <div class="w-36 shrink-0 relative no-drawer">
+                    <button
+                      type="button"
+                      (click)="toggleEpicDropdown(item.id, $event)"
+                      title="Bấm vào để đổi Epic cho công việc này"
+                      class="px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300 hover:bg-purple-200 border border-purple-200/80 transition-colors truncate max-w-full cursor-pointer inline-flex items-center justify-between w-full"
+                    >
+                      <span class="truncate">{{ item.epicName || '+ Gán Epic' }}</span>
+                      <span class="material-symbols-outlined text-[13px] opacity-70">expand_more</span>
+                    </button>
+
+                    <!-- Epic Picker Popover Dropdown -->
+                    @if (activeEpicDropdownTaskId() === item.id) {
+                      <div (click)="$event.stopPropagation()" class="no-drawer absolute right-0 top-7 z-50 w-56 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl py-1 text-xs font-medium text-slate-800 dark:text-slate-200 animate-fade-in">
+                        <div class="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-800">
+                          Chọn Epic
+                        </div>
+                        <button (click)="selectTaskEpic(item.id, null, $event)" class="w-full px-3 py-1.5 text-left hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between text-slate-500 cursor-pointer">
+                          <span>Không gán Epic</span>
+                          @if (!item.epicName) { <span class="material-symbols-outlined text-[14px] text-primary">check</span> }
+                        </button>
+                        <div class="my-0.5 border-t border-slate-100 dark:border-slate-800"></div>
+                        @for (epic of epics(); track epic.id) {
+                          <button (click)="selectTaskEpic(item.id, epic.name, $event)" class="w-full px-3 py-1.5 text-left hover:bg-purple-50 dark:hover:bg-purple-950/40 flex items-center justify-between text-purple-700 dark:text-purple-300 font-semibold cursor-pointer">
+                            <span class="truncate">{{ epic.name }}</span>
+                            @if (item.epicName === epic.name) { <span class="material-symbols-outlined text-[14px] text-purple-600">check</span> }
+                          </button>
+                        }
+                      </div>
+                    }
+                  </div>
+
+                  <!-- 6. Subtask Badge (Width 56px, compact) -->
+                  <div class="w-14 shrink-0 text-center">
+                    @if (subtasks.length > 0) {
+                      <span (click)="toggleSubtasks(item.id, $event)" class="no-drawer px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200 inline-block w-full cursor-pointer">
+                        {{ subProgress.done }}/{{ subProgress.total }} subs
+                      </span>
+                    } @else {
+                      <span class="text-slate-300 text-xs italic">--</span>
+                    }
+                  </div>
+
+                  <!-- 7. Priority (Click to Cycle Priority Inline!) -->
+                  <div
+                    (click)="updateInlinePriorityNext(item.id, item.priority, $event)"
+                    title="Bấm vào để đổi độ ưu tiên"
+                    class="w-14 shrink-0 text-center font-semibold text-[11px] truncate cursor-pointer hover:underline no-drawer"
+                    [class.text-red-600]="item.priority === 'Urgent'"
+                    [class.text-amber-600]="item.priority === 'High'"
+                    [class.text-slate-500]="item.priority === 'Medium' || item.priority === 'Low'"
+                  >
+                    {{ item.priority }}
+                  </div>
+
+                  <!-- 8. Story Points (Click to Edit SP Inline!) -->
+                  <div
+                    (click)="updateInlineSP(item.id, $event)"
+                    title="Bấm vào để nhập điểm SP"
+                    class="w-8 shrink-0 text-center font-mono font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 py-0.5 rounded text-[11px] cursor-pointer hover:bg-primary/20 hover:text-primary transition-colors no-drawer"
+                  >
+                    {{ item.storyPoints }}
+                  </div>
+
+                  <!-- 9. Exact Jira-Style Status Pill Button + Dropdown Popover -->
+                  <div class="w-28 shrink-0 relative no-drawer">
+                    
+                    <!-- Jira Status Pill Button -->
+                    <button
+                      type="button"
+                      (click)="toggleStatusDropdown(item.id, $event)"
+                      title="Bấm để thay đổi trạng thái công việc"
+                      [class.bg-[#dfe1e6]]="item.statusName === 'To Do'"
+                      [class.text-[#42526e]]="item.statusName === 'To Do'"
+                      [class.hover:bg-[#c1c7d0]]="item.statusName === 'To Do'"
+                      [class.bg-[#deebff]]="item.statusName === 'In Progress'"
+                      [class.text-[#0747a6]]="item.statusName === 'In Progress'"
+                      [class.hover:bg-[#b3d4ff]]="item.statusName === 'In Progress'"
+                      [class.bg-[#eae6ff]]="item.statusName === 'Code Review'"
+                      [class.text-[#403294]]="item.statusName === 'Code Review'"
+                      [class.hover:bg-[#d0c8ff]]="item.statusName === 'Code Review'"
+                      [class.bg-[#e3fcef]]="item.statusName === 'Done'"
+                      [class.text-[#006644]]="item.statusName === 'Done'"
+                      [class.hover:bg-[#abf5d1]]="item.statusName === 'Done'"
+                      class="h-6 w-full px-2 rounded text-[11px] font-bold font-sans flex items-center justify-between cursor-pointer transition-all shadow-2xs"
+                    >
+                      <span>{{ item.statusName }}</span>
+                      <span class="material-symbols-outlined text-[14px] opacity-70">expand_more</span>
+                    </button>
+
+                    <!-- Exact Jira Status Dropdown Popover Menu -->
+                    @if (activeStatusDropdownTaskId() === item.id) {
+                      <div class="absolute right-0 top-7 z-50 w-44 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl py-1 text-xs font-semibold animate-fade-in">
+                        <!-- Option 1: To Do -->
+                        <button
+                          (click)="updateInlineStatus(item.id, 'To Do', $event); activeStatusDropdownTaskId.set(null)"
+                          class="w-full px-3 py-1.5 text-left hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between cursor-pointer"
+                        >
+                          <span class="px-2 py-0.5 rounded bg-[#dfe1e6] text-[#42526e] font-bold text-[11px]">To Do</span>
+                          @if (item.statusName === 'To Do') { <span class="material-symbols-outlined text-[14px] text-primary">check</span> }
+                        </button>
+
+                        <!-- Option 2: In Progress -->
+                        <button
+                          (click)="updateInlineStatus(item.id, 'In Progress', $event); activeStatusDropdownTaskId.set(null)"
+                          class="w-full px-3 py-1.5 text-left hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between cursor-pointer"
+                        >
+                          <span class="px-2 py-0.5 rounded bg-[#deebff] text-[#0747a6] font-bold text-[11px]">In Progress</span>
+                          @if (item.statusName === 'In Progress') { <span class="material-symbols-outlined text-[14px] text-primary">check</span> }
+                        </button>
+
+                        <!-- Option 3: Code Review -->
+                        <button
+                          (click)="updateInlineStatus(item.id, 'Code Review', $event); activeStatusDropdownTaskId.set(null)"
+                          class="w-full px-3 py-1.5 text-left hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between cursor-pointer"
+                        >
+                          <span class="px-2 py-0.5 rounded bg-[#eae6ff] text-[#403294] font-bold text-[11px]">Code Review</span>
+                          @if (item.statusName === 'Code Review') { <span class="material-symbols-outlined text-[14px] text-primary">check</span> }
+                        </button>
+
+                        <!-- Option 4: Done -->
+                        <button
+                          (click)="updateInlineStatus(item.id, 'Done', $event); activeStatusDropdownTaskId.set(null)"
+                          class="w-full px-3 py-1.5 text-left hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between cursor-pointer"
+                        >
+                          <span class="px-2 py-0.5 rounded bg-[#e3fcef] text-[#006644] font-bold text-[11px]">Done</span>
+                          @if (item.statusName === 'Done') { <span class="material-symbols-outlined text-[14px] text-primary">check</span> }
+                        </button>
+
+                        <div class="my-0.5 border-t border-slate-100 dark:border-slate-800"></div>
+
+                        <!-- Extra Option: View Workflow -->
+                        <button
+                          (click)="activeStatusDropdownTaskId.set(null)"
+                          class="w-full px-3 py-1 text-left text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-1.5 text-[11px] font-normal cursor-pointer"
+                        >
+                          <span class="material-symbols-outlined text-[13px]">account_tree</span>
+                          <span>View workflow</span>
+                        </button>
+                      </div>
+                    }
+
+                  </div>
+
+                  <!-- 10. Assignee Avatar + Name (Width 112px, fully visible!) -->
+                  <div class="w-28 shrink-0 flex items-center gap-1.5 no-drawer" [title]="'Người làm việc: ' + (item.assigneeName || 'Chưa gán')">
+                    <div class="w-5 h-5 rounded-full bg-primary text-white text-[9px] font-bold flex items-center justify-center shrink-0 shadow-2xs">
+                      {{ getAssigneeInitials(item.assigneeName) }}
+                    </div>
+                    <span class="text-slate-600 dark:text-slate-300 font-normal text-xs truncate">
+                      {{ item.assigneeName }}
+                    </span>
+                  </div>
+
+                  <!-- 11. Context Action Menu `...` (Width 20px) -->
+                  <div class="w-5 shrink-0 text-center relative no-drawer">
+                    <button (click)="toggleRowMenu(item.id, $event)" class="p-0.5 text-slate-400 hover:text-slate-700 rounded hover:bg-slate-100 cursor-pointer">
+                      <span class="material-symbols-outlined text-[16px]">more_vert</span>
+                    </button>
+
+                    @if (activeMenuTaskId() === item.id) {
+                      <div class="absolute right-0 top-7 z-30 w-52 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl py-1 text-xs font-normal text-slate-700 dark:text-slate-200 animate-fade-in text-left">
+                        <button (click)="assignToMe(item.id, $event)" class="w-full px-3 py-1.5 hover:bg-slate-100 flex items-center gap-2 cursor-pointer">
+                          <span class="material-symbols-outlined text-[16px]">person_add</span>
+                          <span>Gán cho tôi</span>
+                        </button>
+                        <button (click)="openSubtaskInput(item.id, $event); activeMenuTaskId.set(null)" class="w-full px-3 py-1.5 hover:bg-slate-100 flex items-center gap-2 cursor-pointer">
+                          <span class="material-symbols-outlined text-[16px]">account_tree</span>
+                          <span>Thêm Sub-task</span>
+                        </button>
+                        <button (click)="cloneItem(item.id, $event)" class="w-full px-3 py-1.5 hover:bg-slate-100 flex items-center gap-2 cursor-pointer">
+                          <span class="material-symbols-outlined text-[16px]">content_copy</span>
+                          <span>Nhân bản</span>
+                        </button>
+                        
+                        <div class="my-0.5 border-t border-slate-100 dark:border-slate-800"></div>
+                        <div class="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase">Chuyển Sprint</div>
+                        @for (sp of sprints(); track sp.id) {
+                          <button (click)="updateWorkItemSprint(item.id, sp.id, sp.name, $event); activeMenuTaskId.set(null)" class="w-full px-3 py-1 hover:bg-blue-50 text-blue-600 flex items-center gap-1.5 cursor-pointer text-[11px]">
+                            <span>➔ {{ sp.name }}</span>
+                          </button>
+                        }
+                        <button (click)="updateWorkItemSprint(item.id, 'sp-backlog', 'Backlog Pool', $event); activeMenuTaskId.set(null)" class="w-full px-3 py-1 hover:bg-slate-100 text-slate-600 flex items-center gap-1.5 cursor-pointer text-[11px]">
+                          <span>➔ Backlog Pool</span>
+                        </button>
+
+                        <div class="my-0.5 border-t border-slate-100 dark:border-slate-800"></div>
+                        <button (click)="deleteItem(item.id, $event)" class="w-full px-3 py-1.5 hover:bg-red-50 text-red-600 flex items-center gap-2 cursor-pointer">
+                          <span class="material-symbols-outlined text-[16px]">delete</span>
+                          <span>Xóa công việc</span>
+                        </button>
+                      </div>
+                    }
+                  </div>
+
+                </div>
+
+                <!-- Sub-task Input Field -->
+                @if (activeSubtaskInputId() === item.id) {
+                  <div class="ml-8 p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center gap-2 animate-fade-in">
+                    <span class="text-slate-500 font-medium text-xs">└─ Sub-task:</span>
+                    <input
+                      type="text"
+                      [(ngModel)]="subtaskTitleMap[item.id]"
+                      (keyup.enter)="createInlineSubtask(item.id)"
+                      placeholder="Nhập tên sub-task rồi nhấn Enter..."
+                      class="flex-1 h-7 px-2.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-normal focus:outline-none"
+                    />
+                    <button (click)="createInlineSubtask(item.id)" class="h-7 px-2.5 rounded bg-primary text-white text-xs font-medium cursor-pointer">
+                      Thêm
+                    </button>
+                    <button (click)="activeSubtaskInputId.set(null)" class="h-7 px-2 text-slate-500 text-xs cursor-pointer">Hủy</button>
+                  </div>
+                }
+
+                <!-- Sub-tasks Tree Child Rows -->
+                @if (expandedSubtasks()[item.id] && subtasks.length > 0) {
+                  <div class="ml-7 pl-2 border-l-2 border-slate-200 dark:border-slate-700 space-y-1 pt-0.5">
+                    @for (sub of subtasks; track sub.id) {
+                      <div (click)="selectIssue(sub, $event)" class="flex items-center justify-between px-2.5 py-1 rounded bg-slate-50 dark:bg-slate-800/60 hover:bg-blue-50/40 text-xs cursor-pointer border border-slate-200/50">
+                        <div class="flex items-center gap-2 min-w-0">
+                          <span class="text-amber-600 font-mono text-[11px]">📙 Sub-task</span>
+                          <span class="font-mono font-semibold text-primary">{{ sub.issueKey }}</span>
+                          <span class="font-normal text-slate-800 dark:text-slate-200 truncate">{{ sub.title }}</span>
+                        </div>
+                        <div class="flex items-center gap-2 shrink-0 no-drawer">
+                          <!-- Quick Subtask Status Toggle Button -->
+                          <button
+                            (click)="toggleStatusDropdown(sub.id, $event)"
+                            class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 hover:bg-blue-200 cursor-pointer"
+                          >
+                            {{ sub.statusName }}
+                          </button>
+                          <span class="text-[11px] text-slate-500 font-mono">{{ sub.storyPoints }} SP</span>
+                          <button (click)="deleteItem(sub.id, $event)" class="text-slate-400 hover:text-red-500 cursor-pointer" title="Xóa Sub-task">
+                            <span class="material-symbols-outlined text-[15px]">close</span>
+                          </button>
+                        </div>
+                      </div>
+                    }
+                  </div>
+                }
+
+              </div>
+            }
+
+            @if (sprintTasks.length === 0) {
+              <div class="py-5 text-center text-slate-400 text-xs">
+                Không có công việc nào trong Sprint này.
+              </div>
+            }
+          </div>
+        </div>
+
+      </div>
+    }
+
+    <!-- DEDICATED BACKLOG POOL SECTION (Jira Style) -->
+    @let backlogPoolItems = getBacklogItems();
+    <div class="rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-2.5 sm:p-3 shadow-2xs space-y-2 w-full mt-4">
+      
+      <!-- Backlog Pool Header -->
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800 flex-wrap gap-2">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-[18px] text-slate-500">inbox</span>
+          <h2 class="text-xs font-bold text-slate-900 dark:text-white font-headline">Backlog (Kho lưu trữ chưa gán Sprint)</h2>
+          <span class="text-[11px] font-mono text-slate-500">({{ backlogPoolItems.length }} công việc)</span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <span class="text-[11px] text-slate-400 font-mono">{{ backlogPoolItems.length }} of {{ workItems().length }} items visible</span>
+        </div>
+      </div>
+
+      <!-- Table Header & Items -->
+      @if (backlogPoolItems.length > 0) {
+        <div class="overflow-x-auto w-full">
+          <div class="min-w-[850px] space-y-1">
+            <div class="flex items-center px-2 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 font-sans">
+              <div class="w-6 shrink-0 text-center">#</div>
+              <div class="w-24 shrink-0">Loại & Mã</div>
+              <div class="flex-1 min-w-[200px] pl-1">Tên công việc</div>
+              <div class="w-28 shrink-0 text-left">Epic</div>
+              <div class="w-14 shrink-0 text-center">Ưu tiên</div>
+              <div class="w-8 shrink-0 text-center">SP</div>
+              <div class="w-28 shrink-0 text-left">Trạng thái</div>
+              <div class="w-28 shrink-0 text-left">Người xử lý</div>
+              <div class="w-5 shrink-0"></div>
+            </div>
+
+            @for (item of backlogPoolItems; track item.id) {
+              <div (click)="selectIssue(item, $event)" class="flex items-center px-2 py-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/60 border border-slate-100 dark:border-slate-800 transition-colors text-xs group cursor-pointer">
+                <div class="w-6 shrink-0 text-center no-drawer">
+                  <input type="checkbox" [checked]="isTaskSelected(item.id)" (change)="toggleTaskSelection(item.id, $event)" class="rounded border-slate-300 text-primary focus:ring-0 cursor-pointer" />
+                </div>
+                <div class="w-24 shrink-0 flex items-center gap-1.5 font-mono">
+                  <span class="text-base">{{ getIssueTypeIcon(item.issueType) }}</span>
+                  <span class="font-bold text-primary">{{ item.issueKey }}</span>
+                </div>
+                <div class="flex-1 min-w-[200px] font-normal text-slate-900 dark:text-white truncate pl-1">
+                  {{ item.title }}
+                </div>
+                <div class="w-28 shrink-0">
+                  @if (item.epicName) {
+                    <span class="px-2 py-0.5 rounded text-[10px] font-medium bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 truncate inline-block max-w-[100px]">
+                      {{ item.epicName }}
+                    </span>
+                  } @else {
+                    <span class="text-slate-300 italic">--</span>
+                  }
+                </div>
+                <div class="w-14 shrink-0 text-center font-semibold text-[11px]" [class.text-red-600]="item.priority === 'Urgent'" [class.text-amber-600]="item.priority === 'High'">
+                  {{ item.priority }}
+                </div>
+                <div class="w-8 shrink-0 text-center font-mono font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 py-0.5 rounded text-[11px]">
+                  {{ item.storyPoints }}
+                </div>
+                <div class="w-28 shrink-0 no-drawer">
+                  <button (click)="toggleStatusDropdown(item.id, $event)" class="h-6 w-full px-2 rounded text-[11px] font-bold bg-slate-100 text-slate-700 flex items-center justify-between">
+                    <span>{{ item.statusName }}</span>
+                    <span class="material-symbols-outlined text-[14px]">expand_more</span>
+                  </button>
+                </div>
+                <div class="w-28 shrink-0 text-slate-600 dark:text-slate-300 truncate text-[11px]">
+                  {{ item.assigneeName }}
+                </div>
+                <div class="w-5 shrink-0 text-center relative no-drawer">
+                  <button (click)="toggleRowMenu(item.id, $event)" class="p-0.5 text-slate-400 hover:text-slate-700">
+                    <span class="material-symbols-outlined text-[16px]">more_vert</span>
+                  </button>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+      } @else {
+        <div class="p-6 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-center space-y-1.5 my-2">
+          <p class="text-xs text-slate-500 font-medium">Danh sách Backlog đang trống (Your backlog is empty).</p>
+          <p class="text-[11px] text-slate-400">Tạo công việc mới hoặc kéo thả công việc vào đây để đưa vào kho lưu trữ Backlog.</p>
+        </div>
+      }
+
+      <!-- Quick Inline Task Creation for Backlog Pool -->
+      @if (activeInlineSprintId() === 'sp-backlog') {
+        <div class="p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg flex items-center gap-2 animate-fade-in">
+          <input
+            type="text"
+            [(ngModel)]="inlineTaskTitleMap['sp-backlog']"
+            (keyup.enter)="createInlineSprintTask('sp-backlog', 'Backlog Pool')"
+            placeholder="Nhập tên công việc mới vào kho Backlog rồi nhấn Enter..."
+            class="flex-1 h-8 px-3 rounded border border-slate-300 dark:border-slate-700 text-xs focus:outline-none bg-white dark:bg-slate-900"
+          />
+          <button (click)="createInlineSprintTask('sp-backlog', 'Backlog Pool')" class="h-8 px-3 rounded bg-primary text-white text-xs font-bold cursor-pointer">Thêm</button>
+          <button (click)="activeInlineSprintId.set(null)" class="h-8 px-2 text-slate-500 text-xs cursor-pointer">Hủy</button>
+        </div>
+      } @else {
+        <div class="pt-1 flex items-center gap-2">
+          <button (click)="activeInlineSprintId.set('sp-backlog')" class="text-xs text-slate-500 hover:text-primary font-bold flex items-center gap-1 cursor-pointer">
+            <span class="material-symbols-outlined text-[16px]">add</span>
+            <span>+ Tạo công việc vào kho Backlog</span>
+          </button>
+        </div>
+      }
+
+    </div>
+
   </div>
+
+  <!-- Floating Bulk Operations Toolbar -->
+  @if (selectedTaskIds().length > 0) {
+    <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900 text-white px-4 py-2.5 rounded-xl shadow-xl border border-slate-700 flex items-center gap-3 animate-slide-up text-xs font-body">
+      <span class="font-medium">{{ selectedTaskIds().length }} đã chọn</span>
+      <div class="h-4 w-px bg-slate-700"></div>
+
+      <select (change)="bulkChangeStatus($any($event.target).value)" class="h-8 px-2.5 rounded bg-slate-800 border border-slate-700 text-white font-normal focus:outline-none">
+        <option value="" disabled selected>Đổi Trạng Thái</option>
+        <option value="To Do">To Do</option>
+        <option value="In Progress">In Progress</option>
+        <option value="Code Review">Code Review</option>
+        <option value="Done">Done</option>
+      </select>
+
+      <select (change)="bulkChangeSprint($any($event.target).value, 'SCRUMAI Sprint 2')" class="h-8 px-2.5 rounded bg-slate-800 border border-slate-700 text-white font-normal focus:outline-none">
+        <option value="" disabled selected>Chuyển Sprint</option>
+        <option value="sp-2">Sprint 2</option>
+        <option value="sp-3">Sprint 3</option>
+        <option value="sp-4">Sprint 4</option>
+      </select>
+
+      <button (click)="bulkDeleteTasks()" class="h-8 px-3 rounded bg-red-600 hover:bg-red-700 font-medium transition-all cursor-pointer">
+        Xóa tất cả
+      </button>
+
+      <button (click)="clearSelection()" class="text-slate-400 hover:text-white cursor-pointer">
+        <span class="material-symbols-outlined text-[18px]">close</span>
+      </button>
+    </div>
+  }
+
+  <!-- New Epic Modal -->
+  @if (showNewEpicModal()) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs font-body animate-fade-in text-xs">
+      <div class="w-full max-w-sm bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 space-y-3 shadow-2xl">
+        <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+          <h3 class="font-bold text-slate-900 dark:text-white font-headline">Tạo Epic Mới</h3>
+          <button (click)="showNewEpicModal.set(false)" class="text-slate-400 hover:text-slate-700 cursor-pointer">
+            <span class="material-symbols-outlined text-[18px]">close</span>
+          </button>
+        </div>
+
+        <div class="space-y-2">
+          <div class="space-y-1">
+            <label class="font-medium text-slate-500 uppercase text-[11px]">Tên Epic</label>
+            <input
+              type="text"
+              [(ngModel)]="newEpicName"
+              placeholder="VD: Mobile App Integration..."
+              class="w-full h-8 px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none text-xs font-normal"
+            />
+          </div>
+        </div>
+
+        <div class="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
+          <button (click)="showNewEpicModal.set(false)" class="px-3 py-1.5 rounded text-slate-600 hover:bg-slate-100 cursor-pointer">Hủy</button>
+          <button [disabled]="!newEpicName.trim()" (click)="createEpic()" class="px-3.5 py-1.5 rounded bg-purple-600 text-white font-medium disabled:opacity-50 cursor-pointer">Tạo Epic</button>
+        </div>
+      </div>
+    </div>
+  }
+
 </div>

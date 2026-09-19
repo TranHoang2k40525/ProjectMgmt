@@ -8,6 +8,8 @@ import {
   UpdateProjectRequest,
   UserDisplayInfo
 } from '../../core/services/project-management.service';
+import { ConfirmDialogService } from '../../core/services/confirm-dialog.service';
+import { ToastService } from '../../core/services/toast.service';
 
 @Component({
   selector: 'app-project-settings-page',
@@ -67,11 +69,7 @@ import {
         </div>
       } @else if (project()) {
         <div class="settings-content">
-          @if (feedbackMsg()) {
-            <div class="alert" [class.alert-success]="feedbackType() === 'success'" [class.alert-error]="feedbackType() === 'error'">
-              {{ feedbackMsg() }}
-            </div>
-          }
+
 
           <div class="card">
             <h2>Chỉnh sửa thông tin cơ bản</h2>
@@ -328,6 +326,8 @@ export class ProjectSettingsPage implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly projectService = inject(ProjectManagementService);
+  private readonly confirmService = inject(ConfirmDialogService);
+  private readonly toastService = inject(ToastService);
 
   projectId = '';
   readonly project = signal<Project | null>(null);
@@ -386,26 +386,36 @@ export class ProjectSettingsPage implements OnInit {
         this.saving.set(false);
         this.feedbackType.set('success');
         this.feedbackMsg.set('Đã lưu thay đổi thông tin dự án thành công!');
+        this.toastService.success('Cập Nhật Dự Án', 'Đã lưu thay đổi cấu hình dự án thành công.');
       },
       error: (err) => {
         this.saving.set(false);
         this.feedbackType.set('error');
         this.feedbackMsg.set(err?.error?.title || 'Không thể lưu thay đổi.');
+        this.toastService.error('Lỗi Cập Nhật', err?.error?.title || 'Không thể lưu thay đổi.');
       }
     });
   }
 
   onDeleteProject(): void {
-    if (confirm(`Bạn có chắc chắn muốn xóa dự án "${this.project()?.name}" không?`)) {
-      this.projectService.deleteProject(this.projectId).subscribe({
-        next: () => {
-          alert('Đã xóa dự án.');
-          this.router.navigate(['/projects']);
-        },
-        error: (err) => {
-          alert(err?.error?.title || 'Không thể xóa dự án.');
-        }
-      });
-    }
+    const projName = this.project()?.name || 'dự án này';
+    this.confirmService.confirm({
+      title: 'Xóa Dự Án',
+      message: `Bạn có chắc chắn muốn xóa dự án "${projName}" không? Hành động này sẽ lưu trữ dự án.`,
+      type: 'danger',
+      confirmText: 'Xóa dự án ngay',
+      cancelText: 'Hủy bỏ',
+      onConfirm: () => {
+        this.projectService.deleteProject(this.projectId).subscribe({
+          next: () => {
+            this.toastService.warning('Đã Xóa Dự Án', `Đã chuyển dự án "${projName}" sang trạng thái lưu trữ.`);
+            this.router.navigate(['/projects']);
+          },
+          error: (err) => {
+            this.toastService.error('Lỗi Xóa Dự Án', err?.error?.title || 'Không thể xóa dự án.');
+          }
+        });
+      }
+    });
   }
 }

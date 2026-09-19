@@ -1,172 +1,303 @@
-<div class="p-6 max-w-[1600px] mx-auto font-body-md text-on-surface">
-  <!-- Header & Navigation -->
-  <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6 pb-4 border-b border-surface-container-highest">
-    <div>
-      <div class="flex items-center gap-2 font-label-sm text-label-sm text-on-surface-variant mb-1">
-        <span>Không gian</span>
-        <span>›</span>
-        <span class="text-primary font-semibold">HUCE AI Lab Project</span>
-        <span class="px-1.5 py-0.5 rounded bg-primary-container text-on-primary-container text-[10px] font-mono font-bold">SCRUMAI</span>
-      </div>
-      <div class="flex items-center gap-3">
-        <h1 class="font-headline-lg text-headline-lg font-bold tracking-tight text-on-surface">Bảng Scrum (Kanban Board)</h1>
-        <span class="px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-600 font-label-sm text-label-sm font-bold">
-          Sprint 1 (Đang chạy)
-        </span>
-      </div>
-    </div>
+<!-- Transparent Backdrop Overlay to Close Popups on Outside Click -->
+@if (activeMenuTaskId()) {
+  <div class="fixed inset-0 z-30 bg-transparent" (click)="closeAllPopups()"></div>
+}
 
-    <!-- Navigation Switcher -->
-    <div class="flex items-center gap-1.5 bg-surface-container-high/60 p-1.5 rounded-xl backdrop-blur-md">
-      <a routerLink="/backlog" class="px-3.5 py-1.5 rounded-lg text-on-surface-variant hover:text-on-surface font-label-md text-label-md flex items-center gap-1.5 transition-colors">
-        <span class="material-symbols-outlined text-[18px]">splitscreen</span>
-        <span>Backlog</span>
-      </a>
-      <a routerLink="/board" class="px-3.5 py-1.5 rounded-lg bg-surface-container-lowest text-primary font-label-md text-label-md font-semibold shadow-sm flex items-center gap-1.5">
-        <span class="material-symbols-outlined text-[18px]">view_kanban</span>
-        <span>Board</span>
-      </a>
-      <a routerLink="/projects" class="px-3.5 py-1.5 rounded-lg text-on-surface-variant hover:text-on-surface font-label-md text-label-md flex items-center gap-1.5 transition-colors">
-        <span class="material-symbols-outlined text-[18px]">timeline</span>
-        <span>Timeline</span>
-      </a>
+<div class="p-6 max-w-[1650px] mx-auto font-body text-slate-900 dark:text-slate-100 space-y-5">
+
+  <!-- Clean Header & Page Context -->
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+    <div class="flex items-center gap-3">
+      <h1 class="text-xl font-medium tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+        <span class="material-symbols-outlined text-primary text-[24px]">view_kanban</span>
+        Bảng Scrum (Kanban Board)
+      </h1>
+      <span class="px-3 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-sm font-normal border border-emerald-500/20">
+        SCRUMAI Sprint 2 (Đang chạy)
+      </span>
+      <span class="px-3 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-sm font-normal">
+        {{ filteredItems().length }} thẻ việc
+      </span>
     </div>
   </div>
 
+  <!-- Filter Bar (Sticky when scrolling down board) -->
+  <div class="sticky top-28 z-20 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-sm transition-all">
+    <div class="flex items-center gap-2.5 flex-wrap flex-1">
+      <!-- Search Input -->
+      <div class="relative flex items-center max-w-xs w-full">
+        <span class="material-symbols-outlined absolute left-3 text-[18px] text-slate-400 pointer-events-none">search</span>
+        <input
+          type="text"
+          [ngModel]="searchQuery()"
+          (ngModelChange)="searchQuery.set($event)"
+          placeholder="Lọc thẻ theo tên, mã Jira..."
+          class="w-full h-9 pl-9 pr-3 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary font-normal"
+        />
+      </div>
+
+      <!-- Assignee Filter -->
+      <select
+        [ngModel]="selectedAssigneeFilter()"
+        (ngModelChange)="selectedAssigneeFilter.set($event)"
+        class="h-9 px-3 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-normal text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer"
+      >
+        <option [ngValue]="null">Tất cả người xử lý</option>
+        <option value="Trần Văn Hoàng">Trần Văn Hoàng (Lead)</option>
+        <option value="Nguyễn Thanh Hà">Nguyễn Thanh Hà</option>
+        <option value="Phạm Đức Anh">Phạm Đức Anh</option>
+        <option value="Lê Minh Khiêm">Lê Minh Khiêm</option>
+      </select>
+
+      <!-- Issue Type Filter -->
+      <select
+        [ngModel]="selectedTypeFilter()"
+        (ngModelChange)="selectedTypeFilter.set($event)"
+        class="h-9 px-3 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-normal text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer"
+      >
+        <option [ngValue]="null">Tất cả loại công việc</option>
+        <option value="Story">Story</option>
+        <option value="Task">Task</option>
+        <option value="Bug">Bug</option>
+        <option value="Use-Case">Use-Case</option>
+        <option value="Epic">Epic</option>
+        <option value="Sub-task">Sub-task</option>
+      </select>
+    </div>
+
+    @if (selectedAssigneeFilter() || selectedTypeFilter() || searchQuery()) {
+      <button
+        (click)="searchQuery.set(''); selectedAssigneeFilter.set(null); selectedTypeFilter.set(null)"
+        class="h-9 px-3 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 text-sm font-normal transition-all cursor-pointer shrink-0"
+      >
+        Xóa bộ lọc
+      </button>
+    }
+  </div>
+
   <!-- Board Columns Grid (To Do, In Progress, Code Review, Done) -->
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 items-start">
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
     
-    <!-- Column 1: TO DO (WIP 5) -->
-    <div class="rounded-2xl bg-surface-container-low/70 border border-outline-variant/20 p-4 space-y-4">
-      <div class="flex items-center justify-between font-label-md text-label-md font-bold text-on-surface">
+    <!-- COLUMN 1: TO DO -->
+    <div class="board-column rounded-xl bg-slate-100/80 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-3.5 space-y-3">
+      <div class="flex items-center justify-between text-sm font-medium text-slate-900 dark:text-slate-100 pb-1">
         <div class="flex items-center gap-2">
-          <span class="w-3 h-3 rounded-full bg-outline"></span>
-          <span>Cần Làm (To Do)</span>
-          <span class="w-5 h-5 rounded-full bg-surface-container-high text-on-surface-variant text-[11px] font-bold flex items-center justify-center">2</span>
+          <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+          <span>To Do (Cần làm)</span>
+          <span class="w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-normal flex items-center justify-center">
+            {{ toDoItems().length }}
+          </span>
         </div>
-        <button type="button" class="w-7 h-7 rounded-lg hover:bg-surface-container text-on-surface-variant flex items-center justify-center">+</button>
       </div>
 
-      <div class="space-y-3">
-        <div class="p-4 rounded-xl bg-surface-container-lowest border border-outline-variant/30 shadow-sm hover:shadow-md transition-all cursor-pointer space-y-3 group">
-          <div class="flex items-center justify-between">
-            <span class="px-2 py-0.5 rounded bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-[10px] font-bold flex items-center gap-1">
-              <span class="material-symbols-outlined text-[12px]">auto_awesome</span> AI Ready
-            </span>
-            <span class="font-mono text-label-sm font-bold text-primary">SCRUMAI-160</span>
-          </div>
+      <div class="space-y-2.5 min-h-[400px]">
+        @for (item of toDoItems(); track item.id) {
+          @let subInfo = getSubtaskCount(item.id);
 
-          <h4 class="font-headline-sm text-headline-sm font-semibold text-on-surface group-hover:text-primary transition-colors">
-            [BE] Đăng ký/đăng nhập, JWT Refresh Token
-          </h4>
+          <div
+            (click)="openTaskDrawer(item, $event)"
+            class="p-3.5 rounded-lg bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 shadow-2xs hover:shadow-sm transition-all cursor-pointer space-y-2.5 group relative"
+          >
+            <!-- Card Top Bar -->
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-1.5">
+                <span
+                  [class.bg-red-100]="item.issueType === 'Bug'"
+                  [class.text-red-700]="item.issueType === 'Bug'"
+                  [class.bg-teal-100]="item.issueType === 'Use-Case'"
+                  [class.text-teal-700]="item.issueType === 'Use-Case'"
+                  [class.bg-blue-100]="item.issueType === 'Task'"
+                  [class.text-blue-700]="item.issueType === 'Task'"
+                  [class.bg-emerald-100]="item.issueType === 'Story'"
+                  [class.text-emerald-700]="item.issueType === 'Story'"
+                  class="px-2 py-0.5 rounded text-xs font-normal uppercase"
+                >
+                  {{ item.issueType }}
+                </span>
 
-          <div class="flex items-center justify-between pt-2 border-t border-surface-container-highest">
-            <span class="px-2 py-0.5 rounded bg-surface-container-high font-label-sm text-[10px] font-mono">Identity</span>
-            <div class="flex items-center gap-2">
-              <span class="font-bold text-primary font-label-sm text-[11px]">8 SP</span>
-              <div class="w-6 h-6 rounded-full bg-primary text-on-primary font-label-sm text-[10px] font-bold flex items-center justify-center">TH</div>
+                @if (item.epicName) {
+                  <span class="px-2 py-0.5 rounded text-xs font-normal bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 truncate max-w-[110px]">
+                    {{ item.epicName }}
+                  </span>
+                }
+              </div>
+
+              <span class="font-mono text-sm font-medium text-primary">{{ item.issueKey }}</span>
+            </div>
+
+            <!-- Title (Font 14px, font-normal) -->
+            <h4 class="text-sm font-normal text-slate-900 dark:text-white group-hover:text-primary transition-colors leading-snug">
+              {{ item.title }}
+            </h4>
+
+            @if (subInfo.total > 0) {
+              <div class="text-sm font-normal text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-1 rounded border border-amber-200 dark:border-amber-900">
+                Sub-tasks: {{ subInfo.done }}/{{ subInfo.total }}
+              </div>
+            }
+
+            <!-- Card Bottom Quick Bar (Font 14px) -->
+            <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700/60 text-sm">
+              <button
+                (click)="moveStatus(item, 'next', $event)"
+                class="px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-normal hover:bg-blue-100 transition-colors flex items-center gap-0.5 cursor-pointer no-drawer text-sm"
+                title="Chuyển sang In Progress"
+              >
+                <span>Chuyển</span>
+                <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+              </button>
+
+              <div class="flex items-center gap-2 no-drawer">
+                <span class="font-medium text-primary text-sm font-mono bg-primary/10 px-2 py-0.5 rounded">{{ item.storyPoints }} SP</span>
+                <span class="text-slate-500 font-normal text-sm">{{ item.assigneeName }}</span>
+              </div>
             </div>
           </div>
-        </div>
+        }
       </div>
     </div>
 
-    <!-- Column 2: IN PROGRESS (WIP 3) -->
-    <div class="rounded-2xl bg-surface-container-low/70 border border-outline-variant/20 p-4 space-y-4">
-      <div class="flex items-center justify-between font-label-md text-label-md font-bold text-on-surface">
+    <!-- COLUMN 2: IN PROGRESS -->
+    <div class="board-column rounded-xl bg-slate-100/80 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-3.5 space-y-3">
+      <div class="flex items-center justify-between text-sm font-medium text-slate-900 dark:text-slate-100 pb-1">
         <div class="flex items-center gap-2">
-          <span class="w-3 h-3 rounded-full bg-primary"></span>
-          <span>Đang Thực Hiện</span>
-          <span class="w-5 h-5 rounded-full bg-primary-container text-on-primary-container text-[11px] font-bold flex items-center justify-center">3</span>
+          <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+          <span>In Progress (Đang làm)</span>
+          <span class="w-5 h-5 rounded-full bg-blue-100 text-blue-800 text-xs font-normal flex items-center justify-center">
+            {{ inProgressItems().length }}
+          </span>
         </div>
-        <button type="button" class="w-7 h-7 rounded-lg hover:bg-surface-container text-on-surface-variant flex items-center justify-center">+</button>
       </div>
 
-      <div class="space-y-3">
-        <div class="p-4 rounded-xl bg-surface-container-lowest border border-outline-variant/30 shadow-sm hover:shadow-md transition-all cursor-pointer space-y-3 group ring-2 ring-primary/30">
-          <div class="flex items-center justify-between">
-            <span class="px-2 py-0.5 rounded bg-surface-container-high font-label-sm text-[10px] text-on-surface-variant font-mono">DevOps</span>
-            <span class="font-mono text-label-sm font-bold text-primary">SCRUMAI-155</span>
-          </div>
+      <div class="space-y-2.5 min-h-[400px]">
+        @for (item of inProgressItems(); track item.id) {
+          <div
+            (click)="openTaskDrawer(item, $event)"
+            class="p-3.5 rounded-lg bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 shadow-2xs hover:shadow-sm transition-all cursor-pointer space-y-2.5 group relative ring-1 ring-blue-500/30"
+          >
+            <div class="flex items-center justify-between">
+              <span class="px-2 py-0.5 rounded text-xs font-normal uppercase bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                {{ item.issueType }}
+              </span>
+              <span class="font-mono text-sm font-medium text-primary">{{ item.issueKey }}</span>
+            </div>
 
-          <h4 class="font-headline-sm text-headline-sm font-semibold text-on-surface group-hover:text-primary transition-colors">
-            [DEVOPS] Dựng Docker Compose local MySQL + Ollama
-          </h4>
+            <h4 class="text-sm font-normal text-slate-900 dark:text-white group-hover:text-primary transition-colors leading-snug">
+              {{ item.title }}
+            </h4>
 
-          <div class="flex items-center justify-between pt-2 border-t border-surface-container-highest">
-            <span class="font-label-sm text-[11px] text-emerald-600 font-semibold">1/3 Subtasks</span>
-            <div class="flex items-center gap-2">
-              <span class="font-bold text-primary font-label-sm text-[11px]">5 SP</span>
-              <div class="w-6 h-6 rounded-full bg-primary text-on-primary font-label-sm text-[10px] font-bold flex items-center justify-center">TH</div>
+            <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700/60 text-sm">
+              <div class="flex items-center gap-1 no-drawer">
+                <button (click)="moveStatus(item, 'prev', $event)" class="p-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200">
+                  <span class="material-symbols-outlined text-[16px]">arrow_back</span>
+                </button>
+                <button (click)="moveStatus(item, 'next', $event)" class="px-2 py-0.5 rounded bg-purple-50 text-purple-700 font-normal hover:bg-purple-100 flex items-center gap-0.5 text-sm">
+                  <span>Review</span>
+                  <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+                </button>
+              </div>
+
+              <div class="flex items-center gap-2 no-drawer">
+                <span class="font-medium text-primary text-sm font-mono bg-primary/10 px-2 py-0.5 rounded">{{ item.storyPoints }} SP</span>
+                <span class="text-slate-500 font-normal text-sm">{{ item.assigneeName }}</span>
+              </div>
             </div>
           </div>
-        </div>
+        }
       </div>
     </div>
 
-    <!-- Column 3: CODE REVIEW -->
-    <div class="rounded-2xl bg-surface-container-low/70 border border-outline-variant/20 p-4 space-y-4">
-      <div class="flex items-center justify-between font-label-md text-label-md font-bold text-on-surface">
+    <!-- COLUMN 3: CODE REVIEW -->
+    <div class="board-column rounded-xl bg-slate-100/80 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-3.5 space-y-3">
+      <div class="flex items-center justify-between text-sm font-medium text-slate-900 dark:text-slate-100 pb-1">
         <div class="flex items-center gap-2">
-          <span class="w-3 h-3 rounded-full bg-amber-500"></span>
-          <span>Code Review & PR</span>
-          <span class="w-5 h-5 rounded-full bg-amber-500/15 text-amber-600 text-[11px] font-bold flex items-center justify-center">1</span>
+          <span class="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
+          <span>Code Review</span>
+          <span class="w-5 h-5 rounded-full bg-purple-100 text-purple-800 text-xs font-normal flex items-center justify-center">
+            {{ codeReviewItems().length }}
+          </span>
         </div>
-        <button type="button" class="w-7 h-7 rounded-lg hover:bg-surface-container text-on-surface-variant flex items-center justify-center">+</button>
       </div>
 
-      <div class="space-y-3">
-        <div class="p-4 rounded-xl bg-surface-container-lowest border border-outline-variant/30 shadow-sm hover:shadow-md transition-all cursor-pointer space-y-3 group">
-          <div class="flex items-center justify-between">
-            <span class="px-2 py-0.5 rounded bg-amber-500/15 text-amber-600 font-label-sm text-[10px] font-bold">PR #14 Pending</span>
-            <span class="font-mono text-label-sm font-bold text-primary">SCRUMAI-158</span>
-          </div>
+      <div class="space-y-2.5 min-h-[400px]">
+        @for (item of codeReviewItems(); track item.id) {
+          <div
+            (click)="openTaskDrawer(item, $event)"
+            class="p-3.5 rounded-lg bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 shadow-2xs hover:shadow-sm transition-all cursor-pointer space-y-2.5 group relative"
+          >
+            <div class="flex items-center justify-between">
+              <span class="px-2 py-0.5 rounded text-xs font-normal uppercase bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300">
+                {{ item.issueType }}
+              </span>
+              <span class="font-mono text-sm font-medium text-primary">{{ item.issueKey }}</span>
+            </div>
 
-          <h4 class="font-headline-sm text-headline-sm font-semibold text-on-surface group-hover:text-primary transition-colors">
-            [TEST/PROCESS] Xây test suite Vitest & Playwright
-          </h4>
+            <h4 class="text-sm font-normal text-slate-900 dark:text-white group-hover:text-primary transition-colors leading-snug">
+              {{ item.title }}
+            </h4>
 
-          <div class="flex items-center justify-between pt-2 border-t border-surface-container-highest">
-            <span class="px-2 py-0.5 rounded bg-surface-container-high font-label-sm text-[10px] font-mono">QA, Testing</span>
-            <div class="flex items-center gap-2">
-              <span class="font-bold text-primary font-label-sm text-[11px]">3 SP</span>
-              <div class="w-6 h-6 rounded-full bg-secondary text-on-secondary font-label-sm text-[10px] font-bold flex items-center justify-center">HH</div>
+            <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700/60 text-sm">
+              <div class="flex items-center gap-1 no-drawer">
+                <button (click)="moveStatus(item, 'prev', $event)" class="p-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200">
+                  <span class="material-symbols-outlined text-[16px]">arrow_back</span>
+                </button>
+                <button (click)="moveStatus(item, 'next', $event)" class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-normal hover:bg-emerald-100 flex items-center gap-0.5 text-sm">
+                  <span>Approve</span>
+                  <span class="material-symbols-outlined text-[16px]">check</span>
+                </button>
+              </div>
+
+              <div class="flex items-center gap-2 no-drawer">
+                <span class="font-medium text-primary text-sm font-mono bg-primary/10 px-2 py-0.5 rounded">{{ item.storyPoints }} SP</span>
+                <span class="text-slate-500 font-normal text-sm">{{ item.assigneeName }}</span>
+              </div>
             </div>
           </div>
-        </div>
+        }
       </div>
     </div>
 
-    <!-- Column 4: DONE -->
-    <div class="rounded-2xl bg-surface-container-low/70 border border-outline-variant/20 p-4 space-y-4">
-      <div class="flex items-center justify-between font-label-md text-label-md font-bold text-on-surface">
+    <!-- COLUMN 4: DONE -->
+    <div class="board-column rounded-xl bg-slate-100/80 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-3.5 space-y-3">
+      <div class="flex items-center justify-between text-sm font-medium text-slate-900 dark:text-slate-100 pb-1">
         <div class="flex items-center gap-2">
-          <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
-          <span>Hoàn Thành (Done)</span>
-          <span class="w-5 h-5 rounded-full bg-emerald-500/15 text-emerald-600 text-[11px] font-bold flex items-center justify-center">4</span>
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+          <span>Done (Hoàn thành)</span>
+          <span class="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-normal flex items-center justify-center">
+            {{ doneItems().length }}
+          </span>
         </div>
-        <button type="button" class="w-7 h-7 rounded-lg hover:bg-surface-container text-on-surface-variant flex items-center justify-center">+</button>
       </div>
 
-      <div class="space-y-3">
-        <div class="p-4 rounded-xl bg-surface-container-lowest border border-outline-variant/30 opacity-80 hover:opacity-100 shadow-sm transition-all cursor-pointer space-y-3 group">
-          <div class="flex items-center justify-between">
-            <span class="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-600 font-label-sm text-[10px] font-bold">Verified</span>
-            <span class="font-mono text-label-sm font-bold text-primary">SCRUMAI-149</span>
-          </div>
+      <div class="space-y-2.5 min-h-[400px]">
+        @for (item of doneItems(); track item.id) {
+          <div
+            (click)="openTaskDrawer(item, $event)"
+            class="p-3.5 rounded-lg bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 shadow-2xs opacity-85 hover:opacity-100 transition-all cursor-pointer space-y-2.5 group relative"
+          >
+            <div class="flex items-center justify-between">
+              <span class="px-2 py-0.5 rounded text-xs font-normal uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                Verified
+              </span>
+              <span class="font-mono text-sm font-medium text-primary">{{ item.issueKey }}</span>
+            </div>
 
-          <h4 class="font-headline-sm text-headline-sm font-semibold text-on-surface line-through">
-            Quy hoạch kiến trúc Server Lab HUCE
-          </h4>
+            <h4 class="text-sm font-normal text-slate-900 dark:text-white line-through leading-snug">
+              {{ item.title }}
+            </h4>
 
-          <div class="flex items-center justify-between pt-2 border-t border-surface-container-highest">
-            <span class="px-2 py-0.5 rounded bg-surface-container-high font-label-sm text-[10px] font-mono">Architecture</span>
-            <div class="flex items-center gap-2">
-              <span class="font-bold text-primary font-label-sm text-[11px]">8 SP</span>
-              <div class="w-6 h-6 rounded-full bg-tertiary-container text-on-tertiary font-label-sm text-[10px] font-bold flex items-center justify-center">PH</div>
+            <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700/60 text-sm">
+              <button (click)="moveStatus(item, 'prev', $event)" class="p-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200 no-drawer" title="Mở lại">
+                <span class="material-symbols-outlined text-[16px]">replay</span>
+              </button>
+
+              <div class="flex items-center gap-2 no-drawer">
+                <span class="font-medium text-emerald-600 text-sm font-mono bg-emerald-50 px-2 py-0.5 rounded">{{ item.storyPoints }} SP</span>
+                <span class="text-slate-500 font-normal text-sm">{{ item.assigneeName }}</span>
+              </div>
             </div>
           </div>
-        </div>
+        }
       </div>
     </div>
 

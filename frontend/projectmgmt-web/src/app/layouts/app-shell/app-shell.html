@@ -1,78 +1,93 @@
-<header class="fixed top-0 w-full h-14 z-50 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between px-4 transition-all">
-  <!-- Topbar Left: Brand & Navigation -->
-  <div class="flex items-center gap-6">
-    <a routerLink="/projects" class="flex items-center gap-2.5 group select-none">
+<!-- Global Transparent Backdrop Overlay for Flyouts -->
+@if (isRecentFlyoutOpen() || headerSearchResults().length > 0) {
+  <div class="fixed inset-0 z-40 bg-transparent" (click)="closeFlyouts()"></div>
+}
+
+<!-- Global Topbar Header -->
+<header class="fixed top-0 w-full h-14 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between px-4 transition-all shadow-xs">
+  <!-- Topbar Left: Brand & Collapsible Toggle -->
+  <div class="flex items-center gap-3 shrink-0">
+    <button (click)="toggleSidebar()" title="Thu / Mở Sidebar Menu (Hover chuột để tự động mở rộng)" class="w-8 h-8 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">
+      <span class="material-symbols-outlined text-[20px]">menu</span>
+    </button>
+
+    <a routerLink="/for-you" title="Trang chủ Dành Cho Bạn (HUCE Scrum Platform)" class="flex items-center gap-2.5 group select-none">
       <img alt="Logo HUCE" class="w-8 h-8 rounded-lg object-contain bg-white p-0.5 shadow-sm ring-1 ring-primary/20 group-hover:scale-105 transition-transform" src="assets/images/huce-branding/huce-official-logo.png" />
       <div class="flex flex-col">
-        <span class="font-headline font-bold text-slate-900 dark:text-white text-sm tracking-tight leading-tight">HUCE Scrum AI</span>
-        <span class="text-[10px] text-slate-500 font-medium tracking-wider uppercase leading-none">Enterprise Agile</span>
+        <span class="font-headline font-bold text-slate-900 dark:text-white text-base tracking-tight leading-tight">HUCE Scrum Platform</span>
+        <span class="text-sm text-slate-500 font-medium tracking-wide leading-none">Hệ thống Quản lý Dự án</span>
       </div>
     </a>
-
-    <nav class="hidden md:flex items-center gap-1">
-      <a routerLink="/projects" routerLinkActive="text-primary font-semibold bg-slate-100 dark:bg-slate-800" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-        <span class="material-symbols-outlined text-[16px]">grid_view</span>
-        Không gian làm việc
-      </a>
-      <a routerLink="/board" routerLinkActive="text-primary font-semibold bg-slate-100 dark:bg-slate-800" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-        <span class="material-symbols-outlined text-[16px]">history</span>
-        Gần đây
-      </a>
-      <a routerLink="/backlog" routerLinkActive="text-primary font-semibold bg-slate-100 dark:bg-slate-800" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-        <span class="material-symbols-outlined text-[16px]">star</span>
-        Đánh dấu
-      </a>
-    </nav>
   </div>
 
-  <!-- Topbar Center: Quick Search -->
-  <div class="flex-1 max-w-md mx-6 hidden lg:block">
-    <div class="relative flex items-center w-full">
+  <!-- Topbar Center: Quick Search with Live Results Preview Dropdown -->
+  <div class="flex-1 max-w-xl mx-6 hidden md:block relative">
+    <div class="relative flex items-center w-full z-50">
       <span class="material-symbols-outlined absolute left-3 text-[18px] text-slate-400 pointer-events-none">search</span>
       <input
         type="text"
-        placeholder="Tìm kiếm công việc, sprint, tài liệu kỹ thuật... (Ctrl + K)"
-        class="w-full h-8 pl-9 pr-4 rounded-lg bg-slate-100 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 text-xs font-normal border border-transparent focus:border-primary focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all"
+        [ngModel]="headerSearchQuery()"
+        (ngModelChange)="headerSearchQuery.set($event)"
+        placeholder="Tìm kiếm công việc, dự án, tài liệu... (Ctrl + K)"
+        title="Nhập từ khóa để tìm kiếm nhanh công việc và dự án"
+        class="w-full h-9 pl-9 pr-14 rounded-xl bg-slate-100 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 text-sm font-normal border border-transparent focus:border-primary focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all shadow-2xs"
       />
+      <kbd class="absolute right-2.5 px-2 py-0.5 rounded text-sm font-mono font-semibold bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 pointer-events-none">Ctrl K</kbd>
     </div>
+
+    <!-- Live Search Dropdown Popup Box -->
+    @if (headerSearchResults().length > 0) {
+      <div class="absolute top-11 left-0 right-0 z-50 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-3 flex flex-col gap-2 animate-fade-in">
+        <span class="text-sm font-bold uppercase tracking-wider text-slate-400 px-2">Kết quả tìm kiếm:</span>
+        <div class="flex flex-col gap-1 max-h-64 overflow-y-auto">
+          @for (item of headerSearchResults(); track item.id) {
+            <button
+              (click)="openSearchResult(item)"
+              [title]="'Xem chi tiết công việc ' + item.issueKey + ': ' + item.title"
+              class="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-left transition-colors cursor-pointer"
+            >
+              <span class="material-symbols-outlined text-[18px] text-primary">check_box</span>
+              <div class="flex flex-col truncate flex-1">
+                <span class="text-sm font-bold text-slate-900 dark:text-white truncate">{{ item.title }}</span>
+                <span class="text-sm text-slate-400 font-mono">{{ item.issueKey }} • {{ item.sprintName }}</span>
+              </div>
+              <span class="px-2.5 py-1 rounded text-sm font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                {{ item.statusName }}
+              </span>
+            </button>
+          }
+        </div>
+      </div>
+    }
   </div>
 
-  <!-- Topbar Right: Actions & User Avatar -->
-  <div class="flex items-center gap-3">
-    <a routerLink="/projects/new" class="hidden sm:flex items-center gap-1 h-8 px-3 rounded-lg bg-primary hover:bg-primary-container text-white font-medium text-xs shadow-sm transition-all hover:shadow">
-      <span class="material-symbols-outlined text-[16px]">add</span>
-      Tạo mới
-    </a>
+  <!-- Topbar Right: Actions (+ Tạo việc mới CTA & Profile) -->
+  <div class="flex items-center gap-3 shrink-0">
+    <button
+      (click)="openCreateTaskModal()"
+      title="Tạo mới công việc (Task / Story / Bug / Epic)"
+      class="flex items-center gap-1.5 h-9 px-4 rounded-xl bg-primary hover:bg-primary-container text-white font-bold text-sm shadow-xs hover:shadow transition-all shrink-0 cursor-pointer"
+    >
+      <span class="material-symbols-outlined text-[18px]">add</span>
+      <span>Tạo việc mới</span>
+    </button>
 
-    <a routerLink="/ai-dataops" class="hidden md:flex items-center gap-1.5 h-8 px-3 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-medium text-xs hover:brightness-110 transition-all shadow-sm">
-      <span class="material-symbols-outlined text-[16px]">auto_awesome</span>
-      <span>AI Assistant</span>
-      <span class="px-1 py-0.2 bg-white/20 rounded text-[9px] uppercase font-bold">Beta</span>
-    </a>
-
-    <div class="flex items-center gap-1 text-slate-500 border-l border-slate-200 dark:border-slate-800 pl-3">
-      <a routerLink="/notifications" class="relative w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors">
+    <div class="flex items-center gap-1 text-slate-500 border-l border-slate-200 dark:border-slate-800 pl-2">
+      <a routerLink="/notifications" title="Trung tâm Thông báo" class="relative w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors">
         <span class="material-symbols-outlined text-[20px]">notifications</span>
         @if (identity.unreadCount() > 0) {
           <span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-slate-900"></span>
         }
       </a>
-      <a routerLink="/profile" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors">
-        <span class="material-symbols-outlined text-[20px]">settings</span>
-      </a>
     </div>
 
-    <!-- User Profile Dropdown Chip -->
     @if (identity.authState().currentUser; as user) {
       <div class="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-slate-800">
-        <a routerLink="/profile" class="flex items-center gap-2.5 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors group">
-          <div class="relative">
-            <img [src]="user.avatarUrl || 'https://lh3.googleusercontent.com/aida/AEtjO1XtHjbcVDz-UBjctM0LfVUGmqUeR39WQIoExjpXXhoH4Wu_I9_Qpk42NbzSi5dIoyYQuxC6PmMSr__bvB8G1iRv51zwwYHyLI9epDcSeaSJ_23pgMSoDqCavTtJMnh_VUr1XiaX_dfIJVrOpVNtqTGgwFT5FuXj3i9tQVUICLqvROYKaCksEl97aHgdr2n-KIVSDs0bZzIZ5hDOpx0AeyayjF5Y_iybOHjJnpBXyyQz40C4Rx5A_y32U-v-DZxAw_gb18RoyaUMMA'" [alt]="user.displayName" class="w-8 h-8 rounded-full object-cover ring-2 ring-primary/30" />
-            <span class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900"></span>
-          </div>
+        <a routerLink="/profile" [title]="'Hồ sơ cá nhân: ' + user.displayName + ' (' + user.roleName + ')'" class="flex items-center gap-2 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors group">
+          <img [src]="user.avatarUrl || 'assets/images/huce-branding/huce-official-logo.png'" [alt]="user.displayName" class="w-8 h-8 rounded-full object-cover ring-2 ring-primary/30" />
           <div class="hidden xl:flex flex-col text-left">
-            <span class="text-xs font-semibold text-slate-900 dark:text-white leading-tight group-hover:text-primary transition-colors">{{ user.displayName }}</span>
-            <span class="text-[10px] text-slate-500 leading-none">{{ user.roleName }}</span>
+            <span class="text-sm font-semibold text-slate-900 dark:text-white leading-tight group-hover:text-primary transition-colors">{{ user.displayName }}</span>
+            <span class="text-sm text-slate-500 leading-none">{{ user.roleName }}</span>
           </div>
         </a>
       </div>
@@ -81,90 +96,344 @@
 </header>
 
 <div class="pt-14 flex min-h-screen bg-slate-50 dark:bg-slate-950">
-  <!-- Jira Left Sidebar Navigation -->
-  <aside class="w-64 fixed left-0 top-14 bottom-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-r border-slate-200/80 dark:border-slate-800 flex flex-col justify-between p-3 select-none">
-    <div class="flex flex-col gap-4">
-      <!-- Project Workspace Header -->
-      <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-100/70 dark:bg-slate-800/60 border border-slate-200/50 dark:border-slate-700/50">
-        <div class="flex items-center gap-2.5 overflow-hidden">
-          <div class="w-7 h-7 rounded-lg bg-primary text-white flex items-center justify-center font-bold shrink-0">
-            <span class="material-symbols-outlined text-[16px]">apartment</span>
-          </div>
-          <div class="flex flex-col truncate">
-            <span class="text-xs font-semibold text-slate-900 dark:text-white truncate">HUCE AI Lab Project</span>
-            <span class="text-[10px] text-slate-500 truncate">Scrum Agile · SCRUMAI</span>
-          </div>
-        </div>
-      </div>
+  
+  <!-- App-Level Left Sidebar Navigation -->
+  <aside
+    [class.w-60]="isSidebarExpanded()"
+    [class.w-14]="!isSidebarExpanded()"
+    class="fixed left-0 top-14 bottom-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-r border-slate-200/80 dark:border-slate-800 flex flex-col justify-between p-2.5 select-none transition-all duration-200 ease-out"
+  >
+    <div class="flex flex-col gap-3 overflow-x-hidden">
+      
+      <!-- Primary Global Nav Links -->
+      <nav class="flex flex-col gap-1">
+        <!-- For You -->
+        <a
+          routerLink="/for-you"
+          routerLinkActive="bg-primary/10 text-primary font-bold"
+          [title]="!isSidebarExpanded() ? 'Dành cho bạn (For You)' : 'Xem trang cá nhân & công việc được giao'"
+          class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors whitespace-nowrap"
+        >
+          <span class="material-symbols-outlined text-[20px] shrink-0">account_circle</span>
+          @if (isSidebarExpanded()) {
+            <span class="truncate">Dành cho bạn (For You)</span>
+          }
+        </a>
 
-      <!-- Navigation Section: Agile Planning -->
-      <div class="flex flex-col gap-1">
-        <div class="px-2 pt-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-          Kế hoạch & Agile
-        </div>
-        <nav class="flex flex-col gap-0.5">
-          @for (item of mainNav; track item.path) {
-            <a
-              [routerLink]="item.path"
-              routerLinkActive="bg-primary/10 text-primary font-semibold shadow-xs"
-              class="jira-nav-link flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-all"
-            >
-              <div class="flex items-center gap-2.5">
-                <span class="material-symbols-outlined text-[18px]">{{ item.icon }}</span>
-                <span>{{ item.label }}</span>
-              </div>
-              @if (item.badge && identity.unreadCount() > 0) {
-                <span class="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-primary text-white">
-                  {{ identity.unreadCount() }}
-                </span>
+        <!-- Recent (With Flyout Dropdown Trigger) -->
+        <div class="relative">
+          <button
+            (click)="toggleRecentFlyout()"
+            [title]="!isSidebarExpanded() ? 'Gần đây (Recent)' : 'Xem công việc vừa truy cập gần đây'"
+            class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left whitespace-nowrap cursor-pointer"
+          >
+            <div class="flex items-center gap-3 min-w-0">
+              <span class="material-symbols-outlined text-[20px] shrink-0">schedule</span>
+              @if (isSidebarExpanded()) {
+                <span class="truncate">Gần đây (Recent)</span>
               }
-            </a>
-          }
-        </nav>
-      </div>
+            </div>
+            @if (isSidebarExpanded()) {
+              <span class="material-symbols-outlined text-[16px] text-slate-400 shrink-0">chevron_right</span>
+            }
+          </button>
 
-      <!-- Navigation Section: Admin & Governance -->
-      <div class="flex flex-col gap-1 border-t border-slate-200/60 dark:border-slate-800 pt-3">
-        <div class="px-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-          Hệ thống & Cài đặt
-        </div>
-        <nav class="flex flex-col gap-0.5">
-          @for (item of settingsNav; track item.path) {
-            <a
-              [routerLink]="item.path"
-              routerLinkActive="bg-primary/10 text-primary font-semibold shadow-xs"
-              class="jira-nav-link flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-all"
+          <!-- Dynamic Positioned Recent Flyout Dropdown Popup -->
+          @if (isRecentFlyoutOpen()) {
+            <div
+              [class.left-60]="isSidebarExpanded()"
+              [class.left-14]="!isSidebarExpanded()"
+              class="fixed top-16 z-50 w-80 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-4 flex flex-col gap-3 animate-fade-in transition-all"
             >
-              <span class="material-symbols-outlined text-[18px]">{{ item.icon }}</span>
-              <span>{{ item.label }}</span>
-            </a>
+              <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                <span class="text-sm font-bold text-slate-900 dark:text-white">Mở gần đây</span>
+                <button (click)="closeFlyouts()" title="Đóng" class="text-slate-400 hover:text-slate-600">
+                  <span class="material-symbols-outlined text-[16px]">close</span>
+                </button>
+              </div>
+
+              <div class="flex flex-col gap-1 max-h-60 overflow-y-auto">
+                @for (item of workItems(); track item.id) {
+                  <button
+                    (click)="openRecentItem(item)"
+                    [title]="item.issueKey + ': ' + item.title"
+                    class="flex items-center gap-2.5 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-left transition-colors cursor-pointer"
+                  >
+                    <span class="material-symbols-outlined text-[18px] text-primary">check_box</span>
+                    <div class="flex flex-col truncate">
+                      <span class="text-sm font-bold text-slate-900 dark:text-white truncate">{{ item.title }}</span>
+                      <span class="text-sm text-slate-400 font-mono">{{ item.issueKey }} • {{ item.sprintName }}</span>
+                    </div>
+                  </button>
+                }
+              </div>
+            </div>
           }
-        </nav>
-      </div>
+        </div>
+
+        <!-- Starred -->
+        <a
+          routerLink="/task-list"
+          routerLinkActive="bg-primary/10 text-primary font-bold"
+          [title]="!isSidebarExpanded() ? 'Đã đánh dấu (Starred)' : 'Xem danh sách công việc quan trọng đã đánh dấu'"
+          class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors whitespace-nowrap"
+        >
+          <span class="material-symbols-outlined text-[20px] shrink-0">star</span>
+          @if (isSidebarExpanded()) {
+            <span class="truncate">Đã đánh dấu (Starred)</span>
+          }
+        </a>
+
+        <!-- Collapsible Accordion Header for Spaces / Dự án -->
+        <div class="flex items-center justify-between px-3 pt-3 pb-1 border-t border-slate-200/60 dark:border-slate-800 mt-2">
+          @if (isSidebarExpanded()) {
+            <button
+              (click)="toggleSpacesSection()"
+              title="Thu/Mở danh sách Dự án"
+              class="flex items-center gap-1 text-sm font-bold uppercase tracking-wider text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+            >
+              <span class="material-symbols-outlined text-[16px]">
+                {{ isSpacesSectionExpanded() ? 'expand_more' : 'chevron_right' }}
+              </span>
+              <span>Dự án (Projects) ({{ projectsList().length }})</span>
+            </button>
+          } @else {
+            <button
+              (click)="toggleSpacesSection()"
+              title="Thu/Mở danh sách Dự án"
+              class="w-full flex justify-center text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+            >
+              <span class="material-symbols-outlined text-[18px]">folder</span>
+            </button>
+          }
+          @if (isSidebarExpanded()) {
+            <button
+              (click)="openCreateProjectModal()"
+              title="Khởi tạo Dự án mới (+ Create Space)"
+              class="w-6 h-6 rounded hover:bg-primary/20 hover:text-primary text-slate-500 flex items-center justify-center transition-colors cursor-pointer"
+            >
+              <span class="material-symbols-outlined text-[18px]">add</span>
+            </button>
+          }
+        </div>
+
+        <!-- Active Project Spaces List (Single Line Layout + Font size 14px) -->
+        @if (isSpacesSectionExpanded()) {
+          @for (proj of projectsList(); track proj.id) {
+            <button
+              (click)="selectProjectSpace(proj)"
+              [class.bg-primary/10]="activeProject().id === proj.id"
+              [class.text-primary]="activeProject().id === proj.id"
+              [title]="proj.name + ' (' + proj.projectKey + ')'"
+              class="w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all text-left whitespace-nowrap overflow-hidden cursor-pointer group"
+            >
+              <div class="flex items-center gap-2.5 min-w-0 flex-1">
+                <span class="w-6 h-6 rounded-md bg-primary text-white flex items-center justify-center font-mono font-bold text-xs shrink-0 shadow-2xs">
+                  {{ proj.projectKey }}
+                </span>
+                @if (isSidebarExpanded()) {
+                  <span class="truncate text-sm font-semibold text-slate-800 dark:text-slate-200 group-hover:text-primary transition-colors">
+                    {{ proj.name }}
+                  </span>
+                }
+              </div>
+              @if (isSidebarExpanded() && activeProject().id === proj.id) {
+                <span class="w-2 h-2 rounded-full bg-primary shrink-0"></span>
+              }
+            </button>
+          }
+        }
+
+        <!-- Dashboards & Teams -->
+        <div class="flex flex-col gap-1 border-t border-slate-200/60 dark:border-slate-800 pt-2 mt-2">
+          <a
+            routerLink="/project/summary"
+            routerLinkActive="bg-primary/10 text-primary font-bold"
+            [title]="!isSidebarExpanded() ? 'Bảng tổng quan (Dashboards)' : 'Xem tổng quan báo cáo tiến độ dự án'"
+            class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors whitespace-nowrap"
+          >
+            <span class="material-symbols-outlined text-[20px] shrink-0">dashboard</span>
+            @if (isSidebarExpanded()) {
+              <span class="truncate">Bảng tổng quan (Dashboards)</span>
+            }
+          </a>
+
+          <a
+            routerLink="/project/members"
+            routerLinkActive="bg-primary/10 text-primary font-bold"
+            [title]="!isSidebarExpanded() ? 'Thành viên nhóm (Teams)' : 'Xem danh sách thành viên & phân quyền nhóm'"
+            class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors whitespace-nowrap"
+          >
+            <span class="material-symbols-outlined text-[20px] shrink-0">groups</span>
+            @if (isSidebarExpanded()) {
+              <span class="truncate">Thành viên nhóm (Teams)</span>
+            }
+          </a>
+        </div>
+      </nav>
+
     </div>
 
-    <!-- AI Auto-Pilot Status Footer -->
-    <div class="flex flex-col gap-2 pt-3 border-t border-slate-200/60 dark:border-slate-800">
-      <div class="flex items-center justify-between p-2 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/40">
-        <div class="flex items-center gap-2">
-          <span class="material-symbols-outlined text-[18px] text-indigo-600 dark:text-indigo-400">psychology</span>
-          <div class="flex flex-col">
-            <span class="text-[11px] font-semibold text-slate-900 dark:text-white">AI Sprint Auto-Pilot</span>
-            <span class="text-[9px] text-slate-500">Tối ưu 12 Tasks</span>
-          </div>
-        </div>
-        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-      </div>
-
-      <button (click)="logout()" class="flex items-center gap-2 w-full px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors">
-        <span class="material-symbols-outlined text-[18px]">logout</span>
-        Đăng xuất
+    <!-- Logout Footer -->
+    <div class="flex flex-col gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-800">
+      <button
+        (click)="logout()"
+        title="Đăng xuất khỏi tài khoản hệ thống"
+        class="flex items-center gap-3 w-full px-3 py-2 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer whitespace-nowrap"
+      >
+        <span class="material-symbols-outlined text-[20px] shrink-0">logout</span>
+        @if (isSidebarExpanded()) {
+          <span class="truncate">Đăng xuất (Logout)</span>
+        }
       </button>
     </div>
   </aside>
 
-  <!-- Main Content Area -->
-  <main class="pl-64 w-full min-h-[calc(100vh-3.5rem)] p-6">
-    <router-outlet />
+  <!-- Main Content Area (pt-28 when sub-header is present so content is never obscured) -->
+  <main
+    [class.pl-60]="isSidebarExpanded()"
+    [class.pl-14]="!isSidebarExpanded()"
+    [class.pt-28]="isProjectRoute()"
+    class="w-full min-h-[calc(100vh-3.5rem)] flex flex-col transition-all duration-200 ease-out"
+  >
+    <!-- Context-Aware Project Navigation Sub-Header (PERMANENTLY FIXED top-14, 1-Row Non-Wrapping) -->
+    @if (isProjectRoute()) {
+      <div
+        [class.left-60]="isSidebarExpanded()"
+        [class.left-14]="!isSidebarExpanded()"
+        class="fixed top-14 right-0 z-30 h-14 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800 pl-6 pr-4 flex items-center justify-between gap-3 shadow-xs transition-all duration-200 select-none overflow-hidden"
+      >
+        
+        <!-- Left: Active Project Info Badge -->
+        <div
+          [title]="'Dự án hiện tại: ' + activeProject().name + ' (' + activeProject().projectKey + ')'"
+          class="flex items-center gap-2.5 pr-3 border-r border-slate-200 dark:border-slate-800 shrink-0 cursor-default"
+        >
+          <div class="w-7 h-7 rounded-lg bg-primary text-white flex items-center justify-center font-extrabold text-xs shadow-2xs">
+            {{ activeProject().projectKey }}
+          </div>
+          <div class="hidden sm:flex items-center gap-1.5">
+            <span class="text-sm font-bold text-slate-900 dark:text-white tracking-tight truncate max-w-[130px]">
+              {{ activeProject().name }}
+            </span>
+            <span class="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-mono font-bold text-xs">
+              {{ activeProject().projectKey }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Center/Right: Project Navigation Tabs (Clean Single Line, Zero Scroll) -->
+        <div class="flex-1 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 min-w-0">
+          <a routerLink="/project/summary" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Bảng tổng quan dự án" class="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0">
+            <span class="material-symbols-outlined text-[18px]">dashboard</span>
+            <span>Tổng quan</span>
+          </a>
+          <a routerLink="/roadmap" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Lộ trình Gantt chart dự án" class="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0">
+            <span class="material-symbols-outlined text-[18px]">timeline</span>
+            <span>Lộ trình</span>
+          </a>
+          <a routerLink="/board" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Bảng Scrum Kanban quản lý Sprint" class="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0">
+            <span class="material-symbols-outlined text-[18px]">view_kanban</span>
+            <span>Scrum</span>
+          </a>
+          <a routerLink="/backlog" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Kế hoạch Backlog các Sprints" class="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0">
+            <span class="material-symbols-outlined text-[18px]">format_list_bulleted</span>
+            <span>Backlog</span>
+          </a>
+          <a routerLink="/task-list" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Danh sách công việc đầy đủ" class="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0">
+            <span class="material-symbols-outlined text-[18px]">table_rows</span>
+            <span>Danh sách</span>
+          </a>
+          <a routerLink="/reports" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Báo cáo tiến độ & Burndown chart" class="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0">
+            <span class="material-symbols-outlined text-[18px]">analytics</span>
+            <span>Báo cáo</span>
+          </a>
+          <a routerLink="/project/members" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Danh sách thành viên dự án" class="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0">
+            <span class="material-symbols-outlined text-[18px]">settings</span>
+            <span>Thành viên</span>
+          </a>
+        </div>
+
+      </div>
+    }
+
+    <!-- Page Body View Container -->
+    <div class="p-6 flex-1">
+      <router-outlet />
+    </div>
   </main>
+
+</div>
+
+<!-- Reusable Task Detail Slide-over Right Drawer -->
+@if (projectService.activeDrawerTask(); as activeTask) {
+  <app-task-detail-drawer
+    [task]="activeTask"
+    (close)="closeActiveDrawer()"
+  ></app-task-detail-drawer>
+}
+
+<!-- Reusable Global Create Task Modal -->
+@if (isCreateTaskModalOpen()) {
+  <app-create-task-modal
+    (close)="closeCreateTaskModal()"
+  ></app-create-task-modal>
+}
+
+<!-- Reusable Global Create Project Modal -->
+@if (isCreateProjectModalOpen()) {
+  <app-create-project-modal
+    (close)="closeCreateProjectModal()"
+  ></app-create-project-modal>
+}
+
+<!-- Reusable Excel Import Modal -->
+@if (isExcelImportModalOpen()) {
+  <app-excel-import-modal
+    (close)="closeExcelImportModal()"
+  ></app-excel-import-modal>
+}
+
+<!-- Custom UI Popup Confirm Dialog Box -->
+<app-confirm-dialog></app-confirm-dialog>
+
+<!-- Global Toast Notifications Floating Stack -->
+<div class="fixed bottom-6 right-6 z-50 flex flex-col gap-3 max-w-md w-full pointer-events-none">
+  @for (toast of toastService.toasts(); track toast.id) {
+    <div
+      class="pointer-events-auto flex items-start gap-3 p-4 rounded-2xl shadow-xl border backdrop-blur-xl animate-fade-in transition-all"
+      [class.bg-emerald-50]="toast.type === 'success'"
+      [class.border-emerald-200]="toast.type === 'success'"
+      [class.text-emerald-900]="toast.type === 'success'"
+      [class.bg-red-50]="toast.type === 'error'"
+      [class.border-red-200]="toast.type === 'error'"
+      [class.text-red-900]="toast.type === 'error'"
+      [class.bg-amber-50]="toast.type === 'warning'"
+      [class.border-amber-200]="toast.type === 'warning'"
+      [class.text-amber-900]="toast.type === 'warning'"
+      [class.bg-blue-50]="toast.type === 'info'"
+      [class.border-blue-200]="toast.type === 'info'"
+      [class.text-blue-900]="toast.type === 'info'"
+    >
+      <span class="material-symbols-outlined text-[24px] shrink-0 mt-0.5"
+        [class.text-emerald-600]="toast.type === 'success'"
+        [class.text-red-600]="toast.type === 'error'"
+        [class.text-amber-600]="toast.type === 'warning'"
+        [class.text-blue-600]="toast.type === 'info'"
+      >
+        {{ toast.type === 'success' ? 'check_circle' : toast.type === 'error' ? 'error' : toast.type === 'warning' ? 'warning' : 'info' }}
+      </span>
+
+      <div class="flex-1 text-sm">
+        <h4 class="font-bold text-base leading-snug">{{ toast.title }}</h4>
+        @if (toast.message) {
+          <p class="text-sm opacity-90 mt-0.5">{{ toast.message }}</p>
+        }
+      </div>
+
+      <button (click)="toastService.remove(toast.id)" title="Đóng thông báo" class="text-slate-400 hover:text-slate-600 p-1">
+        <span class="material-symbols-outlined text-[18px]">close</span>
+      </button>
+    </div>
+  }
 </div>

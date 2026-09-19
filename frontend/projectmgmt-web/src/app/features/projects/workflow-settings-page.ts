@@ -9,13 +9,15 @@ import {
   ProjectStatus,
   WorkflowTransition
 } from '../../core/services/project-management.service';
+import { ConfirmDialogService } from '../../core/services/confirm-dialog.service';
+import { ToastService } from '../../core/services/toast.service';
 
 @Component({
   selector: 'app-workflow-settings-page',
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink],
   template: `
-    <div class="workflow-container">
+    <div class="workflow-container font-sans text-slate-900 dark:text-slate-100">
       <div class="breadcrumb">
         <a routerLink="/projects">Dự án</a> &gt;
         @if (project()) {
@@ -26,8 +28,8 @@ import {
 
       <div class="page-header">
         <div>
-          <h1>Cấu hình Workflow & Chuyển trạng thái</h1>
-          <p class="subtitle">Thiết lập luật chuyển đổi trạng thái (From ➔ To) và quyền bắt buộc cho dự án {{ project()?.name }}</p>
+          <h1 style="font-family: Arial, sans-serif;">Cấu hình Quy trình Workflow (Workflow Settings)</h1>
+          <p class="subtitle">Quản lý các bước trạng thái, áp dụng quy trình mẫu và định nghĩa luật chuyển đổi cho dự án {{ project()?.name }}</p>
         </div>
       </div>
 
@@ -38,31 +40,85 @@ import {
         <a [routerLink]="['/projects', projectId, 'settings', 'board']" class="tab-item">📋 Cấu hình Board</a>
       </div>
 
-      @if (alertMessage()) {
-        <div class="alert" [class.alert-success]="alertType() === 'success'" [class.alert-error]="alertType() === 'error'">
-          {{ alertMessage() }}
-        </div>
-      }
 
-      <!-- Statuses overview -->
+
+      <!-- 1. Apply Workflow Template Section -->
+      <div class="card bg-gradient-to-r from-blue-50/50 to-indigo-50/50 border-blue-200">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h3 style="font-family: Arial, sans-serif;" class="text-blue-900 flex items-center gap-2">
+              <span>🚀</span> Áp dụng Quy trình Mẫu vào Dự án (Workflow Schemes)
+            </h3>
+            <p class="hint text-blue-700">Tự động cấu hình danh sách trạng thái và bảng Kanban theo chuẩn phương pháp Agile/Scrum.</p>
+          </div>
+
+          <div class="flex items-center gap-2.5 shrink-0">
+            <select
+              [ngModel]="selectedTemplate()"
+              (ngModelChange)="selectedTemplate.set($event)"
+              class="form-control text-sm font-semibold bg-white border-blue-300"
+            >
+              <option value="scrum-std">Standard Scrum (To Do ➔ In Progress ➔ Code Review ➔ Done)</option>
+              <option value="agile-qa">Agile Software Dev + QA (To Do ➔ In Progress ➔ Review ➔ QA ➔ Done)</option>
+              <option value="kanban-simple">Kanban Minimal (To Do ➔ In Progress ➔ Done)</option>
+              <option value="enterprise">Enterprise Compliance (Backlog ➔ Spec ➔ Dev ➔ Review ➔ QA ➔ Done)</option>
+            </select>
+
+            <button (click)="onApplyWorkflowTemplate()" class="btn btn-primary whitespace-nowrap">
+              Áp dụng ngay
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Manage Statuses in Project -->
       <div class="card">
-        <h3>Các trạng thái có sẵn trong dự án (Workflow Statuses)</h3>
-        <div class="status-tags">
+        <div class="flex items-center justify-between mb-3">
+          <h3 style="font-family: Arial, sans-serif;">Các trạng thái hiện tại ({{ statuses().length }} bước quy trình)</h3>
+          <span class="text-xs font-normal text-slate-500">Tự động đồng bộ với Backlog và Scrum Board</span>
+        </div>
+
+        <div class="status-tags mb-4">
           @for (s of statuses(); track s.id) {
-            <span class="status-badge" [class.badge-initial]="s.isInitial">
-              {{ s.name }}
-              @if (s.isInitial) {
-                <small>(Khởi đầu)</small>
+            <div class="status-badge-item flex items-center gap-2 px-3 py-1.5 rounded-xl border bg-slate-50 border-slate-200 shadow-2xs">
+              <span class="w-2.5 h-2.5 rounded-full"
+                [class.bg-slate-400]="s.category === 'To Do'"
+                [class.bg-blue-500]="s.category === 'In Progress'"
+                [class.bg-emerald-500]="s.category === 'Done'"
+              ></span>
+              <span class="font-semibold text-sm text-slate-800">{{ s.name }}</span>
+              <span class="text-xs text-slate-400">({{ s.category }})</span>
+              
+              @if (!s.isInitial) {
+                <button (click)="onDeleteStatus(s)" class="text-red-500 hover:text-red-700 ml-1 text-xs font-bold" title="Xóa trạng thái này">✕</button>
               }
-            </span>
+            </div>
           }
+        </div>
+
+        <!-- Add New Status Form -->
+        <div class="flex items-center gap-2.5 pt-3 border-t border-slate-100">
+          <input
+            type="text"
+            [(ngModel)]="newStatusName"
+            placeholder="Tên trạng thái mới (VD: QA Testing, Ready for Deploy...)"
+            class="form-control text-sm flex-1"
+          />
+          <select [(ngModel)]="newStatusCategory" class="form-control text-sm w-44">
+            <option value="To Do">Phân loại: To Do</option>
+            <option value="In Progress">Phân loại: In Progress</option>
+            <option value="Done">Phân loại: Done</option>
+          </select>
+          <button (click)="onAddStatus()" [disabled]="!newStatusName.trim()" class="btn btn-secondary text-sm">
+            + Thêm Trạng Thái
+          </button>
         </div>
       </div>
 
       <div class="workflow-grid">
         <!-- Add Transition Form -->
         <div class="card form-box">
-          <h3>Thêm Transition mới</h3>
+          <h3 style="font-family: Arial, sans-serif;">Thêm Transition mới</h3>
           <p class="hint">Định nghĩa một đường đi cho phép Issue di chuyển từ trạng thái nguồn sang trạng thái đích.</p>
 
           <form (ngSubmit)="onCreateTransition()">
@@ -139,7 +195,7 @@ import {
         <!-- Transitions List -->
         <div class="card list-box">
           <div class="list-header">
-            <h3>Danh sách Transition hiện hành ({{ transitions().length }})</h3>
+            <h3 style="font-family: Arial, sans-serif;">Danh sách Transition hiện hành ({{ transitions().length }})</h3>
             <button (click)="loadWorkflowData()" class="btn btn-sm btn-secondary">Làm mới</button>
           </div>
 
@@ -472,6 +528,8 @@ import {
 export class WorkflowSettingsPage implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly projectService = inject(ProjectManagementService);
+  private readonly confirmService = inject(ConfirmDialogService);
+  private readonly toastService = inject(ToastService);
 
   projectId = '';
   readonly project = signal<Project | null>(null);
@@ -488,6 +546,10 @@ export class WorkflowSettingsPage implements OnInit {
     name: '',
     requiredPermissionCode: ''
   };
+
+  selectedTemplate = signal<string>('scrum-std');
+  newStatusName = '';
+  newStatusCategory = 'In Progress';
 
   ngOnInit(): void {
     this.projectId = this.route.snapshot.paramMap.get('id') || '';
@@ -518,6 +580,37 @@ export class WorkflowSettingsPage implements OnInit {
     });
   }
 
+  onApplyWorkflowTemplate(): void {
+    const updatedStatuses = this.projectService.applyWorkflowTemplateToProject(this.selectedTemplate());
+    this.statuses.set(updatedStatuses);
+    this.alertType.set('success');
+    this.alertMessage.set(`Đã áp dụng quy trình mẫu thành công! Dự án hiện có ${updatedStatuses.length} trạng thái quy trình.`);
+    this.toastService.success('Quy Trình Mới', `Đã cập nhật quy trình dự án với ${updatedStatuses.length} bước.`);
+  }
+
+  onAddStatus(): void {
+    if (!this.newStatusName.trim()) return;
+    const added = this.projectService.addProjectStatus(this.newStatusName.trim(), this.newStatusCategory);
+    this.statuses.set(this.projectService.projectStatuses());
+    this.toastService.success('Thêm Trạng Thái', `Đã thêm bước quy trình "${added.name}"`);
+    this.newStatusName = '';
+  }
+
+  onDeleteStatus(status: ProjectStatus): void {
+    this.confirmService.confirm({
+      title: 'Xóa Bước Quy Trình',
+      message: `Bạn có chắc muốn xóa trạng thái "${status.name}" khỏi quy trình dự án không?`,
+      type: 'warning',
+      confirmText: 'Xóa trạng thái',
+      cancelText: 'Hủy bỏ',
+      onConfirm: () => {
+        this.projectService.deleteProjectStatus(status.id);
+        this.statuses.set(this.projectService.projectStatuses());
+        this.toastService.warning('Đã Xóa Trạng Thái', `Đã xóa "${status.name}" khỏi quy trình.`);
+      }
+    });
+  }
+
   onCreateTransition(): void {
     this.alertMessage.set(null);
 
@@ -525,6 +618,7 @@ export class WorkflowSettingsPage implements OnInit {
     if (this.newTransition.fromStatusId === this.newTransition.toStatusId) {
       this.alertType.set('error');
       this.alertMessage.set('Lỗi: Trạng thái không thể tự chuyển sang chính nó (Self-transition bị chặn)!');
+      this.toastService.error('Lỗi Workflow', 'Trạng thái không thể tự chuyển sang chính nó');
       return;
     }
 
@@ -535,6 +629,7 @@ export class WorkflowSettingsPage implements OnInit {
     if (exists) {
       this.alertType.set('error');
       this.alertMessage.set('Lỗi: Luật chuyển đổi giữa 2 trạng thái này đã tồn tại (Trùng lặp bị chặn)!');
+      this.toastService.error('Lỗi Workflow', 'Luật chuyển đổi giữa 2 trạng thái này đã tồn tại');
       return;
     }
 
@@ -545,6 +640,7 @@ export class WorkflowSettingsPage implements OnInit {
         this.submitting.set(false);
         this.alertType.set('success');
         this.alertMessage.set(`Đã thêm thành công luật chuyển "${created.fromStatusName}" ➔ "${created.toStatusName}"!`);
+        this.toastService.success('Thêm Rule Workflow', `Đã tạo luật chuyển "${created.fromStatusName}" ➔ "${created.toStatusName}"`);
         this.newTransition = { fromStatusId: '', toStatusId: '', name: '', requiredPermissionCode: '' };
         this.loadWorkflowData();
       },
@@ -553,23 +649,33 @@ export class WorkflowSettingsPage implements OnInit {
         this.alertType.set('error');
         const problem = err?.error;
         this.alertMessage.set(problem?.title || problem?.message || 'Không thể tạo transition. Vui lòng kiểm tra lại.');
+        this.toastService.error('Lỗi', problem?.title || problem?.message || 'Không thể tạo transition.');
       }
     });
   }
 
   onDeleteTransition(t: WorkflowTransition): void {
-    if (confirm(`Bạn có chắc muốn xóa luật chuyển từ "${t.fromStatusName}" sang "${t.toStatusName}"?`)) {
-      this.projectService.deleteWorkflowTransition(t.id).subscribe({
-        next: () => {
-          this.alertType.set('success');
-          this.alertMessage.set('Đã xóa luật chuyển trạng thái thành công.');
-          this.loadWorkflowData();
-        },
-        error: (err) => {
-          this.alertType.set('error');
-          this.alertMessage.set(err?.error?.title || 'Không thể xóa transition.');
-        }
-      });
-    }
+    this.confirmService.confirm({
+      title: 'Xóa Luật Workflow',
+      message: `Bạn có chắc muốn xóa luật chuyển trạng thái từ "${t.fromStatusName}" sang "${t.toStatusName}" không?`,
+      type: 'warning',
+      confirmText: 'Xóa luật ngay',
+      cancelText: 'Hủy bỏ',
+      onConfirm: () => {
+        this.projectService.deleteWorkflowTransition(t.id).subscribe({
+          next: () => {
+            this.alertType.set('success');
+            this.alertMessage.set('Đã xóa luật chuyển trạng thái thành công.');
+            this.toastService.warning('Đã Xóa Rule', `Đã xóa luật chuyển "${t.fromStatusName}" ➔ "${t.toStatusName}"`);
+            this.loadWorkflowData();
+          },
+          error: (err) => {
+            this.alertType.set('error');
+            this.alertMessage.set(err?.error?.title || 'Không thể xóa transition.');
+            this.toastService.error('Lỗi', err?.error?.title || 'Không thể xóa transition.');
+          }
+        });
+      }
+    });
   }
 }
