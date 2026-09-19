@@ -5,6 +5,7 @@ using IdentityExperience.Infrastructure;
 using IdentityExperience.Infrastructure.IRepository;
 using IdentityExperience.Infrastructure.Repository;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.OpenApi;
 using Planning.Infrastructure;
 using ProjectMgmt.IdentityAccess.Contracts;
 using ProjectMgmt.Modules.IdentityExperience.Application.Services;
@@ -27,7 +28,16 @@ var serverVersionText = builder.Configuration["Database:ServerVersion"] ?? "8.0.
 var serverVersion = new MySqlServerVersion(Version.Parse(serverVersionText));
 
 builder.Services.AddControllers();
-builder.Services.AddOpenApi();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "ProjectMgmt API",
+        Version = "v1",
+        Description = "API cho hệ thống quản lý dự án ProjectMgmt."
+    });
+});
 builder.Services.AddAuthorization();
 builder.Services.AddHealthChecks();
 
@@ -72,12 +82,22 @@ builder.Services.AddScoped<IUserSkillService, UserLookupService>();
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
 {
-    app.MapOpenApi();
+    app.UseSwagger();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "ProjectMgmt API v1");
+        options.RoutePrefix = "swagger";
+        options.DocumentTitle = "ProjectMgmt API - Swagger";
+    });
 }
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment() && !app.Environment.IsStaging())
+{
+    app.UseHttpsRedirection();
+}
+
 app.UseAuthorization();
 app.MapControllers();
 app.MapHealthChecks("/health");
