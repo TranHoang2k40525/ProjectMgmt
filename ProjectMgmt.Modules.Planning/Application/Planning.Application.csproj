@@ -6,4 +6,7 @@
   <ItemGroup>
     <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\ProjectManagement\Application\**\*.cs" />
+  </ItemGroup>
 </Project>

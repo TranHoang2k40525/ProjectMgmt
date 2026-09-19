@@ -6,6 +6,13 @@ using IdentityExperience.Infrastructure.IRepository;
 using IdentityExperience.Infrastructure.Repository;
 using Microsoft.EntityFrameworkCore;
 using Planning.Infrastructure;
+using ProjectMgmt.IdentityAccess.Contracts;
+using ProjectMgmt.Modules.IdentityExperience.Application.Services;
+using ProjectMgmt.Modules.Planning.ProjectManagement.Application.IServices;
+using ProjectMgmt.Modules.Planning.ProjectManagement.Application.Services;
+using ProjectMgmt.Modules.Planning.ProjectManagement.Domain.IRepositories;
+using ProjectMgmt.Modules.Planning.ProjectManagement.Infrastructure.Repositories;
+using ProjectMgmt.ProjectManagement.Contracts;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -53,10 +60,15 @@ builder.Services.AddDbContext<DeliveryIntelligenceDbContext>(options =>
             mysql.MigrationsHistoryTable("__EFMigrationsHistory_DeliveryIntelligence");
             mysql.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null);
         }));
+
 // DI
 builder.Services.AddScoped<IIdentityRepository, IdentityRepository>();
 builder.Services.AddScoped<IAccountServices, AccountServices>();
-
+builder.Services.AddScoped<IProjectRepository, ProjectRepository>();
+builder.Services.AddScoped<IProjectManagementService, ProjectManagementService>();
+builder.Services.AddScoped<IProjectLookupService, ProjectLookupService>();
+builder.Services.AddScoped<IUserLookupService, UserLookupService>();
+builder.Services.AddScoped<IUserSkillService, UserLookupService>();
 
 var app = builder.Build();
 

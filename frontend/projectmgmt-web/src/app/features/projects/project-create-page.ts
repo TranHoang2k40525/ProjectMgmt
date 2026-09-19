@@ -324,7 +324,7 @@ export class ProjectCreatePage implements OnInit {
     // Tự động gợi ý Project Key từ Name nếu user chưa nhập key thủ công
     if (!this.formData.projectKey && name) {
       const words = name.trim().split(/\s+/);
-      let autoKey = '';
+      let autoKey: string;
       if (words.length === 1) {
         autoKey = words[0].slice(0, 4).toUpperCase();
       } else {

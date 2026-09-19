@@ -77,9 +77,10 @@ import {
             <h2>Chỉnh sửa thông tin cơ bản</h2>
             <form (ngSubmit)="onSaveGeneral()">
               <div class="form-group">
-                <label>Mã dự án (Project Key)</label>
+                <label for="projectKeyDisabled">Mã dự án (Project Key)</label>
                 <input
                   type="text"
+                  id="projectKeyDisabled"
                   [value]="project()?.projectKey"
                   disabled
                   class="form-control readonly-input"

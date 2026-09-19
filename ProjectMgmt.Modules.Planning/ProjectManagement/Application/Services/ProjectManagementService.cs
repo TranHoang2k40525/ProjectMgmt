@@ -1,7 +1,7 @@
 using System.Text.RegularExpressions;
 using ProjectMgmt.BuildingBlocks.Results;
 using ProjectMgmt.Modules.Planning.ProjectManagement.Application.IServices;
-using ProjectMgmt.Modules.Planning.ProjectManagement.Domain.Entities;
+using Planning.Domain.Entities;
 using ProjectMgmt.Modules.Planning.ProjectManagement.Domain.IRepositories;
 
 namespace ProjectMgmt.Modules.Planning.ProjectManagement.Application.Services;
@@ -40,7 +40,7 @@ public class ProjectManagementService : IProjectManagementService
             orgs = new List<Organization> { defaultOrg };
         }
 
-        var dtos = orgs.Select(x => new OrganizationDto(
+        IReadOnlyList<OrganizationDto> dtos = orgs.Select(x => new OrganizationDto(
             x.Id,
             x.Name,
             x.Slug,
@@ -86,7 +86,7 @@ public class ProjectManagementService : IProjectManagementService
     public async Task<Result<IReadOnlyList<ProjectDto>>> GetProjectsAsync(Guid? orgId = null, CancellationToken cancellationToken = default)
     {
         var projects = await _repository.GetAllProjectsAsync(orgId, cancellationToken);
-        var dtos = projects.Select(x => new ProjectDto(
+        IReadOnlyList<ProjectDto> dtos = projects.Select(x => new ProjectDto(
             x.Id,
             x.OrgId,
             x.ProjectKey,
@@ -307,7 +307,7 @@ public class ProjectManagementService : IProjectManagementService
         var transitions = await _repository.GetTransitionsByProjectAsync(projectId, cancellationToken);
         var statuses = (await _repository.GetStatusesAsync(projectId, cancellationToken)).ToDictionary(x => x.Id, x => x.Name);
 
-        var dtos = transitions.Select(t => new WorkflowTransitionItemDto(
+        IReadOnlyList<WorkflowTransitionItemDto> dtos = transitions.Select(t => new WorkflowTransitionItemDto(
             t.Id,
             t.ProjectId,
             t.FromStatusId,
@@ -427,7 +427,7 @@ public class ProjectManagementService : IProjectManagementService
     public async Task<Result<IReadOnlyList<BoardDto>>> GetBoardsAsync(Guid projectId, CancellationToken cancellationToken = default)
     {
         var boards = await _repository.GetBoardsByProjectAsync(projectId, cancellationToken);
-        var dtos = boards.Select(x => new BoardDto(
+        IReadOnlyList<BoardDto> dtos = boards.Select(x => new BoardDto(
             x.Id,
             x.ProjectId,
             x.Name,
@@ -473,7 +473,7 @@ public class ProjectManagementService : IProjectManagementService
         var columns = await _repository.GetBoardColumnsAsync(boardId, cancellationToken);
         var statuses = (await _repository.GetStatusesAsync(board.ProjectId, cancellationToken)).ToDictionary(x => x.Id, x => x.Name);
 
-        var dtos = columns.Select(c => new BoardColumnDto(
+        IReadOnlyList<BoardColumnDto> dtos = columns.Select(c => new BoardColumnDto(
             c.Id,
             c.BoardId,
             c.StatusId,
