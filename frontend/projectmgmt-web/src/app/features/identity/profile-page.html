@@ -1,0 +1,547 @@
+<div class="relative w-full min-h-screen bg-surface px-4 py-6 sm:px-6 lg:px-8 font-body-md text-body-md text-on-surface">
+  <div class="max-w-7xl mx-auto flex flex-col gap-6 animate-fade-in">
+    
+    <!-- Hero Banner Card from Stitch Screen 3095f5e818b74b43984bdd26650c7398 -->
+    @if (user(); as u) {
+      <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary via-primary-container to-secondary p-6 sm:p-8 text-on-primary shadow-lg border border-outline-variant/20">
+        <div class="absolute -right-16 -top-20 w-80 h-80 rounded-full bg-secondary-container/20 blur-3xl pointer-events-none"></div>
+        <div class="absolute -left-12 -bottom-20 w-72 h-72 rounded-full bg-tertiary-container/15 blur-2xl pointer-events-none"></div>
+        
+        <div class="relative flex flex-col md:flex-row md:items-center justify-between gap-6 z-10">
+          <div class="flex flex-col gap-1">
+            <div class="flex items-center gap-2">
+              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container-lowest/15 backdrop-blur-md text-on-primary font-label-sm text-label-sm uppercase tracking-wider font-semibold">
+                <span class="material-symbols-outlined text-[14px]">verified_user</span>
+                Tài Khoản Kỹ Sư Agile HUCE
+              </span>
+            </div>
+            
+            <h1 class="font-headline-lg text-headline-lg text-white tracking-tight font-bold">
+              Hồ sơ cá nhân & Cài đặt bảo mật tài khoản
+            </h1>
+            <p class="font-body-md text-body-md text-on-primary-container/90 max-w-2xl">
+              Quản lý định danh kỹ sư, thông tin xác thực đa lớp, quyền điều phối Scrum Sprint và liên kết tài khoản định danh số HUCE.
+            </p>
+          </div>
+
+          <div class="flex items-center gap-3 self-start md:self-auto shrink-0">
+            <button type="button" (click)="setTab('GENERAL')" class="px-4 py-2.5 rounded-xl bg-surface-container-lowest/15 hover:bg-surface-container-lowest/25 text-white font-label-lg text-label-lg transition-all flex items-center gap-2 shadow-sm backdrop-blur-md cursor-pointer">
+              <span class="material-symbols-outlined text-[18px]">public</span>
+              <span>Xem hồ sơ công khai</span>
+            </button>
+            <button type="button" (click)="onUpdateProfile()" [disabled]="loading() || profileForm.invalid" class="px-4 py-2.5 rounded-xl bg-surface-container-lowest text-primary hover:bg-surface-container-low font-label-lg text-label-lg transition-all flex items-center gap-2 shadow-md cursor-pointer font-bold">
+              <span class="material-symbols-outlined text-[18px]">save</span>
+              <span>Lưu cấu hình</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- User Identity Overview Card with Tabs -->
+      <div class="rounded-2xl bg-surface-container-lowest shadow-sm border border-outline-variant/30 p-6">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          
+          <div class="flex flex-col sm:flex-row items-start sm:items-center gap-5">
+            <div class="relative group">
+              @if (u.avatarUrl) {
+                <img [src]="u.avatarUrl" [alt]="u.displayName" class="w-24 h-24 rounded-full object-cover shadow-md ring-4 ring-surface-container-high" />
+              } @else {
+                <div class="w-24 h-24 rounded-full bg-gradient-to-br from-primary-container to-secondary-container text-white text-3xl font-bold flex items-center justify-center shadow-md ring-4 ring-surface-container-high">
+                  {{ u.displayName.charAt(0).toUpperCase() }}
+                </div>
+              }
+              <span class="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-emerald-500 ring-2 ring-surface-container-lowest" title="Đang online"></span>
+            </div>
+
+            <div class="flex flex-col gap-1 min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <h2 class="font-headline-md text-headline-md text-on-surface font-bold">{{ u.displayName }}</h2>
+                <span class="px-3 py-1 rounded-full bg-surface-container-high text-primary font-label-sm text-label-sm flex items-center gap-1 font-semibold">
+                  <span class="material-symbols-outlined text-[14px]">hub</span>
+                  {{ u.roleName }}
+                </span>
+                <span class="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-label-sm text-label-sm font-semibold flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[13px]">check_circle</span>
+                  Đang online
+                </span>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-y-1 gap-x-4 text-on-surface-variant font-body-sm text-body-sm">
+                <span class="flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[16px] text-outline">mail</span>
+                  {{ u.email }}
+                </span>
+                <span class="flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[16px] text-outline">apartment</span>
+                  {{ u.jobTitle }} • Khoa Công nghệ Thông tin HUCE
+                </span>
+                <span class="flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[16px] text-outline">security</span>
+                  2FA: {{ u.twoFactorEnabled ? 'Đã kích hoạt' : 'Chưa bật' }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2 shrink-0">
+            <button type="button" (click)="setTab('SKILLS')" class="px-3.5 py-2 rounded-xl bg-primary-container text-on-primary hover:bg-primary font-label-lg text-label-lg transition-colors flex items-center gap-1.5 shadow-sm font-semibold cursor-pointer">
+              <span class="material-symbols-outlined text-[18px]">auto_awesome</span>
+              <span>Hồ sơ năng lực AI</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Navigation Tabs Bar -->
+        <div class="mt-6 flex overflow-x-auto gap-2 bg-surface-container-low/70 p-1.5 rounded-xl border border-outline-variant/20">
+          <button
+            type="button"
+            class="px-4 py-2.5 rounded-lg font-label-lg text-label-lg transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer"
+            [class.bg-surface-container-lowest]="activeTab() === 'GENERAL'"
+            [class.text-primary]="activeTab() === 'GENERAL'"
+            [class.font-bold]="activeTab() === 'GENERAL'"
+            [class.shadow-sm]="activeTab() === 'GENERAL'"
+            [class.text-on-surface-variant]="activeTab() !== 'GENERAL'"
+            (click)="setTab('GENERAL')">
+            <span class="material-symbols-outlined text-[18px]">badge</span>
+            <span>Thông tin cá nhân</span>
+          </button>
+
+          <button
+            type="button"
+            class="px-4 py-2.5 rounded-lg font-label-lg text-label-lg transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer"
+            [class.bg-surface-container-lowest]="activeTab() === 'SECURITY'"
+            [class.text-primary]="activeTab() === 'SECURITY'"
+            [class.font-bold]="activeTab() === 'SECURITY'"
+            [class.shadow-sm]="activeTab() === 'SECURITY'"
+            [class.text-on-surface-variant]="activeTab() !== 'SECURITY'"
+            (click)="setTab('SECURITY')">
+            <span class="material-symbols-outlined text-[18px]">lock_reset</span>
+            <span>Bảo mật & Đổi mật khẩu</span>
+          </button>
+
+          <button
+            type="button"
+            class="px-4 py-2.5 rounded-lg font-label-lg text-label-lg transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer"
+            [class.bg-surface-container-lowest]="activeTab() === 'SKILLS'"
+            [class.text-primary]="activeTab() === 'SKILLS'"
+            [class.font-bold]="activeTab() === 'SKILLS'"
+            [class.shadow-sm]="activeTab() === 'SKILLS'"
+            [class.text-on-surface-variant]="activeTab() !== 'SKILLS'"
+            (click)="setTab('SKILLS')">
+            <span class="material-symbols-outlined text-[18px]">workspace_premium</span>
+            <span>Kỹ năng & Năng lực</span>
+          </button>
+
+          <button
+            type="button"
+            class="px-4 py-2.5 rounded-lg font-label-lg text-label-lg transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer"
+            [class.bg-surface-container-lowest]="activeTab() === 'SESSIONS'"
+            [class.text-primary]="activeTab() === 'SESSIONS'"
+            [class.font-bold]="activeTab() === 'SESSIONS'"
+            [class.shadow-sm]="activeTab() === 'SESSIONS'"
+            [class.text-on-surface-variant]="activeTab() !== 'SESSIONS'"
+            (click)="setTab('SESSIONS')">
+            <span class="material-symbols-outlined text-[18px]">devices</span>
+            <span>Phiên & Refresh Tokens</span>
+            <span class="px-1.5 py-0.2 rounded-full bg-surface-container-highest text-primary font-label-sm text-label-sm font-bold">{{ activeSessions().length }}</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Alert Banners -->
+      @if (successMsg()) {
+        <div class="p-4 rounded-xl bg-primary-fixed text-on-primary-fixed border border-primary/30 flex items-center gap-2.5 font-body-md text-body-md shadow-sm">
+          <span class="material-symbols-outlined text-[22px] text-primary">check_circle</span>
+          <span>{{ successMsg() }}</span>
+        </div>
+      }
+      @if (errorMsg()) {
+        <div class="p-4 rounded-xl bg-error-container text-on-error-container border border-error/30 flex items-center gap-2.5 font-body-md text-body-md shadow-sm">
+          <span class="material-symbols-outlined text-[22px] text-error">error</span>
+          <span>{{ errorMsg() }}</span>
+        </div>
+      }
+
+      <!-- Main Dual Pane Grid (Left: 8 cols, Right: 4 cols) -->
+      <div class="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+        
+        <!-- LEFT COLUMN (8 cols) -->
+        <div class="xl:col-span-8 flex flex-col gap-6">
+          
+          <!-- TAB 1: GENERAL -->
+          @if (activeTab() === 'GENERAL') {
+            <div class="rounded-2xl bg-surface-container-lowest p-6 shadow-sm border border-outline-variant/30">
+              <div class="flex items-center justify-between pb-4 mb-6 border-b border-surface-container">
+                <div class="flex items-center gap-3">
+                  <div class="w-9 h-9 rounded-xl bg-surface-container-high flex items-center justify-center text-primary font-bold">
+                    <span class="material-symbols-outlined text-[20px]">person_outline</span>
+                  </div>
+                  <div>
+                    <h3 class="font-headline-sm text-headline-sm text-on-surface font-bold">Chi tiết hồ sơ định danh</h3>
+                    <p class="font-body-sm text-body-sm text-on-surface-variant">Dữ liệu đồng bộ với cơ sở dữ liệu `UserProfile` & Portal HUCE.</p>
+                  </div>
+                </div>
+                <span class="px-3 py-1 rounded-lg bg-surface-container-low text-on-surface-variant font-label-sm text-label-sm font-semibold">
+                  Bản ghi: #UP-{{ u.id }}
+                </span>
+              </div>
+
+              <form [formGroup]="profileForm" (ngSubmit)="onUpdateProfile()" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="flex flex-col gap-1.5">
+                  <label for="profDisplayName" class="font-label-md text-label-md text-on-surface font-semibold flex items-center justify-between">
+                    <span>Họ và Tên</span>
+                    <span class="text-outline font-body-sm text-body-sm">Bắt buộc</span>
+                  </label>
+                  <div class="relative">
+                    <span class="material-symbols-outlined absolute left-3.5 top-2.5 text-outline text-[18px]">badge</span>
+                    <input id="profDisplayName" type="text" formControlName="displayName" class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary-container transition-all" />
+                  </div>
+                </div>
+
+                <div class="flex flex-col gap-1.5">
+                  <label for="profJobTitle" class="font-label-md text-label-md text-on-surface font-semibold flex items-center justify-between">
+                    <span>Chức danh / Vị trí Scrum</span>
+                    <span class="text-outline font-body-sm text-body-sm">Bắt buộc</span>
+                  </label>
+                  <div class="relative">
+                    <span class="material-symbols-outlined absolute left-3.5 top-2.5 text-outline text-[18px]">engineering</span>
+                    <input id="profJobTitle" type="text" formControlName="jobTitle" class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary-container transition-all" />
+                  </div>
+                </div>
+
+                <div class="flex flex-col gap-1.5 md:col-span-2">
+                  <label for="profEmail" class="font-label-md text-label-md text-on-surface font-semibold flex items-center justify-between">
+                    <span>Email Đại học Xây dựng Hà Nội</span>
+                    <span class="inline-flex items-center gap-1 text-emerald-800 font-label-sm text-label-sm font-semibold bg-emerald-100 px-2.5 py-0.5 rounded-full">
+                      <span class="material-symbols-outlined text-[13px]">verified</span>
+                      Đã xác thực email
+                    </span>
+                  </label>
+                  <div class="relative flex items-center">
+                    <span class="material-symbols-outlined absolute left-3.5 text-outline text-[18px]">school</span>
+                    <input id="profEmail" type="email" formControlName="email" class="w-full pl-10 pr-32 py-2.5 rounded-xl bg-surface-container-high/60 text-on-surface font-body-md text-body-md cursor-not-allowed" />
+                    <span class="absolute right-2 px-2.5 py-1 rounded-lg bg-surface-container-highest text-primary font-label-sm text-label-sm font-bold">HUCE ID SSO</span>
+                  </div>
+                </div>
+
+                <div class="flex flex-col gap-1.5 md:col-span-2">
+                  <label for="profAvatar" class="font-label-md text-label-md text-on-surface font-semibold">URL Ảnh đại diện</label>
+                  <div class="relative">
+                    <span class="material-symbols-outlined absolute left-3.5 top-2.5 text-outline text-[18px]">image</span>
+                    <input id="profAvatar" type="text" formControlName="avatarUrl" placeholder="https://lh3.googleusercontent.com/..." class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary-container transition-all" />
+                  </div>
+                </div>
+
+                <div class="md:col-span-2 pt-4 flex items-center justify-between border-t border-surface-container mt-2">
+                  <span class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[16px] text-primary">history</span>
+                    Đã đồng bộ với CSDL Scoped RBAC v2.4
+                  </span>
+
+                  <button type="submit" [disabled]="loading() || profileForm.invalid" class="px-5 py-2.5 rounded-xl bg-primary-container hover:bg-primary text-on-primary font-label-lg text-label-lg transition-colors shadow-md flex items-center gap-2 font-bold cursor-pointer disabled:opacity-50">
+                    @if (loading()) {
+                      <span class="spinner"></span> Đang lưu...
+                    } @else {
+                      <span class="material-symbols-outlined text-[18px]">check</span>
+                      <span>Lưu thay đổi</span>
+                    }
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <!-- Individual Productivity & Story Points Bento Grid Card from Stitch -->
+            <div class="rounded-2xl bg-surface-container-lowest p-6 shadow-sm border border-outline-variant/30">
+              <div class="flex items-center justify-between pb-4 mb-4 border-b border-surface-container">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-primary">
+                    <span class="material-symbols-outlined text-[20px]">insights</span>
+                  </div>
+                  <div>
+                    <h3 class="font-headline-sm text-headline-sm text-on-surface font-bold">Chỉ số phân bổ & Năng suất cá nhân</h3>
+                    <p class="font-body-sm text-body-sm text-on-surface-variant">Thống kê từ Sprint Backlog và hệ thống dự báo AI của đồ án tốt nghiệp K65</p>
+                  </div>
+                </div>
+                <span class="px-3 py-1 rounded-full bg-surface-container-high text-primary font-label-sm text-label-sm font-bold">Sprint 04 Active</span>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div class="p-4 rounded-xl bg-surface-container-low flex flex-col gap-2">
+                  <span class="font-label-sm text-label-sm text-on-surface-variant uppercase font-bold">Story Points hoàn thành</span>
+                  <div class="flex items-baseline gap-2">
+                    <span class="font-display-lg text-display-lg text-primary font-bold">42</span>
+                    <span class="font-body-sm text-body-sm text-emerald-700 font-semibold">+18% vs Sprint 03</span>
+                  </div>
+                  <div class="w-full h-1.5 rounded-full bg-surface-container-high overflow-hidden">
+                    <div class="h-full rounded-full bg-primary" style="width: 82%;"></div>
+                  </div>
+                </div>
+
+                <div class="p-4 rounded-xl bg-surface-container-low flex flex-col gap-2">
+                  <span class="font-label-sm text-label-sm text-on-surface-variant uppercase font-bold">Độ chính xác AI Task</span>
+                  <div class="flex items-baseline gap-2">
+                    <span class="font-display-lg text-display-lg text-secondary font-bold">94.6%</span>
+                    <span class="font-body-sm text-body-sm text-on-surface-variant font-mono">Fibonacci</span>
+                  </div>
+                  <div class="w-full h-1.5 rounded-full bg-surface-container-high overflow-hidden">
+                    <div class="h-full rounded-full bg-gradient-to-r from-secondary to-tertiary" style="width: 94%;"></div>
+                  </div>
+                </div>
+
+                <div class="p-4 rounded-xl bg-surface-container-low flex flex-col gap-2">
+                  <span class="font-label-sm text-label-sm text-on-surface-variant uppercase font-bold">Tasks đã rà soát</span>
+                  <div class="flex items-baseline gap-2">
+                    <span class="font-display-lg text-display-lg text-on-surface font-bold">128</span>
+                    <span class="font-body-sm text-body-sm text-on-surface-variant">Issues reviewed</span>
+                  </div>
+                  <div class="w-full h-1.5 rounded-full bg-surface-container-high overflow-hidden">
+                    <div class="h-full rounded-full bg-primary-container" style="width: 68%;"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          }
+
+          <!-- TAB 2: SECURITY & PASSWORD -->
+          @if (activeTab() === 'SECURITY') {
+            <div class="rounded-2xl bg-surface-container-lowest p-6 shadow-sm border border-outline-variant/30 space-y-4">
+              <div class="flex items-center gap-3 pb-4 border-b border-surface-container">
+                <div class="w-9 h-9 rounded-xl bg-surface-container-high flex items-center justify-center text-primary font-bold">
+                  <span class="material-symbols-outlined text-[20px]">lock_reset</span>
+                </div>
+                <div>
+                  <h3 class="font-headline-sm text-headline-sm text-on-surface font-bold">Đổi Mật Khẩu Cá Nhân</h3>
+                  <p class="font-body-sm text-body-sm text-on-surface-variant">Sử dụng mật khẩu mạnh có chứa chữ hoa, chữ thường, số và ký tự đặc biệt.</p>
+                </div>
+              </div>
+
+              <form [formGroup]="passwordForm" (ngSubmit)="onChangePassword()" class="space-y-4">
+                <div>
+                  <label for="currPass" class="block font-label-md text-label-md text-on-surface mb-1.5 font-semibold">Mật Khẩu Hiện Tại</label>
+                  <div class="relative flex items-center">
+                    <span class="material-symbols-outlined absolute left-3.5 text-[20px] text-outline pointer-events-none">lock</span>
+                    <input id="currPass" type="password" formControlName="currentPassword" placeholder="••••••••" class="w-full h-11 pl-11 pr-4 rounded-xl bg-surface-container-low text-on-surface placeholder:text-outline font-body-md text-body-md focus:outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary-container transition-all" />
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label for="newPassInput" class="block font-label-md text-label-md text-on-surface mb-1.5 font-semibold">Mật Khẩu Mới</label>
+                    <div class="relative flex items-center">
+                      <span class="material-symbols-outlined absolute left-3.5 text-[20px] text-outline pointer-events-none">key</span>
+                      <input id="newPassInput" type="password" formControlName="newPassword" placeholder="Nhập mật khẩu mới..." class="w-full h-11 pl-11 pr-4 rounded-xl bg-surface-container-low text-on-surface placeholder:text-outline font-body-md text-body-md focus:outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary-container transition-all" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label for="confirmPassInput" class="block font-label-md text-label-md text-on-surface mb-1.5 font-semibold">Xác Nhận Mật Khẩu Mới</label>
+                    <div class="relative flex items-center">
+                      <span class="material-symbols-outlined absolute left-3.5 text-[20px] text-outline pointer-events-none">lock_clock</span>
+                      <input id="confirmPassInput" type="password" formControlName="confirmPassword" placeholder="Nhập lại mật khẩu mới..." class="w-full h-11 pl-11 pr-4 rounded-xl bg-surface-container-low text-on-surface placeholder:text-outline font-body-md text-body-md focus:outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary-container transition-all" />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="pt-4 flex justify-end border-t border-surface-container">
+                  <button type="submit" [disabled]="loading() || passwordForm.invalid" class="px-5 py-2.5 rounded-xl bg-primary-container hover:bg-primary text-on-primary font-label-lg text-label-lg transition-colors shadow-md font-bold cursor-pointer disabled:opacity-50">
+                    @if (loading()) {
+                      <span class="spinner"></span> Đang cập nhật...
+                    } @else {
+                      <span>Cập Nhật Mật Khẩu</span>
+                    }
+                  </button>
+                </div>
+              </form>
+            </div>
+          }
+
+          <!-- TAB 3: SKILLS -->
+          @if (activeTab() === 'SKILLS') {
+            <div class="rounded-2xl bg-surface-container-lowest p-6 shadow-sm border border-outline-variant/30 space-y-6">
+              <div class="flex items-center gap-3 pb-4 border-b border-surface-container">
+                <div class="w-9 h-9 rounded-xl bg-surface-container-high flex items-center justify-center text-primary font-bold">
+                  <span class="material-symbols-outlined text-[20px]">workspace_premium</span>
+                </div>
+                <div>
+                  <h3 class="font-headline-sm text-headline-sm text-on-surface font-bold">Kỹ Năng & Năng Lực Chuyên Môn</h3>
+                  <p class="font-body-sm text-body-sm text-on-surface-variant">Quản lý hồ sơ năng lực để AI gán công việc phù hợp nhất trong các Sprint.</p>
+                </div>
+              </div>
+
+              <!-- Add Skill Form Controls -->
+              <div class="p-4 rounded-xl bg-surface-container-low border border-outline-variant/30 flex flex-wrap items-end gap-4">
+                <div class="flex-1 min-w-[200px]">
+                  <label for="skillSelect" class="block font-label-md text-label-md text-on-surface font-semibold mb-1.5">Chọn kỹ năng từ Catalog</label>
+                  <select id="skillSelect" [(ngModel)]="selectedSkillId" class="w-full h-11 px-3.5 rounded-xl bg-surface-container-lowest border border-outline-variant text-on-surface font-body-sm text-body-sm outline-none">
+                    <option value="">-- Chọn kỹ năng --</option>
+                    @for (s of skillsCatalog(); track s.id) {
+                      <option [value]="s.id">{{ s.name }} ({{ s.category }})</option>
+                    }
+                  </select>
+                </div>
+
+                <div class="flex-1 min-w-[180px]">
+                  <label for="skillRange" class="block font-label-md text-label-md text-on-surface font-semibold mb-1.5">
+                    Mức độ thành thạo: <strong class="text-primary font-mono">{{ selectedSkillLevel }}%</strong>
+                  </label>
+                  <input id="skillRange" type="range" min="10" max="100" step="5" [(ngModel)]="selectedSkillLevel" class="w-full accent-primary h-2 bg-surface-container-high rounded-lg cursor-pointer" />
+                </div>
+
+                <button type="button" (click)="onAddSkill()" [disabled]="!selectedSkillId" class="h-11 px-5 rounded-xl bg-primary-container hover:bg-primary text-on-primary font-label-md text-label-md font-bold transition-all shadow-sm disabled:opacity-50 cursor-pointer">
+                  + Thêm Kỹ Năng
+                </button>
+              </div>
+
+              <!-- Skills Grid -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                @for (usk of userSkills(); track usk.id) {
+                  @let badge = getProficiencyBadge(usk.proficiencyLevel);
+                  <div class="relative p-4 rounded-xl bg-surface-container-lowest border border-outline-variant/30 shadow-xs flex flex-col gap-2">
+                    <div class="flex items-center justify-between">
+                      <span class="font-headline-sm text-headline-sm font-bold text-on-surface">{{ usk.skillName }}</span>
+                      <span class="px-2.5 py-0.5 rounded-md font-label-sm text-label-sm font-bold" [class]="badge.colorClass">
+                        {{ badge.label }} ({{ usk.proficiencyLevel }}%)
+                      </span>
+                    </div>
+
+                    <div class="w-full bg-surface-container rounded-full h-2 overflow-hidden">
+                      <div class="h-full rounded-full bg-gradient-to-r from-primary-container to-secondary-container" [style.width.%]="usk.proficiencyLevel"></div>
+                    </div>
+
+                    <button type="button" (click)="onRemoveSkill(usk.id)" class="absolute top-2 right-2 text-outline hover:text-error text-xl font-bold p-1 leading-none" title="Xóa">×</button>
+                  </div>
+                } @empty {
+                  <div class="col-span-2 p-8 text-center text-outline">
+                    <p>Chưa có kỹ năng nào được thêm. Hãy chọn kỹ năng ở form trên!</p>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+
+          <!-- TAB 4: SESSIONS -->
+          @if (activeTab() === 'SESSIONS') {
+            <div class="rounded-2xl bg-surface-container-lowest p-6 shadow-sm border border-outline-variant/30 space-y-4">
+              <div class="flex items-center justify-between pb-4 border-b border-surface-container">
+                <div class="flex items-center gap-3">
+                  <div class="w-9 h-9 rounded-xl bg-surface-container-high flex items-center justify-center text-primary font-bold">
+                    <span class="material-symbols-outlined text-[20px]">devices_other</span>
+                  </div>
+                  <div>
+                    <h3 class="font-headline-sm text-headline-sm text-on-surface font-bold">Thiết bị & Phiên Đăng Nhập</h3>
+                    <p class="font-body-sm text-body-sm text-on-surface-variant">Theo dõi Refresh Token rotation và thiết bị đang truy cập.</p>
+                  </div>
+                </div>
+                <span class="material-symbols-outlined text-emerald-600 text-[22px]">verified</span>
+              </div>
+
+              <div class="space-y-3">
+                @for (sess of activeSessions(); track sess.id) {
+                  <div class="p-4 rounded-xl flex items-center justify-between gap-4 border" [class.bg-emerald-50]="sess.isCurrent" [class.border-emerald-200]="sess.isCurrent" [class.bg-surface-container-low]="!sess.isCurrent" [class.border-outline-variant/20]="!sess.isCurrent">
+                    <div class="flex items-center gap-3.5">
+                      <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-xs" [class.bg-emerald-100]="sess.isCurrent" [class.text-emerald-700]="sess.isCurrent" [class.bg-surface-container-lowest]="!sess.isCurrent" [class.text-outline]="!sess.isCurrent">
+                        <span class="material-symbols-outlined text-[20px]">
+                          {{ sess.deviceName.toLowerCase().includes('mobile') || sess.deviceName.toLowerCase().includes('iphone') ? 'smartphone' : 'desktop_windows' }}
+                        </span>
+                      </div>
+
+                      <div class="flex flex-col">
+                        <div class="flex items-center gap-2">
+                          <strong class="font-label-md text-label-md text-on-surface font-bold">{{ sess.deviceName }}</strong>
+                          @if (sess.isCurrent) {
+                            <span class="px-2 py-0.5 rounded-full bg-emerald-600 text-white font-label-sm text-label-sm font-bold">Thiết bị này</span>
+                          }
+                        </div>
+                        <span class="font-body-sm text-body-sm text-on-surface-variant">
+                          {{ sess.ipAddress }} • {{ sess.location }} • Đăng nhập {{ sess.lastActive | date:'HH:mm - dd/MM/yyyy' }}
+                        </span>
+                      </div>
+                    </div>
+
+                    @if (!sess.isCurrent) {
+                      <button type="button" (click)="onRevokeSession(sess.id)" class="px-3.5 py-1.5 rounded-lg bg-error-container text-on-error-container hover:bg-error hover:text-white font-label-sm text-label-sm font-bold transition-all cursor-pointer">
+                        Đăng xuất
+                      </button>
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+          }
+
+        </div>
+
+        <!-- RIGHT COLUMN (4 cols) from Stitch Screen 3095f5e818b74b43984bdd26650c7398 -->
+        <div class="xl:col-span-4 flex flex-col gap-6">
+          
+          <!-- External Linked Accounts Card -->
+          <div class="rounded-2xl bg-surface-container-lowest p-6 shadow-sm border border-outline-variant/30 space-y-4">
+            <div class="flex items-center gap-3 pb-3 border-b border-surface-container">
+              <div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-primary font-bold">
+                <span class="material-symbols-outlined text-[20px]">share</span>
+              </div>
+              <div>
+                <h3 class="font-headline-sm text-headline-sm text-on-surface font-bold">Tài khoản liên kết</h3>
+                <p class="font-body-sm text-body-sm text-on-surface-variant">Schema ExternalLogin: OAuth2 & SSO</p>
+              </div>
+            </div>
+
+            <div class="space-y-3">
+              <div class="p-3.5 rounded-xl bg-surface-container-low flex items-center justify-between">
+                <div class="flex items-center gap-3 min-w-0">
+                  <div class="w-9 h-9 rounded-lg bg-surface-container-lowest shadow-sm flex items-center justify-center shrink-0">
+                    <svg class="w-5 h-5" viewBox="0 0 24 24">
+                      <path d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z" fill="#4285F4"/>
+                      <path d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z" fill="#34A853"/>
+                      <path d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z" fill="#FBBC05"/>
+                      <path d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z" fill="#EA4335"/>
+                    </svg>
+                  </div>
+                  <div class="flex flex-col min-w-0">
+                    <span class="font-label-md text-label-md text-on-surface font-semibold truncate">Google Workspace HUCE</span>
+                    <span class="font-body-sm text-body-sm text-outline truncate">{{ u.email }}</span>
+                  </div>
+                </div>
+                <span class="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-label-sm text-label-sm font-bold flex items-center gap-1 shrink-0">
+                  <span class="material-symbols-outlined text-[13px]">check_circle</span>
+                  Đã kết nối
+                </span>
+              </div>
+
+              <div class="p-3.5 rounded-xl bg-surface-container-low flex items-center justify-between">
+                <div class="flex items-center gap-3 min-w-0">
+                  <div class="w-9 h-9 rounded-lg bg-surface-container-lowest shadow-sm flex items-center justify-center shrink-0">
+                    <span class="material-symbols-outlined text-[20px] text-on-surface">terminal</span>
+                  </div>
+                  <div class="flex flex-col min-w-0">
+                    <span class="font-label-md text-label-md text-on-surface font-semibold truncate">GitHub Repo Sync</span>
+                    <span class="font-body-sm text-body-sm text-outline truncate">huce-scrum-master</span>
+                  </div>
+                </div>
+                <button type="button" class="px-2.5 py-1 rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm font-semibold hover:bg-surface-container-high transition-colors shrink-0">
+                  Đồng bộ
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Institutional Compliance & Policy Card -->
+          <div class="rounded-2xl bg-gradient-to-br from-surface-container-low to-surface-container p-5 border border-outline-variant/20 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-surface-container-lowest flex items-center justify-center text-primary shadow-xs shrink-0">
+                <span class="material-symbols-outlined text-[22px]">policy</span>
+              </div>
+              <div class="flex flex-col">
+                <span class="font-label-md text-label-md font-bold text-on-surface">Chính sách bảo mật HUCE</span>
+                <span class="font-body-sm text-body-sm text-on-surface-variant">Quy chuẩn dữ liệu đề tài NCKH K65</span>
+              </div>
+            </div>
+            <span class="material-symbols-outlined text-outline text-[18px]">arrow_forward</span>
+          </div>
+
+        </div>
+      </div>
+
+    }
+  </div>
+</div>

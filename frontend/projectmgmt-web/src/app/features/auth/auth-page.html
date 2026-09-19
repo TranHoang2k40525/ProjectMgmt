@@ -1,0 +1,515 @@
+<app-dynamic-bg></app-dynamic-bg>
+<div class="relative w-full min-h-screen bg-surface px-4 py-8 sm:px-6 lg:px-8 flex items-center justify-center font-body-md text-body-md text-on-surface">
+  <div class="relative w-full max-w-6xl overflow-hidden rounded-2xl bg-surface-container-lowest shadow-2xl border border-outline-variant/30">
+    <!-- Ambient Gradient Blobs from Stitch Screen 05851aee02a84a3a81ae7e63395ae387 -->
+    <div class="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-gradient-to-br from-primary-fixed via-secondary-fixed to-transparent opacity-60 blur-3xl pointer-events-none"></div>
+    <div class="absolute -bottom-28 right-1/3 w-80 h-80 rounded-full bg-gradient-to-tr from-tertiary-fixed via-primary-fixed-dim to-transparent opacity-40 blur-3xl pointer-events-none"></div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 min-h-[720px] relative z-10">
+      
+      <!-- LEFT COLUMN: Dynamic Authentication Hub (7 Cols) -->
+      <div class="lg:col-span-7 flex flex-col justify-between p-6 sm:p-10 lg:p-12">
+        <div>
+          <!-- Header & Instant Flow Switcher Tabs -->
+          <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-6 mb-6 bg-surface-container-low/60 p-4 rounded-xl backdrop-blur-md gap-4">
+            <div class="flex items-center gap-3">
+              <img alt="Logo HUCE" class="w-10 h-10 rounded-xl object-cover shadow-md shrink-0 ring-2 ring-primary/20" src="https://lh3.googleusercontent.com/aida/AEtjO1XtHjbcVDz-UBjctM0LfVUGmqUeR39WQIoExjpXXhoH4Wu_I9_Qpk42NbzSi5dIoyYQuxC6PmMSr__bvB8G1iRv51zwwYHyLI9epDcSeaSJ_23pgMSoDqCavTtJMnh_VUr1XiaX_dfIJVrOpVNtqTGgwFT5FuXj3i9tQVUICLqvROYKaCksEl97aHgdr2n-KIVSDs0bZzIZ5hDOpx0AeyayjF5Y_iybOHjJnpBXyyQz40C4Rx5A_y32U-v-DZxAw_gb18RoyaUMMA" />
+              <div class="flex flex-col">
+                <span class="font-headline-sm text-headline-sm text-primary tracking-tight font-bold">Cổng Định Danh HUCE Cloud</span>
+                <span class="font-label-sm text-label-sm text-on-surface-variant">SSO Gateway · Chuẩn Scoped RBAC v2.4</span>
+              </div>
+            </div>
+
+            <!-- Auth Mode Switcher Pills -->
+            <div class="flex items-center gap-1 bg-surface-container-high/80 p-1 rounded-lg">
+              <button
+                type="button"
+                class="auth-tab-btn px-3 py-1.5 rounded-md font-label-md text-label-md transition-all"
+                [class.bg-surface-container-lowest]="mode() === 'LOGIN'"
+                [class.text-primary]="mode() === 'LOGIN'"
+                [class.shadow-sm]="mode() === 'LOGIN'"
+                [class.font-semibold]="mode() === 'LOGIN'"
+                [class.text-on-surface-variant]="mode() !== 'LOGIN'"
+                (click)="setMode('LOGIN')">
+                Đăng nhập
+              </button>
+
+              <button
+                type="button"
+                class="auth-tab-btn px-3 py-1.5 rounded-md font-label-md text-label-md transition-all"
+                [class.bg-surface-container-lowest]="mode() === 'SIGNUP'"
+                [class.text-primary]="mode() === 'SIGNUP'"
+                [class.shadow-sm]="mode() === 'SIGNUP'"
+                [class.font-semibold]="mode() === 'SIGNUP'"
+                [class.text-on-surface-variant]="mode() !== 'SIGNUP'"
+                (click)="setMode('SIGNUP')">
+                Đăng ký
+              </button>
+
+              <button
+                type="button"
+                class="auth-tab-btn px-3 py-1.5 rounded-md font-label-md text-label-md transition-all"
+                [class.bg-surface-container-lowest]="mode() === 'FORGOT' || mode() === 'OTP_FORGOT'"
+                [class.text-primary]="mode() === 'FORGOT' || mode() === 'OTP_FORGOT'"
+                [class.shadow-sm]="mode() === 'FORGOT' || mode() === 'OTP_FORGOT'"
+                [class.font-semibold]="mode() === 'FORGOT' || mode() === 'OTP_FORGOT'"
+                [class.text-on-surface-variant]="mode() !== 'FORGOT' && mode() !== 'OTP_FORGOT'"
+                (click)="setMode('FORGOT')">
+                Khôi phục
+              </button>
+            </div>
+          </div>
+
+          <!-- Alert Notifications -->
+          @if (errorMessage()) {
+            <div class="mb-4 p-3.5 rounded-xl bg-error-container text-on-error-container border border-error/30 flex items-center gap-2.5 font-body-sm text-body-sm animate-fade-in">
+              <span class="material-symbols-outlined text-[20px] text-error">error</span>
+              <span>{{ errorMessage() }}</span>
+            </div>
+          }
+
+          @if (successMessage()) {
+            <div class="mb-4 p-3.5 rounded-xl bg-primary-fixed text-on-primary-fixed border border-primary/30 flex items-center gap-2.5 font-body-sm text-body-sm animate-fade-in">
+              <span class="material-symbols-outlined text-[20px] text-primary">check_circle</span>
+              <span>{{ successMessage() }}</span>
+            </div>
+          }
+
+          <!-- Quick 1-Click Institutional SSO Bar -->
+          @if (mode() === 'LOGIN' || mode() === 'SIGNUP') {
+            <div class="mb-6">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button type="button" (click)="onLogin()" class="flex items-center justify-center gap-2.5 h-11 px-4 rounded-xl bg-surface-container hover:bg-surface-container-high transition-all group shadow-sm text-left">
+                  <div class="w-6 h-6 rounded-md bg-surface-container-lowest flex items-center justify-center shrink-0">
+                    <span class="material-symbols-outlined text-primary text-[18px]">school</span>
+                  </div>
+                  <div class="flex flex-col overflow-hidden">
+                    <span class="font-label-md text-label-md text-on-surface font-semibold group-hover:text-primary transition-colors truncate">HUCE Workspace</span>
+                    <span class="font-label-sm text-[10px] text-on-surface-variant truncate">@huce.edu.vn 1-Click SSO</span>
+                  </div>
+                </button>
+
+                <button type="button" (click)="onLogin()" class="flex items-center justify-center gap-2.5 h-11 px-4 rounded-xl bg-surface-container hover:bg-surface-container-high transition-all group shadow-sm text-left">
+                  <div class="w-6 h-6 rounded-md bg-inverse-surface text-inverse-on-surface flex items-center justify-center shrink-0">
+                    <span class="material-symbols-outlined text-[17px]">terminal</span>
+                  </div>
+                  <div class="flex flex-col overflow-hidden">
+                    <span class="font-label-md text-label-md text-on-surface font-semibold group-hover:text-primary transition-colors truncate">GitHub / MS Azure</span>
+                    <span class="font-label-sm text-[10px] text-on-surface-variant truncate">Tài khoản Lab Kỹ thuật</span>
+                  </div>
+                </button>
+              </div>
+
+              <div class="relative flex py-4 items-center">
+                <div class="flex-grow h-px bg-surface-container-highest"></div>
+                <span class="flex-shrink mx-3 font-label-sm text-label-sm text-outline uppercase tracking-wider">hoặc nhập thông tin xác thực</span>
+                <div class="flex-grow h-px bg-surface-container-highest"></div>
+              </div>
+            </div>
+          }
+
+          <!-- =================== VIEW 1: LOGIN MODE =================== -->
+          @if (mode() === 'LOGIN') {
+            <form [formGroup]="loginForm" (ngSubmit)="onLogin()" class="space-y-4 animate-fade-in">
+              <div>
+                <label for="loginEmail" class="block font-label-md text-label-md text-on-surface mb-1.5">Email trường / Mã định danh</label>
+                <div class="relative flex items-center">
+                  <span class="material-symbols-outlined absolute left-3.5 text-[20px] text-outline pointer-events-none">account_circle</span>
+                  <input
+                    id="loginEmail"
+                    type="email"
+                    formControlName="email"
+                    placeholder="admin@scrumai.internal hoặc @huce.edu.vn"
+                    class="w-full h-11 pl-11 pr-4 rounded-xl bg-surface-container-low text-on-surface placeholder:text-outline font-body-md text-body-md focus:outline-none focus:bg-surface-container-lowest focus:shadow-[0_0_0_2px_#0052cc] transition-all" />
+                </div>
+              </div>
+
+              <div>
+                <div class="flex items-center justify-between mb-1.5">
+                  <label for="loginPass" class="font-label-md text-label-md text-on-surface">Mật khẩu xác thực</label>
+                  <button type="button" class="font-label-sm text-label-sm text-primary hover:underline font-semibold" (click)="setMode('FORGOT')">Quên mật khẩu?</button>
+                </div>
+                <div class="relative flex items-center">
+                  <span class="material-symbols-outlined absolute left-3.5 text-[20px] text-outline pointer-events-none">lock</span>
+                  <input
+                    id="loginPass"
+                    type="password"
+                    formControlName="password"
+                    placeholder="••••••••••••"
+                    class="w-full h-11 pl-11 pr-4 rounded-xl bg-surface-container-low text-on-surface placeholder:text-outline font-body-md text-body-md focus:outline-none focus:bg-surface-container-lowest focus:shadow-[0_0_0_2px_#0052cc] transition-all" />
+                </div>
+              </div>
+
+              <div class="flex items-center justify-between pt-1">
+                <label class="flex items-center gap-2 cursor-pointer select-none">
+                  <input type="checkbox" checked class="w-4 h-4 rounded accent-primary text-primary cursor-pointer" />
+                  <span class="font-label-md text-label-md text-on-surface-variant">Duy trì phiên đăng nhập <span class="font-label-sm text-[10px] text-secondary">(Refresh Token 30d)</span></span>
+                </label>
+                <span class="flex items-center gap-1 font-label-sm text-label-sm text-outline">
+                  <span class="material-symbols-outlined text-[16px] text-primary">security</span> 2FA Bắt buộc
+                </span>
+              </div>
+
+              <div class="pt-2">
+                <button
+                  type="submit"
+                  [disabled]="loading() || loginForm.invalid"
+                  class="w-full h-12 rounded-xl bg-primary-container hover:bg-primary text-on-primary font-headline-sm text-headline-sm flex items-center justify-center gap-2 transition-all shadow-md active:scale-[0.99] disabled:opacity-50 cursor-pointer">
+                  @if (loading()) {
+                    <span class="spinner"></span> Đang xác thực...
+                  } @else {
+                    <span>Truy Cập Hệ Thống Scrum</span>
+                    <span class="material-symbols-outlined text-[20px]">arrow_forward</span>
+                  }
+                </button>
+              </div>
+            </form>
+          }
+
+          <!-- =================== VIEW 2: SIGNUP MODE =================== -->
+          @if (mode() === 'SIGNUP') {
+            <form [formGroup]="signupForm" (ngSubmit)="onSignup()" class="space-y-4 animate-fade-in">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label for="signupName" class="block font-label-md text-label-md text-on-surface mb-1.5">Họ và tên đầy đủ</label>
+                  <div class="relative flex items-center">
+                    <span class="material-symbols-outlined absolute left-3 text-[18px] text-outline pointer-events-none">badge</span>
+                    <input
+                      id="signupName"
+                      type="text"
+                      formControlName="displayName"
+                      placeholder="Trần Văn Hoàng"
+                      class="w-full h-10 pl-9 pr-3 rounded-xl bg-surface-container-low text-on-surface placeholder:text-outline font-body-sm text-body-sm focus:outline-none focus:bg-surface-container-lowest focus:shadow-[0_0_0_2px_#0052cc] transition-all" />
+                  </div>
+                </div>
+
+                <div>
+                  <label for="signupEmail" class="block font-label-md text-label-md text-on-surface mb-1.5">Email công vụ (@huce.edu.vn)</label>
+                  <div class="relative flex items-center">
+                    <span class="material-symbols-outlined absolute left-3 text-[18px] text-outline pointer-events-none">mail</span>
+                    <input
+                      id="signupEmail"
+                      type="email"
+                      formControlName="email"
+                      placeholder="hoang@huce.edu.vn"
+                      class="w-full h-10 pl-9 pr-3 rounded-xl bg-surface-container-low text-on-surface placeholder:text-outline font-body-sm text-body-sm focus:outline-none focus:bg-surface-container-lowest focus:shadow-[0_0_0_2px_#0052cc] transition-all" />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label class="block font-label-md text-label-md text-on-surface mb-1.5">Vai trò vận hành Scrum</label>
+                <div class="grid grid-cols-3 gap-2">
+                  <div class="p-2.5 rounded-xl bg-surface-container text-left ring-2 ring-primary">
+                    <span class="material-symbols-outlined text-primary text-[18px] mb-1">person</span>
+                    <span class="block font-label-md text-label-md font-semibold text-on-surface">Sinh viên K65</span>
+                    <span class="block font-label-sm text-[10px] text-on-surface-variant">Làm Đồ án TN</span>
+                  </div>
+                  <div class="p-2.5 rounded-xl bg-surface-container text-left opacity-75">
+                    <span class="material-symbols-outlined text-secondary text-[18px] mb-1">school</span>
+                    <span class="block font-label-md text-label-md font-semibold text-on-surface">Giảng viên HD</span>
+                    <span class="block font-label-sm text-[10px] text-on-surface-variant">Product Owner</span>
+                  </div>
+                  <div class="p-2.5 rounded-xl bg-surface-container text-left opacity-75">
+                    <span class="material-symbols-outlined text-tertiary-container text-[18px] mb-1">psychology</span>
+                    <span class="block font-label-md text-label-md font-semibold text-on-surface">NCS AI Lab</span>
+                    <span class="block font-label-sm text-[10px] text-on-surface-variant">R&D & Dev Team</span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex items-center justify-between mb-1.5">
+                  <label for="signupPass" class="font-label-md text-label-md text-on-surface">Thiết lập mật khẩu</label>
+                  @let pwd = signupForm.value.password;
+                  @let strength = calculatePasswordStrength(pwd);
+                  @if (pwd) {
+                    <span class="font-label-sm text-label-sm font-semibold" [style.color]="strength.color">Độ mạnh: {{ strength.label }}</span>
+                  }
+                </div>
+                <div class="relative flex items-center">
+                  <span class="material-symbols-outlined absolute left-3.5 text-[20px] text-outline pointer-events-none">key</span>
+                  <input
+                    id="signupPass"
+                    type="password"
+                    formControlName="password"
+                    placeholder="Tối thiểu 6 ký tự kèm chữ hoa, số & ký tự đặc biệt"
+                    class="w-full h-11 pl-11 pr-4 rounded-xl bg-surface-container-low text-on-surface placeholder:text-outline font-body-md text-body-md focus:outline-none focus:bg-surface-container-lowest focus:shadow-[0_0_0_2px_#0052cc] transition-all" />
+                </div>
+                <!-- Strength meter bar -->
+                @if (pwd) {
+                  <div class="w-full bg-surface-container rounded-full h-1.5 overflow-hidden mt-2">
+                    <div class="h-full transition-all duration-300 rounded-full" [style.width.%]="strength.score" [style.background-color]="strength.color"></div>
+                  </div>
+                }
+              </div>
+
+              <button
+                type="submit"
+                [disabled]="loading() || signupForm.invalid"
+                class="w-full h-12 rounded-xl bg-gradient-to-r from-secondary-container to-primary-container hover:brightness-110 text-on-secondary-container font-headline-sm text-headline-sm flex items-center justify-center gap-2 transition-all shadow-md disabled:opacity-50 cursor-pointer">
+                @if (loading()) {
+                  <span class="spinner"></span> Đang xử lý...
+                } @else {
+                  <span class="material-symbols-outlined text-[20px]">how_to_reg</span>
+                  <span>Đăng Ký & Nhận Mã OTP Xác Thực</span>
+                }
+              </button>
+            </form>
+          }
+
+          <!-- =================== VIEW 3: OTP VERIFICATION (6 DIGITS) =================== -->
+          @if (mode() === 'OTP_REGISTER' || mode() === 'OTP_FORGOT') {
+            <div class="space-y-5 animate-fade-in">
+              <div class="p-4 rounded-xl bg-surface-container-high/60 flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-tertiary-fixed text-on-tertiary-fixed flex items-center justify-center shrink-0">
+                  <span class="material-symbols-outlined text-[24px]">mark_email_read</span>
+                </div>
+                <div class="flex flex-col">
+                  <span class="font-label-lg text-label-lg font-bold text-on-surface">Xác minh mã OtpCode 6 số</span>
+                  <span class="font-body-sm text-body-sm text-on-surface-variant">
+                    Đã gửi tới <strong class="text-primary font-semibold">{{ mode() === 'OTP_REGISTER' ? signupForm.value.email : forgotForm.value.email }}</strong> theo CSDL OtpCode 7.1
+                  </span>
+                </div>
+              </div>
+
+              <!-- 6 Digits Auto-focus Input Grid -->
+              <div class="max-w-sm mx-auto">
+                <div class="flex items-center justify-between gap-2">
+                  @for (pin of otpPins; track $index) {
+                    <input
+                      type="text"
+                      maxlength="1"
+                      class="otp-input w-12 h-14 text-center text-headline-lg font-headline-lg font-bold rounded-xl bg-surface-container-low text-primary focus:outline-none focus:bg-surface-container-lowest focus:shadow-[0_0_0_2px_#0052cc] transition-all"
+                      [value]="pin"
+                      (input)="onOtpInput($index, $event)"
+                      (keydown)="onOtpKeyDown($index, $event)"
+                      [attr.aria-label]="'OTP digit ' + ($index + 1)" />
+                  }
+                </div>
+
+                <div class="flex items-center justify-between mt-3">
+                  <span class="flex items-center gap-1 font-label-sm text-label-sm text-on-surface-variant">
+                    <span class="material-symbols-outlined text-[16px] text-tertiary-container animate-pulse">timelapse</span>
+                    Hết hạn sau: <strong class="text-error font-mono">{{ formatTime(otpCountdown()) }}</strong>
+                  </span>
+                  <button type="button" class="font-label-sm text-label-sm text-primary hover:underline font-semibold" (click)="resendOtp()" [disabled]="otpCountdown() > 240">Gửi lại mã OTP</button>
+                </div>
+              </div>
+
+              @if (mode() === 'OTP_FORGOT') {
+                <div class="space-y-2">
+                  <label for="otpNewPass" class="block font-label-md text-label-md text-on-surface">Thiết lập Mật Khẩu Mới</label>
+                  <div class="relative flex items-center" [formGroup]="otpForm">
+                    <span class="material-symbols-outlined absolute left-3.5 text-[20px] text-outline pointer-events-none">lock_reset</span>
+                    <input
+                      id="otpNewPass"
+                      type="password"
+                      formControlName="newPassword"
+                      placeholder="Nhập mật khẩu mới..."
+                      class="w-full h-11 pl-11 pr-4 rounded-xl bg-surface-container-low text-on-surface placeholder:text-outline font-body-md text-body-md focus:outline-none focus:bg-surface-container-lowest focus:shadow-[0_0_0_2px_#0052cc] transition-all" />
+                  </div>
+                </div>
+              }
+
+              <div class="pt-2">
+                @if (mode() === 'OTP_REGISTER') {
+                  <button
+                    type="button"
+                    (click)="onVerifyOtp()"
+                    [disabled]="loading()"
+                    class="w-full h-12 rounded-xl bg-primary-container hover:bg-primary text-on-primary font-headline-sm text-headline-sm flex items-center justify-center gap-2 transition-all shadow-md disabled:opacity-50 cursor-pointer">
+                    @if (loading()) {
+                      <span class="spinner"></span> Đang xác thực...
+                    } @else {
+                      <span class="material-symbols-outlined text-[20px]">check_circle</span>
+                      <span>Xác Nhận & Đồng Bộ Workspace</span>
+                    }
+                  </button>
+                } @else {
+                  <button
+                    type="button"
+                    (click)="onResetPassword()"
+                    [disabled]="loading()"
+                    class="w-full h-12 rounded-xl bg-primary-container hover:bg-primary text-on-primary font-headline-sm text-headline-sm flex items-center justify-center gap-2 transition-all shadow-md disabled:opacity-50 cursor-pointer">
+                    @if (loading()) {
+                      <span class="spinner"></span> Đang cập nhật...
+                    } @else {
+                      <span class="material-symbols-outlined text-[20px]">save</span>
+                      <span>Cập Nhật Mật Khẩu & Đăng Nhập</span>
+                    }
+                  </button>
+                }
+              </div>
+
+              <div class="text-center pt-2">
+                <button type="button" class="font-label-md text-label-md text-outline hover:text-on-surface font-semibold" (click)="setMode('LOGIN')">← Hủy và quay lại Đăng nhập</button>
+              </div>
+            </div>
+          }
+
+          <!-- =================== VIEW 4: FORGOT PASSWORD MODE (3 STEPS) =================== -->
+          @if (mode() === 'FORGOT') {
+            <div class="space-y-4 animate-fade-in">
+              <!-- 3 Steps Indicator from Stitch -->
+              <div class="flex items-center justify-between px-4 py-3 mb-2 bg-surface-container rounded-xl">
+                <div class="flex items-center gap-2">
+                  <span class="w-6 h-6 rounded-full bg-primary text-on-primary font-label-sm text-label-sm flex items-center justify-center font-bold">1</span>
+                  <span class="font-label-sm text-label-sm font-semibold text-on-surface">Gửi mã</span>
+                </div>
+                <div class="w-8 h-0.5 bg-surface-container-highest"></div>
+                <div class="flex items-center gap-2 opacity-60">
+                  <span class="w-6 h-6 rounded-full bg-surface-container-highest text-on-surface-variant font-label-sm text-label-sm flex items-center justify-center font-bold">2</span>
+                  <span class="font-label-sm text-label-sm text-on-surface-variant">OTP</span>
+                </div>
+                <div class="w-8 h-0.5 bg-surface-container-highest"></div>
+                <div class="flex items-center gap-2 opacity-60">
+                  <span class="w-6 h-6 rounded-full bg-surface-container-highest text-on-surface-variant font-label-sm text-label-sm flex items-center justify-center font-bold">3</span>
+                  <span class="font-label-sm text-label-sm text-on-surface-variant">Mật khẩu mới</span>
+                </div>
+              </div>
+
+              <form [formGroup]="forgotForm" (ngSubmit)="onSendForgotOtp()" class="space-y-4">
+                <div>
+                  <label for="forgotEmail" class="block font-label-md text-label-md text-on-surface mb-1.5">Email tài khoản trường HUCE</label>
+                  <div class="relative flex items-center">
+                    <span class="material-symbols-outlined absolute left-3.5 text-[20px] text-outline pointer-events-none">alternate_email</span>
+                    <input
+                      id="forgotEmail"
+                      type="email"
+                      formControlName="email"
+                      placeholder="admin@scrumai.internal hoặc @huce.edu.vn"
+                      class="w-full h-11 pl-11 pr-4 rounded-xl bg-surface-container-low text-on-surface placeholder:text-outline font-body-md text-body-md focus:outline-none focus:bg-surface-container-lowest focus:shadow-[0_0_0_2px_#0052cc] transition-all" />
+                  </div>
+                  <p class="mt-1.5 font-label-sm text-label-sm text-on-surface-variant">Hệ thống sẽ đối soát với CSDL phân quyền để gửi token khôi phục an toàn.</p>
+                </div>
+
+                <button
+                  type="submit"
+                  [disabled]="loading() || forgotForm.invalid"
+                  class="w-full h-12 rounded-xl bg-primary-container hover:bg-primary text-on-primary font-headline-sm text-headline-sm flex items-center justify-center gap-2 transition-all shadow-md disabled:opacity-50 cursor-pointer">
+                  @if (loading()) {
+                    <span class="spinner"></span> Đang gửi mã...
+                  } @else {
+                    <span class="material-symbols-outlined text-[20px]">send</span>
+                    <span>Gửi Mã Khôi Phục Qua Email</span>
+                  }
+                </button>
+              </form>
+
+              <div class="text-center pt-2">
+                <button type="button" class="font-label-md text-label-md text-outline hover:text-on-surface font-semibold" (click)="setMode('LOGIN')">← Nhớ lại mật khẩu? Quay lại Đăng nhập</button>
+              </div>
+            </div>
+          }
+        </div>
+
+        <!-- Footer Compliance Notice from Stitch Screen 05851aee02a84a3a81ae7e63395ae387 -->
+        <div class="pt-6 mt-6 border-t border-surface-container-highest flex flex-col sm:flex-row items-center justify-between gap-3 text-on-surface-variant font-label-sm text-label-sm">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>Atlassian Jira Microservices: <strong>Connected & Secure</strong></span>
+          </div>
+          <div class="flex items-center gap-4">
+            <a href="#" (click)="$event.preventDefault()" class="hover:text-primary transition-colors">Điều khoản bảo mật</a>
+            <span>•</span>
+            <a href="#" (click)="$event.preventDefault()" class="hover:text-primary transition-colors">Hỗ trợ kỹ thuật HUCE IT</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN: Institutional Showcase & AI Scrum System Insight (5 Cols) -->
+      <div class="lg:col-span-5 relative bg-gradient-to-br from-primary via-primary-container to-on-primary-fixed p-8 lg:p-10 text-on-primary flex flex-col justify-between overflow-hidden">
+        <!-- Architectural Wireframe Grid Pattern -->
+        <div class="absolute inset-0 opacity-10 pointer-events-none">
+          <svg class="w-full h-full" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <pattern id="arch-grid" width="32" height="32" patternUnits="userSpaceOnUse">
+                <path d="M 32 0 L 0 0 0 32" fill="none" stroke="currentColor" stroke-width="1"/>
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#arch-grid)"/>
+          </svg>
+        </div>
+
+        <div class="relative z-10 space-y-6">
+          <!-- Top Badge -->
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface-container-lowest/15 backdrop-blur-md">
+            <span class="material-symbols-outlined text-secondary-fixed text-[18px]">hub</span>
+            <span class="font-label-sm text-label-sm uppercase tracking-widest text-primary-fixed font-bold">HUCE Atlassian Cloud v2.4</span>
+          </div>
+
+          <!-- Hero Typography -->
+          <div>
+            <h2 class="font-display-lg text-display-lg leading-tight tracking-tight mb-3 text-white">
+              Nền Tảng Quản Trị Agile AI Cho Kỹ Sư & Đồ Án
+            </h2>
+            <p class="font-body-md text-body-md text-on-primary-container leading-relaxed">
+              Tích hợp toàn diện 18 phân hệ màn hình đồng bộ, kết nối kho lưu trữ bản vẽ kiến trúc và tự động phân rã yêu cầu Scrum với AI Sonnet.
+            </p>
+          </div>
+
+          <!-- Interactive System Metrics Bento Grid from Stitch -->
+          <div class="grid grid-cols-2 gap-3 pt-2">
+            <div class="p-3.5 rounded-xl bg-surface-container-lowest/10 backdrop-blur-md hover:bg-surface-container-lowest/20 transition-all">
+              <span class="font-display-lg-mobile text-display-lg-mobile font-bold text-secondary-fixed">18+</span>
+              <span class="block font-label-sm text-label-sm text-on-primary-container mt-0.5">Phân hệ chuẩn Atlassian Jira</span>
+            </div>
+
+            <div class="p-3.5 rounded-xl bg-surface-container-lowest/10 backdrop-blur-md hover:bg-surface-container-lowest/20 transition-all">
+              <div class="flex items-center gap-1.5 text-tertiary-fixed">
+                <span class="material-symbols-outlined text-[20px]">auto_awesome</span>
+                <span class="font-headline-md text-headline-md font-bold">Claude 3.7</span>
+              </div>
+              <span class="block font-label-sm text-label-sm text-on-primary-container mt-0.5">AI Auto Task Breakdown</span>
+            </div>
+
+            <div class="p-3.5 rounded-xl bg-surface-container-lowest/10 backdrop-blur-md hover:bg-surface-container-lowest/20 transition-all">
+              <span class="font-display-lg-mobile text-display-lg-mobile font-bold text-primary-fixed">99.98%</span>
+              <span class="block font-label-sm text-label-sm text-on-primary-container mt-0.5">Thời gian hoạt động dịch vụ</span>
+            </div>
+
+            <div class="p-3.5 rounded-xl bg-surface-container-lowest/10 backdrop-blur-md hover:bg-surface-container-lowest/20 transition-all">
+              <div class="flex items-center gap-1 text-emerald-300">
+                <span class="material-symbols-outlined text-[18px]">lock</span>
+                <span class="font-label-lg text-label-lg font-bold">Scoped RBAC</span>
+              </div>
+              <span class="block font-label-sm text-label-sm text-on-primary-container mt-0.5">Bảo mật đa cấp theo vai trò</span>
+            </div>
+          </div>
+
+          <!-- Feature Highlight Card -->
+          <div class="p-4 rounded-xl bg-surface-container-lowest/15 backdrop-blur-lg flex items-start gap-3.5">
+            <div class="w-9 h-9 rounded-lg bg-tertiary-container text-on-tertiary flex items-center justify-center shrink-0 shadow-sm">
+              <span class="material-symbols-outlined text-[20px]">psychology</span>
+            </div>
+            <div>
+              <span class="font-label-md text-label-md font-bold text-white block">Tự Động Sinh Sprint & Story Points</span>
+              <p class="font-body-sm text-body-sm text-on-primary-container mt-0.5">
+                Nhập đề cương đồ án tốt nghiệp, hệ thống tự động phân tích thành Epics, Stories và Fibonacci Story Points trong 15 giây.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- System Architecture Visual Pill -->
+        <div class="relative z-10 pt-6 mt-6 border-t border-surface-container-lowest/20 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-lg bg-white/20 p-1 flex items-center justify-center text-white font-bold text-sm">
+              HUCE
+            </div>
+            <div class="flex flex-col">
+              <span class="font-label-sm text-label-sm font-bold text-white">Đại học Xây dựng Hà Nội</span>
+              <span class="font-label-sm text-[10px] text-on-primary-container">Trung tâm Công nghệ Thông tin & AI Lab</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-1 font-label-sm text-[11px] bg-secondary-container px-2.5 py-1 rounded-full text-on-secondary-container font-semibold">
+            <span class="material-symbols-outlined text-[14px]">bolt</span>
+            <span>Bảo mật kép SSL 256-bit</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>

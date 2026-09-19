@@ -293,6 +293,12 @@ try {
     if ($null -ne $frontendSource) {
         Clear-DeploymentDirectory -Path $resolvedWebTarget
         Copy-DirectoryContent -Source $frontendSource -Destination $resolvedWebTarget
+
+        $apiWebRoot = Join-Path $resolvedApiTarget 'wwwroot'
+        [void](New-Item -ItemType Directory -Path $apiWebRoot -Force)
+        Clear-DeploymentDirectory -Path $apiWebRoot
+        Copy-DirectoryContent -Source $frontendSource -Destination $apiWebRoot
+        Write-DeploymentLog -Message "Frontend artifact published to API web root: $apiWebRoot"
     }
 
     Remove-DeploymentItem -Path $offlinePath
