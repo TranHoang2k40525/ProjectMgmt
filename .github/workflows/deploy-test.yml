@@ -102,4 +102,5 @@ jobs:
             -BackupRoot 'C:\DeployBackup\ProjectMgmt-Test' `
             -LogPath 'C:\Logs\ProjectMgmt\deploy-test.log' `
             -HealthUrl $healthUrl `
+            -AppPoolName 'ProjectMgmt.dev.com' `
             -KeepBackups 5
