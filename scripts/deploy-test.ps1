@@ -68,6 +68,35 @@ function Copy-DirectoryContent {
     }
 }
 
+function Remove-DeploymentItem {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [ValidateRange(1, 60)][int]$RetryCount = 30,
+        [ValidateRange(1, 10)][int]$DelaySeconds = 2
+    )
+
+    $lastError = $null
+    for ($attempt = 1; $attempt -le $RetryCount; $attempt++) {
+        if (-not (Test-Path -LiteralPath $Path)) {
+            return
+        }
+
+        try {
+            Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+            return
+        }
+        catch {
+            $lastError = $_.Exception.Message
+            if ($attempt -lt $RetryCount) {
+                Write-Output "Removal attempt $attempt/$RetryCount failed for '$Path': $lastError"
+                Start-Sleep -Seconds $DelaySeconds
+            }
+        }
+    }
+
+    throw "Could not remove deployment item '$Path' after $RetryCount attempts: $lastError"
+}
+
 function Clear-DeploymentDirectory {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -76,7 +105,7 @@ function Clear-DeploymentDirectory {
 
     foreach ($item in @(Get-ChildItem -LiteralPath $Path -Force -ErrorAction SilentlyContinue)) {
         if ($PreserveNames -notcontains $item.Name) {
-            Remove-Item -LiteralPath $item.FullName -Recurse -Force
+            Remove-DeploymentItem -Path $item.FullName
         }
     }
 }
@@ -218,7 +247,7 @@ try {
         Copy-DirectoryContent -Source $frontendSource -Destination $resolvedWebTarget
     }
 
-    Remove-Item -LiteralPath $offlinePath -Force
+    Remove-DeploymentItem -Path $offlinePath
 
     if (-not (Test-DeploymentHealth -Url $HealthUrl)) {
         throw "The new deployment failed its health check: $HealthUrl"
@@ -258,7 +287,7 @@ catch {
             }
         }
 
-        Remove-Item -LiteralPath $offlinePath -Force -ErrorAction SilentlyContinue
+        Remove-DeploymentItem -Path $offlinePath
 
         if (Test-Path -LiteralPath $apiBackup -PathType Container) {
             $rollbackHealthy = Test-DeploymentHealth -Url $HealthUrl -RetryCount 6 -DelaySeconds 5
@@ -281,7 +310,12 @@ catch {
 }
 finally {
     if (Test-Path -LiteralPath $offlinePath -PathType Leaf) {
-        Remove-Item -LiteralPath $offlinePath -Force -ErrorAction SilentlyContinue
+        try {
+            Remove-DeploymentItem -Path $offlinePath -RetryCount 5
+        }
+        catch {
+            Write-Output "Final app_offline cleanup failed: $($_.Exception.Message)"
+        }
     }
 }
 
