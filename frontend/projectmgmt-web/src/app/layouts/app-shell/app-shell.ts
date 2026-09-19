@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit, ElementRef, inject, AfterViewInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, inject, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive, RouterOutlet, Router } from '@angular/router';
 import { IdentityService } from '../../core/services/identity.service';
@@ -12,7 +12,7 @@ import { gsap } from 'gsap';
   styleUrl: './app-shell.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class AppShellComponent implements OnInit, AfterViewInit {
+export class AppShellComponent implements AfterViewInit {
   protected readonly identity = inject(IdentityService);
   private readonly router = inject(Router);
   private readonly el = inject(ElementRef);
@@ -32,12 +32,8 @@ export class AppShellComponent implements OnInit, AfterViewInit {
     { path: '/admin/ai-governance', label: 'Quản trị AI', icon: 'psychology' }
   ];
 
-  ngOnInit(): void {
-    // Check if user is authenticated; if not, route to auth (unauthenticated mode)
-  }
-
   ngAfterViewInit(): void {
-    const ctx = gsap.context(() => {
+    gsap.context(() => {
       // Smooth entrance stagger for sidebar links using GSAP
       gsap.from('.jira-nav-link', {
         opacity: 0,

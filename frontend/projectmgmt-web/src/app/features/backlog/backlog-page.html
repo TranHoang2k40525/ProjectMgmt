@@ -93,6 +93,9 @@
           @for (item of sprint1Items(); track item.id) {
             <div
               (click)="selectIssue(item)"
+              (keydown.enter)="selectIssue(item)"
+              role="button"
+              tabindex="0"
               [class.ring-2]="selectedIssue()?.id === item.id"
               [class.ring-primary]="selectedIssue()?.id === item.id"
               class="flex items-center justify-between p-3 rounded-xl bg-surface-container-low/70 hover:bg-surface-container-low transition-all cursor-pointer group">
@@ -131,6 +134,9 @@
           @for (item of sprint2Items(); track item.id) {
             <div
               (click)="selectIssue(item)"
+              (keydown.enter)="selectIssue(item)"
+              role="button"
+              tabindex="0"
               [class.ring-2]="selectedIssue()?.id === item.id"
               [class.ring-primary]="selectedIssue()?.id === item.id"
               class="flex items-center justify-between p-3 rounded-xl bg-surface-container-low/70 hover:bg-surface-container-low transition-all cursor-pointer group">
