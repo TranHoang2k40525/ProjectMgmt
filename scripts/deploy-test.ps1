@@ -17,6 +17,8 @@ param(
 
     [string]$HealthUrl = 'http://ProjectMgmt.dev.com/health',
 
+    [string]$AppPoolName = 'ProjectMgmt.dev.com',
+
     [ValidateRange(1, 20)]
     [int]$KeepBackups = 5,
 
@@ -116,6 +118,50 @@ function Write-DeploymentLog {
     $line = '{0} {1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Message
     Write-Output $line
     Add-Content -LiteralPath $script:resolvedLogPath -Value $line -Encoding UTF8
+}
+
+function Set-DeploymentAppPoolState {
+    param(
+        [Parameter(Mandatory = $true)][ValidateSet('start', 'stop')][string]$Action,
+        [Parameter(Mandatory = $true)][string]$Name,
+        [ValidateRange(1, 60)][int]$TimeoutSeconds = 30
+    )
+
+    $appCmdPath = Join-Path $env:windir 'System32\inetsrv\appcmd.exe'
+    if (-not (Test-Path -LiteralPath $appCmdPath -PathType Leaf)) {
+        throw "IIS appcmd.exe was not found: $appCmdPath"
+    }
+
+    $expectedState = if ($Action -eq 'stop') { 'Stopped' } else { 'Started' }
+    $currentState = (& $appCmdPath list apppool "/apppool.name:$Name" /text:state 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to read IIS application pool '$Name': $currentState"
+    }
+
+    if ($currentState -eq $expectedState) {
+        Write-DeploymentLog -Message "IIS application pool '$Name' is already $expectedState."
+        return
+    }
+
+    $commandOutput = (& $appCmdPath $Action apppool "/apppool.name:$Name" 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to $Action IIS application pool '$Name': $commandOutput"
+    }
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    do {
+        Start-Sleep -Milliseconds 500
+        $currentState = (& $appCmdPath list apppool "/apppool.name:$Name" /text:state 2>&1 | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0) {
+            throw "Unable to verify IIS application pool '$Name': $currentState"
+        }
+        if ($currentState -eq $expectedState) {
+            Write-DeploymentLog -Message "IIS application pool '$Name' is $expectedState."
+            return
+        }
+    } while ((Get-Date) -lt $deadline)
+
+    throw "IIS application pool '$Name' did not reach state '$expectedState' within $TimeoutSeconds seconds. Current state: $currentState"
 }
 
 function Test-DeploymentHealth {
@@ -220,6 +266,7 @@ $offlinePath = Join-Path $resolvedApiTarget 'app_offline.htm'
 $apiHadContent = @(Get-ChildItem -LiteralPath $resolvedApiTarget -Force -ErrorAction SilentlyContinue).Count -gt 0
 $webHadContent = @(Get-ChildItem -LiteralPath $resolvedWebTarget -Force -ErrorAction SilentlyContinue).Count -gt 0
 $deploymentSucceeded = $false
+$appPoolStopped = $false
 
 try {
     Write-DeploymentLog -Message "Starting TEST deployment from backend artifact: $backendSource"
@@ -236,7 +283,8 @@ try {
     }
 
     Set-Content -LiteralPath $offlinePath -Value 'ProjectMgmt TEST is being deployed.' -Encoding ASCII
-    Start-Sleep -Seconds 2
+    Set-DeploymentAppPoolState -Action stop -Name $AppPoolName
+    $appPoolStopped = $true
 
     Clear-DeploymentDirectory -Path $resolvedApiTarget -PreserveNames @('app_offline.htm')
     Copy-DirectoryContent -Source $backendSource -Destination $resolvedApiTarget
@@ -248,6 +296,8 @@ try {
     }
 
     Remove-DeploymentItem -Path $offlinePath
+    Set-DeploymentAppPoolState -Action start -Name $AppPoolName
+    $appPoolStopped = $false
 
     if (-not (Test-DeploymentHealth -Url $HealthUrl)) {
         throw "The new deployment failed its health check: $HealthUrl"
@@ -272,7 +322,8 @@ catch {
 
     try {
         Set-Content -LiteralPath $offlinePath -Value 'ProjectMgmt TEST rollback is running.' -Encoding ASCII
-        Start-Sleep -Seconds 2
+        Set-DeploymentAppPoolState -Action stop -Name $AppPoolName
+        $appPoolStopped = $true
 
         if (Test-Path -LiteralPath $apiBackup -PathType Container) {
             Clear-DeploymentDirectory -Path $resolvedApiTarget -PreserveNames @('app_offline.htm')
@@ -288,6 +339,8 @@ catch {
         }
 
         Remove-DeploymentItem -Path $offlinePath
+        Set-DeploymentAppPoolState -Action start -Name $AppPoolName
+        $appPoolStopped = $false
 
         if (Test-Path -LiteralPath $apiBackup -PathType Container) {
             $rollbackHealthy = Test-DeploymentHealth -Url $HealthUrl -RetryCount 6 -DelaySeconds 5
@@ -315,6 +368,16 @@ finally {
         }
         catch {
             Write-Output "Final app_offline cleanup failed: $($_.Exception.Message)"
+        }
+    }
+
+    if ($appPoolStopped) {
+        try {
+            Set-DeploymentAppPoolState -Action start -Name $AppPoolName
+            $appPoolStopped = $false
+        }
+        catch {
+            Write-Output "Final application pool recovery failed: $($_.Exception.Message)"
         }
     }
 }
