@@ -11,7 +11,7 @@
   "textContent": "Sign in\n\nUse your Google Account\n\nEmail or phone\n\nForgot email?\n\nNot your computer? Use a private browsing window to sign in. Learn more about using Guest mode\n\nNext\nCreate account\nAfrikaans\nazərbaycan\nbosanski\ncatalà\nČeština\nCymraeg\nDansk\nDeutsch\neesti\nEnglish (United Kingdom)\nEnglish (United States)\nEspañol (España)\nEspañol (Latinoamérica)\neuskara\nFilipino\nFrançais (Canada)\nFrançais (France)\nGaeilge\ngalego\nHrvatski\nIndonesia\nisiZulu\níslenska\nItaliano\nKiswahili\nlatviešu\nlietuvių\nmagyar\nMelayu\nNederlands\nnorsk\no‘zbek\npolski\nPortuguês (Brasil)\nPortuguês (Portugal)\nromână\nshqip\nSlovenčina\nslovenščina\nsrpski (latinica)\nSuomi\nSvenska\nTiếng Việt\nTürkçe\nΕλληνικά\nбеларуская\nбългарски\nкыргызча\nқазақ тілі\nмакедонски\nмонгол\nРусский\nсрпски (ћирилица)\nУкраїнська\nქართული\nհայերեն\n‫עברית‬‎\n‫اردو‬‎\n‫العربية‬‎\n‫فارسی‬‎\nአማርኛ\nनेपाली\nमराठी\nहिन्दी\nঅসমীয়া\nবাংলা\nਪੰਜਾਬੀ\nગુજરાતી\nଓଡ଼ିଆ\nதமிழ்\nతెలుగు\nಕನ್ನಡ\nമലയാളം\nසිංහල\nไทย\nລາວ\nမြန်မာ\nខ្មែរ\n한국어\n中文（香港）\n日本語\n简体中文\n繁體中文\nHelpPrivacyTerms",
   "links": [
     {
-      "href": "https://accounts.google.com/signin/usernamerecovery?continue=https://stitch.withgoogle.com/projects/3489937127396055955&dsh=S875244080:1789848877968257&flowEntry=ServiceLogin&flowName=WebLiteSignIn&hl=en-US&osid=1",
+      "href": "https://accounts.google.com/signin/usernamerecovery?continue=https://stitch.withgoogle.com/projects/3489937127396055955&dsh=S371554287:1789849316363099&flowEntry=ServiceLogin&flowName=WebLiteSignIn&hl=en-US&osid=1",
       "text": "Forgot email?"
     },
     {
@@ -19,7 +19,7 @@
       "text": "Learn more about using Guest mode"
     },
     {
-      "href": "https://accounts.google.com/lifecycle/flows/signup?continue=https://stitch.withgoogle.com/projects/3489937127396055955&dsh=S875244080:1789848877968257&flowEntry=SignUp&flowName=GlifWebSignIn&hl=en-US&osid=1",
+      "href": "https://accounts.google.com/lifecycle/flows/signup?continue=https://stitch.withgoogle.com/projects/3489937127396055955&dsh=S371554287:1789849316363099&flowEntry=SignUp&flowName=GlifWebSignIn&hl=en-US&osid=1",
       "text": "Create account"
     },
     {
