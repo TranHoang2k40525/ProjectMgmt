@@ -1,8 +1,9 @@
-import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, OnDestroy, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { IdentityService } from '../../core/services/identity.service';
+import { NeoCampusSceneComponent } from '../../shared/scenes/neo-campus-scene/neo-campus-scene';
 
 import { gsap } from 'gsap';
 
@@ -11,14 +12,18 @@ export type AuthMode = 'LOGIN' | 'SIGNUP' | 'OTP_REGISTER' | 'FORGOT' | 'OTP_FOR
 @Component({
   selector: 'app-auth-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, NeoCampusSceneComponent],
   templateUrl: './auth-page.html',
   styleUrls: ['./auth-page.scss']
 })
-export class AuthPageComponent implements OnInit, OnDestroy {
+export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
   private fb = inject(FormBuilder);
   private identityService = inject(IdentityService);
   private router = inject(Router);
+
+  @ViewChild('authPage', { static: true }) private authPage!: ElementRef<HTMLElement>;
+  private motionMedia: ReturnType<typeof gsap.matchMedia> | null = null;
+  private modeTween: gsap.core.Tween | null = null;
 
   readonly mode = signal<AuthMode>('LOGIN');
   readonly loading = signal<boolean>(false);
@@ -58,8 +63,36 @@ export class AuthPageComponent implements OnInit, OnDestroy {
     });
   }
 
+  ngAfterViewInit(): void {
+    const root = this.authPage.nativeElement;
+    this.motionMedia = gsap.matchMedia(root);
+    this.motionMedia.add(
+      {
+        animate: '(prefers-reduced-motion: no-preference)',
+        desktop: '(min-width: 1024px)',
+        compact: '(max-width: 1023px)'
+      },
+      context => {
+        if (!context.conditions?.['animate']) return;
+
+        const isDesktop = context.conditions?.['desktop'];
+        const timeline = gsap.timeline({ defaults: { ease: 'power3.out' } });
+        timeline
+          .from(root.querySelector('.auth-brand'), { autoAlpha: 0, y: -18, duration: 0.65 })
+          .from(root.querySelector('.auth-hero-content'), { autoAlpha: 0, x: isDesktop ? -34 : 0, y: isDesktop ? 0 : 18, duration: 0.8 }, '-=0.4')
+          .from(root.querySelectorAll('.auth-stat'), { autoAlpha: 0, y: 16, stagger: 0.08, duration: 0.48 }, '-=0.45')
+          .from(root.querySelector('.auth-card'), { autoAlpha: 0, x: isDesktop ? 38 : 0, y: isDesktop ? 0 : 22, rotateY: isDesktop ? -3 : 0, duration: 0.85 }, '-=0.6')
+          .from(root.querySelector('.auth-footer'), { autoAlpha: 0, y: 10, duration: 0.45 }, '-=0.35');
+
+        return () => timeline.kill();
+      }
+    );
+  }
+
   ngOnDestroy(): void {
     this.stopTimer();
+    this.modeTween?.kill();
+    this.motionMedia?.revert();
   }
 
   setMode(newMode: AuthMode): void {
@@ -74,11 +107,16 @@ export class AuthPageComponent implements OnInit, OnDestroy {
     }
 
     setTimeout(() => {
-      gsap.fromTo('.auth-card-body', 
-        { opacity: 0, y: 10, scale: 0.99 },
-        { opacity: 1, y: 0, scale: 1, duration: 0.35, ease: 'power2.out' }
+      const body = this.authPage?.nativeElement.querySelector<HTMLElement>('.auth-card-body');
+      if (!body || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+      this.modeTween?.kill();
+      this.modeTween = gsap.fromTo(
+        body,
+        { autoAlpha: 0, y: 12, scale: 0.99 },
+        { autoAlpha: 1, y: 0, scale: 1, duration: 0.42, ease: 'power2.out', clearProps: 'transform' }
       );
-    }, 10);
+    }, 0);
   }
 
   // --- PASSWORD STRENGTH CALCULATION ---

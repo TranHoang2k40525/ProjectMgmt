@@ -1,4 +1,44 @@
 /* Stitch Design System - Auth Page Styling */
+.auth-page {
+  isolation: isolate;
+  perspective: 1400px;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 72% 44%, transparent 0 18%, rgb(7 25 62 / .2) 52%, rgb(3 18 48 / .5) 100%),
+      linear-gradient(90deg, rgb(5 27 70 / .5), transparent 52%, rgb(5 24 58 / .18));
+  }
+}
+
+.auth-neo-campus {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.auth-brand,
+.auth-hero-content,
+.auth-footer,
+.auth-card {
+  will-change: transform, opacity;
+}
+
+.auth-card {
+  transform-style: preserve-3d;
+  box-shadow:
+    0 30px 80px rgb(2 15 40 / .34),
+    0 2px 0 rgb(255 255 255 / .65) inset;
+}
+
+.auth-stat {
+  box-shadow: 0 18px 36px rgb(3 22 58 / .13);
+}
+
 .auth-wrapper {
   position: relative;
   min-height: 100vh;
@@ -442,10 +482,18 @@
   .auth-page {
     align-items: flex-start;
     padding: 1rem;
+
+    &::before {
+      background: linear-gradient(180deg, rgb(4 27 70 / .4), rgb(4 22 56 / .68));
+    }
   }
 
   .auth-layout {
     gap: 1rem;
+  }
+
+  .auth-layout > :last-child {
+    order: -1;
   }
 
   .auth-intro {
@@ -462,6 +510,12 @@
 
   .auth-card {
     border-radius: 1.25rem;
+  }
+
+  .auth-brand,
+  .auth-hero-content,
+  .auth-footer {
+    text-shadow: 0 2px 14px rgb(0 18 55 / .42);
   }
 }
 
@@ -485,5 +539,24 @@
 
   .auth-card {
     max-width: none;
+  }
+
+  .auth-layout > :last-child {
+    order: 0;
+  }
+
+  .auth-hero-content > p,
+  .auth-stats,
+  .auth-footer {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-brand,
+  .auth-hero-content,
+  .auth-footer,
+  .auth-card {
+    will-change: auto;
   }
 }
