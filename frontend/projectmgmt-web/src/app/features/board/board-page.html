@@ -154,7 +154,8 @@
             (keydown.space)="$event.preventDefault(); openTaskDrawer(item, $event)"
             role="button"
             tabindex="0"
-            class="p-3.5 rounded-lg bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 shadow-2xs hover:shadow-sm transition-all cursor-pointer space-y-2.5 group relative"
+            class="board-task-card p-3.5 rounded-lg bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 shadow-2xs hover:shadow-sm transition-all cursor-pointer space-y-2.5 group relative"
+            [attr.data-flip-id]="item.id"
           >
             <!-- Card Top Bar -->
             <div class="flex items-center justify-between">
@@ -235,7 +236,8 @@
             (keydown.space)="$event.preventDefault(); openTaskDrawer(item, $event)"
             role="button"
             tabindex="0"
-            class="p-3.5 rounded-lg bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 shadow-2xs hover:shadow-sm transition-all cursor-pointer space-y-2.5 group relative ring-1 ring-blue-500/30"
+            class="board-task-card p-3.5 rounded-lg bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 shadow-2xs hover:shadow-sm transition-all cursor-pointer space-y-2.5 group relative ring-1 ring-blue-500/30"
+            [attr.data-flip-id]="item.id"
           >
             <div class="flex items-center justify-between">
               <span class="px-2 py-0.5 rounded text-xs font-normal uppercase bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
@@ -289,7 +291,8 @@
             (keydown.space)="$event.preventDefault(); openTaskDrawer(item, $event)"
             role="button"
             tabindex="0"
-            class="p-3.5 rounded-lg bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 shadow-2xs hover:shadow-sm transition-all cursor-pointer space-y-2.5 group relative"
+            class="board-task-card p-3.5 rounded-lg bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 shadow-2xs hover:shadow-sm transition-all cursor-pointer space-y-2.5 group relative"
+            [attr.data-flip-id]="item.id"
           >
             <div class="flex items-center justify-between">
               <span class="px-2 py-0.5 rounded text-xs font-normal uppercase bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300">
@@ -343,7 +346,8 @@
             (keydown.space)="$event.preventDefault(); openTaskDrawer(item, $event)"
             role="button"
             tabindex="0"
-            class="p-3.5 rounded-lg bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 shadow-2xs opacity-85 hover:opacity-100 transition-all cursor-pointer space-y-2.5 group relative"
+            class="board-task-card p-3.5 rounded-lg bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 shadow-2xs opacity-85 hover:opacity-100 transition-all cursor-pointer space-y-2.5 group relative"
+            [attr.data-flip-id]="item.id"
           >
             <div class="flex items-center justify-between">
               <span class="px-2 py-0.5 rounded text-xs font-normal uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">

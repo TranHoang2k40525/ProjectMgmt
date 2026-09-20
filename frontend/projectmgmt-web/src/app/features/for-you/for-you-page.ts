@@ -2,13 +2,15 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { ProjectManagementService, Project, WorkItem } from '../../core/services/project-management.service';
+import { NeoCampusSceneComponent } from '../../shared/scenes/neo-campus-scene/neo-campus-scene';
 
 @Component({
   selector: 'app-for-you-page',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, NeoCampusSceneComponent],
   template: `
     <div class="for-you-page flex flex-col gap-6 max-w-6xl mx-auto animate-fade-in font-body text-slate-900 dark:text-slate-100">
+      <app-neo-campus-scene class="command-scene" mode="COMMAND" variant="command" />
       
       <!-- Recommended Spaces Section -->
       <div class="flex flex-col gap-3">
@@ -135,6 +137,21 @@ import { ProjectManagementService, Project, WorkItem } from '../../core/services
     </div>
   `,
   styles: [`
+    .for-you-page { position: relative; isolation: isolate; }
+    .for-you-page > :not(.command-scene) { position: relative; z-index: 1; }
+    .command-scene {
+      position: absolute;
+      z-index: 0;
+      top: -1rem;
+      right: -1rem;
+      width: min(54vw, 680px);
+      height: 300px;
+      opacity: .76;
+      border-radius: 28px;
+      overflow: hidden;
+      mask-image: linear-gradient(100deg, transparent 0, #000 24%, #000 88%, transparent 100%);
+    }
+
     @media (max-width: 1279px) {
       .for-you-page, .workspace-heading > *, .workspace-card, .work-item, .work-item-copy { min-width: 0; }
       .workspace-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -147,6 +164,7 @@ import { ProjectManagementService, Project, WorkItem } from '../../core/services
     }
 
     @media (max-width: 767px) {
+      .command-scene { width: 100%; right: 0; height: 230px; opacity: .3; mask-image: linear-gradient(180deg, #000, transparent); }
       .for-you-page { gap: 1rem; }
       .workspace-heading { align-items: flex-start; flex-direction: column; gap: .5rem; }
       .workspace-grid { grid-template-columns: minmax(0, 1fr); gap: .75rem; }
@@ -159,6 +177,10 @@ import { ProjectManagementService, Project, WorkItem } from '../../core/services
       .work-item-title { display: -webkit-box; overflow: hidden; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
       .work-item-meta { justify-content: space-between; gap: .5rem; padding-left: 2.5rem; }
       .work-item-meta > span:last-child { width: auto; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .command-scene { opacity: .2; }
     }
   `]
 })

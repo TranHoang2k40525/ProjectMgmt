@@ -1,9 +1,12 @@
-import { ChangeDetectionStrategy, Component, AfterViewInit, ElementRef, inject, signal, computed } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { gsap } from 'gsap';
+import { Flip } from 'gsap/Flip';
 import { ProjectManagementService, WorkItem } from '../../core/services/project-management.service';
 import { ToastService } from '../../core/services/toast.service';
+
+gsap.registerPlugin(Flip);
 
 @Component({
   selector: 'app-board-page',
@@ -13,8 +16,9 @@ import { ToastService } from '../../core/services/toast.service';
   styleUrl: './board-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class BoardPage implements AfterViewInit {
-  private el = inject(ElementRef);
+export class BoardPage implements OnDestroy {
+  private el = inject<ElementRef<HTMLElement>>(ElementRef);
+  private flipAnimation: gsap.core.Timeline | null = null;
   readonly projectService = inject(ProjectManagementService);
   readonly toastService = inject(ToastService);
 
@@ -62,14 +66,8 @@ export class BoardPage implements AfterViewInit {
   readonly codeReviewItems = computed(() => this.filteredItems().filter(i => i.statusName === 'Code Review'));
   readonly doneItems = computed(() => this.filteredItems().filter(i => i.statusName === 'Done'));
 
-  ngAfterViewInit(): void {
-    gsap.from('.board-column', {
-      opacity: 0,
-      y: 20,
-      duration: 0.4,
-      stagger: 0.08,
-      ease: 'power2.out'
-    });
+  ngOnDestroy(): void {
+    this.flipAnimation?.kill();
   }
 
   openTaskDrawer(task: WorkItem, event?: Event): void {
@@ -89,18 +87,18 @@ export class BoardPage implements AfterViewInit {
     const idx = statuses.indexOf(task.statusName);
     if (direction === 'next' && idx < statuses.length - 1) {
       const nextStatus = statuses[idx + 1];
-      this.projectService.updateWorkItemStatus(task.id, nextStatus);
+      this.animateBoardChange(() => this.projectService.updateWorkItemStatus(task.id, nextStatus));
       this.toastService.success('Đã Chuyển Cột', `Công việc [${task.issueKey}] sang ${nextStatus}`);
     } else if (direction === 'prev' && idx > 0) {
       const prevStatus = statuses[idx - 1];
-      this.projectService.updateWorkItemStatus(task.id, prevStatus);
+      this.animateBoardChange(() => this.projectService.updateWorkItemStatus(task.id, prevStatus));
       this.toastService.info('Lùi Trạng Thái', `Công việc [${task.issueKey}] về ${prevStatus}`);
     }
   }
 
   updateInlineStatus(taskId: string, statusName: string, event?: Event): void {
     if (event) event.stopPropagation();
-    this.projectService.updateWorkItemStatus(taskId, statusName);
+    this.animateBoardChange(() => this.projectService.updateWorkItemStatus(taskId, statusName));
     this.toastService.success('Cập Nhật Trạng Thái', `Đã chuyển sang ${statusName}`);
   }
 
@@ -149,8 +147,32 @@ export class BoardPage implements AfterViewInit {
 
   deleteItem(taskId: string, event?: Event): void {
     if (event) event.stopPropagation();
-    this.projectService.deleteWorkItem(taskId);
+    this.animateBoardChange(() => this.projectService.deleteWorkItem(taskId));
     this.toastService.warning('Đã Xóa Công Việc', 'Công việc đã xóa khỏi bảng.');
     this.activeMenuTaskId.set(null);
+  }
+
+  private animateBoardChange(update: () => void): void {
+    const cards = this.el.nativeElement.querySelectorAll<HTMLElement>('.board-task-card');
+    if (!cards.length || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      update();
+      return;
+    }
+
+    const state = Flip.getState(cards);
+    this.flipAnimation?.kill();
+    update();
+
+    requestAnimationFrame(() => {
+      this.flipAnimation = Flip.from(state, {
+        duration: 0.52,
+        ease: 'power3.inOut',
+        absolute: true,
+        prune: true,
+        stagger: 0.012,
+        onEnter: elements => gsap.fromTo(elements, { autoAlpha: 0, scale: 0.92 }, { autoAlpha: 1, scale: 1, duration: 0.3 }),
+        onLeave: elements => gsap.to(elements, { autoAlpha: 0, scale: 0.92, duration: 0.2 })
+      });
+    });
   }
 }

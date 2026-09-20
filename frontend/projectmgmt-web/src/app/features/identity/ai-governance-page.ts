@@ -3,11 +3,12 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IdentityService } from '../../core/services/identity.service';
 import { AiModelConfig, AiGenLogModel } from '../../core/mocks/identity-mock-db';
+import { NeoCampusSceneComponent } from '../../shared/scenes/neo-campus-scene/neo-campus-scene';
 
 @Component({
   selector: 'app-ai-governance-page',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, NeoCampusSceneComponent],
   templateUrl: './ai-governance-page.html',
   styleUrls: ['./ai-governance-page.scss']
 })

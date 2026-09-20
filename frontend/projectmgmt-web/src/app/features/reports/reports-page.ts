@@ -1,5 +1,6 @@
-import { Component, inject } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, OnDestroy, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { gsap } from 'gsap';
 import { ProjectManagementService } from '../../core/services/project-management.service';
 
 @Component({
@@ -83,7 +84,7 @@ import { ProjectManagementService } from '../../core/services/project-management
                 <span class="text-xs font-mono font-bold text-primary">{{ sprint.totalStoryPoints }} SP</span>
                 <div
                   [style.height.%]="(sprint.totalStoryPoints / 40) * 100"
-                  class="w-full max-w-[48px] bg-indigo-600 dark:bg-indigo-500 rounded-t-xl hover:brightness-110 transition-all cursor-pointer"
+                  class="velocity-bar w-full max-w-[48px] bg-indigo-600 dark:bg-indigo-500 rounded-t-xl hover:brightness-110 transition-all cursor-pointer"
                 ></div>
                 <span class="velocity-label text-xs font-bold text-slate-700 dark:text-slate-300 truncate w-full text-center">{{ sprint.name }}</span>
               </div>
@@ -122,7 +123,33 @@ import { ProjectManagementService } from '../../core/services/project-management
     }
   `]
 })
-export class ReportsPageComponent {
+export class ReportsPageComponent implements AfterViewInit, OnDestroy {
   private readonly projectService = inject(ProjectManagementService);
+  private readonly elementRef = inject<ElementRef<HTMLElement>>(ElementRef);
+  private motionMedia: ReturnType<typeof gsap.matchMedia> | null = null;
   readonly sprints = this.projectService.sprints;
+
+  ngAfterViewInit(): void {
+    const root = this.elementRef.nativeElement;
+    this.motionMedia = gsap.matchMedia(root);
+    this.motionMedia.add('(prefers-reduced-motion: no-preference)', () => {
+      const strokes = gsap.utils.toArray<SVGGeometryElement>('.chart-svg line, .chart-svg polyline', root);
+      strokes.forEach(stroke => {
+        const length = Math.max(stroke.getTotalLength(), 1);
+        gsap.set(stroke, { strokeDasharray: length, strokeDashoffset: length });
+      });
+
+      const timeline = gsap.timeline({ defaults: { ease: 'power3.out' } });
+      timeline
+        .to(strokes, { strokeDashoffset: 0, duration: 0.9, stagger: 0.08, clearProps: 'strokeDasharray,strokeDashoffset' })
+        .from('.velocity-bar', { scaleY: 0, transformOrigin: 'bottom center', duration: 0.72, stagger: 0.09 }, '<0.15')
+        .from('.velocity-label', { autoAlpha: 0, y: 8, duration: 0.35, stagger: 0.06 }, '-=0.35');
+
+      return () => timeline.kill();
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.motionMedia?.revert();
+  }
 }
