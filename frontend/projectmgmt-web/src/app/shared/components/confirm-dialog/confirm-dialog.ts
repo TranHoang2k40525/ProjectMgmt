@@ -8,12 +8,12 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
   imports: [CommonModule],
   template: `
     @if (dialogService.state(); as dialog) {
-      <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in font-body text-slate-900 dark:text-slate-100">
+      <div class="confirm-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in font-body text-slate-900 dark:text-slate-100">
         <!-- Backdrop close -->
         <button type="button" aria-label="Đóng hộp thoại xác nhận" class="fixed inset-0 w-full h-full bg-transparent border-0" (click)="dialogService.close()"></button>
 
         <!-- Custom Popup Dialog Box -->
-        <div class="relative z-10 w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col p-6 space-y-4 animate-scale-up">
+        <div class="confirm-panel relative z-10 w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col p-6 space-y-4 animate-scale-up">
           
           <div class="flex items-start gap-4">
             <div
@@ -40,7 +40,7 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
             </div>
           </div>
 
-          <div class="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+          <div class="confirm-actions flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
             <button
               (click)="dialogService.close()"
               class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
@@ -64,7 +64,25 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
         </div>
       </div>
     }
-  `
+  `,
+  styles: [`
+    @media (max-width: 1279px) {
+      .confirm-panel { max-height: calc(100dvh - 2rem); overflow-y: auto; }
+      .confirm-panel button { min-height: 40px; }
+    }
+
+    @media (max-width: 767px) {
+      .confirm-backdrop { align-items: flex-end; padding: 0; }
+      .confirm-panel { max-height: calc(100dvh - 1rem); padding: 1rem; border-radius: 1rem 1rem 0 0; }
+      .confirm-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .confirm-actions button { min-height: 44px; }
+    }
+
+    @media (max-width: 932px) and (orientation: landscape) and (max-height: 520px) {
+      .confirm-backdrop { align-items: center; padding: .5rem; }
+      .confirm-panel { max-width: 680px; max-height: calc(100dvh - 1rem); border-radius: 1rem; }
+    }
+  `]
 })
 export class ConfirmDialogComponent {
   readonly dialogService = inject(ConfirmDialogService);

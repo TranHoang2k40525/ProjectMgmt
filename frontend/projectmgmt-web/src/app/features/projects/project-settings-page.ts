@@ -319,6 +319,28 @@ import { ToastService } from '../../core/services/toast.service';
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
+
+    @media (max-width: 1279px) {
+      .settings-container { width: 100%; max-width: 900px; min-width: 0; padding: 1rem; }
+      .settings-tabs {
+        overflow-x: auto;
+        overscroll-behavior-inline: contain;
+        scroll-snap-type: x proximity;
+        scrollbar-width: thin;
+      }
+      .tab-item { flex: 0 0 auto; scroll-snap-align: start; }
+      .card, .settings-content { min-width: 0; }
+    }
+
+    @media (max-width: 767px) {
+      .settings-container { padding: 0; }
+      h1 { font-size: 1.35rem; }
+      .settings-tabs { gap: 0; margin-bottom: 1.25rem; }
+      .tab-item { padding: .75rem .9rem; font-size: .875rem; }
+      .card { padding: 1rem; }
+      .form-actions .btn,
+      .danger-card .btn { min-height: 44px; width: 100%; }
+    }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush
 })

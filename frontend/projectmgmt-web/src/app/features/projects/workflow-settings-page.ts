@@ -44,7 +44,7 @@ import { ToastService } from '../../core/services/toast.service';
 
       <!-- 1. Apply Workflow Template Section -->
       <div class="card bg-gradient-to-r from-blue-50/50 to-indigo-50/50 border-blue-200">
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div class="workflow-template-layout flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h3 style="font-family: Arial, sans-serif;" class="text-blue-900 flex items-center gap-2">
               <span>🚀</span> Áp dụng Quy trình Mẫu vào Dự án (Workflow Schemes)
@@ -52,7 +52,7 @@ import { ToastService } from '../../core/services/toast.service';
             <p class="hint text-blue-700">Tự động cấu hình danh sách trạng thái và bảng Kanban theo chuẩn phương pháp Agile/Scrum.</p>
           </div>
 
-          <div class="flex items-center gap-2.5 shrink-0">
+          <div class="workflow-template-actions flex items-center gap-2.5 shrink-0">
             <select
               [ngModel]="selectedTemplate()"
               (ngModelChange)="selectedTemplate.set($event)"
@@ -73,7 +73,7 @@ import { ToastService } from '../../core/services/toast.service';
 
       <!-- 2. Manage Statuses in Project -->
       <div class="card">
-        <div class="flex items-center justify-between mb-3">
+        <div class="status-section-header flex items-center justify-between mb-3">
           <h3 style="font-family: Arial, sans-serif;">Các trạng thái hiện tại ({{ statuses().length }} bước quy trình)</h3>
           <span class="text-xs font-normal text-slate-500">Tự động đồng bộ với Backlog và Scrum Board</span>
         </div>
@@ -97,7 +97,7 @@ import { ToastService } from '../../core/services/toast.service';
         </div>
 
         <!-- Add New Status Form -->
-        <div class="flex items-center gap-2.5 pt-3 border-t border-slate-100">
+        <div class="status-create-row flex items-center gap-2.5 pt-3 border-t border-slate-100">
           <input
             type="text"
             [(ngModel)]="newStatusName"
@@ -521,6 +521,100 @@ import { ToastService } from '../../core/services/toast.service';
       text-align: center;
       padding: 2rem;
       color: #64748b;
+    }
+
+    @media (max-width: 1279px) {
+      .workflow-container {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        padding: 1rem;
+      }
+      .workflow-container *,
+      .card,
+      .list-box {
+        min-width: 0;
+      }
+      .settings-tabs {
+        overflow-x: auto;
+        overscroll-behavior-inline: contain;
+        scroll-snap-type: x proximity;
+        scrollbar-width: thin;
+      }
+      .tab-item {
+        flex: 0 0 auto;
+        scroll-snap-align: start;
+      }
+      .workflow-template-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .workflow-template-actions {
+        width: 100%;
+        flex-wrap: wrap;
+      }
+      .workflow-template-actions .form-control {
+        flex: 1 1 420px;
+      }
+      .status-section-header,
+      .status-create-row {
+        flex-wrap: wrap;
+      }
+      .status-create-row > input {
+        flex: 1 1 320px;
+      }
+      .workflow-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .transitions-table-wrap {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: auto;
+        overscroll-behavior-inline: contain;
+      }
+      .transitions-table {
+        min-width: 720px;
+      }
+      .workflow-container button {
+        min-height: 40px;
+      }
+    }
+
+    @media (max-width: 767px) {
+      .workflow-container { padding: 0; }
+      h1 { font-size: 1.35rem; line-height: 1.08; }
+      .subtitle { line-height: 1.45; }
+      .settings-tabs { gap: 0; margin: 1rem 0; }
+      .tab-item { padding: .75rem .9rem; font-size: .875rem; }
+      .card { padding: 1rem; margin-bottom: 1rem; }
+      .workflow-template-actions {
+        align-items: stretch;
+        flex-direction: column;
+      }
+      .workflow-template-actions .form-control,
+      .workflow-template-actions .btn {
+        flex-basis: auto;
+        width: 100%;
+      }
+      .status-section-header {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: .35rem;
+      }
+      .status-create-row {
+        align-items: stretch;
+        flex-direction: column;
+      }
+      .status-create-row > * { width: 100% !important; flex-basis: auto !important; }
+      .list-header { align-items: flex-start; flex-wrap: wrap; gap: .75rem; }
+      .btn { min-height: 42px; }
+    }
+
+    @media (max-width: 932px) and (orientation: landscape) and (max-height: 520px) {
+      .workflow-container { padding-block: .5rem; }
+      .card { padding: 1rem; }
+      .workflow-template-actions { align-items: stretch; }
+      .workflow-template-actions .btn { min-height: 42px; }
     }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush

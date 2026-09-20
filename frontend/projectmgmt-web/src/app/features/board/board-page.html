@@ -3,7 +3,7 @@
   <button type="button" aria-label="Đóng menu" class="fixed inset-0 z-30 w-full h-full bg-transparent border-0" (click)="closeAllPopups()"></button>
 }
 
-<div class="p-6 max-w-[1650px] mx-auto font-body text-slate-900 dark:text-slate-100 space-y-5">
+<div class="board-page p-6 max-w-[1650px] mx-auto font-body text-slate-900 dark:text-slate-100 space-y-5">
 
   <!-- Clean Header & Page Context -->
   <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
@@ -22,7 +22,7 @@
   </div>
 
   <!-- Filter Bar (Sticky when scrolling down board) -->
-  <div class="sticky top-28 z-20 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-sm transition-all">
+  <div class="board-filter-toolbar sticky top-28 z-20 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-sm transition-all">
     <div class="flex items-center gap-2.5 flex-wrap flex-1">
       <!-- Search Input -->
       <div class="relative flex items-center max-w-xs w-full">
@@ -130,7 +130,7 @@
   </div>
 
   <!-- Board Columns Grid / Touch Carousel for Mobile & Tablet -->
-  <div class="flex overflow-x-auto snap-x snap-mandatory gap-3.5 pb-4 md:grid md:grid-cols-2 lg:grid-cols-4 md:overflow-visible no-scrollbar">
+  <div class="kanban-grid flex overflow-x-auto snap-x snap-mandatory gap-3.5 pb-4 md:grid md:grid-cols-2 lg:grid-cols-4 md:overflow-visible no-scrollbar">
     
     <!-- COLUMN 1: TO DO -->
     <div class="board-column min-w-[280px] sm:min-w-[320px] md:min-w-0 snap-center flex-1 rounded-xl bg-slate-100/80 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-3 sm:p-3.5 space-y-3">

@@ -259,6 +259,26 @@ import { Project, ProjectManagementService } from '../../core/services/project-m
       justify-content: space-between;
       align-items: center;
     }
+
+    @media (max-width: 1279px) {
+      .projects-container { width: 100%; max-width: 100%; min-width: 0; padding: 1rem; }
+      .project-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); }
+      .project-card, .page-header > div { min-width: 0; }
+      .projects-container .btn { min-height: 40px; }
+    }
+
+    @media (max-width: 767px) {
+      .projects-container { padding: 0; }
+      .page-header { align-items: stretch; flex-direction: column; gap: 1rem; margin-bottom: 1.25rem; }
+      .page-header .btn-primary { justify-content: center; width: 100%; }
+      .project-grid { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+      .project-card { padding: 1rem; }
+      .project-desc { display: block; overflow: visible; }
+      .card-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .card-actions .btn { justify-content: center; min-height: 42px; }
+      .card-actions .btn:last-child { grid-column: 1 / -1; }
+      .error-alert { align-items: stretch; flex-direction: column; gap: .75rem; }
+    }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush
 })

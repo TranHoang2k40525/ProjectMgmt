@@ -298,3 +298,149 @@
     padding: 16px;
   }
 }
+
+/* Responsive shell: tablet remains a drawer layout until the desktop boundary. */
+@media (max-width: 1279px) {
+  .desktop-quick-search {
+    display: none !important;
+  }
+
+  .app-topbar button,
+  .app-topbar > div:last-child a {
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  .compact-search-trigger,
+  .compact-search-panel {
+    display: flex !important;
+  }
+
+  .tablet-sidebar-backdrop {
+    display: block !important;
+  }
+
+  .app-sidebar {
+    width: 15rem !important;
+    transform: translateX(-100%) !important;
+  }
+
+  .app-sidebar.translate-x-0 {
+    transform: translateX(0) !important;
+  }
+
+  .app-main {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    padding-left: 0 !important;
+  }
+
+  .project-context-bar {
+    left: 0 !important;
+    min-width: 0;
+  }
+
+  .project-context-identity {
+    min-width: 0;
+    max-width: min(34vw, 250px);
+  }
+
+  .project-context-tabs {
+    min-width: 0;
+    max-width: 100%;
+    padding-right: 24px;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin !important;
+    -webkit-overflow-scrolling: touch;
+    -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 24px), transparent 100%);
+    mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 24px), transparent 100%);
+  }
+
+  .project-context-tabs > a {
+    min-height: 40px;
+    scroll-snap-align: start;
+  }
+
+  .app-page-body {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .global-toast-stack {
+    right: 1rem;
+    bottom: 1rem;
+    width: min(28rem, calc(100vw - 2rem));
+  }
+}
+
+@media (max-width: 767px) {
+  .app-topbar {
+    gap: .5rem;
+  }
+
+  .app-topbar > div:first-child,
+  .app-topbar > div:first-child > a,
+  .app-topbar > div:first-child > a > div {
+    min-width: 0;
+  }
+
+  .app-topbar > div:first-child > a > div span:first-child {
+    display: block;
+    max-width: 145px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .project-context-bar {
+    padding-inline: .75rem;
+  }
+
+  .project-context-identity {
+    max-width: 42px;
+  }
+
+  .project-context-tabs {
+    gap: .25rem;
+  }
+
+  .project-context-tabs > a {
+    padding-inline: .625rem;
+  }
+
+  .app-page-body {
+    padding: .75rem;
+  }
+
+  .global-toast-stack {
+    right: .75rem;
+    bottom: .75rem;
+    width: calc(100vw - 1.5rem);
+  }
+}
+
+@media (max-width: 420px) {
+  .app-topbar > div:first-child > a > div span:first-child {
+    max-width: 116px;
+  }
+
+  .app-topbar > div:last-child {
+    gap: .25rem;
+  }
+}
+
+@media (max-width: 932px) and (orientation: landscape) and (max-height: 520px) {
+  .app-sidebar {
+    overflow-y: auto;
+  }
+
+  .global-toast-stack {
+    bottom: .5rem;
+    max-height: calc(100dvh - 1rem);
+    overflow-y: auto;
+  }
+}

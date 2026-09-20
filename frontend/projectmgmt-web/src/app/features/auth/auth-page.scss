@@ -422,3 +422,68 @@
     transform: rotate(360deg);
   }
 }
+
+@media (max-width: 1279px) {
+  .auth-page,
+  .auth-layout,
+  .auth-intro,
+  .auth-card {
+    min-width: 0;
+  }
+
+  .auth-page button,
+  .auth-page input,
+  .auth-page select {
+    min-height: 40px;
+  }
+}
+
+@media (max-width: 767px) {
+  .auth-page {
+    align-items: flex-start;
+    padding: 1rem;
+  }
+
+  .auth-layout {
+    gap: 1rem;
+  }
+
+  .auth-intro {
+    padding-block: 0;
+  }
+
+  .auth-stats {
+    gap: .5rem;
+  }
+
+  .auth-stats > div {
+    padding: .75rem;
+  }
+
+  .auth-card {
+    border-radius: 1.25rem;
+  }
+}
+
+@media (max-width: 932px) and (orientation: landscape) and (max-height: 520px) {
+  .auth-page {
+    align-items: flex-start;
+    padding: .75rem;
+  }
+
+  .auth-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(340px, 420px);
+    gap: 1rem;
+    align-items: start;
+  }
+
+  .auth-intro {
+    grid-column: auto;
+    gap: 1rem;
+    padding: 0;
+  }
+
+  .auth-card {
+    max-width: none;
+  }
+}

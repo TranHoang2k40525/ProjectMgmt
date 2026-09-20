@@ -8,16 +8,16 @@ import { ProjectManagementService, Project, WorkItem } from '../../core/services
   standalone: true,
   imports: [CommonModule, RouterLink],
   template: `
-    <div class="flex flex-col gap-6 max-w-6xl mx-auto animate-fade-in font-body text-slate-900 dark:text-slate-100">
+    <div class="for-you-page flex flex-col gap-6 max-w-6xl mx-auto animate-fade-in font-body text-slate-900 dark:text-slate-100">
       
       <!-- Recommended Spaces Section -->
       <div class="flex flex-col gap-3">
-        <div class="flex items-center justify-between">
+        <div class="workspace-heading flex items-center justify-between">
           <h2 class="text-base font-bold text-slate-900 dark:text-white uppercase tracking-wider">Dự án & Không gian làm việc</h2>
           <a routerLink="/project/summary" class="text-sm font-semibold text-primary hover:underline">Xem tổng quan dự án &rarr;</a>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div class="workspace-grid grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           @for (proj of projects(); track proj.id) {
             <div
               (click)="selectProject(proj)"
@@ -25,7 +25,7 @@ import { ProjectManagementService, Project, WorkItem } from '../../core/services
               (keydown.space)="$event.preventDefault(); selectProject(proj)"
               role="button"
               tabindex="0"
-              class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col gap-3 group border-l-4 border-l-primary"
+              class="workspace-card p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col gap-3 group border-l-4 border-l-primary"
             >
               <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-base shrink-0 group-hover:scale-105 transition-transform">
@@ -43,11 +43,11 @@ import { ProjectManagementService, Project, WorkItem } from '../../core/services
 
       <!-- Personalized Work Items Tabs & List -->
       <div class="flex flex-col gap-4 mt-2">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
+        <div class="work-header flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
           <h2 class="text-lg font-bold text-slate-900 dark:text-white">Dành cho bạn (For You)</h2>
 
           <!-- Tabs Switcher (Min 14px font) -->
-          <div class="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-xl text-sm font-semibold">
+          <div class="work-tabs flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-xl text-sm font-semibold">
             <button
               (click)="activeTab.set('assigned')"
               [class.bg-white]="activeTab() === 'assigned'"
@@ -85,7 +85,7 @@ import { ProjectManagementService, Project, WorkItem } from '../../core/services
         </div>
 
         <!-- Work Items Table List -->
-        <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col gap-3">
+        <div class="work-list-panel p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col gap-3">
           <span class="text-xs font-bold text-slate-400 uppercase tracking-wider px-2">Danh sách công việc đang thực hiện</span>
 
           <div class="divide-y divide-slate-100 dark:divide-slate-800">
@@ -96,15 +96,15 @@ import { ProjectManagementService, Project, WorkItem } from '../../core/services
                 (keydown.space)="$event.preventDefault(); openDrawer(item)"
                 role="button"
                 tabindex="0"
-                class="flex items-center justify-between py-3.5 px-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors group"
+                class="work-item flex items-center justify-between py-3.5 px-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors group"
               >
                 <div class="flex items-center gap-3.5 min-w-0">
                   <div class="w-6 h-6 rounded border border-slate-300 dark:border-slate-600 flex items-center justify-center text-slate-400 shrink-0">
                     <span class="material-symbols-outlined text-[16px]">check</span>
                   </div>
 
-                  <div class="flex flex-col truncate">
-                    <span class="text-sm font-semibold text-slate-900 dark:text-white truncate group-hover:text-primary transition-colors leading-snug">
+                  <div class="work-item-copy flex flex-col truncate">
+                    <span class="work-item-title text-sm font-semibold text-slate-900 dark:text-white truncate group-hover:text-primary transition-colors leading-snug">
                       {{ item.title }}
                     </span>
                     <div class="flex items-center gap-2 text-xs text-slate-400">
@@ -115,7 +115,7 @@ import { ProjectManagementService, Project, WorkItem } from '../../core/services
                   </div>
                 </div>
 
-                <div class="flex items-center gap-4 shrink-0 text-sm">
+                <div class="work-item-meta flex items-center gap-4 shrink-0 text-sm">
                   <span class="px-3 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
                     {{ item.statusName }}
                   </span>
@@ -133,7 +133,34 @@ import { ProjectManagementService, Project, WorkItem } from '../../core/services
       </div>
 
     </div>
-  `
+  `,
+  styles: [`
+    @media (max-width: 1279px) {
+      .for-you-page, .workspace-heading > *, .workspace-card, .work-item, .work-item-copy { min-width: 0; }
+      .workspace-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .work-tabs { max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: thin; }
+      .work-tabs > button { flex: 0 0 auto; min-height: 40px; }
+    }
+
+    @media (max-width: 932px) {
+      .workspace-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 767px) {
+      .for-you-page { gap: 1rem; }
+      .workspace-heading { align-items: flex-start; flex-direction: column; gap: .5rem; }
+      .workspace-grid { grid-template-columns: minmax(0, 1fr); gap: .75rem; }
+      .workspace-card span { white-space: normal; }
+      .work-header { align-items: stretch; }
+      .work-tabs { width: 100%; }
+      .work-list-panel { padding: .75rem; }
+      .work-item { align-items: stretch; flex-direction: column; gap: .75rem; }
+      .work-item-copy { overflow: visible; }
+      .work-item-title { display: -webkit-box; overflow: hidden; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+      .work-item-meta { justify-content: space-between; gap: .5rem; padding-left: 2.5rem; }
+      .work-item-meta > span:last-child { width: auto; }
+    }
+  `]
 })
 export class ForYouPageComponent {
   private readonly projectService = inject(ProjectManagementService);

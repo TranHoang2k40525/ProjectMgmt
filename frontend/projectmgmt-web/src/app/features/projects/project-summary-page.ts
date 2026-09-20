@@ -8,13 +8,13 @@ import { ProjectManagementService } from '../../core/services/project-management
   standalone: true,
   imports: [CommonModule, RouterLink],
   template: `
-    <div class="flex flex-col gap-6 animate-fade-in">
+    <div class="project-summary-page flex flex-col gap-6 animate-fade-in">
       
       <!-- Top Banner Header -->
-      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shadow-xl relative overflow-hidden">
+      <div class="summary-hero flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shadow-xl relative overflow-hidden">
         <div class="absolute -right-10 -bottom-10 w-64 h-64 bg-primary/20 rounded-full blur-3xl pointer-events-none"></div>
 
-        <div class="flex items-center gap-4 z-10">
+        <div class="summary-hero-copy flex items-center gap-4 z-10">
           <div class="w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-md p-1.5 ring-1 ring-white/20 shrink-0 flex items-center justify-center">
             <img src="assets/images/huce-branding/huce-official-logo.png" alt="HUCE Logo" class="w-full h-full object-contain" />
           </div>
@@ -28,7 +28,7 @@ import { ProjectManagementService } from '../../core/services/project-management
           </div>
         </div>
 
-        <div class="flex items-center gap-3 z-10">
+        <div class="summary-hero-action flex items-center gap-3 z-10">
           <a routerLink="/board" class="px-4 py-2 rounded-xl bg-primary hover:bg-primary-container text-white text-xs font-bold shadow-md transition-all flex items-center gap-1.5">
             <span class="material-symbols-outlined text-[18px]">view_kanban</span>
             Mở Bảng Scrum
@@ -37,7 +37,7 @@ import { ProjectManagementService } from '../../core/services/project-management
       </div>
 
       <!-- Bento Grid Layout Container -->
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="summary-kpi-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         
         <!-- KPI Tile 1: Done -->
         <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
@@ -98,11 +98,11 @@ import { ProjectManagementService } from '../../core/services/project-management
       </div>
 
       <!-- Bento Big Tiles: Status Donut Breakdown & Activity Stream -->
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="summary-main-grid grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         <!-- Tile Left: Status Overview Donut Visual -->
         <div class="lg:col-span-2 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col gap-6">
-          <div class="flex items-center justify-between">
+          <div class="summary-status-header flex items-center justify-between">
             <div class="flex flex-col">
               <h3 class="text-base font-bold text-slate-900 dark:text-white">Tổng Quan Trạng Thái Công Việc</h3>
               <p class="text-xs text-slate-400">Phân bố công việc theo trạng thái trong dự án</p>
@@ -185,7 +185,26 @@ import { ProjectManagementService } from '../../core/services/project-management
       </div>
 
     </div>
-  `
+  `,
+  styles: [`
+    @media (max-width: 1279px) {
+      .project-summary-page, .summary-hero, .summary-hero-copy, .summary-hero-copy > div { min-width: 0; }
+      .summary-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .summary-main-grid { grid-template-columns: minmax(0, 1fr); }
+      .summary-main-grid > * { grid-column: auto !important; }
+    }
+
+    @media (max-width: 767px) {
+      .project-summary-page { gap: 1rem; }
+      .summary-hero { align-items: stretch; padding: 1rem; }
+      .summary-hero-copy { align-items: flex-start; }
+      .summary-hero-copy h1 { line-height: 1.15; }
+      .summary-hero-action, .summary-hero-action a { width: 100%; }
+      .summary-hero-action a { justify-content: center; min-height: 44px; }
+      .summary-kpi-grid { grid-template-columns: minmax(0, 1fr); gap: .75rem; }
+      .summary-status-header { align-items: flex-start; flex-direction: column; gap: .75rem; }
+    }
+  `]
 })
 export class ProjectSummaryPageComponent {
   private readonly projectService = inject(ProjectManagementService);

@@ -155,3 +155,73 @@
     color: #737685;
   }
 }
+
+@media (max-width: 1279px) {
+  .notifications-page,
+  .notifications-heading,
+  .notifications-layout,
+  .notifications-layout > *,
+  .notification-card,
+  .notification-card-head {
+    min-width: 0;
+  }
+
+  .notifications-page {
+    padding-inline: 1rem;
+  }
+
+  .notifications-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .notifications-layout > * {
+    grid-column: auto !important;
+  }
+
+  .notifications-actions {
+    flex-wrap: wrap;
+  }
+
+  .notifications-page button,
+  .notifications-page input,
+  .notifications-page select {
+    min-height: 40px;
+  }
+}
+
+@media (max-width: 767px) {
+  .notifications-page {
+    padding: .5rem 0 1rem;
+  }
+
+  .notifications-heading,
+  .notifications-actions {
+    align-items: stretch;
+  }
+
+  .notifications-actions {
+    flex-direction: column;
+  }
+
+  .notifications-actions > * {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .notification-card {
+    padding: 1rem;
+  }
+
+  .notification-card-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .notification-card-head time {
+    white-space: normal;
+  }
+
+  .realtime-metrics-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

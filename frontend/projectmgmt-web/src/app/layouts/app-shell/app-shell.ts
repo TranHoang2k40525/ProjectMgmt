@@ -1,4 +1,4 @@
-import { Component, HostListener, inject, signal, computed } from '@angular/core';
+import { Component, HostListener, afterNextRender, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive, RouterOutlet, Router, NavigationEnd } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -61,7 +61,7 @@ export class AppShellComponent {
   });
 
   // Global Interactive UI Signals
-  readonly isSidebarCollapsed = signal<boolean>(typeof window !== 'undefined' && window.innerWidth < 1024);
+  readonly isSidebarCollapsed = signal<boolean>(typeof window !== 'undefined' && window.innerWidth < 1280);
 
   // Computed Expanded State
   readonly isSidebarExpanded = computed(() => !this.isSidebarCollapsed());
@@ -80,15 +80,18 @@ export class AppShellComponent {
   readonly workItems = this.projectService.workItems;
 
   constructor() {
+    afterNextRender(() => this.revealActiveProjectTab());
+
     this.router.events.pipe(
       filter((event): event is NavigationEnd => event instanceof NavigationEnd)
     ).subscribe((event) => {
       this.currentUrl.set(event.urlAfterRedirects || event.url);
       this.closeFlyouts();
       // Auto-collapse sidebar on mobile/tablet viewports on navigation
-      if (window.innerWidth < 1024) {
+      if (window.innerWidth < 1280) {
         this.isSidebarCollapsed.set(true);
       }
+      this.revealActiveProjectTab();
     });
   }
 
@@ -121,9 +124,18 @@ export class AppShellComponent {
   @HostListener('document:keydown.escape')
   closeTransientNavigation(): void {
     this.closeFlyouts();
-    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+    if (typeof window !== 'undefined' && window.innerWidth < 1280) {
       this.isSidebarCollapsed.set(true);
     }
+  }
+
+  private revealActiveProjectTab(): void {
+    if (typeof window === 'undefined' || !window.matchMedia('(max-width: 1279px)').matches) return;
+
+    window.requestAnimationFrame(() => {
+      const activeTab = document.querySelector<HTMLElement>('.project-context-tabs a[aria-current="page"]');
+      activeTab?.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'center' });
+    });
   }
 
   selectProjectSpace(proj: Project): void {

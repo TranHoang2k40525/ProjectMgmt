@@ -5,11 +5,11 @@
 
 <!-- Mobile Sidebar Backdrop Drawer Overlay -->
 @if (isSidebarExpanded()) {
-  <button type="button" aria-label="Đóng thanh điều hướng" class="lg:hidden fixed inset-0 z-30 w-full h-full bg-slate-900/50 backdrop-blur-xs transition-opacity border-0" (click)="toggleSidebar()"></button>
+  <button type="button" aria-label="Đóng thanh điều hướng" class="tablet-sidebar-backdrop lg:hidden fixed inset-0 z-30 w-full h-full bg-slate-900/50 backdrop-blur-xs transition-opacity border-0" (click)="toggleSidebar()"></button>
 }
 
 <!-- Global Topbar Header -->
-<header class="fixed top-0 w-full h-14 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between px-3 sm:px-4 transition-all shadow-xs">
+<header class="app-topbar fixed top-0 w-full h-14 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between px-3 sm:px-4 transition-all shadow-xs">
   <!-- Topbar Left: Brand & Collapsible Toggle -->
   <div class="flex items-center gap-2 sm:gap-3 shrink-0">
     <button (click)="toggleSidebar()" title="Thu / Mở Sidebar Menu (Hover chuột để tự động mở rộng)" class="w-8 h-8 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">
@@ -26,7 +26,7 @@
   </div>
 
   <!-- Topbar Center: Quick Search with Live Results Preview Dropdown -->
-  <div class="flex-1 max-w-xl mx-2 sm:mx-6 hidden lg:block relative">
+  <div class="desktop-quick-search flex-1 max-w-xl mx-2 sm:mx-6 hidden lg:block relative">
     <div class="relative flex items-center w-full z-50">
       <span class="material-symbols-outlined absolute left-3 text-[18px] text-slate-400 pointer-events-none">search</span>
       <input
@@ -68,7 +68,7 @@
 
   <!-- Topbar Right: Actions (+ Mobile Search Toggle, + Tạo việc mới CTA & Profile) -->
   <div class="flex items-center gap-1.5 sm:gap-3 shrink-0">
-    <button (click)="toggleMobileSearch()" class="lg:hidden w-8 h-8 flex items-center justify-center text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer" title="Tìm kiếm nhanh">
+    <button (click)="toggleMobileSearch()" class="compact-search-trigger lg:hidden w-8 h-8 flex items-center justify-center text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer" title="Tìm kiếm nhanh">
       <span class="material-symbols-outlined text-[20px]">search</span>
     </button>
 
@@ -107,7 +107,7 @@
 
 <!-- Mobile Live Search Floating Overlay Bar -->
 @if (isMobileSearchOpen()) {
-  <div class="lg:hidden fixed top-14 left-0 right-0 z-50 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-3 shadow-lg flex flex-col gap-2 animate-fade-in">
+  <div class="compact-search-panel lg:hidden fixed top-14 left-0 right-0 z-50 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-3 shadow-lg flex flex-col gap-2 animate-fade-in">
     <div class="relative flex items-center w-full">
       <span class="material-symbols-outlined absolute left-3 text-[18px] text-slate-400 pointer-events-none">search</span>
       <input
@@ -149,7 +149,7 @@
     [class.w-14]="!isSidebarExpanded()"
     [class.-translate-x-full]="!isSidebarExpanded()"
     [class.translate-x-0]="isSidebarExpanded()"
-    class="lg:translate-x-0 fixed left-0 top-14 bottom-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-r border-slate-200/80 dark:border-slate-800 flex flex-col justify-between p-2.5 select-none transition-all duration-200 ease-out shadow-xl lg:shadow-none"
+    class="app-sidebar lg:translate-x-0 fixed left-0 top-14 bottom-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-r border-slate-200/80 dark:border-slate-800 flex flex-col justify-between p-2.5 select-none transition-all duration-200 ease-out shadow-xl lg:shadow-none"
   >
     <div class="flex flex-col gap-3 overflow-x-hidden">
       
@@ -342,20 +342,20 @@
     [class.lg:pl-60]="isSidebarExpanded()"
     [class.lg:pl-14]="!isSidebarExpanded()"
     [class.pt-14]="isProjectRoute()"
-    class="w-full pl-0 min-w-0 min-h-[calc(100vh-3.5rem)] flex flex-col transition-all duration-200 ease-out"
+    class="app-main w-full pl-0 min-w-0 min-h-[calc(100vh-3.5rem)] flex flex-col transition-all duration-200 ease-out"
   >
     <!-- Context-Aware Project Navigation Sub-Header (PERMANENTLY FIXED top-14, 1-Row Non-Wrapping) -->
     @if (isProjectRoute()) {
       <div
         [class.lg:left-60]="isSidebarExpanded()"
         [class.lg:left-14]="!isSidebarExpanded()"
-        class="left-0 fixed top-14 right-0 z-30 h-14 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800 pl-3 sm:pl-6 pr-3 sm:pr-4 flex items-center justify-between gap-2 sm:gap-3 shadow-xs transition-all duration-200 select-none overflow-hidden"
+        class="project-context-bar left-0 fixed top-14 right-0 z-30 h-14 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800 pl-3 sm:pl-6 pr-3 sm:pr-4 flex items-center justify-between gap-2 sm:gap-3 shadow-xs transition-all duration-200 select-none overflow-hidden"
       >
         
         <!-- Left: Active Project Info Badge -->
         <div
           [title]="'Dự án hiện tại: ' + activeProject().name + ' (' + activeProject().projectKey + ')'"
-          class="flex items-center gap-2 sm:gap-2.5 pr-2 sm:pr-3 border-r border-slate-200 dark:border-slate-800 shrink-0 cursor-default"
+          class="project-context-identity flex items-center gap-2 sm:gap-2.5 pr-2 sm:pr-3 border-r border-slate-200 dark:border-slate-800 shrink-0 cursor-default"
         >
           <div class="w-7 h-7 rounded-lg bg-primary text-white flex items-center justify-center font-extrabold text-xs shadow-2xs shrink-0">
             {{ activeProject().projectKey.slice(0, 2) }}
@@ -371,32 +371,32 @@
         </div>
 
         <!-- Center/Right: Project Navigation Tabs (Clean Single Line, Zero Scroll) -->
-        <div class="flex-1 flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar py-1 min-w-0">
-          <a routerLink="/project/summary" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Bảng tổng quan dự án" class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0">
+        <div class="project-context-tabs flex-1 flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar py-1 min-w-0">
+          <a routerLink="/project/summary" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" ariaCurrentWhenActive="page" title="Bảng tổng quan dự án" class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0">
             <span class="material-symbols-outlined text-[17px] sm:text-[18px]">dashboard</span>
             <span>Tổng quan</span>
           </a>
-          <a routerLink="/roadmap" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Lộ trình Gantt chart dự án" class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0">
+          <a routerLink="/roadmap" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" ariaCurrentWhenActive="page" title="Lộ trình Gantt chart dự án" class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0">
             <span class="material-symbols-outlined text-[17px] sm:text-[18px]">timeline</span>
             <span>Lộ trình</span>
           </a>
-          <a routerLink="/board" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Bảng Scrum Kanban quản lý Sprint" class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0">
+          <a routerLink="/board" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" ariaCurrentWhenActive="page" title="Bảng Scrum Kanban quản lý Sprint" class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0">
             <span class="material-symbols-outlined text-[17px] sm:text-[18px]">view_kanban</span>
             <span>Scrum</span>
           </a>
-          <a routerLink="/backlog" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Kế hoạch Backlog các Sprints" class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0">
+          <a routerLink="/backlog" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" ariaCurrentWhenActive="page" title="Kế hoạch Backlog các Sprints" class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0">
             <span class="material-symbols-outlined text-[17px] sm:text-[18px]">format_list_bulleted</span>
             <span>Backlog</span>
           </a>
-          <a routerLink="/task-list" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Danh sách công việc đầy đủ" class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0">
+          <a routerLink="/task-list" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" ariaCurrentWhenActive="page" title="Danh sách công việc đầy đủ" class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0">
             <span class="material-symbols-outlined text-[17px] sm:text-[18px]">table_rows</span>
             <span>Danh sách</span>
           </a>
-          <a routerLink="/reports" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Báo cáo tiến độ & Burndown chart" class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0">
+          <a routerLink="/reports" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" ariaCurrentWhenActive="page" title="Báo cáo tiến độ & Burndown chart" class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0">
             <span class="material-symbols-outlined text-[17px] sm:text-[18px]">analytics</span>
             <span>Báo cáo</span>
           </a>
-          <a routerLink="/project/members" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Danh sách thành viên dự án" class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0">
+          <a routerLink="/project/members" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" ariaCurrentWhenActive="page" title="Danh sách thành viên dự án" class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0">
             <span class="material-symbols-outlined text-[17px] sm:text-[18px]">settings</span>
             <span>Thành viên</span>
           </a>
@@ -406,7 +406,7 @@
     }
 
     <!-- Page Body View Container -->
-    <div class="p-3 sm:p-5 md:p-6 flex-1 w-full max-w-full min-w-0">
+    <div class="app-page-body p-3 sm:p-5 md:p-6 flex-1 w-full max-w-full min-w-0">
       <router-outlet />
     </div>
   </main>
@@ -446,7 +446,7 @@
 <app-confirm-dialog></app-confirm-dialog>
 
 <!-- Global Toast Notifications Floating Stack -->
-<div class="fixed bottom-6 right-6 z-50 flex flex-col gap-3 max-w-md w-full pointer-events-none">
+<div class="global-toast-stack fixed bottom-6 right-6 z-50 flex flex-col gap-3 max-w-md w-full pointer-events-none">
   @for (toast of toastService.toasts(); track toast.id) {
     <div
       class="pointer-events-auto flex items-start gap-3 p-4 rounded-2xl shadow-xl border backdrop-blur-xl animate-fade-in transition-all"

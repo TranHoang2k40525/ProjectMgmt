@@ -11,9 +11,9 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
   imports: [CommonModule, FormsModule],
   template: `
     @if (task) {
-      <div class="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-xs transition-opacity animate-fade-in font-body text-slate-900 dark:text-slate-100">
+      <div class="task-drawer-backdrop fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-xs transition-opacity animate-fade-in font-body text-slate-900 dark:text-slate-100">
         <!-- Backdrop close click -->
-        <button type="button" aria-label="Đóng chi tiết công việc" class="flex-1 bg-transparent border-0" (click)="dismissed.emit()"></button>
+        <button type="button" aria-label="Đóng chi tiết công việc" class="task-drawer-dismiss flex-1 bg-transparent border-0" (click)="dismissed.emit()"></button>
 
         <!-- Slide-over Right Drawer Container (Resizable Width, Full Width on Mobile) -->
         <div
@@ -30,7 +30,7 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
           </div>
           
           <!-- Drawer Top Navigation Header -->
-          <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40">
+          <div class="task-drawer-header flex items-center justify-between px-6 py-4 border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40">
             <div class="flex items-center gap-3">
               <span class="px-3 py-1 rounded-md text-sm font-mono font-bold bg-primary/10 text-primary border border-primary/20">
                 {{ task.issueKey }}
@@ -53,7 +53,7 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
           </div>
 
           <!-- Drawer Main Content Body -->
-          <div class="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
+          <div class="task-drawer-body flex-1 overflow-y-auto p-6 flex flex-col gap-6">
             
             <!-- Issue Title & Type -->
             <div class="flex flex-col gap-2">
@@ -96,7 +96,7 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
             </div>
 
             <!-- Metadata Quick Control Grid (Min 14px font text-sm) -->
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/60">
+            <div class="task-meta-grid grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/60">
               <!-- Status Dropdown -->
               <div class="flex flex-col gap-1.5">
                 <span class="text-sm font-bold uppercase tracking-wider text-slate-400">Trạng thái</span>
@@ -198,7 +198,7 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
 
               <div class="space-y-2">
                 @for (sub of drawerSubtasks; track sub.id) {
-                  <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 text-sm">
+                  <div class="drawer-subtask-row flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 text-sm">
                     <div class="flex items-center gap-2">
                       <span class="font-mono font-bold text-amber-600">{{ sub.issueKey }}</span>
                       <span class="font-medium text-slate-800 dark:text-slate-200">{{ sub.title }}</span>
@@ -271,7 +271,7 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
           </div>
 
           <!-- Drawer Footer Controls -->
-          <div class="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex justify-end gap-3">
+          <div class="task-drawer-footer px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex justify-end gap-3">
             <button (click)="dismissed.emit()" class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer">
               Đóng
             </button>
@@ -280,7 +280,34 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
         </div>
       </div>
     }
-  `
+  `,
+  styles: [`
+    @media (max-width: 1279px) {
+      .jira-drawer { width: min(680px, 100vw) !important; max-width: 100vw !important; }
+      .task-drawer-header, .task-drawer-body, .task-meta-grid, .drawer-subtask-row { min-width: 0; }
+      .jira-drawer button, .jira-drawer input, .jira-drawer select, .jira-drawer textarea { min-height: 40px; }
+    }
+
+    @media (max-width: 767px) {
+      .task-drawer-dismiss { display: none; }
+      .jira-drawer { width: 100vw !important; border-left: 0; }
+      .task-drawer-header { align-items: flex-start; gap: .75rem; padding: .75rem; }
+      .task-drawer-header > div:first-child { align-items: flex-start; flex-direction: column; gap: .35rem; min-width: 0; }
+      .task-drawer-body { gap: 1rem; padding: .75rem; }
+      .task-meta-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; padding: .75rem; }
+      .task-meta-grid input { width: 100%; }
+      .drawer-subtask-row { align-items: flex-start; flex-direction: column; gap: .5rem; }
+      .drawer-subtask-row > div { min-width: 0; flex-wrap: wrap; }
+      .task-drawer-footer { padding: .75rem; }
+      .task-drawer-footer button { width: 100%; }
+    }
+
+    @media (max-width: 932px) and (orientation: landscape) and (max-height: 520px) {
+      .jira-drawer { width: min(680px, 86vw) !important; }
+      .task-drawer-header, .task-drawer-footer { padding-block: .5rem; }
+      .task-drawer-body { gap: 1rem; padding: .75rem 1rem; }
+    }
+  `]
 })
 export class TaskDetailDrawerComponent {
   @Input() task: WorkItem | null = null;

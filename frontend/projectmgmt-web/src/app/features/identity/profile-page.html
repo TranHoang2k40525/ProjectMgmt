@@ -1,13 +1,13 @@
-<div class="relative w-full min-h-screen bg-surface px-4 py-6 sm:px-6 lg:px-8 font-body-md text-body-md text-on-surface">
+<div class="profile-page relative w-full min-h-screen bg-surface px-4 py-6 sm:px-6 lg:px-8 font-body-md text-body-md text-on-surface">
   <div class="max-w-7xl mx-auto flex flex-col gap-6 animate-fade-in">
     
     <!-- Hero Banner Card from Stitch Screen 3095f5e818b74b43984bdd26650c7398 -->
     @if (user(); as u) {
-      <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary via-primary-container to-secondary p-6 sm:p-8 text-on-primary shadow-lg border border-outline-variant/20">
+      <div class="profile-hero relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary via-primary-container to-secondary p-6 sm:p-8 text-on-primary shadow-lg border border-outline-variant/20">
         <div class="absolute -right-16 -top-20 w-80 h-80 rounded-full bg-secondary-container/20 blur-3xl pointer-events-none"></div>
         <div class="absolute -left-12 -bottom-20 w-72 h-72 rounded-full bg-tertiary-container/15 blur-2xl pointer-events-none"></div>
         
-        <div class="relative flex flex-col md:flex-row md:items-center justify-between gap-6 z-10">
+        <div class="profile-hero-layout relative flex flex-col md:flex-row md:items-center justify-between gap-6 z-10">
           <div class="flex flex-col gap-1">
             <div class="flex items-center gap-2">
               <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container-lowest/15 backdrop-blur-md text-on-primary font-label-sm text-label-sm uppercase tracking-wider font-semibold">
@@ -24,7 +24,7 @@
             </p>
           </div>
 
-          <div class="flex items-center gap-3 self-start md:self-auto shrink-0">
+          <div class="profile-hero-actions flex items-center gap-3 self-start md:self-auto shrink-0">
             <button type="button" (click)="setTab('GENERAL')" class="px-4 py-2.5 rounded-xl bg-surface-container-lowest/15 hover:bg-surface-container-lowest/25 text-white font-label-lg text-label-lg transition-all flex items-center gap-2 shadow-sm backdrop-blur-md cursor-pointer">
               <span class="material-symbols-outlined text-[18px]">public</span>
               <span>Xem hồ sơ công khai</span>
@@ -38,8 +38,8 @@
       </div>
 
       <!-- User Identity Overview Card with Tabs -->
-      <div class="rounded-2xl bg-surface-container-lowest shadow-sm border border-outline-variant/30 p-6">
-        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+      <div class="profile-overview rounded-2xl bg-surface-container-lowest shadow-sm border border-outline-variant/30 p-6">
+        <div class="profile-overview-layout flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           
           <div class="flex flex-col sm:flex-row items-start sm:items-center gap-5">
             <div class="relative group">
@@ -83,7 +83,7 @@
             </div>
           </div>
 
-          <div class="flex items-center gap-2 shrink-0">
+          <div class="profile-quick-actions flex items-center gap-2 shrink-0">
             <button type="button" (click)="setTab('SKILLS')" class="px-3.5 py-2 rounded-xl bg-primary-container text-on-primary hover:bg-primary font-label-lg text-label-lg transition-colors flex items-center gap-1.5 shadow-sm font-semibold cursor-pointer">
               <span class="material-symbols-outlined text-[18px]">auto_awesome</span>
               <span>Hồ sơ năng lực AI</span>
@@ -92,7 +92,7 @@
         </div>
 
         <!-- Navigation Tabs Bar -->
-        <div class="mt-6 flex overflow-x-auto gap-2 bg-surface-container-low/70 p-1.5 rounded-xl border border-outline-variant/20">
+        <div class="profile-tabs mt-6 flex overflow-x-auto gap-2 bg-surface-container-low/70 p-1.5 rounded-xl border border-outline-variant/20">
           <button
             type="button"
             class="px-4 py-2.5 rounded-lg font-label-lg text-label-lg transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer"
@@ -163,7 +163,7 @@
       }
 
       <!-- Main Dual Pane Grid (Left: 8 cols, Right: 4 cols) -->
-      <div class="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+      <div class="profile-content-grid grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
         
         <!-- LEFT COLUMN (8 cols) -->
         <div class="xl:col-span-8 flex flex-col gap-6">
@@ -370,7 +370,7 @@
 
               <!-- Add Skill Form Controls -->
               <div class="p-4 rounded-xl bg-surface-container-low border border-outline-variant/30 flex flex-wrap items-end gap-4">
-                <div class="flex-1 min-w-[200px]">
+                <div class="profile-skill-field flex-1 min-w-[200px]">
                   <label for="skillSelect" class="block font-label-md text-label-md text-on-surface font-semibold mb-1.5">Chọn kỹ năng từ Catalog</label>
                   <select id="skillSelect" [(ngModel)]="selectedSkillId" class="w-full h-11 px-3.5 rounded-xl bg-surface-container-lowest border border-outline-variant text-on-surface font-body-sm text-body-sm outline-none">
                     <option value="">-- Chọn kỹ năng --</option>
@@ -380,7 +380,7 @@
                   </select>
                 </div>
 
-                <div class="flex-1 min-w-[180px]">
+                <div class="profile-skill-field flex-1 min-w-[180px]">
                   <label for="skillRange" class="block font-label-md text-label-md text-on-surface font-semibold mb-1.5">
                     Mức độ thành thạo: <strong class="text-primary font-mono">{{ selectedSkillLevel }}%</strong>
                   </label>
