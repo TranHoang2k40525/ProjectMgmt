@@ -1,3 +1,5 @@
+<app-route-transition-layer />
+
 <!-- Global Transparent Backdrop Overlay for Flyouts -->
 @if (isRecentFlyoutOpen() || headerSearchResults().length > 0 || isMobileSearchOpen()) {
   <button type="button" aria-label="Đóng bảng nổi" class="fixed inset-0 z-40 w-full h-full bg-transparent border-0" (click)="closeFlyouts()"></button>
@@ -406,8 +408,8 @@
     }
 
     <!-- Page Body View Container -->
-    <div class="app-page-body p-3 sm:p-5 md:p-6 flex-1 w-full max-w-full min-w-0">
-      <router-outlet />
+    <div #pageBody class="app-page-body p-3 sm:p-5 md:p-6 flex-1 w-full max-w-full min-w-0">
+      <router-outlet (activate)="onRouteActivated()" />
     </div>
   </main>
 
@@ -449,6 +451,7 @@
 <div class="global-toast-stack fixed bottom-6 right-6 z-50 flex flex-col gap-3 max-w-md w-full pointer-events-none">
   @for (toast of toastService.toasts(); track toast.id) {
     <div
+      appMotion="slide"
       class="pointer-events-auto flex items-start gap-3 p-4 rounded-2xl shadow-xl border backdrop-blur-xl animate-fade-in transition-all"
       [class.bg-emerald-50]="toast.type === 'success'"
       [class.border-emerald-200]="toast.type === 'success'"

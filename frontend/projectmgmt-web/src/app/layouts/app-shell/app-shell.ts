@@ -1,8 +1,9 @@
-import { Component, HostListener, afterNextRender, inject, signal, computed } from '@angular/core';
+import { Component, DestroyRef, ElementRef, HostListener, OnDestroy, ViewChild, afterNextRender, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive, RouterOutlet, Router, NavigationEnd } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { filter } from 'rxjs/operators';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { IdentityService } from '../../core/services/identity.service';
 import { ProjectManagementService, Project, WorkItem } from '../../core/services/project-management.service';
 import { ExcelDataService } from '../../core/services/excel-data.service';
@@ -13,6 +14,9 @@ import { CreateTaskModalComponent } from '../../shared/components/create-task-mo
 import { CreateProjectModalComponent } from '../../shared/components/create-project-modal/create-project-modal';
 import { ExcelImportModalComponent } from '../../shared/components/excel-import-modal/excel-import-modal';
 import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/confirm-dialog';
+import { RouteTransitionLayerComponent } from '../../shared/motion/route-transition-layer/route-transition-layer';
+import { MotionOrchestratorService } from '../../core/motion/motion-orchestrator.service';
+import { MotionDirective } from '../../shared/motion/motion.directive';
 
 @Component({
   selector: 'app-shell',
@@ -27,18 +31,25 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/c
     CreateTaskModalComponent,
     CreateProjectModalComponent,
     ExcelImportModalComponent,
-    ConfirmDialogComponent
+    ConfirmDialogComponent,
+    RouteTransitionLayerComponent,
+    MotionDirective
   ],
   templateUrl: './app-shell.html',
   styleUrl: './app-shell.scss'
 })
-export class AppShellComponent {
+export class AppShellComponent implements OnDestroy {
   readonly identity = inject(IdentityService);
   readonly projectService = inject(ProjectManagementService);
   readonly toastService = inject(ToastService);
   readonly confirmService = inject(ConfirmDialogService);
   private readonly excelService = inject(ExcelDataService);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly motion = inject(MotionOrchestratorService);
+
+  @ViewChild('pageBody', { read: ElementRef })
+  private pageBody?: ElementRef<HTMLElement>;
 
   // Current Route Path Signal
   readonly currentUrl = signal<string>(this.router.url);
@@ -83,7 +94,8 @@ export class AppShellComponent {
     afterNextRender(() => this.revealActiveProjectTab());
 
     this.router.events.pipe(
-      filter((event): event is NavigationEnd => event instanceof NavigationEnd)
+      filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+      takeUntilDestroyed(this.destroyRef)
     ).subscribe((event) => {
       this.currentUrl.set(event.urlAfterRedirects || event.url);
       this.closeFlyouts();
@@ -93,6 +105,18 @@ export class AppShellComponent {
       }
       this.revealActiveProjectTab();
     });
+  }
+
+  onRouteActivated(): void {
+    window.requestAnimationFrame(() => {
+      if (this.pageBody) {
+        this.motion.animatePage(this.pageBody.nativeElement, this.currentUrl());
+      }
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.motion.destroy();
   }
 
   toggleSidebar(): void {
