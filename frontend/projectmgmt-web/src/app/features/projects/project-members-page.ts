@@ -57,18 +57,18 @@ import { ProjectManagementService, ProjectMember } from '../../core/services/pro
             <h3 class="text-base font-bold text-slate-900 dark:text-white">Thêm Thành Viên Vào Dự Án</h3>
 
             <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-bold text-slate-500">Họ và tên</label>
-              <input type="text" [(ngModel)]="newMemberName" placeholder="Nhập tên thành viên..." class="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs focus:outline-none focus:border-primary" />
+              <label for="member-name" class="text-xs font-bold text-slate-500">Họ và tên</label>
+              <input id="member-name" type="text" [(ngModel)]="newMemberName" placeholder="Nhập tên thành viên..." class="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs focus:outline-none focus:border-primary" />
             </div>
 
             <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-bold text-slate-500">Email sinh viên / giảng viên HUCE</label>
-              <input type="email" [(ngModel)]="newMemberEmail" placeholder="nguyenvana@huce.edu.vn" class="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs focus:outline-none focus:border-primary" />
+              <label for="member-email" class="text-xs font-bold text-slate-500">Email sinh viên / giảng viên HUCE</label>
+              <input id="member-email" type="email" [(ngModel)]="newMemberEmail" placeholder="nguyenvana@huce.edu.vn" class="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs focus:outline-none focus:border-primary" />
             </div>
 
             <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-bold text-slate-500">Vai trò trong dự án</label>
-              <select [(ngModel)]="newMemberRole" class="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs focus:outline-none focus:border-primary">
+              <label for="member-role" class="text-xs font-bold text-slate-500">Vai trò trong dự án</label>
+              <select id="member-role" [(ngModel)]="newMemberRole" class="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs focus:outline-none focus:border-primary">
                 <option value="Developer">Developer (Phát triển)</option>
                 <option value="Scrum Master">Scrum Master (Quản trị Sprint)</option>
                 <option value="QA Engineer">QA Engineer (Kiểm thử)</option>

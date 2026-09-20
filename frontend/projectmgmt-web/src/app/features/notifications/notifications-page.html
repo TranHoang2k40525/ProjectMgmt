@@ -100,7 +100,11 @@
               [class.border-primary-container]="!item.isRead"
               [class.bg-surface-container-lowest]="item.isRead"
               [class.bg-surface-container-low/40]="!item.isRead"
-              (click)="markAsRead(item.id)">
+              (click)="markAsRead(item.id)"
+              (keydown.enter)="markAsRead(item.id)"
+              (keydown.space)="$event.preventDefault(); markAsRead(item.id)"
+              role="button"
+              tabindex="0">
               
               @if (!item.isRead) {
                 <div class="absolute top-0 left-0 bottom-0 w-1.5 bg-primary rounded-l-2xl"></div>

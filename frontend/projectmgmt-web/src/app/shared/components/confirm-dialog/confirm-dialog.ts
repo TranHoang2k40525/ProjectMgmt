@@ -10,7 +10,7 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
     @if (dialogService.state(); as dialog) {
       <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in font-body text-slate-900 dark:text-slate-100">
         <!-- Backdrop close -->
-        <div class="fixed inset-0" (click)="dialogService.close()"></div>
+        <button type="button" aria-label="Đóng hộp thoại xác nhận" class="fixed inset-0 w-full h-full bg-transparent border-0" (click)="dialogService.close()"></button>
 
         <!-- Custom Popup Dialog Box -->
         <div class="relative z-10 w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col p-6 space-y-4 animate-scale-up">

@@ -21,6 +21,10 @@ import { ProjectManagementService, Project, WorkItem } from '../../core/services
           @for (proj of projects(); track proj.id) {
             <div
               (click)="selectProject(proj)"
+              (keydown.enter)="selectProject(proj)"
+              (keydown.space)="$event.preventDefault(); selectProject(proj)"
+              role="button"
+              tabindex="0"
               class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col gap-3 group border-l-4 border-l-primary"
             >
               <div class="flex items-center gap-3">
@@ -88,6 +92,10 @@ import { ProjectManagementService, Project, WorkItem } from '../../core/services
             @for (item of filteredWorkItems(); track item.id) {
               <div
                 (click)="openDrawer(item)"
+                (keydown.enter)="openDrawer(item)"
+                (keydown.space)="$event.preventDefault(); openDrawer(item)"
+                role="button"
+                tabindex="0"
                 class="flex items-center justify-between py-3.5 px-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors group"
               >
                 <div class="flex items-center gap-3.5 min-w-0">

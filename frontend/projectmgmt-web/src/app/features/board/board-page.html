@@ -1,6 +1,6 @@
 <!-- Transparent Backdrop Overlay to Close Popups on Outside Click -->
 @if (activeMenuTaskId()) {
-  <div class="fixed inset-0 z-30 bg-transparent" (click)="closeAllPopups()"></div>
+  <button type="button" aria-label="Đóng menu" class="fixed inset-0 z-30 w-full h-full bg-transparent border-0" (click)="closeAllPopups()"></button>
 }
 
 <div class="p-6 max-w-[1650px] mx-auto font-body text-slate-900 dark:text-slate-100 space-y-5">
@@ -65,21 +65,75 @@
       </select>
     </div>
 
-    @if (selectedAssigneeFilter() || selectedTypeFilter() || searchQuery()) {
+    @if (selectedAssigneeFilter() || selectedTypeFilter() || searchQuery() || selectedStatusTab()) {
       <button
-        (click)="searchQuery.set(''); selectedAssigneeFilter.set(null); selectedTypeFilter.set(null)"
+        (click)="searchQuery.set(''); selectedAssigneeFilter.set(null); selectedTypeFilter.set(null); selectedStatusTab.set(null)"
         class="h-9 px-3 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 text-sm font-normal transition-all cursor-pointer shrink-0"
       >
         Xóa bộ lọc
       </button>
     }
+
+    <!-- Quick Column Status Tabs Bar for Mobile/Tablet Swiping -->
+    <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 w-full border-t border-slate-100 dark:border-slate-800/80 pt-2">
+      <button
+        (click)="selectedStatusTab.set(null)"
+        [class.bg-primary]="!selectedStatusTab()"
+        [class.text-white]="!selectedStatusTab()"
+        [class.bg-slate-100]="selectedStatusTab()"
+        [class.text-slate-700]="selectedStatusTab()"
+        class="px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer"
+      >
+        Tất cả ({{ filteredItems().length }})
+      </button>
+      <button
+        (click)="selectedStatusTab.set(selectedStatusTab() === 'To Do' ? null : 'To Do')"
+        [class.bg-amber-500]="selectedStatusTab() === 'To Do'"
+        [class.text-white]="selectedStatusTab() === 'To Do'"
+        [class.bg-amber-50]="selectedStatusTab() !== 'To Do'"
+        [class.text-amber-800]="selectedStatusTab() !== 'To Do'"
+        class="px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer border border-amber-200/60"
+      >
+        To Do ({{ toDoItems().length }})
+      </button>
+      <button
+        (click)="selectedStatusTab.set(selectedStatusTab() === 'In Progress' ? null : 'In Progress')"
+        [class.bg-blue-600]="selectedStatusTab() === 'In Progress'"
+        [class.text-white]="selectedStatusTab() === 'In Progress'"
+        [class.bg-blue-50]="selectedStatusTab() !== 'In Progress'"
+        [class.text-blue-800]="selectedStatusTab() !== 'In Progress'"
+        class="px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer border border-blue-200/60"
+      >
+        In Progress ({{ inProgressItems().length }})
+      </button>
+      <button
+        (click)="selectedStatusTab.set(selectedStatusTab() === 'Code Review' ? null : 'Code Review')"
+        [class.bg-purple-600]="selectedStatusTab() === 'Code Review'"
+        [class.text-white]="selectedStatusTab() === 'Code Review'"
+        [class.bg-purple-50]="selectedStatusTab() !== 'Code Review'"
+        [class.text-purple-800]="selectedStatusTab() !== 'Code Review'"
+        class="px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer border border-purple-200/60"
+      >
+        Code Review ({{ codeReviewItems().length }})
+      </button>
+      <button
+        (click)="selectedStatusTab.set(selectedStatusTab() === 'Done' ? null : 'Done')"
+        [class.bg-emerald-600]="selectedStatusTab() === 'Done'"
+        [class.text-white]="selectedStatusTab() === 'Done'"
+        [class.bg-emerald-50]="selectedStatusTab() !== 'Done'"
+        [class.text-emerald-800]="selectedStatusTab() !== 'Done'"
+        class="px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer border border-emerald-200/60"
+      >
+        Done ({{ doneItems().length }})
+      </button>
+    </div>
   </div>
 
-  <!-- Board Columns Grid (To Do, In Progress, Code Review, Done) -->
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
+  <!-- Board Columns Grid / Touch Carousel for Mobile & Tablet -->
+  <div class="flex overflow-x-auto snap-x snap-mandatory gap-3.5 pb-4 md:grid md:grid-cols-2 lg:grid-cols-4 md:overflow-visible no-scrollbar">
     
     <!-- COLUMN 1: TO DO -->
-    <div class="board-column rounded-xl bg-slate-100/80 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-3.5 space-y-3">
+    <div class="board-column min-w-[280px] sm:min-w-[320px] md:min-w-0 snap-center flex-1 rounded-xl bg-slate-100/80 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-3 sm:p-3.5 space-y-3">
       <div class="flex items-center justify-between text-sm font-medium text-slate-900 dark:text-slate-100 pb-1">
         <div class="flex items-center gap-2">
           <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
@@ -96,6 +150,10 @@
 
           <div
             (click)="openTaskDrawer(item, $event)"
+            (keydown.enter)="openTaskDrawer(item, $event)"
+            (keydown.space)="$event.preventDefault(); openTaskDrawer(item, $event)"
+            role="button"
+            tabindex="0"
             class="p-3.5 rounded-lg bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 shadow-2xs hover:shadow-sm transition-all cursor-pointer space-y-2.5 group relative"
           >
             <!-- Card Top Bar -->
@@ -158,7 +216,7 @@
     </div>
 
     <!-- COLUMN 2: IN PROGRESS -->
-    <div class="board-column rounded-xl bg-slate-100/80 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-3.5 space-y-3">
+    <div class="board-column min-w-[280px] sm:min-w-[320px] md:min-w-0 snap-center flex-1 rounded-xl bg-slate-100/80 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-3 sm:p-3.5 space-y-3">
       <div class="flex items-center justify-between text-sm font-medium text-slate-900 dark:text-slate-100 pb-1">
         <div class="flex items-center gap-2">
           <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
@@ -173,6 +231,10 @@
         @for (item of inProgressItems(); track item.id) {
           <div
             (click)="openTaskDrawer(item, $event)"
+            (keydown.enter)="openTaskDrawer(item, $event)"
+            (keydown.space)="$event.preventDefault(); openTaskDrawer(item, $event)"
+            role="button"
+            tabindex="0"
             class="p-3.5 rounded-lg bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 shadow-2xs hover:shadow-sm transition-all cursor-pointer space-y-2.5 group relative ring-1 ring-blue-500/30"
           >
             <div class="flex items-center justify-between">
@@ -208,7 +270,7 @@
     </div>
 
     <!-- COLUMN 3: CODE REVIEW -->
-    <div class="board-column rounded-xl bg-slate-100/80 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-3.5 space-y-3">
+    <div class="board-column min-w-[280px] sm:min-w-[320px] md:min-w-0 snap-center flex-1 rounded-xl bg-slate-100/80 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-3 sm:p-3.5 space-y-3">
       <div class="flex items-center justify-between text-sm font-medium text-slate-900 dark:text-slate-100 pb-1">
         <div class="flex items-center gap-2">
           <span class="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
@@ -223,6 +285,10 @@
         @for (item of codeReviewItems(); track item.id) {
           <div
             (click)="openTaskDrawer(item, $event)"
+            (keydown.enter)="openTaskDrawer(item, $event)"
+            (keydown.space)="$event.preventDefault(); openTaskDrawer(item, $event)"
+            role="button"
+            tabindex="0"
             class="p-3.5 rounded-lg bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 shadow-2xs hover:shadow-sm transition-all cursor-pointer space-y-2.5 group relative"
           >
             <div class="flex items-center justify-between">
@@ -258,7 +324,7 @@
     </div>
 
     <!-- COLUMN 4: DONE -->
-    <div class="board-column rounded-xl bg-slate-100/80 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-3.5 space-y-3">
+    <div class="board-column min-w-[280px] sm:min-w-[320px] md:min-w-0 snap-center flex-1 rounded-xl bg-slate-100/80 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-3 sm:p-3.5 space-y-3">
       <div class="flex items-center justify-between text-sm font-medium text-slate-900 dark:text-slate-100 pb-1">
         <div class="flex items-center gap-2">
           <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
@@ -273,6 +339,10 @@
         @for (item of doneItems(); track item.id) {
           <div
             (click)="openTaskDrawer(item, $event)"
+            (keydown.enter)="openTaskDrawer(item, $event)"
+            (keydown.space)="$event.preventDefault(); openTaskDrawer(item, $event)"
+            role="button"
+            tabindex="0"
             class="p-3.5 rounded-lg bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 shadow-2xs opacity-85 hover:opacity-100 transition-all cursor-pointer space-y-2.5 group relative"
           >
             <div class="flex items-center justify-between">

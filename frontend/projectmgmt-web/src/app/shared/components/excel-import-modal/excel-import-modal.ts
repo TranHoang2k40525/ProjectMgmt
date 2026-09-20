@@ -1,7 +1,7 @@
 import { Component, EventEmitter, Output, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ExcelDataService, ImportedTaskRow } from '../../../core/services/excel-data.service';
-import { ProjectManagementService } from '../../../core/services/project-management.service';
+import { ProjectManagementService, WorkItem } from '../../../core/services/project-management.service';
 import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
@@ -24,7 +24,7 @@ import { ToastService } from '../../../core/services/toast.service';
             </div>
           </div>
 
-          <button (click)="close.emit()" class="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500">
+          <button (click)="dismissed.emit()" class="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500">
             <span class="material-symbols-outlined text-[20px]">close</span>
           </button>
         </div>
@@ -97,7 +97,7 @@ import { ToastService } from '../../../core/services/toast.service';
 
         <!-- Footer -->
         <div class="px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50 flex items-center justify-end gap-3">
-          <button (click)="close.emit()" class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+          <button (click)="dismissed.emit()" class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
             Hủy
           </button>
           <button
@@ -114,7 +114,7 @@ import { ToastService } from '../../../core/services/toast.service';
   `
 })
 export class ExcelImportModalComponent {
-  @Output() close = new EventEmitter<void>();
+  @Output() dismissed = new EventEmitter<void>();
 
   private readonly excelService = inject(ExcelDataService);
   private readonly projectService = inject(ProjectManagementService);
@@ -158,14 +158,18 @@ export class ExcelImportModalComponent {
       this.projectService.addWorkItem({
         title: row.title,
         description: row.description,
-        issueType: (row.type as any) || 'Task',
-        priority: (row.priority as any) || 'Medium',
+        issueType: row.type || 'Task',
+        priority: this.isPriority(row.priority) ? row.priority : 'Medium',
         storyPoints: row.storyPoints || 3,
         sprintName: row.sprintName || 'SCRUMAI Sprint 2',
         assigneeName: row.assigneeName || 'Trần Văn Hoàng'
       });
     }
     this.toastService.success('Import Hoàn Tất', `Đã thêm ${this.parsedRows.length} công việc vào dự án`);
-    this.close.emit();
+    this.dismissed.emit();
+  }
+
+  private isPriority(value: string | undefined): value is WorkItem['priority'] {
+    return value === 'Low' || value === 'Medium' || value === 'High' || value === 'Urgent';
   }
 }

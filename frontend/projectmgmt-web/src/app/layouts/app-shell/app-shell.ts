@@ -1,4 +1,4 @@
-import { Component, inject, signal, computed } from '@angular/core';
+import { Component, HostListener, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive, RouterOutlet, Router, NavigationEnd } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -61,7 +61,7 @@ export class AppShellComponent {
   });
 
   // Global Interactive UI Signals
-  readonly isSidebarCollapsed = signal<boolean>(false);
+  readonly isSidebarCollapsed = signal<boolean>(typeof window !== 'undefined' && window.innerWidth < 1024);
 
   // Computed Expanded State
   readonly isSidebarExpanded = computed(() => !this.isSidebarCollapsed());
@@ -81,8 +81,8 @@ export class AppShellComponent {
 
   constructor() {
     this.router.events.pipe(
-      filter(event => event instanceof NavigationEnd)
-    ).subscribe((event: any) => {
+      filter((event): event is NavigationEnd => event instanceof NavigationEnd)
+    ).subscribe((event) => {
       this.currentUrl.set(event.urlAfterRedirects || event.url);
       this.closeFlyouts();
       // Auto-collapse sidebar on mobile/tablet viewports on navigation
@@ -93,7 +93,15 @@ export class AppShellComponent {
   }
 
   toggleSidebar(): void {
+    this.isMobileSearchOpen.set(false);
+    this.isRecentFlyoutOpen.set(false);
     this.isSidebarCollapsed.update(val => !val);
+  }
+
+  toggleMobileSearch(): void {
+    this.isRecentFlyoutOpen.set(false);
+    this.isSidebarCollapsed.set(true);
+    this.isMobileSearchOpen.update(value => !value);
   }
 
   toggleSpacesSection(): void {
@@ -106,7 +114,16 @@ export class AppShellComponent {
 
   closeFlyouts(): void {
     this.isRecentFlyoutOpen.set(false);
+    this.isMobileSearchOpen.set(false);
     this.headerSearchQuery.set('');
+  }
+
+  @HostListener('document:keydown.escape')
+  closeTransientNavigation(): void {
+    this.closeFlyouts();
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      this.isSidebarCollapsed.set(true);
+    }
   }
 
   selectProjectSpace(proj: Project): void {
@@ -152,7 +169,7 @@ export class AppShellComponent {
   }
 
   triggerAiBreakdown(): void {
-    this.toastService.info('🤖 AI Assistant Phân Rã', 'Đang tự động phân rã các User Stories trong Backlog thành các Subtasks chuẩn Agile!');
+    this.toastService.info('AI Assistant Phân Rã', 'Đang tự động phân rã các User Stories trong Backlog thành các Subtasks chuẩn Agile!');
   }
 
   exportExcel(): void {

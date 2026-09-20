@@ -19,7 +19,7 @@ import { ToastService } from '../../../core/services/toast.service';
             <h3 class="text-base font-bold text-slate-900 dark:text-white">Tạo Công Việc / Epic / Use-Case Mới</h3>
           </div>
 
-          <button (click)="close.emit()" class="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500">
+          <button (click)="dismissed.emit()" class="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500">
             <span class="material-symbols-outlined text-[20px]">close</span>
           </button>
         </div>
@@ -29,8 +29,9 @@ import { ToastService } from '../../../core/services/toast.service';
           
           <!-- Title -->
           <div class="flex flex-col gap-1.5">
-            <label class="text-sm font-bold uppercase tracking-wider text-slate-500">Tên công việc <span class="text-red-500">*</span></label>
+            <label for="new-task-title" class="text-sm font-bold uppercase tracking-wider text-slate-500">Tên công việc <span class="text-red-500">*</span></label>
             <input
+              id="new-task-title"
               type="text"
               [(ngModel)]="title"
               placeholder="Nhập tên ngắn gọn mô tả công việc..."
@@ -42,7 +43,7 @@ import { ToastService } from '../../../core/services/toast.service';
           <div class="grid grid-cols-2 gap-4">
             <div class="flex flex-col gap-1.5">
               <div class="flex items-center justify-between">
-                <label class="text-sm font-bold uppercase tracking-wider text-slate-500">Loại công việc</label>
+                <label for="new-task-type" class="text-sm font-bold uppercase tracking-wider text-slate-500">Loại công việc</label>
                 <button (click)="toggleNewTypeForm()" class="text-xs text-primary font-semibold hover:underline">
                   {{ showNewTypeForm() ? 'Hủy' : '+ Tạo Loại Mới' }}
                 </button>
@@ -63,6 +64,7 @@ import { ToastService } from '../../../core/services/toast.service';
                 </div>
               } @else {
                 <select
+                  id="new-task-type"
                   [(ngModel)]="issueType"
                   class="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-primary"
                 >
@@ -74,8 +76,9 @@ import { ToastService } from '../../../core/services/toast.service';
             </div>
 
             <div class="flex flex-col gap-1.5">
-              <label class="text-sm font-bold uppercase tracking-wider text-slate-500">Mức độ ưu tiên</label>
+              <label for="new-task-priority" class="text-sm font-bold uppercase tracking-wider text-slate-500">Mức độ ưu tiên</label>
               <select
+                id="new-task-priority"
                 [(ngModel)]="priority"
                 class="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-primary"
               >
@@ -90,8 +93,9 @@ import { ToastService } from '../../../core/services/toast.service';
           <!-- Sprint & Epic Grid -->
           <div class="grid grid-cols-2 gap-4">
             <div class="flex flex-col gap-1.5">
-              <label class="text-sm font-bold uppercase tracking-wider text-slate-500">Sprint</label>
+              <label for="new-task-sprint" class="text-sm font-bold uppercase tracking-wider text-slate-500">Sprint</label>
               <select
+                id="new-task-sprint"
                 [(ngModel)]="sprintName"
                 class="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-primary"
               >
@@ -103,8 +107,9 @@ import { ToastService } from '../../../core/services/toast.service';
             </div>
 
             <div class="flex flex-col gap-1.5">
-              <label class="text-sm font-bold uppercase tracking-wider text-slate-500">Gán Epic</label>
+              <label for="new-task-epic" class="text-sm font-bold uppercase tracking-wider text-slate-500">Gán Epic</label>
               <select
+                id="new-task-epic"
                 [(ngModel)]="epicName"
                 class="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-primary"
               >
@@ -119,8 +124,9 @@ import { ToastService } from '../../../core/services/toast.service';
           <!-- Story Points & Assignee Grid -->
           <div class="grid grid-cols-2 gap-4">
             <div class="flex flex-col gap-1.5">
-              <label class="text-sm font-bold uppercase tracking-wider text-slate-500">Story Points</label>
+              <label for="new-task-points" class="text-sm font-bold uppercase tracking-wider text-slate-500">Story Points</label>
               <input
+                id="new-task-points"
                 type="number"
                 min="1"
                 max="21"
@@ -130,8 +136,9 @@ import { ToastService } from '../../../core/services/toast.service';
             </div>
 
             <div class="flex flex-col gap-1.5">
-              <label class="text-sm font-bold uppercase tracking-wider text-slate-500">Người xử lý</label>
+              <label for="new-task-assignee" class="text-sm font-bold uppercase tracking-wider text-slate-500">Người xử lý</label>
               <select
+                id="new-task-assignee"
                 [(ngModel)]="assigneeName"
                 class="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-primary"
               >
@@ -145,8 +152,9 @@ import { ToastService } from '../../../core/services/toast.service';
 
           <!-- Description -->
           <div class="flex flex-col gap-1.5">
-            <label class="text-sm font-bold uppercase tracking-wider text-slate-500">Mô tả chi tiết</label>
+            <label for="new-task-description" class="text-sm font-bold uppercase tracking-wider text-slate-500">Mô tả chi tiết</label>
             <textarea
+              id="new-task-description"
               rows="3"
               [(ngModel)]="description"
               placeholder="Mô tả yêu cầu hoặc ghi chú thêm cho người xử lý..."
@@ -158,7 +166,7 @@ import { ToastService } from '../../../core/services/toast.service';
 
         <!-- Footer -->
         <div class="px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50 flex items-center justify-end gap-3">
-          <button (click)="close.emit()" class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer">
+          <button (click)="dismissed.emit()" class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer">
             Hủy
           </button>
           <button
@@ -175,7 +183,7 @@ import { ToastService } from '../../../core/services/toast.service';
   `
 })
 export class CreateTaskModalComponent {
-  @Output() close = new EventEmitter<void>();
+  @Output() dismissed = new EventEmitter<void>();
 
   private readonly projectService = inject(ProjectManagementService);
   private readonly toastService = inject(ToastService);
@@ -226,6 +234,6 @@ export class CreateTaskModalComponent {
     });
 
     this.toastService.success('Tạo Công Việc Thành Công', `Đã khởi tạo công việc "${this.title}" trong ${this.sprintName}`);
-    this.close.emit();
+    this.dismissed.emit();
   }
 }

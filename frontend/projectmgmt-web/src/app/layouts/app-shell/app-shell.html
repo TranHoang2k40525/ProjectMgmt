@@ -1,27 +1,32 @@
 <!-- Global Transparent Backdrop Overlay for Flyouts -->
-@if (isRecentFlyoutOpen() || headerSearchResults().length > 0) {
-  <div class="fixed inset-0 z-40 bg-transparent" (click)="closeFlyouts()"></div>
+@if (isRecentFlyoutOpen() || headerSearchResults().length > 0 || isMobileSearchOpen()) {
+  <button type="button" aria-label="Đóng bảng nổi" class="fixed inset-0 z-40 w-full h-full bg-transparent border-0" (click)="closeFlyouts()"></button>
+}
+
+<!-- Mobile Sidebar Backdrop Drawer Overlay -->
+@if (isSidebarExpanded()) {
+  <button type="button" aria-label="Đóng thanh điều hướng" class="lg:hidden fixed inset-0 z-30 w-full h-full bg-slate-900/50 backdrop-blur-xs transition-opacity border-0" (click)="toggleSidebar()"></button>
 }
 
 <!-- Global Topbar Header -->
-<header class="fixed top-0 w-full h-14 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between px-4 transition-all shadow-xs">
+<header class="fixed top-0 w-full h-14 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between px-3 sm:px-4 transition-all shadow-xs">
   <!-- Topbar Left: Brand & Collapsible Toggle -->
-  <div class="flex items-center gap-3 shrink-0">
+  <div class="flex items-center gap-2 sm:gap-3 shrink-0">
     <button (click)="toggleSidebar()" title="Thu / Mở Sidebar Menu (Hover chuột để tự động mở rộng)" class="w-8 h-8 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">
       <span class="material-symbols-outlined text-[20px]">menu</span>
     </button>
 
-    <a routerLink="/for-you" title="Trang chủ Dành Cho Bạn (HUCE Scrum Platform)" class="flex items-center gap-2.5 group select-none">
-      <img alt="Logo HUCE" class="w-8 h-8 rounded-lg object-contain bg-white p-0.5 shadow-sm ring-1 ring-primary/20 group-hover:scale-105 transition-transform" src="assets/images/huce-branding/huce-official-logo.png" />
+    <a routerLink="/for-you" title="Trang chủ Dành Cho Bạn (HUCE Scrum Platform)" class="flex items-center gap-2 group select-none">
+      <img alt="Logo HUCE" class="w-8 h-8 rounded-lg object-contain bg-white p-0.5 shadow-sm ring-1 ring-primary/20 group-hover:scale-105 transition-transform shrink-0" src="assets/images/huce-branding/huce-official-logo.png" />
       <div class="flex flex-col">
-        <span class="font-headline font-bold text-slate-900 dark:text-white text-base tracking-tight leading-tight">HUCE Scrum Platform</span>
-        <span class="text-sm text-slate-500 font-medium tracking-wide leading-none">Hệ thống Quản lý Dự án</span>
+        <span class="font-headline font-bold text-slate-900 dark:text-white text-sm sm:text-base tracking-tight leading-tight">HUCE Scrum Platform</span>
+        <span class="text-xs text-slate-500 font-medium tracking-wide leading-none hidden sm:inline-block">Hệ thống Quản lý Dự án</span>
       </div>
     </a>
   </div>
 
   <!-- Topbar Center: Quick Search with Live Results Preview Dropdown -->
-  <div class="flex-1 max-w-xl mx-6 hidden md:block relative">
+  <div class="flex-1 max-w-xl mx-2 sm:mx-6 hidden lg:block relative">
     <div class="relative flex items-center w-full z-50">
       <span class="material-symbols-outlined absolute left-3 text-[18px] text-slate-400 pointer-events-none">search</span>
       <input
@@ -32,13 +37,13 @@
         title="Nhập từ khóa để tìm kiếm nhanh công việc và dự án"
         class="w-full h-9 pl-9 pr-14 rounded-xl bg-slate-100 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 text-sm font-normal border border-transparent focus:border-primary focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all shadow-2xs"
       />
-      <kbd class="absolute right-2.5 px-2 py-0.5 rounded text-sm font-mono font-semibold bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 pointer-events-none">Ctrl K</kbd>
+      <kbd class="absolute right-2.5 px-2 py-0.5 rounded text-xs font-mono font-semibold bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 pointer-events-none">Ctrl K</kbd>
     </div>
 
     <!-- Live Search Dropdown Popup Box -->
     @if (headerSearchResults().length > 0) {
       <div class="absolute top-11 left-0 right-0 z-50 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-3 flex flex-col gap-2 animate-fade-in">
-        <span class="text-sm font-bold uppercase tracking-wider text-slate-400 px-2">Kết quả tìm kiếm:</span>
+        <span class="text-xs font-bold uppercase tracking-wider text-slate-400 px-2">Kết quả tìm kiếm:</span>
         <div class="flex flex-col gap-1 max-h-64 overflow-y-auto">
           @for (item of headerSearchResults(); track item.id) {
             <button
@@ -49,9 +54,9 @@
               <span class="material-symbols-outlined text-[18px] text-primary">check_box</span>
               <div class="flex flex-col truncate flex-1">
                 <span class="text-sm font-bold text-slate-900 dark:text-white truncate">{{ item.title }}</span>
-                <span class="text-sm text-slate-400 font-mono">{{ item.issueKey }} • {{ item.sprintName }}</span>
+                <span class="text-xs text-slate-400 font-mono">{{ item.issueKey }} • {{ item.sprintName }}</span>
               </div>
-              <span class="px-2.5 py-1 rounded text-sm font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              <span class="px-2 py-0.5 rounded text-xs font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
                 {{ item.statusName }}
               </span>
             </button>
@@ -61,18 +66,23 @@
     }
   </div>
 
-  <!-- Topbar Right: Actions (+ Tạo việc mới CTA & Profile) -->
-  <div class="flex items-center gap-3 shrink-0">
+  <!-- Topbar Right: Actions (+ Mobile Search Toggle, + Tạo việc mới CTA & Profile) -->
+  <div class="flex items-center gap-1.5 sm:gap-3 shrink-0">
+    <button (click)="toggleMobileSearch()" class="lg:hidden w-8 h-8 flex items-center justify-center text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer" title="Tìm kiếm nhanh">
+      <span class="material-symbols-outlined text-[20px]">search</span>
+    </button>
+
     <button
       (click)="openCreateTaskModal()"
       title="Tạo mới công việc (Task / Story / Bug / Epic)"
-      class="flex items-center gap-1.5 h-9 px-4 rounded-xl bg-primary hover:bg-primary-container text-white font-bold text-sm shadow-xs hover:shadow transition-all shrink-0 cursor-pointer"
+      class="flex items-center gap-1 h-9 px-2.5 sm:px-4 rounded-xl bg-primary hover:bg-primary-container text-white font-bold text-xs sm:text-sm shadow-xs hover:shadow transition-all shrink-0 cursor-pointer"
     >
       <span class="material-symbols-outlined text-[18px]">add</span>
-      <span>Tạo việc mới</span>
+      <span class="hidden sm:inline">Tạo việc mới</span>
+      <span class="sm:hidden">Tạo</span>
     </button>
 
-    <div class="flex items-center gap-1 text-slate-500 border-l border-slate-200 dark:border-slate-800 pl-2">
+    <div class="flex items-center gap-1 text-slate-500 border-l border-slate-200 dark:border-slate-800 pl-1.5 sm:pl-2">
       <a routerLink="/notifications" title="Trung tâm Thông báo" class="relative w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors">
         <span class="material-symbols-outlined text-[20px]">notifications</span>
         @if (identity.unreadCount() > 0) {
@@ -82,12 +92,12 @@
     </div>
 
     @if (identity.authState().currentUser; as user) {
-      <div class="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-slate-800">
-        <a routerLink="/profile" [title]="'Hồ sơ cá nhân: ' + user.displayName + ' (' + user.roleName + ')'" class="flex items-center gap-2 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors group">
-          <img [src]="user.avatarUrl || 'assets/images/huce-branding/huce-official-logo.png'" [alt]="user.displayName" class="w-8 h-8 rounded-full object-cover ring-2 ring-primary/30" />
+      <div class="flex items-center gap-2 pl-1.5 sm:pl-2 border-l border-slate-200 dark:border-slate-800">
+        <a routerLink="/profile" [title]="'Hồ sơ cá nhân: ' + user.displayName + ' (' + user.roleName + ')'" class="flex items-center gap-2 p-0.5 sm:p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors group">
+          <img [src]="user.avatarUrl || 'assets/images/huce-branding/huce-official-logo.png'" [alt]="user.displayName" class="w-7 h-7 sm:w-8 sm:h-8 rounded-full object-cover ring-2 ring-primary/30 shrink-0" />
           <div class="hidden xl:flex flex-col text-left">
             <span class="text-sm font-semibold text-slate-900 dark:text-white leading-tight group-hover:text-primary transition-colors">{{ user.displayName }}</span>
-            <span class="text-sm text-slate-500 leading-none">{{ user.roleName }}</span>
+            <span class="text-xs text-slate-500 leading-none">{{ user.roleName }}</span>
           </div>
         </a>
       </div>
@@ -95,13 +105,51 @@
   </div>
 </header>
 
+<!-- Mobile Live Search Floating Overlay Bar -->
+@if (isMobileSearchOpen()) {
+  <div class="lg:hidden fixed top-14 left-0 right-0 z-50 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-3 shadow-lg flex flex-col gap-2 animate-fade-in">
+    <div class="relative flex items-center w-full">
+      <span class="material-symbols-outlined absolute left-3 text-[18px] text-slate-400 pointer-events-none">search</span>
+      <input
+        type="text"
+        [ngModel]="headerSearchQuery()"
+        (ngModelChange)="headerSearchQuery.set($event)"
+        placeholder="Tìm tên công việc, mã SCRUMAI..."
+        class="w-full h-9 pl-9 pr-9 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-sm focus:outline-none focus:border-primary"
+      />
+      <button (click)="closeFlyouts()" class="absolute right-2 text-slate-400 hover:text-slate-600 p-1">
+        <span class="material-symbols-outlined text-[18px]">close</span>
+      </button>
+    </div>
+
+    @if (headerSearchResults().length > 0) {
+      <div class="flex flex-col gap-1 max-h-48 overflow-y-auto">
+        @for (item of headerSearchResults(); track item.id) {
+          <button
+            (click)="openSearchResult(item)"
+            class="flex items-center gap-2.5 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-left transition-colors cursor-pointer"
+          >
+            <span class="material-symbols-outlined text-[16px] text-primary">check_box</span>
+            <div class="flex flex-col truncate flex-1">
+              <span class="text-xs font-bold text-slate-900 dark:text-white truncate">{{ item.title }}</span>
+              <span class="text-[11px] text-slate-400 font-mono">{{ item.issueKey }}</span>
+            </div>
+          </button>
+        }
+      </div>
+    }
+  </div>
+}
+
 <div class="pt-14 flex min-h-screen bg-slate-50 dark:bg-slate-950">
   
   <!-- App-Level Left Sidebar Navigation -->
   <aside
     [class.w-60]="isSidebarExpanded()"
     [class.w-14]="!isSidebarExpanded()"
-    class="fixed left-0 top-14 bottom-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-r border-slate-200/80 dark:border-slate-800 flex flex-col justify-between p-2.5 select-none transition-all duration-200 ease-out"
+    [class.-translate-x-full]="!isSidebarExpanded()"
+    [class.translate-x-0]="isSidebarExpanded()"
+    class="lg:translate-x-0 fixed left-0 top-14 bottom-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-r border-slate-200/80 dark:border-slate-800 flex flex-col justify-between p-2.5 select-none transition-all duration-200 ease-out shadow-xl lg:shadow-none"
   >
     <div class="flex flex-col gap-3 overflow-x-hidden">
       
@@ -111,12 +159,12 @@
         <a
           routerLink="/for-you"
           routerLinkActive="bg-primary/10 text-primary font-bold"
-          [title]="!isSidebarExpanded() ? 'Dành cho bạn (For You)' : 'Xem trang cá nhân & công việc được giao'"
+          [title]="!isSidebarExpanded() ? 'Dành cho bạn' : 'Xem trang cá nhân & công việc được giao'"
           class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors whitespace-nowrap"
         >
           <span class="material-symbols-outlined text-[20px] shrink-0">account_circle</span>
           @if (isSidebarExpanded()) {
-            <span class="truncate">Dành cho bạn (For You)</span>
+            <span class="truncate">Dành cho bạn</span>
           }
         </a>
 
@@ -124,13 +172,13 @@
         <div class="relative">
           <button
             (click)="toggleRecentFlyout()"
-            [title]="!isSidebarExpanded() ? 'Gần đây (Recent)' : 'Xem công việc vừa truy cập gần đây'"
+            [title]="!isSidebarExpanded() ? 'Gần đây' : 'Xem công việc vừa truy cập gần đây'"
             class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left whitespace-nowrap cursor-pointer"
           >
             <div class="flex items-center gap-3 min-w-0">
               <span class="material-symbols-outlined text-[20px] shrink-0">schedule</span>
               @if (isSidebarExpanded()) {
-                <span class="truncate">Gần đây (Recent)</span>
+                <span class="truncate">Gần đây</span>
               }
             </div>
             @if (isSidebarExpanded()) {
@@ -143,7 +191,7 @@
             <div
               [class.left-60]="isSidebarExpanded()"
               [class.left-14]="!isSidebarExpanded()"
-              class="fixed top-16 z-50 w-80 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-4 flex flex-col gap-3 animate-fade-in transition-all"
+              class="fixed top-16 z-50 w-72 sm:w-80 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-4 flex flex-col gap-3 animate-fade-in transition-all"
             >
               <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
                 <span class="text-sm font-bold text-slate-900 dark:text-white">Mở gần đây</span>
@@ -161,8 +209,8 @@
                   >
                     <span class="material-symbols-outlined text-[18px] text-primary">check_box</span>
                     <div class="flex flex-col truncate">
-                      <span class="text-sm font-bold text-slate-900 dark:text-white truncate">{{ item.title }}</span>
-                      <span class="text-sm text-slate-400 font-mono">{{ item.issueKey }} • {{ item.sprintName }}</span>
+                      <span class="text-xs font-bold text-slate-900 dark:text-white truncate">{{ item.title }}</span>
+                      <span class="text-xs text-slate-400 font-mono">{{ item.issueKey }} • {{ item.sprintName }}</span>
                     </div>
                   </button>
                 }
@@ -171,16 +219,16 @@
           }
         </div>
 
-        <!-- Starred -->
+        <!-- Starred / Đã đánh dấu -->
         <a
           routerLink="/task-list"
           routerLinkActive="bg-primary/10 text-primary font-bold"
-          [title]="!isSidebarExpanded() ? 'Đã đánh dấu (Starred)' : 'Xem danh sách công việc quan trọng đã đánh dấu'"
+          [title]="!isSidebarExpanded() ? 'Đã đánh dấu' : 'Xem danh sách công việc quan trọng đã đánh dấu'"
           class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors whitespace-nowrap"
         >
           <span class="material-symbols-outlined text-[20px] shrink-0">star</span>
           @if (isSidebarExpanded()) {
-            <span class="truncate">Đã đánh dấu (Starred)</span>
+            <span class="truncate">Đã đánh dấu</span>
           }
         </a>
 
@@ -190,12 +238,12 @@
             <button
               (click)="toggleSpacesSection()"
               title="Thu/Mở danh sách Dự án"
-              class="flex items-center gap-1 text-sm font-bold uppercase tracking-wider text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+              class="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
             >
               <span class="material-symbols-outlined text-[16px]">
                 {{ isSpacesSectionExpanded() ? 'expand_more' : 'chevron_right' }}
               </span>
-              <span>Dự án (Projects) ({{ projectsList().length }})</span>
+              <span>Dự án ({{ projectsList().length }})</span>
             </button>
           } @else {
             <button
@@ -229,10 +277,10 @@
             >
               <div class="flex items-center gap-2.5 min-w-0 flex-1">
                 <span class="w-6 h-6 rounded-md bg-primary text-white flex items-center justify-center font-mono font-bold text-xs shrink-0 shadow-2xs">
-                  {{ proj.projectKey }}
+                  {{ proj.projectKey.slice(0, 2) }}
                 </span>
                 @if (isSidebarExpanded()) {
-                  <span class="truncate text-sm font-semibold text-slate-800 dark:text-slate-200 group-hover:text-primary transition-colors">
+                  <span class="truncate text-xs font-semibold text-slate-800 dark:text-slate-200 group-hover:text-primary transition-colors">
                     {{ proj.name }}
                   </span>
                 }
@@ -249,24 +297,24 @@
           <a
             routerLink="/project/summary"
             routerLinkActive="bg-primary/10 text-primary font-bold"
-            [title]="!isSidebarExpanded() ? 'Bảng tổng quan (Dashboards)' : 'Xem tổng quan báo cáo tiến độ dự án'"
+            [title]="!isSidebarExpanded() ? 'Bảng tổng quan' : 'Xem tổng quan báo cáo tiến độ dự án'"
             class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors whitespace-nowrap"
           >
             <span class="material-symbols-outlined text-[20px] shrink-0">dashboard</span>
             @if (isSidebarExpanded()) {
-              <span class="truncate">Bảng tổng quan (Dashboards)</span>
+              <span class="truncate">Bảng tổng quan</span>
             }
           </a>
 
           <a
             routerLink="/project/members"
             routerLinkActive="bg-primary/10 text-primary font-bold"
-            [title]="!isSidebarExpanded() ? 'Thành viên nhóm (Teams)' : 'Xem danh sách thành viên & phân quyền nhóm'"
+            [title]="!isSidebarExpanded() ? 'Thành viên nhóm' : 'Xem danh sách thành viên & phân quyền nhóm'"
             class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors whitespace-nowrap"
           >
             <span class="material-symbols-outlined text-[20px] shrink-0">groups</span>
             @if (isSidebarExpanded()) {
-              <span class="truncate">Thành viên nhóm (Teams)</span>
+              <span class="truncate">Thành viên nhóm</span>
             }
           </a>
         </div>
@@ -283,73 +331,73 @@
       >
         <span class="material-symbols-outlined text-[20px] shrink-0">logout</span>
         @if (isSidebarExpanded()) {
-          <span class="truncate">Đăng xuất (Logout)</span>
+          <span class="truncate">Đăng xuất</span>
         }
       </button>
     </div>
   </aside>
 
-  <!-- Main Content Area (pt-28 when sub-header is present so content is never obscured) -->
+  <!-- Main Content Area (Responsive Padding: lg:pl-60 or lg:pl-14, pl-0 on mobile/tablet) -->
   <main
-    [class.pl-60]="isSidebarExpanded()"
-    [class.pl-14]="!isSidebarExpanded()"
-    [class.pt-28]="isProjectRoute()"
-    class="w-full min-h-[calc(100vh-3.5rem)] flex flex-col transition-all duration-200 ease-out"
+    [class.lg:pl-60]="isSidebarExpanded()"
+    [class.lg:pl-14]="!isSidebarExpanded()"
+    [class.pt-14]="isProjectRoute()"
+    class="w-full pl-0 min-w-0 min-h-[calc(100vh-3.5rem)] flex flex-col transition-all duration-200 ease-out"
   >
     <!-- Context-Aware Project Navigation Sub-Header (PERMANENTLY FIXED top-14, 1-Row Non-Wrapping) -->
     @if (isProjectRoute()) {
       <div
-        [class.left-60]="isSidebarExpanded()"
-        [class.left-14]="!isSidebarExpanded()"
-        class="fixed top-14 right-0 z-30 h-14 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800 pl-6 pr-4 flex items-center justify-between gap-3 shadow-xs transition-all duration-200 select-none overflow-hidden"
+        [class.lg:left-60]="isSidebarExpanded()"
+        [class.lg:left-14]="!isSidebarExpanded()"
+        class="left-0 fixed top-14 right-0 z-30 h-14 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800 pl-3 sm:pl-6 pr-3 sm:pr-4 flex items-center justify-between gap-2 sm:gap-3 shadow-xs transition-all duration-200 select-none overflow-hidden"
       >
         
         <!-- Left: Active Project Info Badge -->
         <div
           [title]="'Dự án hiện tại: ' + activeProject().name + ' (' + activeProject().projectKey + ')'"
-          class="flex items-center gap-2.5 pr-3 border-r border-slate-200 dark:border-slate-800 shrink-0 cursor-default"
+          class="flex items-center gap-2 sm:gap-2.5 pr-2 sm:pr-3 border-r border-slate-200 dark:border-slate-800 shrink-0 cursor-default"
         >
-          <div class="w-7 h-7 rounded-lg bg-primary text-white flex items-center justify-center font-extrabold text-xs shadow-2xs">
-            {{ activeProject().projectKey }}
+          <div class="w-7 h-7 rounded-lg bg-primary text-white flex items-center justify-center font-extrabold text-xs shadow-2xs shrink-0">
+            {{ activeProject().projectKey.slice(0, 2) }}
           </div>
           <div class="hidden sm:flex items-center gap-1.5">
-            <span class="text-sm font-bold text-slate-900 dark:text-white tracking-tight truncate max-w-[130px]">
+            <span class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white tracking-tight truncate max-w-[130px]">
               {{ activeProject().name }}
             </span>
-            <span class="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-mono font-bold text-xs">
+            <span class="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-mono font-bold text-[11px]">
               {{ activeProject().projectKey }}
             </span>
           </div>
         </div>
 
         <!-- Center/Right: Project Navigation Tabs (Clean Single Line, Zero Scroll) -->
-        <div class="flex-1 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 min-w-0">
-          <a routerLink="/project/summary" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Bảng tổng quan dự án" class="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0">
-            <span class="material-symbols-outlined text-[18px]">dashboard</span>
+        <div class="flex-1 flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar py-1 min-w-0">
+          <a routerLink="/project/summary" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Bảng tổng quan dự án" class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0">
+            <span class="material-symbols-outlined text-[17px] sm:text-[18px]">dashboard</span>
             <span>Tổng quan</span>
           </a>
-          <a routerLink="/roadmap" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Lộ trình Gantt chart dự án" class="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0">
-            <span class="material-symbols-outlined text-[18px]">timeline</span>
+          <a routerLink="/roadmap" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Lộ trình Gantt chart dự án" class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0">
+            <span class="material-symbols-outlined text-[17px] sm:text-[18px]">timeline</span>
             <span>Lộ trình</span>
           </a>
-          <a routerLink="/board" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Bảng Scrum Kanban quản lý Sprint" class="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0">
-            <span class="material-symbols-outlined text-[18px]">view_kanban</span>
+          <a routerLink="/board" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Bảng Scrum Kanban quản lý Sprint" class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0">
+            <span class="material-symbols-outlined text-[17px] sm:text-[18px]">view_kanban</span>
             <span>Scrum</span>
           </a>
-          <a routerLink="/backlog" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Kế hoạch Backlog các Sprints" class="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0">
-            <span class="material-symbols-outlined text-[18px]">format_list_bulleted</span>
+          <a routerLink="/backlog" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Kế hoạch Backlog các Sprints" class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0">
+            <span class="material-symbols-outlined text-[17px] sm:text-[18px]">format_list_bulleted</span>
             <span>Backlog</span>
           </a>
-          <a routerLink="/task-list" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Danh sách công việc đầy đủ" class="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0">
-            <span class="material-symbols-outlined text-[18px]">table_rows</span>
+          <a routerLink="/task-list" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Danh sách công việc đầy đủ" class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0">
+            <span class="material-symbols-outlined text-[17px] sm:text-[18px]">table_rows</span>
             <span>Danh sách</span>
           </a>
-          <a routerLink="/reports" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Báo cáo tiến độ & Burndown chart" class="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0">
-            <span class="material-symbols-outlined text-[18px]">analytics</span>
+          <a routerLink="/reports" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Báo cáo tiến độ & Burndown chart" class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0">
+            <span class="material-symbols-outlined text-[17px] sm:text-[18px]">analytics</span>
             <span>Báo cáo</span>
           </a>
-          <a routerLink="/project/members" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Danh sách thành viên dự án" class="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0">
-            <span class="material-symbols-outlined text-[18px]">settings</span>
+          <a routerLink="/project/members" routerLinkActive="bg-primary/10 text-primary font-bold shadow-2xs" title="Danh sách thành viên dự án" class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0">
+            <span class="material-symbols-outlined text-[17px] sm:text-[18px]">settings</span>
             <span>Thành viên</span>
           </a>
         </div>
@@ -358,7 +406,7 @@
     }
 
     <!-- Page Body View Container -->
-    <div class="p-6 flex-1">
+    <div class="p-3 sm:p-5 md:p-6 flex-1 w-full max-w-full min-w-0">
       <router-outlet />
     </div>
   </main>
@@ -369,28 +417,28 @@
 @if (projectService.activeDrawerTask(); as activeTask) {
   <app-task-detail-drawer
     [task]="activeTask"
-    (close)="closeActiveDrawer()"
+    (dismissed)="closeActiveDrawer()"
   ></app-task-detail-drawer>
 }
 
 <!-- Reusable Global Create Task Modal -->
 @if (isCreateTaskModalOpen()) {
   <app-create-task-modal
-    (close)="closeCreateTaskModal()"
+    (dismissed)="closeCreateTaskModal()"
   ></app-create-task-modal>
 }
 
 <!-- Reusable Global Create Project Modal -->
 @if (isCreateProjectModalOpen()) {
   <app-create-project-modal
-    (close)="closeCreateProjectModal()"
+    (dismissed)="closeCreateProjectModal()"
   ></app-create-project-modal>
 }
 
 <!-- Reusable Excel Import Modal -->
 @if (isExcelImportModalOpen()) {
   <app-excel-import-modal
-    (close)="closeExcelImportModal()"
+    (dismissed)="closeExcelImportModal()"
   ></app-excel-import-modal>
 }
 

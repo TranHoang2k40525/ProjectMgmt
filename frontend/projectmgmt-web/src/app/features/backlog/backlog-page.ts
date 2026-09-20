@@ -1,21 +1,20 @@
-import { ChangeDetectionStrategy, Component, AfterViewInit, ElementRef, inject, signal, computed, HostListener } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { gsap } from 'gsap';
-import { ProjectManagementService, WorkItem, EpicItem, Sprint } from '../../core/services/project-management.service';
+import { ConnectedPosition, OverlayModule } from '@angular/cdk/overlay';
+import { ProjectManagementService, WorkItem, Sprint } from '../../core/services/project-management.service';
 import { ExcelDataService } from '../../core/services/excel-data.service';
 import { ToastService } from '../../core/services/toast.service';
 
 @Component({
   selector: 'app-backlog-page',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, OverlayModule],
   templateUrl: './backlog-page.html',
   styleUrl: './backlog-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class BacklogPage implements AfterViewInit {
-  private el = inject(ElementRef);
+export class BacklogPage {
   readonly projectService = inject(ProjectManagementService);
   readonly excelService = inject(ExcelDataService);
   readonly toastService = inject(ToastService);
@@ -51,9 +50,42 @@ export class BacklogPage implements AfterViewInit {
   activeStatusDropdownTaskId = signal<string | null>(null);
   activeEpicDropdownTaskId = signal<string | null>(null);
 
+  readonly startAlignedOverlayPositions: ConnectedPosition[] = [
+    { originX: 'start', originY: 'bottom', overlayX: 'start', overlayY: 'top', offsetY: 8 },
+    { originX: 'start', originY: 'top', overlayX: 'start', overlayY: 'bottom', offsetY: -8 },
+    { originX: 'end', originY: 'bottom', overlayX: 'end', overlayY: 'top', offsetY: 8 },
+    { originX: 'end', originY: 'top', overlayX: 'end', overlayY: 'bottom', offsetY: -8 },
+  ];
+
+  readonly endAlignedOverlayPositions: ConnectedPosition[] = [
+    { originX: 'end', originY: 'bottom', overlayX: 'end', overlayY: 'top', offsetY: 8 },
+    { originX: 'end', originY: 'top', overlayX: 'end', overlayY: 'bottom', offsetY: -8 },
+    { originX: 'start', originY: 'bottom', overlayX: 'start', overlayY: 'top', offsetY: 8 },
+    { originX: 'start', originY: 'top', overlayX: 'start', overlayY: 'bottom', offsetY: -8 },
+  ];
+
+  readonly hasActivePopover = computed(() => {
+    return !!(this.activeMenuTaskId() || this.activeStatusDropdownTaskId() || this.activeEpicDropdownTaskId());
+  });
+
+  isRowPopoverActive(taskId: string): boolean {
+    return this.activeMenuTaskId() === taskId ||
+           this.activeStatusDropdownTaskId() === taskId ||
+           this.activeEpicDropdownTaskId() === taskId;
+  }
+
+  hasSprintActivePopover(sprintId: string): boolean {
+    const activeId = this.activeMenuTaskId() || this.activeStatusDropdownTaskId() || this.activeEpicDropdownTaskId();
+    if (!activeId) return false;
+    const task = this.workItems().find(w => w.id === activeId);
+    return task?.sprintId === sprintId;
+  }
+
   // Inline Task Title Edit State
   editingTaskId = signal<string | null>(null);
   editingTaskTitle = signal<string>('');
+  editingStoryPointsTaskId = signal<string | null>(null);
+  editingStoryPointsValue = signal<number>(0);
 
   // Inline Sprint Edit State
   editingSprintId = signal<string | null>(null);
@@ -121,16 +153,6 @@ export class BacklogPage implements AfterViewInit {
     return items;
   });
 
-  ngAfterViewInit(): void {
-    gsap.from('.backlog-row-item', {
-      opacity: 0,
-      y: 6,
-      duration: 0.25,
-      stagger: 0.03,
-      ease: 'power2.out'
-    });
-  }
-
   resetFilters(): void {
     this.selectedTypeFilter.set(null);
     this.selectedPriorityFilter.set(null);
@@ -151,6 +173,7 @@ export class BacklogPage implements AfterViewInit {
     this.activeSubtaskInputId.set(null);
     this.editingSprintId.set(null);
     this.editingTaskId.set(null);
+    this.editingStoryPointsTaskId.set(null);
   }
 
   startEditingTaskTitle(item: WorkItem, event?: Event): void {
@@ -170,13 +193,18 @@ export class BacklogPage implements AfterViewInit {
     this.editingTaskId.set(null);
   }
 
-  updateInlineSP(taskId: string, event?: Event): void {
-    if (event) event.stopPropagation();
-    const val = prompt('Nhập số điểm Story Points (SP):');
-    if (val !== null && !isNaN(Number(val))) {
-      this.projectService.updateWorkItemStoryPoints(taskId, Number(val));
-      this.toastService.success('Cập Nhật SP', `Đã cập nhật ${val} SP.`);
-    }
+  startEditingStoryPoints(item: WorkItem, event?: Event): void {
+    event?.stopPropagation();
+    this.editingStoryPointsTaskId.set(item.id);
+    this.editingStoryPointsValue.set(item.storyPoints ?? 0);
+  }
+
+  saveStoryPoints(taskId: string, event?: Event): void {
+    event?.stopPropagation();
+    const value = Math.max(0, Math.min(999, Number(this.editingStoryPointsValue()) || 0));
+    this.projectService.updateWorkItemStoryPoints(taskId, value);
+    this.editingStoryPointsTaskId.set(null);
+    this.toastService.success('Cập Nhật SP', `Đã cập nhật ${value} SP.`);
   }
 
   updateInlinePriorityNext(taskId: string, currentPriority: WorkItem['priority'], event?: Event): void {
@@ -206,6 +234,14 @@ export class BacklogPage implements AfterViewInit {
     this.activeMenuTaskId.set(null);
   }
 
+  toggleFilterMenu(event?: Event): void {
+    event?.stopPropagation();
+    this.isFilterMenuOpen.update(value => !value);
+    this.activeStatusDropdownTaskId.set(null);
+    this.activeEpicDropdownTaskId.set(null);
+    this.activeMenuTaskId.set(null);
+  }
+
   selectTaskEpic(taskId: string, epicName: string | null, event?: Event): void {
     if (event) {
       event.stopPropagation();
@@ -219,14 +255,14 @@ export class BacklogPage implements AfterViewInit {
 
   getIssueTypeIcon(type: string): string {
     const map: Record<string, string> = {
-      'Story': '📗',
-      'Task': '📘',
-      'Bug': '📕',
-      'Use-Case': '🩵',
-      'Epic': '⚡',
-      'Sub-task': '📙'
+      'Story': 'bookmark',
+      'Task': 'task',
+      'Bug': 'bug_report',
+      'Use-Case': 'schema',
+      'Epic': 'bolt',
+      'Sub-task': 'subdirectory_arrow_right'
     };
-    return map[type] || '📌';
+    return map[type] || 'task_alt';
   }
 
   startEditingSprint(sprint: Sprint, event?: Event): void {
@@ -252,6 +288,17 @@ export class BacklogPage implements AfterViewInit {
     if (!target.closest('.no-drawer') && !target.closest('button') && !target.closest('select') && !target.closest('input')) {
       this.closeAllPopups();
     }
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    this.closeAllPopups();
+    this.showNewEpicModal.set(false);
+  }
+
+  openTask(item: WorkItem, event?: Event): void {
+    event?.stopPropagation();
+    this.projectService.activeDrawerTask.set(item);
   }
 
   createSprint(): void {

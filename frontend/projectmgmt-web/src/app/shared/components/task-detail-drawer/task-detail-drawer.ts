@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ProjectManagementService, WorkItem } from '../../../core/services/project-management.service';
 import { ToastService } from '../../../core/services/toast.service';
+import { ConfirmDialogService } from '../../../core/services/confirm-dialog.service';
 
 @Component({
   selector: 'app-task-detail-drawer',
@@ -12,18 +13,18 @@ import { ToastService } from '../../../core/services/toast.service';
     @if (task) {
       <div class="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-xs transition-opacity animate-fade-in font-body text-slate-900 dark:text-slate-100">
         <!-- Backdrop close click -->
-        <div class="flex-1" (click)="close.emit()"></div>
+        <button type="button" aria-label="Đóng chi tiết công việc" class="flex-1 bg-transparent border-0" (click)="dismissed.emit()"></button>
 
-        <!-- Slide-over Right Drawer Container (Resizable Width) -->
+        <!-- Slide-over Right Drawer Container (Resizable Width, Full Width on Mobile) -->
         <div
           [style.width.px]="drawerWidth()"
-          class="jira-drawer relative bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col h-full overflow-hidden animate-slide-left transition-all duration-75"
+          class="jira-drawer relative bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col h-full overflow-hidden animate-slide-left transition-all duration-75 w-full max-w-full sm:max-w-[90vw]"
         >
-          <!-- Resizable Left Edge Drag Handle -->
+          <!-- Resizable Left Edge Drag Handle (Hidden on Mobile) -->
           <div
             (mousedown)="startResizing($event)"
             title="Kéo thả để mở rộng hoặc thu gọn độ rộng bảng chi tiết"
-            class="absolute left-0 top-0 bottom-0 w-2 hover:w-3 bg-slate-200 hover:bg-primary dark:bg-slate-800 cursor-col-resize z-50 flex items-center justify-center transition-all group"
+            class="hidden sm:flex absolute left-0 top-0 bottom-0 w-2 hover:w-3 bg-slate-200 hover:bg-primary dark:bg-slate-800 cursor-col-resize z-50 items-center justify-center transition-all group"
           >
             <div class="w-0.5 h-8 bg-slate-400 group-hover:bg-white rounded-full"></div>
           </div>
@@ -45,7 +46,7 @@ import { ToastService } from '../../../core/services/toast.service';
                 <span class="material-symbols-outlined text-[20px]">delete</span>
               </button>
               <div class="h-4 w-px bg-slate-200 dark:bg-slate-800"></div>
-              <button (click)="close.emit()" class="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 transition-colors">
+              <button (click)="dismissed.emit()" class="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 transition-colors">
                 <span class="material-symbols-outlined text-[20px]">close</span>
               </button>
             </div>
@@ -63,12 +64,12 @@ import { ToastService } from '../../../core/services/toast.service';
                   (ngModelChange)="onFieldChange()"
                   class="px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wider bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 focus:outline-none cursor-pointer"
                 >
-                  <option value="Task">🛠️ Task</option>
-                  <option value="Story">📖 Story</option>
-                  <option value="Bug">🔴 Bug</option>
-                  <option value="Use-Case">📐 Use-Case</option>
-                  <option value="Epic">⚡ Epic</option>
-                  <option value="Sub-task">🌿 Sub-task</option>
+                  <option value="Task">Task</option>
+                  <option value="Story">Story</option>
+                  <option value="Bug">Bug</option>
+                  <option value="Use-Case">Use-Case</option>
+                  <option value="Epic">Epic</option>
+                  <option value="Sub-task">Sub-task</option>
                 </select>
 
                 <!-- Epic Selector -->
@@ -174,11 +175,26 @@ import { ToastService } from '../../../core/services/toast.service';
                   <span class="material-symbols-outlined text-[20px] text-amber-500">account_tree</span>
                   Danh sách Sub-tasks ({{ drawerSubtasks.length }})
                 </span>
-                <button (click)="addSubtaskFromDrawer()" class="text-xs font-bold text-primary hover:underline flex items-center gap-1">
+                <button (click)="isSubtaskComposerOpen.set(!isSubtaskComposerOpen())" class="text-sm font-bold text-primary hover:underline flex items-center gap-1">
                   <span class="material-symbols-outlined text-[16px]">add</span>
                   <span>Thêm Sub-task</span>
                 </button>
               </div>
+
+              @if (isSubtaskComposerOpen()) {
+                <div class="flex flex-col sm:flex-row gap-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
+                  <input
+                    type="text"
+                    [ngModel]="newSubtaskTitle()"
+                    (ngModelChange)="newSubtaskTitle.set($event)"
+                    (keyup.enter)="addSubtaskFromDrawer()"
+                    placeholder="Nhập tên Sub-task mới"
+                    class="flex-1 h-9 px-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-sm focus:outline-none focus:border-primary"
+                  />
+                  <button (click)="addSubtaskFromDrawer()" class="h-9 px-3 rounded-lg bg-primary text-white text-sm font-semibold">Thêm</button>
+                  <button (click)="cancelSubtaskComposer()" class="h-9 px-3 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-semibold">Hủy</button>
+                </div>
+              }
 
               <div class="space-y-2">
                 @for (sub of drawerSubtasks; track sub.id) {
@@ -256,7 +272,7 @@ import { ToastService } from '../../../core/services/toast.service';
 
           <!-- Drawer Footer Controls -->
           <div class="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex justify-end gap-3">
-            <button (click)="close.emit()" class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer">
+            <button (click)="dismissed.emit()" class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer">
               Đóng
             </button>
           </div>
@@ -268,16 +284,19 @@ import { ToastService } from '../../../core/services/toast.service';
 })
 export class TaskDetailDrawerComponent {
   @Input() task: WorkItem | null = null;
-  @Output() close = new EventEmitter<void>();
+  @Output() dismissed = new EventEmitter<void>();
 
   private readonly projectService = inject(ProjectManagementService);
   private readonly toastService = inject(ToastService);
+  private readonly confirmDialog = inject(ConfirmDialogService);
 
   readonly drawerWidth = signal<number>(640);
   private isResizing = false;
 
   readonly epics = this.projectService.epics;
   newCommentText = '';
+  readonly isSubtaskComposerOpen = signal(false);
+  readonly newSubtaskTitle = signal('');
 
   startResizing(event: MouseEvent): void {
     event.preventDefault();
@@ -312,11 +331,16 @@ export class TaskDetailDrawerComponent {
 
   addSubtaskFromDrawer(): void {
     if (!this.task) return;
-    const title = prompt('Nhập tên Sub-task mới:');
-    if (title && title.trim()) {
-      const created = this.projectService.createSubTask(this.task.id, title.trim());
-      this.toastService.success('Tạo Sub-task', `Đã tạo công việc con [${created.issueKey}]`);
-    }
+    const title = this.newSubtaskTitle().trim();
+    if (!title) return;
+    const created = this.projectService.createSubTask(this.task.id, title);
+    this.toastService.success('Tạo Sub-task', `Đã tạo công việc con [${created.issueKey}]`);
+    this.cancelSubtaskComposer();
+  }
+
+  cancelSubtaskComposer(): void {
+    this.newSubtaskTitle.set('');
+    this.isSubtaskComposerOpen.set(false);
   }
 
   cloneTask(): void {
@@ -329,11 +353,20 @@ export class TaskDetailDrawerComponent {
 
   deleteTask(): void {
     if (!this.task) return;
-    if (confirm(`Bạn có chắc chắn muốn xóa công việc [${this.task.issueKey}]?`)) {
-      this.projectService.deleteWorkItem(this.task.id);
-      this.toastService.warning('Đã Xóa Công Việc', `Công việc [${this.task.issueKey}] đã được xóa.`);
-      this.close.emit();
-    }
+    const taskId = this.task.id;
+    const issueKey = this.task.issueKey;
+    this.confirmDialog.confirm({
+      title: 'Xóa công việc',
+      message: `Bạn có chắc chắn muốn xóa công việc [${issueKey}]? Hành động này không thể hoàn tác.`,
+      type: 'danger',
+      confirmText: 'Xóa công việc',
+      cancelText: 'Hủy',
+      onConfirm: () => {
+        this.projectService.deleteWorkItem(taskId);
+        this.toastService.warning('Đã Xóa Công Việc', `Công việc [${issueKey}] đã được xóa.`);
+        this.dismissed.emit();
+      }
+    });
   }
 
   submitComment(): void {

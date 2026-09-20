@@ -1,7 +1,11 @@
+@import '@angular/cdk/overlay-prebuilt.css';
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap');
 
 :root {
+  --app-topbar-height: 3.5rem;
+  --project-nav-height: 3.5rem;
+  --app-shell-offset: calc(var(--app-topbar-height) + var(--project-nav-height));
   --font-headline: 'Arial', sans-serif;
   --font-body: 'Inter', Arial, sans-serif;
   --font-label: 'Inter', Arial, sans-serif;
@@ -39,7 +43,7 @@ html, body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 h1, h2, h3, h4, h5, h6, .font-headline {

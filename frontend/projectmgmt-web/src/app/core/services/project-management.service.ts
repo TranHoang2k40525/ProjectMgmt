@@ -676,12 +676,13 @@ export class ProjectManagementService {
     return of(this.allProjectsList());
   }
 
-  createProject(req: any): Observable<Project> {
-    const proj = this.addNewProject({ name: req.name || 'Dự án mới', projectKey: req.projectKey || 'PROJ', description: req.description });
+  createProject(req: CreateProjectRequest): Observable<Project> {
+    const proj = this.addNewProject({ name: req.name || 'Dự án mới', projectKey: req.projectKey || 'PROJ', description: req.description ?? undefined });
     return of(proj);
   }
 
-  addProjectMember(memberReq: any): Observable<boolean> {
+  addProjectMember(memberReq: Pick<ProjectMember, 'displayName' | 'email' | 'role'>): Observable<boolean> {
+    void memberReq;
     return of(true);
   }
 
@@ -749,7 +750,7 @@ export class ProjectManagementService {
   }
 
   applyWorkflowTemplateToProject(templateId: string): ProjectStatus[] {
-    let newStatuses: ProjectStatus[] = [];
+    let newStatuses: ProjectStatus[];
     if (templateId === 'scrum-std') {
       newStatuses = [
         { id: 'st-1', name: 'To Do', category: 'To Do', isInitial: true, orderIndex: 1 },

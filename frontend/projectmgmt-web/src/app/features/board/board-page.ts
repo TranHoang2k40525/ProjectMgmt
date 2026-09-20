@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, AfterViewInit, ElementRef, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
 import { gsap } from 'gsap';
 import { ProjectManagementService, WorkItem } from '../../core/services/project-management.service';
 import { ToastService } from '../../core/services/toast.service';
@@ -22,6 +21,7 @@ export class BoardPage implements AfterViewInit {
   searchQuery = signal<string>('');
   selectedAssigneeFilter = signal<string | null>(null);
   selectedTypeFilter = signal<string | null>(null);
+  selectedStatusTab = signal<string | null>(null);
   activeMenuTaskId = signal<string | null>(null);
 
   readonly items = this.projectService.workItems;
@@ -32,6 +32,7 @@ export class BoardPage implements AfterViewInit {
     const query = this.searchQuery().trim().toLowerCase();
     const assignee = this.selectedAssigneeFilter();
     const type = this.selectedTypeFilter();
+    const statusTab = this.selectedStatusTab();
 
     if (query) {
       list = list.filter(i =>
@@ -47,6 +48,10 @@ export class BoardPage implements AfterViewInit {
 
     if (type) {
       list = list.filter(i => i.issueType === type);
+    }
+
+    if (statusTab) {
+      list = list.filter(i => i.statusName === statusTab);
     }
 
     return list;
