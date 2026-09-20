@@ -102,6 +102,7 @@
               [class.bg-surface-container-low/40]="!item.isRead"
               (click)="markAsRead(item.id)"
               (keydown.enter)="markAsRead(item.id)"
+              (keydown.space)="$event.preventDefault(); markAsRead(item.id)"
               role="button"
               tabindex="0">
               

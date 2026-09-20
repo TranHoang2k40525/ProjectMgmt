@@ -1,10 +1,14 @@
+@import '@angular/cdk/overlay-prebuilt.css';
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap');
 
 :root {
-  --font-headline: 'Manrope', 'Outfit', sans-serif;
-  --font-body: 'Inter', sans-serif;
-  --font-label: 'Inter', sans-serif;
+  --app-topbar-height: 3.5rem;
+  --project-nav-height: 3.5rem;
+  --app-shell-offset: calc(var(--app-topbar-height) + var(--project-nav-height));
+  --font-headline: 'Arial', sans-serif;
+  --font-body: 'Inter', Arial, sans-serif;
+  --font-label: 'Inter', Arial, sans-serif;
 
   /* Stitch Material Design 3 Surface & Palette Tokens */
   --bg-surface: #090d16;
@@ -13,9 +17,9 @@
   --surface-container-high: #1e293b;
   --surface-container-highest: #334155;
 
-  --primary: #b90014;
-  --primary-container: #6366f1;
-  --primary-container-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  --primary: #0052cc;
+  --primary-container: #003d9b;
+  --primary-container-gradient: linear-gradient(135deg, #0052cc 0%, #003d9b 100%);
   --on-primary: #ffffff;
   --on-surface: #f8fafc;
   --on-surface-variant: #94a3b8;
@@ -31,28 +35,28 @@
 }
 
 html, body {
-  background-color: var(--bg-surface);
-  color: var(--on-surface);
+  background-color: #f8fafc;
+  color: #0f172a;
   font-family: var(--font-body);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-headline);
-  letter-spacing: -0.025em;
+h1, h2, h3, h4, h5, h6, .font-headline {
+  font-family: Arial, Helvetica, sans-serif !important;
+  letter-spacing: -0.01em;
 }
 
 /* Material Symbols Outlined Utility */
 .material-symbols-outlined {
-  font-family: 'Material Symbols Outlined';
+  font-family: 'Material Symbols Outlined' !important;
   font-weight: normal;
   font-style: normal;
-  font-size: 24px;
+  font-size: 20px;
   line-height: 1;
   letter-spacing: normal;
   text-transform: none;
@@ -105,22 +109,22 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
-/* Custom Scrollbars */
+/* Custom Scrollbars - Ultra-Thin Sleek Gray */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #090d16;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
-  border-radius: 4px;
+  background: #cbd5e1;
+  border-radius: 9999px;
 
   &:hover {
-    background: #334155;
+    background: #94a3b8;
   }
 }
 

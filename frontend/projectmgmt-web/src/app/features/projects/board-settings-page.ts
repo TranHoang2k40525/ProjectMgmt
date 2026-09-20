@@ -11,6 +11,8 @@ import {
   ProjectManagementService,
   ProjectStatus
 } from '../../core/services/project-management.service';
+import { ConfirmDialogService } from '../../core/services/confirm-dialog.service';
+import { ToastService } from '../../core/services/toast.service';
 
 @Component({
   selector: 'app-board-settings-page',
@@ -545,6 +547,8 @@ import {
 export class BoardSettingsPage implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly projectService = inject(ProjectManagementService);
+  private readonly confirmService = inject(ConfirmDialogService);
+  private readonly toastService = inject(ToastService);
 
   projectId = '';
   readonly project = signal<Project | null>(null);
@@ -625,12 +629,14 @@ export class BoardSettingsPage implements OnInit {
         this.newBoard = { name: '', type: 'Kanban', isDefault: false };
         this.alertType.set('success');
         this.alertMessage.set(`Đã tạo Board "${b.name}" thành công!`);
+        this.toastService.success('Tạo Board', `Đã tạo Bảng mới "${b.name}"`);
         this.loadBoards();
         this.selectBoard(b);
       },
       error: (err) => {
         this.alertType.set('error');
         this.alertMessage.set(err?.error?.title || 'Không thể tạo Board.');
+        this.toastService.error('Lỗi', err?.error?.title || 'Không thể tạo Board.');
       }
     });
   }
@@ -643,6 +649,7 @@ export class BoardSettingsPage implements OnInit {
     if (this.newColumn.wipLimit !== null && this.newColumn.wipLimit !== undefined && this.newColumn.wipLimit < 0) {
       this.alertType.set('error');
       this.alertMessage.set('Lỗi: WIP limit không được là số âm (< 0)!');
+      this.toastService.error('Lỗi WIP Limit', 'Giới hạn WIP không được là số âm (< 0)');
       return;
     }
 
@@ -654,6 +661,7 @@ export class BoardSettingsPage implements OnInit {
         this.submittingCol.set(false);
         this.alertType.set('success');
         this.alertMessage.set(`Đã thêm cột "${col.name}" vào Board!`);
+        this.toastService.success('Thêm Cột Board', `Đã thêm cột "${col.name}"`);
         this.newColumn = { statusId: '', name: '', wipLimit: null };
         this.loadColumns(board.id);
       },
@@ -661,6 +669,7 @@ export class BoardSettingsPage implements OnInit {
         this.submittingCol.set(false);
         this.alertType.set('error');
         this.alertMessage.set(err?.error?.title || 'Không thể thêm cột.');
+        this.toastService.error('Lỗi', err?.error?.title || 'Không thể thêm cột.');
       }
     });
   }
@@ -686,6 +695,7 @@ export class BoardSettingsPage implements OnInit {
         next: () => {
           this.alertType.set('success');
           this.alertMessage.set('Đã lưu thứ tự cột thành công!');
+          this.toastService.success('Cập Nhật Thứ Tự', 'Đã sắp xếp lại thứ tự cột trên bảng');
           this.loadColumns(board.id);
         },
         error: (err) => {
@@ -697,20 +707,29 @@ export class BoardSettingsPage implements OnInit {
   }
 
   onDeleteColumn(col: BoardColumn): void {
-    if (confirm(`Bạn có chắc muốn xóa cột "${col.name}"?`)) {
-      this.projectService.deleteBoardColumn(col.id).subscribe({
-        next: () => {
-          this.alertType.set('success');
-          this.alertMessage.set(`Đã xóa cột "${col.name}".`);
-          if (this.selectedBoard()) {
-            this.loadColumns(this.selectedBoard()!.id);
+    this.confirmService.confirm({
+      title: 'Xóa Cột Board',
+      message: `Bạn có chắc chắn muốn xóa cột "${col.name || col.statusName}" khỏi Bảng không?`,
+      type: 'warning',
+      confirmText: 'Xóa cột ngay',
+      cancelText: 'Hủy bỏ',
+      onConfirm: () => {
+        this.projectService.deleteBoardColumn(col.id).subscribe({
+          next: () => {
+            this.alertType.set('success');
+            this.alertMessage.set(`Đã xóa cột "${col.name}".`);
+            this.toastService.warning('Đã Xóa Cột', `Đã loại bỏ cột "${col.name}" khỏi bảng`);
+            if (this.selectedBoard()) {
+              this.loadColumns(this.selectedBoard()!.id);
+            }
+          },
+          error: (err) => {
+            this.alertType.set('error');
+            this.alertMessage.set(err?.error?.title || 'Không thể xóa cột.');
+            this.toastService.error('Lỗi Xóa Cột', err?.error?.title || 'Không thể xóa cột.');
           }
-        },
-        error: (err) => {
-          this.alertType.set('error');
-          this.alertMessage.set(err?.error?.title || 'Không thể xóa cột.');
-        }
-      });
-    }
+        });
+      }
+    });
   }
 }

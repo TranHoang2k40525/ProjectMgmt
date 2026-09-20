@@ -1,261 +1,159 @@
-<div class="p-6 max-w-[1600px] mx-auto font-body-md text-on-surface">
-  <!-- Header & Breadcrumb from Stitch Screen 39cc24dfeb37497780f09aa6e9324e0c -->
-  <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6 pb-4 border-b border-surface-container-highest">
-    <div>
-      <div class="flex items-center gap-2 font-label-sm text-label-sm text-on-surface-variant mb-1">
-        <span>Không gian</span>
-        <span>›</span>
-        <span class="text-primary font-semibold">Scrum AI Project Management</span>
-        <span class="px-1.5 py-0.5 rounded bg-primary-container text-on-primary-container text-[10px] font-mono font-bold">SCRUMAI</span>
-      </div>
-      <div class="flex items-center gap-3">
-        <h1 class="font-headline-lg text-headline-lg font-bold tracking-tight text-on-surface">Kế hoạch Backlog & Phân rã AI</h1>
-        <span class="px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm font-semibold">
-          13 Work Items
-        </span>
-      </div>
-    </div>
-
-    <!-- Navigation View Switcher (Backlog, Board, Timeline, Calendar) -->
-    <div class="flex items-center gap-1.5 bg-surface-container-high/60 p-1.5 rounded-xl backdrop-blur-md">
-      <a routerLink="/backlog" class="px-3.5 py-1.5 rounded-lg bg-surface-container-lowest text-primary font-label-md text-label-md font-semibold shadow-sm flex items-center gap-1.5">
-        <span class="material-symbols-outlined text-[18px]">splitscreen</span>
-        <span>Backlog</span>
-      </a>
-      <a routerLink="/board" class="px-3.5 py-1.5 rounded-lg text-on-surface-variant hover:text-on-surface font-label-md text-label-md flex items-center gap-1.5 transition-colors">
-        <span class="material-symbols-outlined text-[18px]">view_kanban</span>
-        <span>Board</span>
-      </a>
-      <a routerLink="/projects" class="px-3.5 py-1.5 rounded-lg text-on-surface-variant hover:text-on-surface font-label-md text-label-md flex items-center gap-1.5 transition-colors">
-        <span class="material-symbols-outlined text-[18px]">timeline</span>
-        <span>Timeline</span>
-      </a>
-    </div>
-  </div>
-
-  <!-- Action Bar & AI Breakdown Toolbar -->
-  <div class="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 mb-6">
-    <div class="flex flex-wrap items-center gap-2.5">
-      <button type="button" (click)="toggleAiModal()" class="h-10 px-4 rounded-xl bg-gradient-to-r from-primary to-primary-container hover:brightness-110 text-on-primary font-label-md text-label-md font-bold flex items-center gap-2 shadow-sm transition-all active:scale-[0.98] cursor-pointer">
-        <span class="material-symbols-outlined text-[20px]">auto_awesome</span>
-        <span>Phân rã AI (Task Breakdown)</span>
-      </button>
-
-      <button type="button" class="h-10 px-3.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold flex items-center gap-1.5 transition-all">
-        <span class="material-symbols-outlined text-[18px]">file_upload</span>
-        <span>Nhập công việc</span>
-      </button>
-
-      <div class="h-6 w-px bg-surface-container-highest mx-1"></div>
-
-      <!-- Quick Filter Avatars -->
-      <div class="flex items-center gap-1">
-        <span class="font-label-sm text-label-sm text-on-surface-variant mr-1">Phân công:</span>
-        <div class="w-7 h-7 rounded-full bg-primary text-on-primary font-label-sm text-[11px] font-bold flex items-center justify-center ring-2 ring-surface">TH</div>
-        <div class="w-7 h-7 rounded-full bg-secondary text-on-secondary font-label-sm text-[11px] font-bold flex items-center justify-center ring-2 ring-surface">HH</div>
-        <div class="w-7 h-7 rounded-full bg-tertiary-container text-on-tertiary font-label-sm text-[11px] font-bold flex items-center justify-center ring-2 ring-surface">PH</div>
-      </div>
-    </div>
-
-    <!-- Search input inside Backlog -->
-    <div class="relative flex items-center max-w-md w-full">
-      <span class="material-symbols-outlined absolute left-3 text-[18px] text-outline pointer-events-none">search</span>
-      <input
-        type="text"
-        [(ngModel)]="searchQuery"
-        placeholder="Tìm kiếm công việc trong backlog..."
-        class="w-full h-10 pl-9 pr-4 rounded-xl bg-surface-container-low text-on-surface placeholder:text-outline font-body-sm text-body-sm focus:outline-none focus:bg-surface-container-lowest focus:shadow-[0_0_0_2px_#0052cc] transition-all" />
-    </div>
-  </div>
-
-  <!-- Main Backlog Container & Drawer Layout -->
-  <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-    <!-- Left List: Sprint Groups (8 Cols when Drawer is open, 12 when closed) -->
-    <div [class]="selectedIssue() ? 'lg:col-span-7 space-y-6' : 'lg:col-span-12 space-y-6'">
-      
-      <!-- SPRINT 1 (ACTIVE) -->
-      <div class="rounded-2xl bg-surface-container-lowest border border-outline-variant/30 p-5 shadow-sm space-y-4">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <span class="material-symbols-outlined text-primary">expand_more</span>
-            <h3 class="font-headline-sm text-headline-sm font-bold text-on-surface">SCRUMAI Sprint 1</h3>
-            <span class="font-label-sm text-label-sm text-on-surface-variant">24 Thg 8 – 30 Thg 8 (3 items)</span>
-            <span class="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 font-label-sm text-[11px] font-bold">ĐANG CHẠY</span>
-          </div>
-
-          <button type="button" class="h-8 px-3 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-sm text-label-sm font-semibold transition-all">
-            Hoàn thành Sprint
-          </button>
-        </div>
-
-        <!-- Issue Table Rows -->
-        <div class="space-y-2">
-          @for (item of sprint1Items(); track item.id) {
-            <div
-              (click)="selectIssue(item)"
-              (keydown.enter)="selectIssue(item)"
-              role="button"
-              tabindex="0"
-              [class.ring-2]="selectedIssue()?.id === item.id"
-              [class.ring-primary]="selectedIssue()?.id === item.id"
-              class="flex items-center justify-between p-3 rounded-xl bg-surface-container-low/70 hover:bg-surface-container-low transition-all cursor-pointer group">
-              <div class="flex items-center gap-3 min-w-0">
-                <input type="checkbox" checked class="w-4 h-4 rounded accent-primary cursor-pointer" (click)="$event.stopPropagation()" />
-                <span class="font-mono text-label-md font-bold text-primary shrink-0">{{ item.key }}</span>
-                <span class="font-body-md text-body-md font-medium text-on-surface truncate group-hover:text-primary transition-colors">{{ item.title }}</span>
-              </div>
-
-              <div class="flex items-center gap-3 shrink-0">
-                <span class="px-2 py-0.5 rounded bg-surface-container-high font-label-sm text-[11px] text-on-surface-variant font-mono">{{ item.tag }}</span>
-                <span class="px-2.5 py-1 rounded-full bg-primary-container text-on-primary-container font-label-sm text-[11px] font-semibold">{{ item.status }}</span>
-                <div class="w-6 h-6 rounded-full bg-primary text-on-primary font-label-sm text-[10px] font-bold flex items-center justify-center">{{ item.assignee }}</div>
-              </div>
-            </div>
-          }
-        </div>
-      </div>
-
-      <!-- SPRINT 2 (PLANNING) -->
-      <div class="rounded-2xl bg-surface-container-lowest border border-outline-variant/30 p-5 shadow-sm space-y-4">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <span class="material-symbols-outlined text-outline">expand_more</span>
-            <h3 class="font-headline-sm text-headline-sm font-bold text-on-surface">SCRUMAI Sprint 2</h3>
-            <span class="font-label-sm text-label-sm text-on-surface-variant">31 Thg 8 – 6 Thg 9 (5 items)</span>
-            <span class="px-2.5 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-[11px] font-bold">Kế hoạch</span>
-          </div>
-
-          <button type="button" class="h-8 px-3 rounded-lg bg-primary-container text-on-primary-container hover:bg-primary hover:text-on-primary font-label-sm text-label-sm font-semibold transition-all">
-            Start Sprint
-          </button>
-        </div>
-
-        <div class="space-y-2">
-          @for (item of sprint2Items(); track item.id) {
-            <div
-              (click)="selectIssue(item)"
-              (keydown.enter)="selectIssue(item)"
-              role="button"
-              tabindex="0"
-              [class.ring-2]="selectedIssue()?.id === item.id"
-              [class.ring-primary]="selectedIssue()?.id === item.id"
-              class="flex items-center justify-between p-3 rounded-xl bg-surface-container-low/70 hover:bg-surface-container-low transition-all cursor-pointer group">
-              <div class="flex items-center gap-3 min-w-0">
-                <input type="checkbox" class="w-4 h-4 rounded accent-primary cursor-pointer" (click)="$event.stopPropagation()" />
-                <span class="font-mono text-label-md font-bold text-primary shrink-0">{{ item.key }}</span>
-                <span class="font-body-md text-body-md font-medium text-on-surface truncate group-hover:text-primary transition-colors">{{ item.title }}</span>
-              </div>
-
-              <div class="flex items-center gap-3 shrink-0">
-                @if (item.aiBreakdown) {
-                  <span class="px-2 py-0.5 rounded bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-[10px] font-bold flex items-center gap-1">
-                    <span class="material-symbols-outlined text-[12px]">auto_awesome</span> AI Ready
-                  </span>
-                }
-                <span class="px-2 py-0.5 rounded bg-surface-container-high font-label-sm text-[11px] text-on-surface-variant font-mono">{{ item.tag }}</span>
-                <span class="px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-[11px] font-semibold">To Do</span>
-                <div class="w-6 h-6 rounded-full bg-secondary text-on-secondary font-label-sm text-[10px] font-bold flex items-center justify-center">{{ item.assignee }}</div>
-              </div>
-            </div>
-          }
-        </div>
-      </div>
-
-    </div>
-
-    <!-- Right Drawer: Jira Work Item Detail Screen matching Stitch 39cc24dfeb37497780f09aa6e9324e0c -->
-    @if (selectedIssue(); as issue) {
-      <div class="lg:col-span-5 rounded-2xl bg-surface-container-lowest border border-outline-variant/30 p-6 shadow-xl space-y-6 sticky top-20 animate-fade-in">
-        <div class="flex items-center justify-between pb-4 border-b border-surface-container-highest">
-          <div class="flex items-center gap-2">
-            <span class="material-symbols-outlined text-primary text-[20px]">check_box</span>
-            <span class="font-label-md text-label-md font-bold text-on-surface">Jira Work Item</span>
-            <span class="font-mono font-bold text-primary text-label-md">• {{ issue.key }}</span>
-          </div>
-
-          <div class="flex items-center gap-1">
-            <button type="button" class="w-8 h-8 rounded-lg hover:bg-surface-container text-on-surface-variant flex items-center justify-center">
-              <span class="material-symbols-outlined text-[18px]">visibility</span>
-            </button>
-            <button type="button" class="w-8 h-8 rounded-lg hover:bg-surface-container text-on-surface-variant flex items-center justify-center">
-              <span class="material-symbols-outlined text-[18px]">share</span>
-            </button>
-            <button type="button" (click)="closeDrawer()" class="w-8 h-8 rounded-lg hover:bg-surface-container text-on-surface-variant flex items-center justify-center">
-              <span class="material-symbols-outlined text-[18px]">close</span>
-            </button>
-          </div>
-        </div>
-
+<section class="backlog-page" aria-labelledby="backlog-title">
+  <header class="backlog-toolbar">
+    <div class="backlog-heading-row">
+      <div class="backlog-heading">
+        <span class="material-symbols-outlined text-primary" aria-hidden="true">format_list_bulleted</span>
         <div>
-          <h2 class="font-headline-sm text-headline-sm font-bold text-on-surface leading-snug mb-3">
-            {{ issue.title }}
-          </h2>
+          <h1 id="backlog-title">Kế hoạch Sprint &amp; Backlog</h1>
+          <p>{{ workItems().length }} công việc · {{ epics().length }} Epic</p>
+        </div>
+      </div>
 
-          <div class="flex items-center gap-2 mb-4">
-            <span class="px-3 py-1 rounded-full bg-primary text-on-primary font-label-sm text-label-sm font-semibold flex items-center gap-1">
-              <span class="w-2 h-2 rounded-full bg-emerald-400"></span> {{ issue.status }}
-            </span>
-            <button type="button" (click)="generateAiSubtasks()" class="h-8 px-3 rounded-xl bg-tertiary-container hover:bg-tertiary hover:text-on-tertiary text-on-tertiary-container font-label-sm text-label-sm font-bold flex items-center gap-1.5 transition-all">
-              <span class="material-symbols-outlined text-[16px]">auto_awesome</span>
-              <span>AI Gợi ý Subtask</span>
+      <div class="toolbar-actions" aria-label="Thao tác Backlog">
+        <button type="button" class="button button-ai" (click)="triggerAiBreakdown()"><span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span><span>Phân rã AI</span></button>
+        <button type="button" class="button button-secondary" (click)="exportExcel()"><span class="material-symbols-outlined" aria-hidden="true">download</span><span>Xuất Excel</span></button>
+        <button type="button" class="button button-primary" (click)="createSprint()"><span class="material-symbols-outlined" aria-hidden="true">add</span><span>Tạo Sprint</span></button>
+      </div>
+    </div>
+
+    <div class="filter-row">
+      <label class="search-field">
+        <span class="sr-only">Tìm kiếm công việc</span>
+        <span class="material-symbols-outlined" aria-hidden="true">search</span>
+        <input type="search" [ngModel]="searchQuery()" (ngModelChange)="searchQuery.set($event)" placeholder="Tìm tên công việc, mã SCRUMAI hoặc Epic" />
+      </label>
+
+      <button #filterOrigin="cdkOverlayOrigin" cdkOverlayOrigin type="button" class="button button-secondary" [class.is-active]="hasActiveFilters()" [attr.aria-expanded]="isFilterMenuOpen()" aria-haspopup="dialog" (click)="toggleFilterMenu($event)">
+        <span class="material-symbols-outlined" aria-hidden="true">filter_list</span><span>Bộ lọc</span>
+        @if (hasActiveFilters()) { <span class="active-dot" aria-hidden="true"></span> }
+      </button>
+
+      <ng-template cdkConnectedOverlay [cdkConnectedOverlayOrigin]="filterOrigin" [cdkConnectedOverlayOpen]="isFilterMenuOpen()" [cdkConnectedOverlayPositions]="startAlignedOverlayPositions" [cdkConnectedOverlayHasBackdrop]="true" cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop" [cdkConnectedOverlayPush]="true" [cdkConnectedOverlayViewportMargin]="12" (backdropClick)="isFilterMenuOpen.set(false)" (detach)="isFilterMenuOpen.set(false)">
+        <div class="overlay-panel filter-panel" role="dialog" aria-label="Bộ lọc công việc">
+          <div class="overlay-title"><strong>Bộ lọc công việc</strong><button type="button" class="text-button" (click)="resetFilters()">Xóa bộ lọc</button></div>
+          <label><span>Người xử lý</span><select [ngModel]="selectedAssigneeFilter()" (ngModelChange)="selectedAssigneeFilter.set($event)"><option [ngValue]="null">Tất cả người xử lý</option><option value="Trần Văn Hoàng">Trần Văn Hoàng (Lead)</option><option value="Nguyễn Thanh Hà">Nguyễn Thanh Hà</option><option value="Phạm Đức Anh">Phạm Đức Anh</option><option value="Lê Minh Khiêm">Lê Minh Khiêm</option></select></label>
+          <label><span>Loại công việc</span><select [ngModel]="selectedTypeFilter()" (ngModelChange)="selectedTypeFilter.set($event)"><option [ngValue]="null">Tất cả loại công việc</option><option value="Story">Story</option><option value="Task">Task</option><option value="Bug">Bug</option><option value="Use-Case">Use-Case</option><option value="Epic">Epic</option><option value="Sub-task">Sub-task</option></select></label>
+          <label><span>Mức độ ưu tiên</span><select [ngModel]="selectedPriorityFilter()" (ngModelChange)="selectedPriorityFilter.set($event)"><option [ngValue]="null">Tất cả mức độ</option><option value="Urgent">Khẩn cấp</option><option value="High">Cao</option><option value="Medium">Trung bình</option><option value="Low">Thấp</option></select></label>
+          <label><span>Epic</span><select [ngModel]="selectedEpicFilter()" (ngModelChange)="selectedEpicFilter.set($event)"><option [ngValue]="null">Tất cả Epic</option>@for (epic of epics(); track epic.id) { <option [value]="epic.name">{{ epic.name }}</option> }</select></label>
+        </div>
+      </ng-template>
+
+      <button type="button" class="button button-secondary" [class.is-active]="onlyMineFilter()" (click)="onlyMineFilter.update(value => !value)"><span class="material-symbols-outlined" aria-hidden="true">person</span><span>Của tôi</span></button>
+      <button type="button" class="button button-secondary" [class.is-active-purple]="isEpicPanelOpen()" (click)="toggleEpicPanel()"><span class="material-symbols-outlined" aria-hidden="true">view_column</span><span>Epic</span></button>
+      @if (hasActiveFilters()) { <button type="button" class="text-button" (click)="resetFilters()">Xóa lọc</button> }
+    </div>
+  </header>
+
+  <div class="backlog-layout">
+    @if (isEpicPanelOpen()) {
+      <button type="button" class="epic-panel-backdrop" aria-label="Đóng bảng Epic" (click)="isEpicPanelOpen.set(false)"></button>
+      <aside class="epic-panel" aria-label="Danh sách Epic">
+        <div class="epic-panel-title">
+          <div><span class="eyebrow">Phạm vi công việc</span><strong>Bảng Epic</strong></div>
+          <div class="compact-actions"><button type="button" class="icon-button" title="Tạo Epic" (click)="showNewEpicModal.set(true)"><span class="material-symbols-outlined" aria-hidden="true">add</span></button><button type="button" class="icon-button" title="Đóng bảng Epic" (click)="isEpicPanelOpen.set(false)"><span class="material-symbols-outlined" aria-hidden="true">close</span></button></div>
+        </div>
+        <button type="button" class="epic-card" [class.is-selected]="!selectedEpicFilter()" (click)="filterByEpic(null)"><span>Tất cả công việc</span><strong>{{ workItems().length }}</strong></button>
+        <div class="epic-list">
+          @for (epic of epics(); track epic.id) {
+            @let stats = getEpicProgress(epic.name);
+            <button type="button" class="epic-card epic-card-detail" [class.is-selected]="selectedEpicFilter() === epic.name" (click)="filterByEpic(epic.name)">
+              <span class="epic-card-top"><strong>{{ epic.key }}</strong><span>{{ stats.points }} SP</span></span><span class="epic-name">{{ epic.name }}</span><span class="epic-progress-label"><span>{{ stats.done }}/{{ stats.total }} hoàn thành</span><strong>{{ stats.percent }}%</strong></span><span class="progress-track"><span [style.width.%]="stats.percent"></span></span>
             </button>
-          </div>
+          }
+        </div>
+      </aside>
+    }
 
-          <!-- Description -->
-          <div class="space-y-1.5 mb-6">
-            <div class="flex items-center justify-between font-label-md text-label-md font-bold text-on-surface">
-              <span>Mô tả nhiệm vụ (Description)</span>
-              <span class="font-label-sm text-[10px] text-on-surface-variant italic">Đã lưu tự động</span>
-            </div>
-            <p class="font-body-sm text-body-sm text-on-surface-variant bg-surface-container-low p-3.5 rounded-xl leading-relaxed">
-              {{ issue.description }}
-            </p>
-          </div>
-
-          <!-- Subtask Checklist -->
-          <div class="space-y-3 mb-6">
-            <div class="flex items-center justify-between">
-              <span class="font-label-md text-label-md font-bold text-on-surface">Danh sách Subtasks ({{ issue.subtasks.length }})</span>
-              <button type="button" class="font-label-sm text-label-sm text-primary hover:underline font-semibold">+ Thêm subtask</button>
-            </div>
-
-            <div class="space-y-2">
-              @for (st of issue.subtasks; track st.id) {
-                <div class="flex items-center justify-between p-2.5 rounded-xl bg-surface-container-low">
-                  <label class="flex items-center gap-2.5 cursor-pointer">
-                    <input type="checkbox" [checked]="st.done" class="w-4 h-4 rounded accent-primary cursor-pointer" />
-                    <span class="font-body-sm text-body-sm text-on-surface" [class.line-through]="st.done" [class.opacity-60]="st.done">{{ st.title }}</span>
-                  </label>
-                  <span class="px-2 py-0.5 rounded font-label-sm text-[10px] font-bold" [class.bg-emerald-500/15]="st.done" [class.text-emerald-600]="st.done" [class.bg-surface-container-high]="!st.done" [class.text-on-surface-variant]="!st.done">
-                    {{ st.done ? 'Done' : 'In Progress' }}
-                  </span>
-                </div>
+    <main class="sprint-list">
+      @for (sprint of sprints(); track sprint.id) {
+        @let sprintTasks = getSprintItems(sprint.id);
+        @let sprintAssignees = getSprintAssignees(sprint.id);
+        <article class="sprint-section">
+          <div class="sprint-header">
+            <div class="sprint-info">
+              @if (editingSprintId() === sprint.id) {
+                <div class="sprint-edit-row"><input type="text" [(ngModel)]="editingSprintName" aria-label="Tên Sprint" /><input type="date" [(ngModel)]="editingStartDate" aria-label="Ngày bắt đầu" /><input type="date" [(ngModel)]="editingEndDate" aria-label="Ngày kết thúc" /><button type="button" class="button button-primary" (click)="saveEditingSprint(sprint.id)">Lưu</button><button type="button" class="button button-secondary" (click)="editingSprintId.set(null)">Hủy</button></div>
+              } @else {
+                <button type="button" class="sprint-title" (click)="startEditingSprint(sprint, $event)" title="Sửa thông tin Sprint"><strong>{{ sprint.name }}</strong><span>{{ sprint.startDate || 'Chưa có ngày' }} – {{ sprint.endDate || 'Chưa có ngày' }}</span><span class="material-symbols-outlined" aria-hidden="true">edit</span></button>
               }
+              <span class="sprint-state" [class.state-active]="sprint.status === 'active'" [class.state-completed]="sprint.status === 'completed'" [class.state-future]="sprint.status === 'future'">{{ sprint.status === 'active' ? 'Đang chạy' : (sprint.status === 'completed' ? 'Hoàn thành' : 'Kế hoạch') }}</span>
+              <span class="muted-count">{{ sprintTasks.length }} việc</span>
+            </div>
+            <div class="sprint-actions">
+              <div class="avatar-stack" [title]="sprintAssignees.join(', ')" aria-label="Thành viên Sprint">@for (assignee of sprintAssignees; track assignee) { <span>{{ getAssigneeInitials(assignee) }}</span> }</div>
+              <span class="points-summary">{{ sprint.totalStoryPoints }} SP</span>
+              <button type="button" class="button button-secondary" (click)="toggleSprintStatus(sprint, $event)"><span class="material-symbols-outlined" aria-hidden="true">{{ sprint.status === 'future' ? 'play_arrow' : (sprint.status === 'active' ? 'check_circle' : 'restart_alt') }}</span><span>{{ sprint.status === 'future' ? 'Bắt đầu' : (sprint.status === 'active' ? 'Hoàn thành' : 'Mở lại') }}</span></button>
+              <button type="button" class="button button-primary" (click)="activeInlineSprintId.set(activeInlineSprintId() === sprint.id ? null : sprint.id)"><span class="material-symbols-outlined" aria-hidden="true">add</span><span>Tạo việc</span></button>
             </div>
           </div>
+          @if (activeInlineSprintId() === sprint.id) { <div class="inline-create"><input type="text" [(ngModel)]="inlineTaskTitleMap[sprint.id]" (keyup.enter)="createInlineSprintTask(sprint.id, sprint.name)" placeholder="Nhập tên công việc rồi nhấn Enter" /><button type="button" class="button button-primary" (click)="createInlineSprintTask(sprint.id, sprint.name)">Thêm</button><button type="button" class="button button-secondary" (click)="activeInlineSprintId.set(null)">Hủy</button></div> }
+          @if (sprintTasks.length > 0) { <ng-container *ngTemplateOutlet="workItemList; context: { $implicit: sprintTasks }"></ng-container> } @else { <div class="empty-state"><span class="material-symbols-outlined" aria-hidden="true">inventory_2</span><p>Sprint chưa có công việc.</p></div> }
+        </article>
+      }
 
-          <!-- Metadata Fields -->
-          <div class="pt-4 border-t border-surface-container-highest space-y-3 font-label-sm text-label-sm">
-            <div class="flex items-center justify-between">
-              <span class="text-on-surface-variant">Người thực hiện (Assignee)</span>
-              <div class="flex items-center gap-2 font-semibold text-on-surface">
-                <div class="w-5 h-5 rounded-full bg-primary text-on-primary text-[10px] flex items-center justify-center">{{ issue.assignee }}</div>
-                <span>Trần Văn Hoàng (TH)</span>
-              </div>
-            </div>
+      @let backlogPoolItems = getBacklogItems();
+      <article class="sprint-section backlog-pool">
+        <div class="sprint-header"><div class="sprint-info"><span class="material-symbols-outlined text-slate-500" aria-hidden="true">inbox</span><div><h2>Backlog</h2><p>Kho công việc chưa gán Sprint · {{ backlogPoolItems.length }} việc</p></div></div><button type="button" class="button button-primary" (click)="activeInlineSprintId.set(activeInlineSprintId() === 'sp-backlog' ? null : 'sp-backlog')"><span class="material-symbols-outlined" aria-hidden="true">add</span><span>Tạo việc</span></button></div>
+        @if (activeInlineSprintId() === 'sp-backlog') { <div class="inline-create"><input type="text" [(ngModel)]="inlineTaskTitleMap['sp-backlog']" (keyup.enter)="createInlineSprintTask('sp-backlog', 'Backlog Pool')" placeholder="Nhập tên công việc vào Backlog" /><button type="button" class="button button-primary" (click)="createInlineSprintTask('sp-backlog', 'Backlog Pool')">Thêm</button><button type="button" class="button button-secondary" (click)="activeInlineSprintId.set(null)">Hủy</button></div> }
+        @if (backlogPoolItems.length > 0) { <ng-container *ngTemplateOutlet="workItemList; context: { $implicit: backlogPoolItems }"></ng-container> } @else { <div class="empty-state"><span class="material-symbols-outlined" aria-hidden="true">inbox</span><p>Backlog đang trống.</p></div> }
+      </article>
+    </main>
+  </div>
 
-            <div class="flex items-center justify-between">
-              <span class="text-on-surface-variant">Ước lượng (Story Points)</span>
-              <span class="font-bold text-primary px-2 py-0.5 bg-primary-container rounded">{{ issue.storyPoints }} SP</span>
-            </div>
+  @if (selectedTaskIds().length > 0) {
+    <aside class="bulk-toolbar" aria-label="Thao tác hàng loạt"><strong>{{ selectedTaskIds().length }} đã chọn</strong><select aria-label="Đổi trạng thái" (change)="bulkChangeStatus($any($event.target).value)"><option value="" disabled selected>Đổi trạng thái</option><option value="To Do">To Do</option><option value="In Progress">In Progress</option><option value="Code Review">Code Review</option><option value="Done">Done</option></select><select aria-label="Chuyển Sprint" (change)="bulkChangeSprint($any($event.target).value, 'Sprint đã chọn')"><option value="" disabled selected>Chuyển Sprint</option>@for (sprint of sprints(); track sprint.id) { <option [value]="sprint.id">{{ sprint.name }}</option> }</select><button type="button" class="danger-button" (click)="bulkDeleteTasks()">Xóa</button><button type="button" class="icon-button icon-button-dark" title="Bỏ chọn" (click)="clearSelection()"><span class="material-symbols-outlined" aria-hidden="true">close</span></button></aside>
+  }
 
-            <div class="flex items-center justify-between">
-              <span class="text-on-surface-variant">Mức độ ưu tiên</span>
-              <span class="font-bold text-error">❗ Cao (High)</span>
-            </div>
+  @if (showNewEpicModal()) {
+    <div class="modal-backdrop" role="presentation"><button type="button" class="modal-dismiss" aria-label="Đóng hộp thoại tạo Epic" (click)="showNewEpicModal.set(false)"></button><section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="new-epic-title"><div class="modal-title"><h2 id="new-epic-title">Tạo Epic mới</h2><button type="button" class="icon-button" title="Đóng" (click)="showNewEpicModal.set(false)"><span class="material-symbols-outlined" aria-hidden="true">close</span></button></div><label class="modal-field"><span>Tên Epic</span><input type="text" [(ngModel)]="newEpicName" placeholder="Ví dụ: Mobile App Integration" /></label><div class="modal-actions"><button type="button" class="button button-secondary" (click)="showNewEpicModal.set(false)">Hủy</button><button type="button" class="button button-ai-solid" [disabled]="!newEpicName.trim()" (click)="createEpic()">Tạo Epic</button></div></section></div>
+  }
+</section>
+
+<ng-template #workItemList let-items>
+  <div class="work-item-table">
+    <div class="work-item-header" aria-hidden="true"><span></span><span>Mã</span><span>Công việc</span><span>Epic</span><span>Ưu tiên</span><span>SP</span><span>Trạng thái</span><span>Người xử lý</span><span></span></div>
+    @for (item of items; track item.id) {
+      @let subtasks = getSubtasks(item.id);
+      <div class="work-item-group">
+        <div class="work-item-row" [class.is-selected]="isTaskSelected(item.id)">
+          <div class="cell-select no-drawer">@if (subtasks.length > 0) { <button type="button" class="icon-button icon-button-small" [title]="expandedSubtasks()[item.id] ? 'Thu gọn Sub-task' : 'Mở Sub-task'" (click)="toggleSubtasks(item.id, $event)"><span class="material-symbols-outlined" aria-hidden="true">{{ expandedSubtasks()[item.id] ? 'expand_more' : 'chevron_right' }}</span></button> } @else { <input type="checkbox" [checked]="isTaskSelected(item.id)" [attr.aria-label]="'Chọn ' + item.issueKey" (change)="toggleTaskSelection(item.id, $event)" /> }</div>
+          <div class="cell-key"><span class="material-symbols-outlined issue-type-icon" [title]="item.issueType" aria-hidden="true">{{ getIssueTypeIcon(item.issueType) }}</span><strong>{{ item.issueKey }}</strong></div>
+          <div class="cell-title">
+            @if (editingTaskId() === item.id) { <input class="title-input" type="text" [ngModel]="editingTaskTitle()" (ngModelChange)="editingTaskTitle.set($event)" (click)="$event.stopPropagation()" (keyup.enter)="saveEditingTaskTitle(item.id)" (blur)="saveEditingTaskTitle(item.id)" /> } @else { <button type="button" class="task-title-button" (click)="openTask(item, $event)">{{ item.title }}</button><button type="button" class="edit-title-button" title="Sửa tên công việc" (click)="startEditingTaskTitle(item, $event)"><span class="material-symbols-outlined" aria-hidden="true">edit</span></button> }
+            @if (subtasks.length > 0) { <span class="subtask-count">{{ getSubtaskProgress(item.id).done }}/{{ subtasks.length }} Sub-task</span> }
+          </div>
+
+          <div class="cell-epic no-drawer">
+            <button #epicOrigin="cdkOverlayOrigin" cdkOverlayOrigin type="button" class="epic-pill" [attr.aria-expanded]="activeEpicDropdownTaskId() === item.id" (click)="toggleEpicDropdown(item.id, $event)"><span>{{ item.epicName || 'Gán Epic' }}</span><span class="material-symbols-outlined" aria-hidden="true">expand_more</span></button>
+            <ng-template cdkConnectedOverlay [cdkConnectedOverlayOrigin]="epicOrigin" [cdkConnectedOverlayOpen]="activeEpicDropdownTaskId() === item.id" [cdkConnectedOverlayPositions]="startAlignedOverlayPositions" [cdkConnectedOverlayHasBackdrop]="true" cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop" [cdkConnectedOverlayPush]="true" [cdkConnectedOverlayViewportMargin]="12" (backdropClick)="activeEpicDropdownTaskId.set(null)" (detach)="activeEpicDropdownTaskId.set(null)">
+              <div class="overlay-panel option-menu" role="menu"><div class="overlay-title"><strong>Chọn Epic</strong></div><button type="button" role="menuitem" (click)="selectTaskEpic(item.id, null, $event)"><span>Không gán Epic</span>@if (!item.epicName) { <span class="material-symbols-outlined">check</span> }</button>@for (epic of epics(); track epic.id) { <button type="button" role="menuitem" class="epic-option" (click)="selectTaskEpic(item.id, epic.name, $event)"><span>{{ epic.name }}</span>@if (item.epicName === epic.name) { <span class="material-symbols-outlined">check</span> }</button> }</div>
+            </ng-template>
+          </div>
+
+          <button type="button" class="cell-priority no-drawer" [class.priority-urgent]="item.priority === 'Urgent'" [class.priority-high]="item.priority === 'High'" title="Bấm để chuyển mức ưu tiên" (click)="updateInlinePriorityNext(item.id, item.priority, $event)">{{ item.priority }}</button>
+
+          <div class="cell-points no-drawer">@if (editingStoryPointsTaskId() === item.id) { <input type="number" min="0" max="999" [ngModel]="editingStoryPointsValue()" (ngModelChange)="editingStoryPointsValue.set($event)" (click)="$event.stopPropagation()" (keyup.enter)="saveStoryPoints(item.id, $event)" (blur)="saveStoryPoints(item.id, $event)" aria-label="Story Points" /> } @else { <button type="button" title="Sửa Story Points" (click)="startEditingStoryPoints(item, $event)">{{ item.storyPoints }}</button> }</div>
+
+          <div class="cell-status no-drawer">
+            <button #statusOrigin="cdkOverlayOrigin" cdkOverlayOrigin type="button" class="status-pill" [class.status-todo]="item.statusName === 'To Do'" [class.status-progress]="item.statusName === 'In Progress'" [class.status-review]="item.statusName === 'Code Review'" [class.status-done]="item.statusName === 'Done'" [attr.aria-expanded]="activeStatusDropdownTaskId() === item.id" (click)="toggleStatusDropdown(item.id, $event)"><span>{{ item.statusName }}</span><span class="material-symbols-outlined" aria-hidden="true">expand_more</span></button>
+            <ng-template cdkConnectedOverlay [cdkConnectedOverlayOrigin]="statusOrigin" [cdkConnectedOverlayOpen]="activeStatusDropdownTaskId() === item.id" [cdkConnectedOverlayPositions]="endAlignedOverlayPositions" [cdkConnectedOverlayHasBackdrop]="true" cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop" [cdkConnectedOverlayPush]="true" [cdkConnectedOverlayViewportMargin]="12" (backdropClick)="activeStatusDropdownTaskId.set(null)" (detach)="activeStatusDropdownTaskId.set(null)">
+              <div class="overlay-panel option-menu status-menu" role="menu">@for (status of ['To Do', 'In Progress', 'Code Review', 'Done']; track status) { <button type="button" role="menuitem" (click)="updateInlineStatus(item.id, status, $event); activeStatusDropdownTaskId.set(null)"><span class="status-pill" [class.status-todo]="status === 'To Do'" [class.status-progress]="status === 'In Progress'" [class.status-review]="status === 'Code Review'" [class.status-done]="status === 'Done'">{{ status }}</span>@if (item.statusName === status) { <span class="material-symbols-outlined">check</span> }</button> }</div>
+            </ng-template>
+          </div>
+
+          <div class="cell-assignee" [title]="item.assigneeName || 'Chưa gán'"><span class="assignee-avatar">{{ getAssigneeInitials(item.assigneeName) }}</span><span>{{ item.assigneeName || 'Chưa gán' }}</span></div>
+
+          <div class="cell-menu no-drawer">
+            <button #menuOrigin="cdkOverlayOrigin" cdkOverlayOrigin type="button" class="icon-button icon-button-small" title="Thêm thao tác" [attr.aria-expanded]="activeMenuTaskId() === item.id" (click)="toggleRowMenu(item.id, $event)"><span class="material-symbols-outlined" aria-hidden="true">more_vert</span></button>
+            <ng-template cdkConnectedOverlay [cdkConnectedOverlayOrigin]="menuOrigin" [cdkConnectedOverlayOpen]="activeMenuTaskId() === item.id" [cdkConnectedOverlayPositions]="endAlignedOverlayPositions" [cdkConnectedOverlayHasBackdrop]="true" cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop" [cdkConnectedOverlayPush]="true" [cdkConnectedOverlayViewportMargin]="12" (backdropClick)="activeMenuTaskId.set(null)" (detach)="activeMenuTaskId.set(null)">
+              <div class="overlay-panel option-menu action-menu" role="menu"><button type="button" role="menuitem" (click)="assignToMe(item.id, $event)"><span class="material-symbols-outlined">person_add</span><span>Gán cho tôi</span></button><button type="button" role="menuitem" (click)="openSubtaskInput(item.id, $event); activeMenuTaskId.set(null)"><span class="material-symbols-outlined">account_tree</span><span>Thêm Sub-task</span></button><button type="button" role="menuitem" (click)="cloneItem(item.id, $event)"><span class="material-symbols-outlined">content_copy</span><span>Nhân bản</span></button><div class="menu-separator"></div><div class="menu-label">Chuyển Sprint</div>@for (sprint of sprints(); track sprint.id) { <button type="button" role="menuitem" (click)="updateWorkItemSprint(item.id, sprint.id, sprint.name, $event); activeMenuTaskId.set(null)"><span class="material-symbols-outlined">arrow_forward</span><span>{{ sprint.name }}</span></button> }<button type="button" role="menuitem" (click)="updateWorkItemSprint(item.id, 'sp-backlog', 'Backlog Pool', $event); activeMenuTaskId.set(null)"><span class="material-symbols-outlined">inbox</span><span>Backlog</span></button><div class="menu-separator"></div><button type="button" role="menuitem" class="danger-menu-item" (click)="deleteItem(item.id, $event)"><span class="material-symbols-outlined">delete</span><span>Xóa công việc</span></button></div>
+            </ng-template>
           </div>
         </div>
+
+        @if (activeSubtaskInputId() === item.id) { <div class="subtask-create"><span class="material-symbols-outlined" aria-hidden="true">subdirectory_arrow_right</span><input type="text" [(ngModel)]="subtaskTitleMap[item.id]" (keyup.enter)="createInlineSubtask(item.id)" placeholder="Tên Sub-task mới" /><button type="button" class="button button-primary" (click)="createInlineSubtask(item.id)">Thêm</button><button type="button" class="button button-secondary" (click)="activeSubtaskInputId.set(null)">Hủy</button></div> }
+        @if (expandedSubtasks()[item.id]) { <div class="subtask-list">@for (subtask of subtasks; track subtask.id) { <button type="button" class="subtask-row" (click)="openTask(subtask, $event)"><span class="material-symbols-outlined" aria-hidden="true">subdirectory_arrow_right</span><strong>{{ subtask.issueKey }}</strong><span>{{ subtask.title }}</span><span class="status-pill" [class.status-todo]="subtask.statusName === 'To Do'" [class.status-progress]="subtask.statusName === 'In Progress'" [class.status-review]="subtask.statusName === 'Code Review'" [class.status-done]="subtask.statusName === 'Done'">{{ subtask.statusName }}</span></button> }</div> }
       </div>
     }
   </div>
-</div>
+</ng-template>
