@@ -43,6 +43,7 @@ export function computeFocusActions(context: FocusContext): FocusAction[] {
   if (isAdmin) {
     for (const notification of notifications.filter(item => item.userId === user?.id && !item.isRead)) {
       const security = notification.category === 'Security';
+      if (!security && !notification.actionUrl) continue;
       candidates.push({
         id: `notification:${notification.id}`,
         kind: 'route',
@@ -51,8 +52,8 @@ export function computeFocusActions(context: FocusContext): FocusAction[] {
         icon: security ? 'shield' : 'notifications_active',
         eyebrow: security ? 'Cảnh báo tài khoản' : 'Thông báo mới',
         title: notification.title,
-        reason: security ? 'Cần xem lại hoạt động bảo mật.' : 'Bạn có thông báo chưa đọc cần xem.',
-        score: security ? 110 : 82
+        reason: security ? 'Cần xem lại hoạt động bảo mật.' : notification.message,
+        score: security ? 110 : 65
       });
     }
   }
@@ -104,6 +105,20 @@ export function computeFocusActions(context: FocusContext): FocusAction[] {
     reason: isViewer ? 'Xem các chỉ số và thay đổi mới nhất của dự án.' : 'Xem tổng quan trước khi chọn bước tiếp theo.',
     score: isViewer ? 82 : 20
   });
+
+  if (!isViewer) {
+    const route = isProductOwner ? '/backlog' : isDeveloper || isQa ? '/task-list' : '/board';
+    candidates.push({
+      id: `route:${route}`,
+      kind: 'route',
+      route,
+      icon: isProductOwner ? 'view_list' : route === '/board' ? 'view_kanban' : 'task_alt',
+      eyebrow: 'Không gian làm việc',
+      title: isProductOwner ? 'Sắp xếp Backlog' : route === '/board' ? 'Mở bảng công việc' : 'Xem danh sách công việc',
+      reason: 'Xem các mục còn mở và chọn bước tiếp theo.',
+      score: 18
+    });
+  }
 
   const unique = new Map<string, FocusAction>();
   for (const action of candidates) {

@@ -1,0 +1,117 @@
+<main class="for-you-page">
+  <header class="today-header">
+    <div>
+      <span class="today-date">{{ dateLabel }}</span>
+      <h1>{{ greeting }}, {{ user()?.displayName || 'bạn' }}.</h1>
+      <p>Một bước rõ ràng để bắt đầu. Những việc khác vẫn ở ngay bên dưới.</p>
+    </div>
+    <a routerLink="/notifications" class="today-notifications">
+      <span class="material-symbols-outlined" aria-hidden="true">notifications</span>
+      <span>Thông báo</span>
+      @if (identity.unreadCount() > 0) { <b>{{ identity.unreadCount() }}</b> }
+    </a>
+  </header>
+
+  <section class="focus-stage" aria-labelledby="focus-heading">
+    <div class="focus-main">
+      <div class="focus-glow" aria-hidden="true"></div>
+      <div class="focus-content">
+        <span class="focus-kicker"><span class="focus-pulse" aria-hidden="true"></span> GỢI Ý CHO BẠN LÚC NÀY</span>
+        <div class="focus-symbol" aria-hidden="true"><span class="material-symbols-outlined">{{ focus.primary().icon }}</span></div>
+        <span class="focus-eyebrow">{{ focus.primary().eyebrow }}</span>
+        <h2 id="focus-heading">{{ focus.primary().title }}</h2>
+        <p>{{ focus.primary().reason }}</p>
+        <button type="button" class="focus-cta" (click)="activate(focus.primary())">
+          {{ focus.primary().kind === 'task' ? 'Mở công việc' : 'Đi tới ngay' }}
+          <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
+        </button>
+      </div>
+      <span class="focus-index" aria-hidden="true">01 / BẮT ĐẦU</span>
+    </div>
+
+    <div class="focus-side">
+      <div class="focus-side-heading">
+        <span>SAU ĐÓ</span>
+        <small>Tối đa ba việc đáng chú ý</small>
+      </div>
+      @for (action of focus.secondary(); track action.id; let index = $index) {
+        <button type="button" class="next-action" (click)="activate(action)">
+          <span class="next-number">0{{ index + 2 }}</span>
+          <span class="next-body">
+            <small>{{ action.eyebrow }}</small>
+            <strong>{{ action.title }}</strong>
+            <span>{{ action.reason }}</span>
+          </span>
+          <span class="material-symbols-outlined next-arrow" aria-hidden="true">north_east</span>
+        </button>
+      } @empty {
+        <p class="next-empty">Không có việc khẩn khác. Bạn có thể tập trung vào bước đầu tiên.</p>
+      }
+    </div>
+  </section>
+
+  @if (recentTask(); as task) {
+    <section class="resume-strip" aria-label="Tiếp tục công việc đang dở">
+      <span class="resume-icon material-symbols-outlined" aria-hidden="true">history</span>
+      <div>
+        <small>BẠN ĐÃ XEM GẦN ĐÂY</small>
+        <strong>{{ task.issueKey }} · {{ task.title }}</strong>
+      </div>
+      <button type="button" (click)="openDrawer(task)">Tiếp tục <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span></button>
+    </section>
+  }
+
+  <div class="workspace-body">
+    <section class="workspace-section" aria-labelledby="my-work-heading">
+      <div class="section-heading">
+        <div>
+          <span class="section-overline">CÔNG VIỆC</span>
+          <h2 id="my-work-heading">Theo nhịp của bạn</h2>
+        </div>
+        <a routerLink="/task-list">Xem tất cả <span aria-hidden="true">↗</span></a>
+      </div>
+      <div class="work-tabs" role="group" aria-label="Lọc công việc">
+        <button type="button" [class.active]="activeTab() === 'mine'" (click)="activeTab.set('mine')">Của tôi <span>{{ myWork().length }}</span></button>
+        <button type="button" [class.active]="activeTab() === 'project'" (click)="activeTab.set('project')">Trong dự án <span>{{ currentWork().length }}</span></button>
+      </div>
+      <div class="work-list">
+        @for (item of visibleWork(); track item.id) {
+          <button type="button" class="work-row" (click)="openDrawer(item)">
+            <span class="work-state" [class.work-state--progress]="item.statusName === 'In Progress'" aria-hidden="true"></span>
+            <span class="work-copy">
+              <small>{{ item.issueKey }} · {{ item.issueType }}</small>
+              <strong>{{ item.title }}</strong>
+            </span>
+            <span class="work-status">{{ item.statusName }}</span>
+            <span class="material-symbols-outlined work-arrow" aria-hidden="true">arrow_forward</span>
+          </button>
+        } @empty {
+          <div class="work-empty">
+            <span class="material-symbols-outlined" aria-hidden="true">task_alt</span>
+            <strong>{{ activeTab() === 'mine' ? 'Bạn chưa có công việc được giao trong dự án này.' : 'Dự án chưa có công việc đang mở.' }}</strong>
+            <p>Chọn “Trong dự án” để xem toàn bộ luồng công việc hoặc mở danh sách đầy đủ.</p>
+          </div>
+        }
+      </div>
+    </section>
+
+    <section class="workspace-section projects-section" aria-labelledby="projects-heading">
+      <div class="section-heading">
+        <div>
+          <span class="section-overline">KHÔNG GIAN</span>
+          <h2 id="projects-heading">Dự án của nhóm</h2>
+        </div>
+        <a routerLink="/projects">Quản lý dự án <span aria-hidden="true">↗</span></a>
+      </div>
+      <div class="project-list">
+        @for (project of projects(); track project.id) {
+          <button type="button" class="project-row" (click)="selectProject(project)" [class.project-row--active]="project.id === currentProject().id">
+            <span class="project-monogram">{{ project.projectKey.slice(0, 2) }}</span>
+            <span><strong>{{ project.name }}</strong><small>{{ project.type || 'Dự án nhóm' }}</small></span>
+            <span class="material-symbols-outlined" aria-hidden="true">north_east</span>
+          </button>
+        }
+      </div>
+    </section>
+  </div>
+</main>

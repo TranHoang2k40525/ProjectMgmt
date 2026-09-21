@@ -54,4 +54,19 @@ describe('computeFocusActions', () => {
     expect(actions[0].route).toBe('/project/summary');
     expect(actions.some(action => action.taskId === 't1')).toBe(false);
   });
+
+  it('does not promote a generic system announcement above actionable project work', () => {
+    const admin = { ...developer, roleName: 'System Administrator' };
+    const review = { ...inProgress, id: 't3', statusName: 'Code Review' };
+    const actions = computeFocusActions(context({
+      user: admin,
+      workItems: [review],
+      notifications: [{
+        id: 'n1', userId: admin.id, title: 'Hệ thống đã cập nhật', message: 'Phiên bản mới đã sẵn sàng.',
+        type: 'SYSTEM', category: 'System', isRead: false, createdAt: '2026-01-01'
+      }]
+    }));
+    expect(actions[0].taskId).toBe('t3');
+    expect(actions.some(action => action.id === 'notification:n1')).toBe(false);
+  });
 });
