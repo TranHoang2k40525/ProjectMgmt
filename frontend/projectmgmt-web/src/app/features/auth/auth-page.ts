@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { IdentityService } from '../../core/services/identity.service';
-import { NeoCampusSceneComponent } from '../../shared/scenes/neo-campus-scene/neo-campus-scene';
+import { SylvaArrivalComponent } from './sylva-arrival/sylva-arrival';
 
 import { gsap } from 'gsap';
 
@@ -12,7 +12,7 @@ export type AuthMode = 'LOGIN' | 'SIGNUP' | 'OTP_REGISTER' | 'FORGOT' | 'OTP_FOR
 @Component({
   selector: 'app-auth-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, NeoCampusSceneComponent],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, SylvaArrivalComponent],
   templateUrl: './auth-page.html',
   styleUrls: ['./auth-page.scss']
 })
@@ -22,10 +22,16 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
   private router = inject(Router);
 
   @ViewChild('authPage', { static: true }) private authPage!: ElementRef<HTMLElement>;
-  private motionMedia: ReturnType<typeof gsap.matchMedia> | null = null;
+  private entryTween: gsap.core.Tween | null = null;
   private modeTween: gsap.core.Tween | null = null;
+  private teardownTimer: ReturnType<typeof setTimeout> | null = null;
+  private focusTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly mode = signal<AuthMode>('LOGIN');
+  readonly panelOpen = signal(true);
+  readonly sceneVisible = signal(false);
+  readonly canReplayArrival = signal(false);
+  readonly passwordVisible = signal(false);
   readonly loading = signal<boolean>(false);
   readonly errorMessage = signal<string | null>(null);
   readonly successMessage = signal<string | null>(null);
@@ -42,6 +48,17 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
   otpPins: string[] = ['', '', '', '', '', ''];
 
   ngOnInit(): void {
+    if (typeof window !== 'undefined') {
+      const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const canPlay = !reducedMotion && !connection?.saveData && (navigator.hardwareConcurrency ?? 4) >= 4;
+      this.canReplayArrival.set(canPlay);
+      if (canPlay && sessionStorage.getItem('projectmgmt-sylva-seen') !== '1') {
+        this.panelOpen.set(false);
+        this.sceneVisible.set(true);
+      }
+    }
+
     this.loginForm = this.fb.group({
       email: ['admin@scrumai.internal', [Validators.required, Validators.email]],
       password: ['password123', [Validators.required, Validators.minLength(6)]]
@@ -64,35 +81,46 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit(): void {
-    const root = this.authPage.nativeElement;
-    this.motionMedia = gsap.matchMedia(root);
-    this.motionMedia.add(
-      {
-        animate: '(prefers-reduced-motion: no-preference)',
-        desktop: '(min-width: 1024px)',
-        compact: '(max-width: 1023px)'
-      },
-      context => {
-        if (!context.conditions?.['animate']) return;
-
-        const isDesktop = context.conditions?.['desktop'];
-        const timeline = gsap.timeline({ defaults: { ease: 'power3.out' } });
-        timeline
-          .from(root.querySelector('.auth-brand'), { autoAlpha: 0, y: -18, duration: 0.65 })
-          .from(root.querySelector('.auth-hero-content'), { autoAlpha: 0, x: isDesktop ? -34 : 0, y: isDesktop ? 0 : 18, duration: 0.8 }, '-=0.4')
-          .from(root.querySelectorAll('.auth-stat'), { autoAlpha: 0, y: 16, stagger: 0.08, duration: 0.48 }, '-=0.45')
-          .from(root.querySelector('.auth-card'), { autoAlpha: 0, x: isDesktop ? 38 : 0, y: isDesktop ? 0 : 22, rotateY: isDesktop ? -3 : 0, duration: 0.85 }, '-=0.6')
-          .from(root.querySelector('.auth-footer'), { autoAlpha: 0, y: 10, duration: 0.45 }, '-=0.35');
-
-        return () => timeline.kill();
-      }
-    );
+    if (this.panelOpen()) this.animatePanel();
   }
 
   ngOnDestroy(): void {
     this.stopTimer();
+    if (this.teardownTimer) clearTimeout(this.teardownTimer);
+    if (this.focusTimer) clearTimeout(this.focusTimer);
     this.modeTween?.kill();
-    this.motionMedia?.revert();
+    this.entryTween?.kill();
+  }
+
+  openAuth(): void {
+    this.panelOpen.set(true);
+    if (typeof window !== 'undefined') sessionStorage.setItem('projectmgmt-sylva-seen', '1');
+    if (this.teardownTimer) clearTimeout(this.teardownTimer);
+    this.teardownTimer = setTimeout(() => this.sceneVisible.set(false), 450);
+    if (this.focusTimer) clearTimeout(this.focusTimer);
+    this.focusTimer = setTimeout(() => {
+      this.animatePanel();
+      this.authPage.nativeElement.querySelector<HTMLInputElement>('#loginEmail')?.focus();
+    }, 0);
+  }
+
+  reopenArrival(): void {
+    if (!this.canReplayArrival()) return;
+    if (this.teardownTimer) clearTimeout(this.teardownTimer);
+    this.entryTween?.kill();
+    this.panelOpen.set(false);
+    this.sceneVisible.set(true);
+  }
+
+  private animatePanel(): void {
+    if (typeof window === 'undefined' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const panel = this.authPage.nativeElement.querySelector<HTMLElement>('.auth-card');
+    if (!panel) return;
+    this.entryTween?.kill();
+    this.entryTween = gsap.fromTo(panel,
+      { autoAlpha: 0, y: 20, scale: 0.985 },
+      { autoAlpha: 1, y: 0, scale: 1, duration: 0.46, ease: 'power3.out', clearProps: 'transform,opacity,visibility' }
+    );
   }
 
   setMode(newMode: AuthMode): void {
@@ -144,7 +172,7 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
     this.identityService.login(email, password).subscribe({
       next: () => {
         this.loading.set(false);
-        this.router.navigate(['/profile']);
+        this.router.navigate(['/for-you']);
       },
       error: (err) => {
         this.loading.set(false);
@@ -233,7 +261,7 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
       next: () => {
         this.loading.set(false);
         if (purpose === 'REGISTER') {
-          this.router.navigate(['/profile']);
+          this.router.navigate(['/for-you']);
         } else {
           this.successMessage.set('Xác thực thành công! Vui lòng thiết lập mật khẩu mới.');
         }
