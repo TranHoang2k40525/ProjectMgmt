@@ -1,7 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, OnDestroy, ViewChild, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { FocusAction } from '../../core/attention/focus-recommendation.model';
+import { AttentionOrchestratorService } from '../../core/attention/attention-orchestrator.service';
 import { FocusRecommendationService } from '../../core/attention/focus-recommendation.service';
 import { RecentWorkService } from '../../core/attention/recent-work.service';
 import { IdentityService } from '../../core/services/identity.service';
@@ -14,12 +15,17 @@ import { Project, ProjectManagementService, WorkItem } from '../../core/services
   templateUrl: './for-you-page.html',
   styleUrl: './for-you-page.scss'
 })
-export class ForYouPageComponent {
+export class ForYouPageComponent implements AfterViewInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly projectService = inject(ProjectManagementService);
   readonly identity = inject(IdentityService);
   private readonly recent = inject(RecentWorkService);
+  private readonly attention = inject(AttentionOrchestratorService);
   readonly focus = inject(FocusRecommendationService);
+
+  @ViewChild('focusStage') private focusStage?: ElementRef<HTMLElement>;
+  @ViewChild('focusSymbol') private focusSymbol?: ElementRef<HTMLElement>;
+  @ViewChild('focusCta') private focusCta?: ElementRef<HTMLElement>;
 
   readonly user = computed(() => this.identity.authState().currentUser);
   readonly projects = this.projectService.allProjectsList;
@@ -55,7 +61,18 @@ export class ForYouPageComponent {
     if (this.myWork().length === 0) this.activeTab.set('project');
   }
 
+  ngAfterViewInit(): void {
+    if (this.focusStage && this.focusSymbol && this.focusCta) {
+      this.attention.nudge(this.focusStage.nativeElement, this.focusSymbol.nativeElement, this.focusCta.nativeElement);
+    }
+  }
+
+  ngOnDestroy(): void {
+    this.attention.stop();
+  }
+
   activate(action: FocusAction): void {
+    this.attention.stop();
     if (action.kind === 'task' && action.taskId) {
       const task = this.workItems().find(item => item.id === action.taskId);
       if (task) this.openDrawer(task);
@@ -65,6 +82,7 @@ export class ForYouPageComponent {
   }
 
   openDrawer(task: WorkItem): void {
+    this.attention.stop();
     this.recent.rememberTask(task.id);
     this.projectService.activeDrawerTask.set(task);
   }

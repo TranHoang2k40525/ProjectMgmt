@@ -168,6 +168,9 @@
           @if (isSidebarExpanded()) {
             <span class="truncate">Dành cho bạn</span>
           }
+          @if (currentUrl() !== '/for-you' && focus.primary().score > 20) {
+            <span class="nav-guidance-dot" title="Có việc tiếp theo được gợi ý"></span>
+          }
         </a>
 
         <!-- Recent (With Flyout Dropdown Trigger) -->

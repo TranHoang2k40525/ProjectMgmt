@@ -17,6 +17,8 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/c
 import { RouteTransitionLayerComponent } from '../../shared/motion/route-transition-layer/route-transition-layer';
 import { MotionOrchestratorService } from '../../core/motion/motion-orchestrator.service';
 import { MotionDirective } from '../../shared/motion/motion.directive';
+import { FocusRecommendationService } from '../../core/attention/focus-recommendation.service';
+import { RecentWorkService } from '../../core/attention/recent-work.service';
 
 @Component({
   selector: 'app-shell',
@@ -40,6 +42,7 @@ import { MotionDirective } from '../../shared/motion/motion.directive';
 })
 export class AppShellComponent implements OnDestroy {
   readonly identity = inject(IdentityService);
+  readonly focus = inject(FocusRecommendationService);
   readonly projectService = inject(ProjectManagementService);
   readonly toastService = inject(ToastService);
   readonly confirmService = inject(ConfirmDialogService);
@@ -47,6 +50,7 @@ export class AppShellComponent implements OnDestroy {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   private readonly motion = inject(MotionOrchestratorService);
+  private readonly recentWork = inject(RecentWorkService);
 
   @ViewChild('pageBody', { read: ElementRef })
   private pageBody?: ElementRef<HTMLElement>;
@@ -170,11 +174,13 @@ export class AppShellComponent implements OnDestroy {
   }
 
   openSearchResult(item: WorkItem): void {
+    this.recentWork.rememberTask(item.id);
     this.projectService.activeDrawerTask.set(item);
     this.closeFlyouts();
   }
 
   openRecentItem(item: WorkItem): void {
+    this.recentWork.rememberTask(item.id);
     this.projectService.activeDrawerTask.set(item);
     this.closeFlyouts();
   }

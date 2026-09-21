@@ -444,3 +444,49 @@
     overflow-y: auto;
   }
 }
+
+/* One contextual navigation cue; icon motion responds to a user's own hover/focus. */
+.nav-guidance-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  margin-left: auto;
+  border-radius: 50%;
+  background: #2b8455;
+  box-shadow: 0 0 0 3px rgb(43 132 85 / .12);
+}
+
+.app-sidebar nav > a > .material-symbols-outlined,
+.app-sidebar nav > div > button .material-symbols-outlined:first-child,
+.app-topbar button > .material-symbols-outlined {
+  transform-origin: center;
+  transition: transform 180ms ease;
+}
+
+.app-sidebar nav > a:hover > .material-symbols-outlined,
+.app-sidebar nav > a:focus-visible > .material-symbols-outlined,
+.app-sidebar nav > div > button:hover .material-symbols-outlined:first-child,
+.app-sidebar nav > div > button:focus-visible .material-symbols-outlined:first-child,
+.app-topbar button:hover > .material-symbols-outlined,
+.app-topbar button:focus-visible > .material-symbols-outlined {
+  transform: translateY(-2px) rotate(-6deg) scale(1.06);
+}
+
+.app-topbar a[title='Trung tâm Thông báo']:hover .material-symbols-outlined,
+.app-topbar a[title='Trung tâm Thông báo']:focus-visible .material-symbols-outlined {
+  animation: notification-ring 420ms ease-out 1;
+}
+
+@keyframes notification-ring {
+  25% { transform: rotate(-12deg); }
+  60% { transform: rotate(9deg); }
+  100% { transform: rotate(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-sidebar nav > a > .material-symbols-outlined,
+  .app-sidebar nav > div > button .material-symbols-outlined:first-child,
+  .app-topbar button > .material-symbols-outlined { transition: none; }
+  .app-topbar a[title='Trung tâm Thông báo']:hover .material-symbols-outlined,
+  .app-topbar a[title='Trung tâm Thông báo']:focus-visible .material-symbols-outlined { animation: none; }
+}

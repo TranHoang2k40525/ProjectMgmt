@@ -12,16 +12,16 @@
     </a>
   </header>
 
-  <section class="focus-stage" aria-labelledby="focus-heading">
+  <section #focusStage class="focus-stage" aria-labelledby="focus-heading">
     <div class="focus-main">
       <div class="focus-glow" aria-hidden="true"></div>
       <div class="focus-content">
         <span class="focus-kicker"><span class="focus-pulse" aria-hidden="true"></span> GỢI Ý CHO BẠN LÚC NÀY</span>
-        <div class="focus-symbol" aria-hidden="true"><span class="material-symbols-outlined">{{ focus.primary().icon }}</span></div>
+        <div #focusSymbol class="focus-symbol" aria-hidden="true"><span class="material-symbols-outlined">{{ focus.primary().icon }}</span></div>
         <span class="focus-eyebrow">{{ focus.primary().eyebrow }}</span>
         <h2 id="focus-heading">{{ focus.primary().title }}</h2>
         <p>{{ focus.primary().reason }}</p>
-        <button type="button" class="focus-cta" (click)="activate(focus.primary())">
+        <button #focusCta type="button" class="focus-cta" (click)="activate(focus.primary())">
           {{ focus.primary().kind === 'task' ? 'Mở công việc' : 'Đi tới ngay' }}
           <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
         </button>
