@@ -1,3 +1,66 @@
 :host {
   display: block;
 }
+
+@media (max-width: 1279px) {
+  .board-page,
+  .board-filter-toolbar,
+  .kanban-grid,
+  .board-column {
+    min-width: 0;
+  }
+
+  .board-page {
+    max-width: 100%;
+    padding: 1rem;
+  }
+
+  .kanban-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: visible;
+  }
+
+  button,
+  select,
+  input {
+    min-height: 40px;
+  }
+}
+
+@media (max-width: 767px), (max-width: 932px) and (orientation: landscape) and (max-height: 520px) {
+  .board-page {
+    padding: 0;
+  }
+
+  .board-filter-toolbar {
+    top: var(--app-shell-offset, 7rem);
+  }
+
+  .kanban-grid {
+    display: flex;
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scroll-padding-inline: .25rem;
+    scrollbar-width: thin;
+  }
+
+  .kanban-grid .board-column {
+    flex: 0 0 min(82vw, 320px);
+    min-width: min(82vw, 320px);
+    scroll-snap-align: center;
+  }
+}
+
+@media (max-width: 932px) and (orientation: landscape) and (max-height: 520px) {
+  .board-filter-toolbar {
+    position: relative;
+    top: auto;
+  }
+
+  .kanban-grid .board-column {
+    flex-basis: min(44vw, 340px);
+    min-width: min(44vw, 340px);
+  }
+}

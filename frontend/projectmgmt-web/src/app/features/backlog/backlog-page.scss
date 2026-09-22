@@ -981,6 +981,24 @@ select:focus-visible {
 }
 
 @media (max-width: 1279px) {
+  .backlog-page,
+  .backlog-layout,
+  .sprint-list,
+  .sprint-section {
+    min-width: 0;
+  }
+
+  .button,
+  input,
+  select {
+    min-height: 40px;
+  }
+
+  .icon-button {
+    min-width: 40px;
+    min-height: 40px;
+  }
+
   .work-item-header,
   .work-item-row {
     grid-template-columns: 32px 100px minmax(190px, 1fr) 126px 78px 50px 126px 34px;
@@ -992,7 +1010,7 @@ select:focus-visible {
   }
 }
 
-@media (max-width: 1023px) {
+@media (max-width: 1279px) {
   .epic-panel-backdrop {
     position: fixed;
     inset: 0;
@@ -1097,6 +1115,15 @@ select:focus-visible {
     right: 8px;
   }
 
+  .task-title-button {
+    display: -webkit-box;
+    overflow: hidden;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
   .inline-create,
   .subtask-create {
     align-items: stretch;
@@ -1128,6 +1155,30 @@ select:focus-visible {
   .subtask-row .status-pill {
     grid-column: 2 / -1;
     justify-self: start;
+  }
+
+  .modal-panel {
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
+  }
+}
+
+@media (max-width: 932px) and (orientation: landscape) and (max-height: 520px) {
+  .backlog-toolbar {
+    position: relative;
+    top: auto;
+  }
+
+  .modal-backdrop {
+    align-items: stretch;
+    padding: 8px;
+  }
+
+  .modal-panel {
+    width: min(680px, 100%);
+    max-height: calc(100dvh - 16px);
+    margin: auto;
+    overflow-y: auto;
   }
 }
 

@@ -9,11 +9,11 @@ import { ToastService } from '../../../core/services/toast.service';
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fade-in font-body text-slate-900 dark:text-slate-100">
-      <div class="w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
+    <div class="responsive-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fade-in font-body text-slate-900 dark:text-slate-100">
+      <div class="responsive-modal-panel w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
         
         <!-- Header -->
-        <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50">
+        <div class="responsive-modal-header flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50">
           <div class="flex items-center gap-2">
             <span class="material-symbols-outlined text-[20px] text-primary">add_task</span>
             <h3 class="text-base font-bold text-slate-900 dark:text-white">Tạo Công Việc / Epic / Use-Case Mới</h3>
@@ -25,7 +25,7 @@ import { ToastService } from '../../../core/services/toast.service';
         </div>
 
         <!-- Form Fields Body (Min 14px text-sm) -->
-        <div class="p-6 flex flex-col gap-4">
+        <div class="responsive-modal-body p-6 flex flex-col gap-4">
           
           <!-- Title -->
           <div class="flex flex-col gap-1.5">
@@ -40,7 +40,7 @@ import { ToastService } from '../../../core/services/toast.service';
           </div>
 
           <!-- Type & Priority Grid -->
-          <div class="grid grid-cols-2 gap-4">
+          <div class="responsive-form-grid grid grid-cols-2 gap-4">
             <div class="flex flex-col gap-1.5">
               <div class="flex items-center justify-between">
                 <label for="new-task-type" class="text-sm font-bold uppercase tracking-wider text-slate-500">Loại công việc</label>
@@ -91,7 +91,7 @@ import { ToastService } from '../../../core/services/toast.service';
           </div>
 
           <!-- Sprint & Epic Grid -->
-          <div class="grid grid-cols-2 gap-4">
+          <div class="responsive-form-grid grid grid-cols-2 gap-4">
             <div class="flex flex-col gap-1.5">
               <label for="new-task-sprint" class="text-sm font-bold uppercase tracking-wider text-slate-500">Sprint</label>
               <select
@@ -122,7 +122,7 @@ import { ToastService } from '../../../core/services/toast.service';
           </div>
 
           <!-- Story Points & Assignee Grid -->
-          <div class="grid grid-cols-2 gap-4">
+          <div class="responsive-form-grid grid grid-cols-2 gap-4">
             <div class="flex flex-col gap-1.5">
               <label for="new-task-points" class="text-sm font-bold uppercase tracking-wider text-slate-500">Story Points</label>
               <input
@@ -165,7 +165,7 @@ import { ToastService } from '../../../core/services/toast.service';
         </div>
 
         <!-- Footer -->
-        <div class="px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50 flex items-center justify-end gap-3">
+        <div class="responsive-modal-footer px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50 flex items-center justify-end gap-3">
           <button (click)="dismissed.emit()" class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer">
             Hủy
           </button>
@@ -180,7 +180,32 @@ import { ToastService } from '../../../core/services/toast.service';
 
       </div>
     </div>
-  `
+  `,
+  styles: [`
+    @media (max-width: 1279px) {
+      .responsive-modal-panel { max-height: calc(100dvh - 2rem); }
+      .responsive-modal-body { min-width: 0; overflow-y: auto; }
+      .responsive-modal-panel button, .responsive-modal-panel input, .responsive-modal-panel select, .responsive-modal-panel textarea { min-height: 40px; }
+    }
+
+    @media (max-width: 767px) {
+      .responsive-modal-backdrop { align-items: flex-end; padding: 0; }
+      .responsive-modal-panel { max-height: calc(100dvh - .5rem); border-radius: 1rem 1rem 0 0; }
+      .responsive-modal-header, .responsive-modal-body, .responsive-modal-footer { padding: 1rem; }
+      .responsive-modal-header { align-items: flex-start; gap: .75rem; }
+      .responsive-form-grid { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+      .responsive-modal-footer { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .responsive-modal-footer button { min-height: 44px; }
+    }
+
+    @media (max-width: 932px) and (orientation: landscape) and (max-height: 520px) {
+      .responsive-modal-backdrop { align-items: stretch; padding: .5rem; }
+      .responsive-modal-panel { max-width: 720px; max-height: calc(100dvh - 1rem); margin: auto; border-radius: 1rem; }
+      .responsive-modal-header, .responsive-modal-footer { padding-block: .625rem; }
+      .responsive-modal-body { padding-block: .75rem; }
+      .responsive-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+  `]
 })
 export class CreateTaskModalComponent {
   @Output() dismissed = new EventEmitter<void>();

@@ -9,11 +9,11 @@ import { ToastService } from '../../../core/services/toast.service';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fade-in font-body text-slate-900 dark:text-slate-100">
-      <div class="w-full max-w-xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
+    <div class="responsive-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fade-in font-body text-slate-900 dark:text-slate-100">
+      <div class="responsive-modal-panel w-full max-w-xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
         
         <!-- Header -->
-        <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50">
+        <div class="responsive-modal-header flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50">
           <div class="flex items-center gap-2.5">
             <div class="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
               <span class="material-symbols-outlined text-[20px]">table_chart</span>
@@ -30,10 +30,10 @@ import { ToastService } from '../../../core/services/toast.service';
         </div>
 
         <!-- Body -->
-        <div class="p-6 flex flex-col gap-6">
+        <div class="responsive-modal-body p-6 flex flex-col gap-6">
           
           <!-- Download Template CTA -->
-          <div class="flex items-center justify-between p-3.5 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/40">
+          <div class="template-download-row flex items-center justify-between p-3.5 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/40">
             <div class="flex items-center gap-3">
               <span class="material-symbols-outlined text-indigo-600 dark:text-indigo-400">download</span>
               <div class="flex flex-col">
@@ -81,7 +81,7 @@ import { ToastService } from '../../../core/services/toast.service';
 
               <div class="max-h-40 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-xl p-2 bg-slate-50 dark:bg-slate-900">
                 @for (row of parsedRows; track row.title) {
-                  <div class="flex items-center justify-between py-1.5 px-2 text-sm border-b border-slate-200/50 dark:border-slate-800 last:border-none">
+                  <div class="import-preview-row flex items-center justify-between py-1.5 px-2 text-sm border-b border-slate-200/50 dark:border-slate-800 last:border-none">
                     <span class="font-medium text-slate-800 dark:text-slate-200 truncate max-w-xs">{{ row.title }}</span>
                     <div class="flex items-center gap-2 text-sm">
                       <span class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 font-mono">{{ row.storyPoints }} pts</span>
@@ -96,7 +96,7 @@ import { ToastService } from '../../../core/services/toast.service';
         </div>
 
         <!-- Footer -->
-        <div class="px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50 flex items-center justify-end gap-3">
+        <div class="responsive-modal-footer px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50 flex items-center justify-end gap-3">
           <button (click)="dismissed.emit()" class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
             Hủy
           </button>
@@ -111,7 +111,33 @@ import { ToastService } from '../../../core/services/toast.service';
 
       </div>
     </div>
-  `
+  `,
+  styles: [`
+    @media (max-width: 1279px) {
+      .responsive-modal-panel { max-height: calc(100dvh - 2rem); }
+      .responsive-modal-body { min-width: 0; overflow-y: auto; }
+      .responsive-modal-panel button, .responsive-modal-panel input { min-height: 40px; }
+    }
+
+    @media (max-width: 767px) {
+      .responsive-modal-backdrop { align-items: flex-end; padding: 0; }
+      .responsive-modal-panel { max-height: calc(100dvh - .5rem); border-radius: 1rem 1rem 0 0; }
+      .responsive-modal-header, .responsive-modal-body, .responsive-modal-footer { padding: 1rem; }
+      .responsive-modal-header { align-items: flex-start; gap: .75rem; }
+      .template-download-row, .import-preview-row { align-items: stretch; flex-direction: column; gap: .75rem; }
+      .template-download-row button { width: 100%; }
+      .import-preview-row > span { max-width: none; white-space: normal; }
+      .responsive-modal-footer { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .responsive-modal-footer button { min-height: 44px; }
+    }
+
+    @media (max-width: 932px) and (orientation: landscape) and (max-height: 520px) {
+      .responsive-modal-backdrop { align-items: stretch; padding: .5rem; }
+      .responsive-modal-panel { max-width: 720px; max-height: calc(100dvh - 1rem); margin: auto; border-radius: 1rem; }
+      .responsive-modal-header, .responsive-modal-footer { padding-block: .625rem; }
+      .responsive-modal-body { padding-block: .75rem; }
+    }
+  `]
 })
 export class ExcelImportModalComponent {
   @Output() dismissed = new EventEmitter<void>();

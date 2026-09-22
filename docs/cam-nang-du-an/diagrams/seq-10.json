@@ -1,0 +1,88 @@
+{
+  "title": "10 AI phân công",
+  "participants": [
+    {
+      "id": "pm",
+      "label": "PM / SM",
+      "actor": true
+    },
+    {
+      "id": "plan",
+      "label": "Planning API"
+    },
+    {
+      "id": "identity",
+      "label": "Identity"
+    },
+    {
+      "id": "delivery",
+      "label": "Delivery"
+    },
+    {
+      "id": "rank",
+      "label": "Ranker"
+    }
+  ],
+  "messages": [
+    {
+      "from": "pm",
+      "to": "plan",
+      "label": "Yêu cầu gợi ý cho Issue"
+    },
+    {
+      "from": "plan",
+      "to": "identity",
+      "label": "Member + skill"
+    },
+    {
+      "from": "identity",
+      "to": "plan",
+      "label": "Feature DTO",
+      "return": true
+    },
+    {
+      "from": "plan",
+      "to": "delivery",
+      "label": "Issue skill + history"
+    },
+    {
+      "from": "delivery",
+      "to": "plan",
+      "label": "Feature DTO",
+      "return": true
+    },
+    {
+      "from": "plan",
+      "to": "rank",
+      "label": "Capacity asOf + weights"
+    },
+    {
+      "from": "rank",
+      "to": "plan",
+      "label": "Candidate scores",
+      "return": true
+    },
+    {
+      "from": "plan",
+      "to": "pm",
+      "label": "Danh sách + giải thích",
+      "return": true
+    },
+    {
+      "from": "pm",
+      "to": "plan",
+      "label": "Accept / override / reject"
+    },
+    {
+      "from": "plan",
+      "to": "delivery",
+      "label": "Ghi assignee cuối"
+    },
+    {
+      "from": "delivery",
+      "to": "plan",
+      "label": "Assignment outcome",
+      "return": true
+    }
+  ]
+}

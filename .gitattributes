@@ -1,0 +1,5 @@
+# The ThreeUI canonical files are verified by SHA-256 and must remain byte-exact.
+/frontend/projectmgmt-web/public/landing-pages/inner-green-3d.html -text
+/frontend/projectmgmt-web/public/landing-pages/inner-green-assets/three.min.js -text
+/frontend/projectmgmt-web/public/landing-pages/inner-green-assets/*.jpg -text
+/frontend/projectmgmt-web/public/landing-pages/inner-green-assets/*.woff2 -text

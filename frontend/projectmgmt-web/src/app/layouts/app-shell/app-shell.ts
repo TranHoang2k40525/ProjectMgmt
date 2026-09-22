@@ -1,8 +1,9 @@
-import { Component, HostListener, inject, signal, computed } from '@angular/core';
+import { Component, DestroyRef, ElementRef, HostListener, OnDestroy, ViewChild, afterNextRender, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive, RouterOutlet, Router, NavigationEnd } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { filter } from 'rxjs/operators';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { IdentityService } from '../../core/services/identity.service';
 import { ProjectManagementService, Project, WorkItem } from '../../core/services/project-management.service';
 import { ExcelDataService } from '../../core/services/excel-data.service';
@@ -13,6 +14,11 @@ import { CreateTaskModalComponent } from '../../shared/components/create-task-mo
 import { CreateProjectModalComponent } from '../../shared/components/create-project-modal/create-project-modal';
 import { ExcelImportModalComponent } from '../../shared/components/excel-import-modal/excel-import-modal';
 import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/confirm-dialog';
+import { RouteTransitionLayerComponent } from '../../shared/motion/route-transition-layer/route-transition-layer';
+import { MotionOrchestratorService } from '../../core/motion/motion-orchestrator.service';
+import { MotionDirective } from '../../shared/motion/motion.directive';
+import { FocusRecommendationService } from '../../core/attention/focus-recommendation.service';
+import { RecentWorkService } from '../../core/attention/recent-work.service';
 
 @Component({
   selector: 'app-shell',
@@ -27,18 +33,27 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/c
     CreateTaskModalComponent,
     CreateProjectModalComponent,
     ExcelImportModalComponent,
-    ConfirmDialogComponent
+    ConfirmDialogComponent,
+    RouteTransitionLayerComponent,
+    MotionDirective
   ],
   templateUrl: './app-shell.html',
   styleUrl: './app-shell.scss'
 })
-export class AppShellComponent {
+export class AppShellComponent implements OnDestroy {
   readonly identity = inject(IdentityService);
+  readonly focus = inject(FocusRecommendationService);
   readonly projectService = inject(ProjectManagementService);
   readonly toastService = inject(ToastService);
   readonly confirmService = inject(ConfirmDialogService);
   private readonly excelService = inject(ExcelDataService);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly motion = inject(MotionOrchestratorService);
+  private readonly recentWork = inject(RecentWorkService);
+
+  @ViewChild('pageBody', { read: ElementRef })
+  private pageBody?: ElementRef<HTMLElement>;
 
   // Current Route Path Signal
   readonly currentUrl = signal<string>(this.router.url);
@@ -61,7 +76,7 @@ export class AppShellComponent {
   });
 
   // Global Interactive UI Signals
-  readonly isSidebarCollapsed = signal<boolean>(typeof window !== 'undefined' && window.innerWidth < 1024);
+  readonly isSidebarCollapsed = signal<boolean>(typeof window !== 'undefined' && window.innerWidth < 1280);
 
   // Computed Expanded State
   readonly isSidebarExpanded = computed(() => !this.isSidebarCollapsed());
@@ -80,16 +95,38 @@ export class AppShellComponent {
   readonly workItems = this.projectService.workItems;
 
   constructor() {
+    afterNextRender(() => this.revealActiveProjectTab());
+
     this.router.events.pipe(
-      filter((event): event is NavigationEnd => event instanceof NavigationEnd)
+      filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+      takeUntilDestroyed(this.destroyRef)
     ).subscribe((event) => {
       this.currentUrl.set(event.urlAfterRedirects || event.url);
       this.closeFlyouts();
       // Auto-collapse sidebar on mobile/tablet viewports on navigation
-      if (window.innerWidth < 1024) {
+      if (window.innerWidth < 1280) {
         this.isSidebarCollapsed.set(true);
       }
+      this.revealActiveProjectTab();
     });
+  }
+
+  onRouteActivated(): void {
+    window.requestAnimationFrame(() => {
+      if (this.pageBody) {
+        this.motion.animatePage(this.pageBody.nativeElement, this.currentUrl());
+      }
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.motion.destroy();
+  }
+
+  useAvatarFallback(event: Event): void {
+    const image = event.target as HTMLImageElement;
+    const fallback = 'assets/images/huce-branding/huce-official-logo.png';
+    if (image.getAttribute('src') !== fallback) image.src = fallback;
   }
 
   toggleSidebar(): void {
@@ -121,9 +158,18 @@ export class AppShellComponent {
   @HostListener('document:keydown.escape')
   closeTransientNavigation(): void {
     this.closeFlyouts();
-    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+    if (typeof window !== 'undefined' && window.innerWidth < 1280) {
       this.isSidebarCollapsed.set(true);
     }
+  }
+
+  private revealActiveProjectTab(): void {
+    if (typeof window === 'undefined' || !window.matchMedia('(max-width: 1279px)').matches) return;
+
+    window.requestAnimationFrame(() => {
+      const activeTab = document.querySelector<HTMLElement>('.project-context-tabs a[aria-current="page"]');
+      activeTab?.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'center' });
+    });
   }
 
   selectProjectSpace(proj: Project): void {
@@ -134,11 +180,13 @@ export class AppShellComponent {
   }
 
   openSearchResult(item: WorkItem): void {
+    this.recentWork.rememberTask(item.id);
     this.projectService.activeDrawerTask.set(item);
     this.closeFlyouts();
   }
 
   openRecentItem(item: WorkItem): void {
+    this.recentWork.rememberTask(item.id);
     this.projectService.activeDrawerTask.set(item);
     this.closeFlyouts();
   }

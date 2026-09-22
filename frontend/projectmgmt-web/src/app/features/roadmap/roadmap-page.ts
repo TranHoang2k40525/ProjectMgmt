@@ -7,7 +7,7 @@ import { ProjectManagementService } from '../../core/services/project-management
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="flex flex-col gap-6 animate-fade-in font-body text-slate-900 dark:text-slate-100">
+    <div class="roadmap-page flex flex-col gap-6 animate-fade-in font-body text-slate-900 dark:text-slate-100">
       
       <!-- Top Action Bar -->
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200 dark:border-slate-800">
@@ -21,10 +21,11 @@ import { ProjectManagementService } from '../../core/services/project-management
       </div>
 
       <!-- Timeline Controls & Chart Panel -->
-      <div class="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col gap-6 overflow-x-auto">
+      <div class="roadmap-panel p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col gap-6 overflow-x-auto">
+        <p class="roadmap-scroll-hint">Vuốt ngang để xem đầy đủ trục thời gian</p>
         
         <!-- Month Header Track -->
-        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
+        <div class="roadmap-controls flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
           <div class="flex items-center gap-2">
             <span class="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Tháng 8 - Tháng 10 (2026)</span>
           </div>
@@ -37,7 +38,7 @@ import { ProjectManagementService } from '../../core/services/project-management
         </div>
 
         <!-- Gantt Rows Container (Min 14px font text-sm) -->
-        <div class="flex flex-col gap-4 min-w-[700px]">
+        <div class="roadmap-track flex flex-col gap-4 min-w-[700px]">
           @for (sprint of sprints(); track sprint.id) {
             <div class="flex flex-col gap-2.5 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/60">
               <div class="flex items-center justify-between">
@@ -71,7 +72,30 @@ import { ProjectManagementService } from '../../core/services/project-management
       </div>
 
     </div>
-  `
+  `,
+  styles: [`
+    .roadmap-scroll-hint { display: none; }
+
+    @media (max-width: 1279px) {
+      .roadmap-page, .roadmap-panel { min-width: 0; }
+      .roadmap-panel { max-width: 100%; overscroll-behavior-inline: contain; scroll-snap-type: x proximity; scrollbar-width: thin; }
+      .roadmap-scroll-hint { display: block; position: sticky; left: 0; width: max-content; max-width: 100%; margin: 0; color: #64748b; font-size: .75rem; font-weight: 600; }
+      .roadmap-track { scroll-snap-align: start; }
+    }
+
+    @media (max-width: 767px) {
+      .roadmap-page { gap: 1rem; }
+      .roadmap-panel { gap: 1rem; padding: 1rem; }
+      .roadmap-controls { align-items: flex-start; flex-direction: column; gap: .75rem; }
+      .roadmap-controls > div:last-child button { min-height: 40px; }
+      .roadmap-track { min-width: 620px; }
+    }
+
+    @media (max-width: 932px) and (orientation: landscape) and (max-height: 520px) {
+      .roadmap-panel { padding: .75rem; }
+      .roadmap-track { min-width: 700px; }
+    }
+  `]
 })
 export class RoadmapPageComponent {
   private readonly projectService = inject(ProjectManagementService);

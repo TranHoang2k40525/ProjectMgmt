@@ -1,0 +1,1204 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Cẩm nang kỹ thuật ProjectMgmt: nghiệp vụ Scrum, kiến trúc modular monolith, hai hệ AI, CSDL MySQL, frontend Angular và CI/CD.">
+  <title>ProjectMgmt — Cẩm nang kỹ thuật hoàn thiện hệ thống</title>
+  <style>
+    :root { --ink:#101827; --muted:#526071; --paper:#f7f4ed; --panel:#ffffff; --navy:#061526; --cyan:#18b9d8; --gold:#d9a44a; --line:#d8d4ca; --danger:#b74235; --ok:#16724b; --shadow:0 24px 70px rgba(6,21,38,.13); }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; max-width:100%; overflow-x:hidden; }
+    body { margin:0; max-width:100%; overflow-x:hidden; color:var(--ink); background:var(--paper); font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; line-height:1.72; }
+    a { color:#076c83; text-underline-offset:3px; }
+    .hero { min-height:82vh; display:grid; align-items:end; position:relative; overflow:hidden; color:white; background:var(--navy); }
+    .hero::before { content:""; position:absolute; inset:0; background:linear-gradient(90deg,rgba(3,14,26,.92) 0%,rgba(3,14,26,.42) 48%,rgba(3,14,26,.08) 100%),linear-gradient(0deg,rgba(3,14,26,.92),transparent 65%),url("assets/projectmgmt-technical-handbook-cover.png") center/cover no-repeat; }
+    .hero-inner { position:relative; width:min(1180px,calc(100% - 48px)); margin:0 auto; padding:84px 0 72px; }
+    .eyebrow { color:#86e7f4; font-weight:800; letter-spacing:.16em; text-transform:uppercase; font-size:.78rem; }
+    .hero h1 { max-width:850px; margin:.75rem 0 1rem; font-size:clamp(3rem,7vw,7.2rem); line-height:.93; letter-spacing:-.06em; }
+    .hero p { max-width:760px; color:#dce8ef; font-size:clamp(1rem,2vw,1.32rem); }
+    .hero-meta { display:flex; flex-wrap:wrap; gap:10px 28px; margin-top:28px; font-size:.9rem; color:#b9cbd8; }
+    .layout { width:min(1380px,calc(100% - 36px)); margin:0 auto; display:grid; grid-template-columns:270px minmax(0,920px); justify-content:center; gap:54px; padding:64px 0 100px; }
+    .toc { position:sticky; top:22px; align-self:start; max-height:calc(100vh - 44px); overflow:auto; padding:20px; border:1px solid var(--line); background:rgba(255,255,255,.83); backdrop-filter:blur(14px); box-shadow:0 12px 40px rgba(6,21,38,.07); }
+    .toc strong { display:block; margin-bottom:12px; text-transform:uppercase; letter-spacing:.1em; font-size:.74rem; color:var(--muted); }
+    .toc a { display:block; color:#253448; text-decoration:none; padding:5px 0; font-size:.84rem; line-height:1.35; }
+    .toc a:hover { color:#077b95; }
+    .toc-level-3 { padding-left:14px!important; color:#647386!important; }
+    main { min-width:0; background:var(--panel); box-shadow:var(--shadow); padding:clamp(28px,6vw,78px); }
+    main > h1:first-of-type { font-size:clamp(2.2rem,5vw,4.5rem); line-height:1; letter-spacing:-.045em; margin-top:0; }
+    h2 { margin:3.8rem 0 1.25rem; padding-top:1rem; border-top:1px solid var(--line); font-size:clamp(1.75rem,4vw,2.8rem); line-height:1.1; letter-spacing:-.035em; }
+    h3 { margin:2.5rem 0 .75rem; font-size:1.45rem; line-height:1.25; }
+    h4 { margin:1.8rem 0 .5rem; font-size:1.08rem; text-transform:uppercase; letter-spacing:.04em; color:#394b5f; }
+    p, li { max-width:78ch; }
+    blockquote { margin:1.5rem 0; padding:18px 22px; border-left:4px solid var(--gold); background:#fff8e9; color:#39424e; }
+    pre { max-width:100%; overflow:auto; padding:20px; color:#dcecff; background:#081827; border:1px solid #173149; border-radius:4px; font-size:.85rem; line-height:1.55; }
+    code { padding:.12em .34em; background:#eef2f4; border-radius:3px; font-family:"Cascadia Code",Consolas,monospace; font-size:.9em; }
+    pre code { padding:0; background:transparent; }
+    .table-wrap { overflow-x:auto; margin:1.4rem 0 2rem; border:1px solid var(--line); }
+    table { width:100%; border-collapse:collapse; font-size:.89rem; line-height:1.45; }
+    th { padding:12px 14px; text-align:left; color:white; background:#10273b; vertical-align:top; }
+    td { padding:11px 14px; border-top:1px solid #e4e1d9; vertical-align:top; }
+    tbody tr:nth-child(even) { background:#faf9f5; }
+    .diagram { margin:1.6rem 0 2.2rem; padding:18px; border:1px solid #b9ccd7; background:linear-gradient(145deg,#f7fbfc,#eef5f7); overflow:hidden; }
+    .diagram figcaption { margin-bottom:13px; color:#3f5d6b; text-transform:uppercase; letter-spacing:.08em; font-size:.72rem; font-weight:900; }
+    .diagram-row { display:grid; grid-template-columns:minmax(110px,1fr) 34px minmax(110px,1fr); gap:8px; align-items:center; position:relative; padding:9px 0; border-top:1px solid #d8e5ea; }
+    .diagram-row:first-of-type { border-top:0; }
+    .diagram .node { display:flex; align-items:center; min-height:42px; padding:8px 10px; color:#e9f6fa; background:#102c3f; border:1px solid #23536d; font-size:.82rem; font-weight:750; line-height:1.25; }
+    .diagram .arrow { color:#0c809a; text-align:center; font-size:1.35rem; font-weight:900; }
+    .diagram .edge-label { grid-column:1 / -1; justify-self:center; max-width:90%; padding:3px 9px; color:#6a4a0a; background:#fff2cf; border-radius:999px; font-size:.72rem; line-height:1.3; }
+    .diagram .step { position:absolute; left:-10px; top:8px; width:22px; height:22px; display:grid; place-items:center; color:white; background:#d09530; border-radius:50%; font-size:.7rem; font-weight:900; }
+    .diagram details { margin-top:12px; }
+    .diagram summary { cursor:pointer; color:#526979; font-size:.78rem; font-weight:750; }
+    .diagram details pre { margin-bottom:0; }
+    img { max-width:100%; height:auto; }
+    hr { border:0; border-top:1px solid var(--line); margin:3rem 0; }
+    .evidence { display:inline-block; padding:.1rem .44rem; border-radius:999px; font-size:.7rem; line-height:1.4; font-weight:900; letter-spacing:.04em; vertical-align:.1em; }
+    .verified { color:#075c3a; background:#dff4e8; }
+    .inferred { color:#775200; background:#fff0bd; }
+    .recommendation { color:#075b70; background:#d9f3f8; }
+    footer { color:#d0dee8; background:#071725; padding:38px 24px; text-align:center; font-size:.86rem; }
+    @media (max-width:980px) { .layout{display:block;width:min(calc(100% - 24px),920px);padding-top:24px}.toc{display:none}main{padding:28px}.hero{min-height:70vh}.hero-inner{width:min(calc(100% - 32px),900px)}.diagram-row{grid-template-columns:1fr 24px 1fr}.diagram .node{font-size:.72rem}.diagram{padding:12px} }
+    @media (max-width:420px) { .diagram-row{grid-template-columns:1fr}.diagram .arrow{transform:rotate(90deg)}.diagram .edge-label{grid-column:1}.diagram .step{position:static;justify-self:center}.hero h1{font-size:2.7rem} }
+    @media print { @page{size:A4;margin:16mm}.hero{min-height:0;break-after:page}.hero::before{background:var(--navy)}.hero-inner{padding:40mm 0}.layout{display:block;width:auto;padding:0}.toc{display:none}main{box-shadow:none;padding:0}h2{break-before:page}h3,table,pre{break-inside:avoid}a{color:inherit;text-decoration:none}footer{display:none} }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-inner">
+      <div class="eyebrow">Engineering design report · v1.0</div>
+      <h1>ProjectMgmt</h1>
+      <p>Cẩm nang kỹ thuật hoàn thiện hệ thống Quản lý Dự án Scrum + AI — từ nghiệp vụ, kiến trúc, dữ liệu và hai AI đến bảo mật, kiểm thử, CI/CD và phân công ba thành viên.</p>
+      <div class="hero-meta"><span>Baseline: commit 05ce307</span><span>Ngày chốt: 20/09/2026</span><span>MySQL 55 bảng · 4 view · 2 trigger</span></div>
+    </div>
+  </header>
+  <div class="layout">
+    <nav class="toc" aria-label="Mục lục"><strong>Mục lục</strong><a class="toc-level-2" href="#muc-luc">Mục lục</a>
+<a class="toc-level-2" href="#1-tom-tat-ieu-hanh">1. Tóm tắt điều hành</a>
+<a class="toc-level-2" href="#2-toan-canh-he-thong">2. Toàn cảnh hệ thống</a>
+<a class="toc-level-3" href="#2-1-ban-chat-san-pham">2.1 Bản chất sản phẩm</a>
+<a class="toc-level-3" href="#2-2-nguyen-tac-khong-thay-oi">2.2 Nguyên tắc không thay đổi</a>
+<a class="toc-level-2" href="#3-cach-oc-va-thu-tu-nguon-su-that">3. Cách đọc và thứ tự nguồn sự thật</a>
+<a class="toc-level-3" href="#3-1-nhan-bang-chung">3.1 Nhãn bằng chứng</a>
+<a class="toc-level-3" href="#3-2-thu-tu-uu-tien-khi-co-mau-thuan">3.2 Thứ tự ưu tiên khi có mâu thuẫn</a>
+<a class="toc-level-3" href="#3-3-cac-mau-thuan-a-uoc-giai-quyet">3.3 Các mâu thuẫn đã được giải quyết</a>
+<a class="toc-level-3" href="#3-4-pham-vi-quet-va-loai-tru">3.4 Phạm vi quét và loại trừ</a>
+<a class="toc-level-2" href="#4-phan-tich-bai-toan-va-pham-vi">4. Phân tích bài toán và phạm vi</a>
+<a class="toc-level-3" href="#4-1-bai-toan-can-giai-quyet">4.1 Bài toán cần giải quyết</a>
+<a class="toc-level-3" href="#4-2-muc-tieu-chuc-nang">4.2 Mục tiêu chức năng</a>
+<a class="toc-level-3" href="#4-3-tac-nhan-va-quyen-ien-hinh">4.3 Tác nhân và quyền điển hình</a>
+<a class="toc-level-3" href="#4-4-trong-va-ngoai-pham-vi">4.4 Trong và ngoài phạm vi</a>
+<a class="toc-level-3" href="#4-5-ieu-kien-thanh-cong">4.5 Điều kiện thành công</a>
+<a class="toc-level-2" href="#5-cac-phat-hien-chinh-tu-ma-nguon">5. Các phát hiện chính từ mã nguồn</a>
+<a class="toc-level-3" href="#5-1-iem-manh-hien-tai">5.1 Điểm mạnh hiện tại</a>
+<a class="toc-level-3" href="#5-2-khoang-trong-chan-phat-hanh">5.2 Khoảng trống chặn phát hành</a>
+<a class="toc-level-3" href="#5-3-trang-thai-theo-vung-nghiep-vu">5.3 Trạng thái theo vùng nghiệp vụ</a>
+<a class="toc-level-2" href="#6-kien-truc-muc-tieu-va-kien-truc-hien-tai">6. Kiến trúc mục tiêu và kiến trúc hiện tại</a>
+<a class="toc-level-3" href="#6-1-so-o-ngu-canh">6.1 Sơ đồ ngữ cảnh</a>
+<a class="toc-level-3" href="#6-2-cau-truc-vat-ly-hien-tai">6.2 Cấu trúc vật lý hiện tại</a>
+<a class="toc-level-3" href="#6-3-quy-tac-dependency">6.3 Quy tắc dependency</a>
+<a class="toc-level-3" href="#6-4-modular-monolith-khong-phai-microservice-gia">6.4 Modular monolith, không phải microservice giả</a>
+<a class="toc-level-3" href="#6-5-current-va-target-runtime">6.5 Current và target runtime</a>
+<a class="toc-level-2" href="#7-phan-ranh-ba-module-va-trach-nhiem-ba-thanh-vien">7. Phân ranh ba module và trách nhiệm ba thành viên</a>
+<a class="toc-level-3" href="#7-1-thanh-vien-a-tran-van-hoang-identityexperience">7.1 Thành viên A — Trần Văn Hoàng — IdentityExperience</a>
+<a class="toc-level-3" href="#7-2-thanh-vien-b-nguyen-the-hoai-planning">7.2 Thành viên B — Nguyễn Thế Hoài — Planning</a>
+<a class="toc-level-3" href="#7-3-thanh-vien-c-hoang-tran-huy-hoang-deliveryintelligence">7.3 Thành viên C — Hoàng Trần Huy Hoàng — DeliveryIntelligence</a>
+<a class="toc-level-3" href="#7-4-ma-tran-raci-toi-thieu">7.4 Ma trận RACI tối thiểu</a>
+<a class="toc-level-2" href="#8-hop-ong-lien-module">8. Hợp đồng liên module</a>
+<a class="toc-level-3" href="#8-1-hop-ong-hien-co">8.1 Hợp đồng hiện có</a>
+<a class="toc-level-3" href="#8-2-bo-contract-can-hoan-thien">8.2 Bộ contract cần hoàn thiện</a>
+<a class="toc-level-3" href="#8-3-chuan-contract">8.3 Chuẩn contract</a>
+<a class="toc-level-3" href="#8-4-mau-contract-goi-y">8.4 Mẫu contract gợi ý</a>
+<a class="toc-level-2" href="#9-kien-truc-du-lieu-mysql-55-bang">9. Kiến trúc dữ liệu MySQL 55 bảng</a>
+<a class="toc-level-3" href="#9-1-danh-muc-theo-module-logic-va-module-vat-ly">9.1 Danh mục theo module logic và module vật lý</a>
+<a class="toc-level-3" href="#9-2-view-va-trigger">9.2 View và trigger</a>
+<a class="toc-level-3" href="#9-3-rang-buoc-quan-trong">9.3 Ràng buộc quan trọng</a>
+<a class="toc-level-3" href="#9-4-quy-tac-xmod">9.4 Quy tắc XMOD</a>
+<a class="toc-level-3" href="#9-5-dbcontext-va-migration">9.5 DbContext và migration</a>
+<a class="toc-level-3" href="#9-6-an-toan-ddl-va-docker">9.6 An toàn DDL và Docker</a>
+<a class="toc-level-2" href="#10-backend-va-api">10. Backend và API</a>
+<a class="toc-level-3" href="#10-1-nen-tang-ky-thuat">10.1 Nền tảng kỹ thuật</a>
+<a class="toc-level-3" href="#10-2-api-hien-co">10.2 API hiện có</a>
+<a class="toc-level-3" href="#10-3-chuan-endpoint-muc-tieu">10.3 Chuẩn endpoint mục tiêu</a>
+<a class="toc-level-3" href="#10-4-backlog-api-bat-buoc">10.4 Backlog API bắt buộc</a>
+<a class="toc-level-3" href="#10-5-transaction-va-consistency">10.5 Transaction và consistency</a>
+<a class="toc-level-3" href="#10-6-vertical-slice-p0-chinh-thuc-auth-that-en-project-that">10.6 Vertical slice P0 chính thức — Auth thật đến Project thật</a>
+<a class="toc-level-2" href="#11-frontend-angular">11. Frontend Angular</a>
+<a class="toc-level-3" href="#11-1-stack-va-cau-truc">11.1 Stack và cấu trúc</a>
+<a class="toc-level-3" href="#11-2-route-inventory-va-integration-target">11.2 Route inventory và integration target</a>
+<a class="toc-level-3" href="#11-3-khoang-trong-tich-hop">11.3 Khoảng trống tích hợp</a>
+<a class="toc-level-3" href="#11-4-chuan-ux-bat-buoc">11.4 Chuẩn UX bắt buộc</a>
+<a class="toc-level-2" href="#12-hai-he-ai-va-vong-oi-du-lieu">12. Hai hệ AI và vòng đời dữ liệu</a>
+<a class="toc-level-3" href="#12-1-phan-biet-chinh-xac-hai-ai">12.1 Phân biệt chính xác hai AI</a>
+<a class="toc-level-3" href="#12-2-kien-truc-runtime-e-xuat">12.2 Kiến trúc runtime đề xuất</a>
+<a class="toc-level-3" href="#12-3-luong-ai-1-breakdown">12.3 Luồng AI 1 — Breakdown</a>
+<a class="toc-level-3" href="#12-4-luong-ai-2-assignment">12.4 Luồng AI 2 — Assignment</a>
+<a class="toc-level-3" href="#12-5-dataops-khong-phai-ai-thu-ba">12.5 DataOps không phải AI thứ ba</a>
+<a class="toc-level-2" href="#13-cac-luong-nghiep-vu-au-cuoi">13. Các luồng nghiệp vụ đầu-cuối</a>
+<a class="toc-level-3" href="#13-1-tao-project-san-sang-su-dung">13.1 Tạo project sẵn sàng sử dụng</a>
+<a class="toc-level-3" href="#13-2-tao-issue">13.2 Tạo issue</a>
+<a class="toc-level-3" href="#13-3-chuyen-trang-thai-tren-board">13.3 Chuyển trạng thái trên Board</a>
+<a class="toc-level-3" href="#13-4-sprint-lifecycle">13.4 Sprint lifecycle</a>
+<a class="toc-level-3" href="#13-5-chuoi-hai-ai">13.5 Chuỗi hai AI</a>
+<a class="toc-level-2" href="#14-bao-mat-va-phan-quyen">14. Bảo mật và phân quyền</a>
+<a class="toc-level-3" href="#14-1-hien-trang-rui-ro">14.1 Hiện trạng rủi ro</a>
+<a class="toc-level-3" href="#14-2-mo-hinh-ich">14.2 Mô hình đích</a>
+<a class="toc-level-3" href="#14-3-permission-catalog-toi-thieu">14.3 Permission catalog tối thiểu</a>
+<a class="toc-level-3" href="#14-4-threat-driven-test-bat-buoc">14.4 Threat-driven test bắt buộc</a>
+<a class="toc-level-2" href="#15-hieu-nang-quan-sat-va-o-tin-cay">15. Hiệu năng, quan sát và độ tin cậy</a>
+<a class="toc-level-3" href="#15-1-muc-tieu-phi-chuc-nang-e-xuat">15.1 Mục tiêu phi chức năng đề xuất</a>
+<a class="toc-level-3" href="#15-2-du-lieu-va-query">15.2 Dữ liệu và query</a>
+<a class="toc-level-3" href="#15-3-observability">15.3 Observability</a>
+<a class="toc-level-2" href="#16-ci-cd-moi-truong-va-van-hanh">16. CI/CD, môi trường và vận hành</a>
+<a class="toc-level-3" href="#16-1-pipeline-hien-tai">16.1 Pipeline hiện tại</a>
+<a class="toc-level-3" href="#16-2-ci-a-co">16.2 CI đã có</a>
+<a class="toc-level-3" href="#16-3-cd-test-a-co">16.3 CD TEST đã có</a>
+<a class="toc-level-3" href="#16-4-khoang-trong-ci-cd">16.4 Khoảng trống CI/CD</a>
+<a class="toc-level-3" href="#16-5-moi-truong">16.5 Môi trường</a>
+<a class="toc-level-3" href="#16-6-release-gate-muc-tieu">16.6 Release gate mục tiêu</a>
+<a class="toc-level-2" href="#17-chien-luoc-kiem-thu-va-tieu-chi-chat-luong">17. Chiến lược kiểm thử và tiêu chí chất lượng</a>
+<a class="toc-level-3" href="#17-1-ket-qua-audit-ngay-20-09-2026">17.1 Kết quả audit ngày 20/09/2026</a>
+<a class="toc-level-3" href="#17-2-test-pyramid-can-at">17.2 Test pyramid cần đạt</a>
+<a class="toc-level-3" href="#17-3-definition-of-ready">17.3 Definition of Ready</a>
+<a class="toc-level-3" href="#17-4-definition-of-done">17.4 Definition of Done</a>
+<a class="toc-level-3" href="#17-5-ai-evaluation-gate">17.5 AI evaluation gate</a>
+<a class="toc-level-2" href="#18-lo-trinh-hoan-thien-theo-muc-uu-tien">18. Lộ trình hoàn thiện theo mức ưu tiên</a>
+<a class="toc-level-3" href="#18-1-p0-lam-baseline-an-toan-va-tich-hop-uoc">18.1 P0 — Làm baseline an toàn và tích hợp được</a>
+<a class="toc-level-3" href="#18-2-p1-hoan-thien-scrum-core">18.2 P1 — Hoàn thiện Scrum core</a>
+<a class="toc-level-3" href="#18-3-p2-ai-1-breakdown">18.3 P2 — AI 1 Breakdown</a>
+<a class="toc-level-3" href="#18-4-p3-ai-2-assignment-va-dataops">18.4 P3 — AI 2 Assignment và DataOps</a>
+<a class="toc-level-3" href="#18-5-p4-hardening-va-release">18.5 P4 — Hardening và release</a>
+<a class="toc-level-2" href="#19-playbook-rieng-cho-tung-thanh-vien">19. Playbook riêng cho từng thành viên</a>
+<a class="toc-level-3" href="#19-1-playbook-a-tran-van-hoang-identityexperience">19.1 Playbook A — Trần Văn Hoàng — IdentityExperience</a>
+<a class="toc-level-3" href="#19-2-playbook-b-nguyen-the-hoai-planning">19.2 Playbook B — Nguyễn Thế Hoài — Planning</a>
+<a class="toc-level-3" href="#19-3-playbook-c-hoang-tran-huy-hoang-deliveryintelligence">19.3 Playbook C — Hoàng Trần Huy Hoàng — DeliveryIntelligence</a>
+<a class="toc-level-3" href="#19-4-cach-phoi-hop-khong-chan-nhau">19.4 Cách phối hợp không chặn nhau</a>
+<a class="toc-level-3" href="#19-5-starter-pr-uoc-khuyen-nghi">19.5 Starter PR được khuyến nghị</a>
+<a class="toc-level-2" href="#20-huong-dan-khoi-ong-cho-thanh-vien-moi">20. Hướng dẫn khởi động cho thành viên mới</a>
+<a class="toc-level-3" href="#20-1-yeu-cau-cong-cu">20.1 Yêu cầu công cụ</a>
+<a class="toc-level-3" href="#20-2-clone-va-backend-native">20.2 Clone và backend native</a>
+<a class="toc-level-3" href="#20-3-frontend">20.3 Frontend</a>
+<a class="toc-level-3" href="#20-4-docker-local">20.4 Docker local</a>
+<a class="toc-level-3" href="#20-5-kiem-tra-truoc-pr">20.5 Kiểm tra trước PR</a>
+<a class="toc-level-2" href="#21-runbook-xu-ly-su-co">21. Runbook xử lý sự cố</a>
+<a class="toc-level-3" href="#21-1-api-khong-khoi-ong">21.1 API không khởi động</a>
+<a class="toc-level-3" href="#21-2-health-live-pass-nhung-nghiep-vu-loi">21.2 Health live pass nhưng nghiệp vụ lỗi</a>
+<a class="toc-level-3" href="#21-3-frontend-test-co-unhandled-timer">21.3 Frontend test có unhandled timer</a>
+<a class="toc-level-3" href="#21-4-board-transition-conflict">21.4 Board/transition conflict</a>
+<a class="toc-level-3" href="#21-5-ai-timeout-hoac-json-loi">21.5 AI timeout hoặc JSON lỗi</a>
+<a class="toc-level-3" href="#21-6-deploy-test-fail">21.6 Deploy TEST fail</a>
+<a class="toc-level-2" href="#22-cac-quyet-inh-kien-truc">22. Các quyết định kiến trúc</a>
+<a class="toc-level-2" href="#23-khuyen-nghi-va-ket-luan">23. Khuyến nghị và kết luận</a>
+<a class="toc-level-3" href="#23-1-key-findings">23.1 Key findings</a>
+<a class="toc-level-3" href="#23-2-he-qua-neu-khong-xu-ly-ung-thu-tu">23.2 Hệ quả nếu không xử lý đúng thứ tự</a>
+<a class="toc-level-3" href="#23-3-khuyen-nghi-hanh-ong-ngay">23.3 Khuyến nghị hành động ngay</a>
+<a class="toc-level-3" href="#23-4-ket-luan">23.4 Kết luận</a>
+<a class="toc-level-2" href="#24-phu-luc-tra-cuu">24. Phụ lục tra cứu</a>
+<a class="toc-level-3" href="#24-1-file-quan-trong-trong-repo">24.1 File quan trọng trong repo</a>
+<a class="toc-level-3" href="#24-2-nguon-tai-lieu-ngoai-repo-a-tong-hop">24.2 Nguồn tài liệu ngoài repo đã tổng hợp</a>
+<a class="toc-level-3" href="#24-3-cac-rui-ro-du-an-chinh">24.3 Các rủi ro dự án chính</a>
+<a class="toc-level-3" href="#24-4-checklist-review-pr">24.4 Checklist review PR</a>
+<a class="toc-level-3" href="#24-5-lenh-tai-sinh-ba-tai-lieu">24.5 Lệnh tái sinh ba tài liệu</a></nav>
+    <main><h2 id="muc-luc">Mục lục</h2>
+<ol>
+<li><a href="#1-tom-tat-ieu-hanh">Tóm tắt điều hành</a></li>
+<li><a href="#2-toan-canh-he-thong">Toàn cảnh hệ thống</a></li>
+<li><a href="#3-cach-oc-va-thu-tu-nguon-su-that">Cách đọc và thứ tự nguồn sự thật</a></li>
+<li><a href="#4-phan-tich-bai-toan-va-pham-vi">Phân tích bài toán và phạm vi</a></li>
+<li><a href="#5-cac-phat-hien-chinh-tu-ma-nguon">Các phát hiện chính từ mã nguồn</a></li>
+<li><a href="#6-kien-truc-muc-tieu-va-kien-truc-hien-tai">Kiến trúc mục tiêu và kiến trúc hiện tại</a></li>
+<li><a href="#7-phan-ranh-ba-module-va-trach-nhiem-ba-thanh-vien">Phân ranh ba module và trách nhiệm ba thành viên</a></li>
+<li><a href="#8-hop-ong-lien-module">Hợp đồng liên module</a></li>
+<li><a href="#9-kien-truc-du-lieu-mysql-55-bang">Kiến trúc dữ liệu MySQL 55 bảng</a></li>
+<li><a href="#10-backend-va-api">Backend và API</a></li>
+<li><a href="#11-frontend-angular">Frontend Angular</a></li>
+<li><a href="#12-hai-he-ai-va-vong-oi-du-lieu">Hai hệ AI và vòng đời dữ liệu</a></li>
+<li><a href="#13-cac-luong-nghiep-vu-au-cuoi">Các luồng nghiệp vụ đầu-cuối</a></li>
+<li><a href="#14-bao-mat-va-phan-quyen">Bảo mật và phân quyền</a></li>
+<li><a href="#15-hieu-nang-quan-sat-va-o-tin-cay">Hiệu năng, quan sát và độ tin cậy</a></li>
+<li><a href="#16-ci-cd-moi-truong-va-van-hanh">CI/CD, môi trường và vận hành</a></li>
+<li><a href="#17-chien-luoc-kiem-thu-va-tieu-chi-chat-luong">Chiến lược kiểm thử và tiêu chí chất lượng</a></li>
+<li><a href="#18-lo-trinh-hoan-thien-theo-muc-uu-tien">Lộ trình hoàn thiện theo mức ưu tiên</a></li>
+<li><a href="#19-playbook-rieng-cho-tung-thanh-vien">Playbook riêng cho từng thành viên</a></li>
+<li><a href="#20-huong-dan-khoi-ong-cho-thanh-vien-moi">Hướng dẫn khởi động cho thành viên mới</a></li>
+<li><a href="#21-runbook-xu-ly-su-co">Runbook xử lý sự cố</a></li>
+<li><a href="#22-cac-quyet-inh-kien-truc">Các quyết định kiến trúc</a></li>
+<li><a href="#23-khuyen-nghi-va-ket-luan">Khuyến nghị và kết luận</a></li>
+<li><a href="#24-phu-luc-tra-cuu">Phụ lục tra cứu</a></li>
+</ol>
+<hr>
+<h2 id="1-tom-tat-ieu-hanh">1. Tóm tắt điều hành</h2>
+<p>ProjectMgmt là hệ thống quản lý dự án theo Scrum, định hướng tương đương một Jira thu gọn, có hai năng lực AI tách biệt:</p>
+<ul>
+<li><strong>AI 1 — Auto Task Breakdown:</strong> phân rã User Story/Task thành các sub-task có cấu trúc và Acceptance Criteria; người dùng phải xem, sửa, chấp nhận hoặc từ chối trước khi ghi thành issue thật.</li>
+<li><strong>AI 2 — Intelligent Assignment:</strong> xếp hạng người phù hợp cho từng issue theo tải, kỹ năng, lịch sử và capacity; PM/SM quyết định cuối cùng, còn hệ thống lưu cả đề xuất, override và kết quả thực tế để cải thiện mô hình.</li>
+</ul>
+<p><span class="evidence verified">VERIFIED</span> Thiết kế dữ liệu hiện hành là <strong>MySQL 8, 55 bảng, 4 view và 2 trigger</strong>. Mã nguồn vật lý đã được gom thành <strong>ba module lớn</strong> tương ứng ba thành viên: <code>IdentityExperience</code>, <code>Planning</code>, <code>DeliveryIntelligence</code>; mỗi module có <code>Domain</code>, <code>Application</code>, <code>Infrastructure</code>, dùng chung <code>Contracts</code> và <code>Core</code>, chạy trong một ASP.NET Core host.</p>
+<p><span class="evidence verified">VERIFIED</span> Nền tảng đã có giá trị thực: solution .NET 10 build được, mô hình EF bao phủ 55 bảng, API quản lý Organization/Project/Workflow/Board đã có, Angular có hệ thống route và giao diện rộng, CI cho backend/frontend/container, pipeline deploy TEST lên IIS, backup và rollback ứng dụng.</p>
+<p><span class="evidence verified">VERIFIED</span> Ứng dụng <strong>chưa phải bản hoàn thiện nghiệp vụ</strong>. Authentication chưa được cấu hình vào pipeline HTTP; nhiều màn hình Angular đang dùng signal/mock data thay vì API; Delivery/Issue, Sprint, Notification, SignalR và hai AI chưa có luồng chạy đầu-cuối; test backend mới có 2 ca cho Result; frontend có 22 test pass nhưng job hiện trả lỗi vì hai timer truy cập <code>nativeElement</code> sau khi fixture đã hủy.</p>
+<blockquote><strong>Kết luận điều hành:</strong> giữ kiến trúc modular monolith ba module và MySQL hiện tại; ưu tiên đóng các lỗ hổng bảo mật/tích hợp P0, hoàn thiện Scrum core trước, sau đó đưa AI Breakdown rồi AI Assignment vào theo contract và event rõ ràng. Không quay lại kiến trúc 9–10 project nghiệp vụ, không chuyển về SQL Server, không đưa LLM vào quyết định tự động không có Human-in-the-loop.</blockquote>
+<h2 id="2-toan-canh-he-thong">2. Toàn cảnh hệ thống</h2>
+<div class="table-wrap"><table><thead><tr><th>Hạng mục</th><th>Trạng thái đã kiểm chứng</th><th>Đích cần đạt</th></tr></thead><tbody><tr><td>Sản phẩm</td><td>Scrum project management + UI dạng Jira</td><td>Luồng Project → Backlog → Sprint → Board → Report hoàn chỉnh</td></tr><tr><td>Backend</td><td>ASP.NET Core/.NET 10; 3 module vật lý; repository/service truyền thống</td><td>API có auth, validation, transaction, contract liên module và observability</td></tr><tr><td>Frontend</td><td>Angular 21, standalone, Signals; 20 route nghiệp vụ</td><td>Bỏ mock, dùng API thật, guard thật, SignalR thật, loading/error nhất quán</td></tr><tr><td>Database</td><td>MySQL; 55 table; 4 view; 2 trigger; 3 DbContext</td><td>Migration policy an toàn; review 32 XMOD index left-prefix còn thiếu</td></tr><tr><td>AI 1</td><td>Có schema và thiết kế; chưa có runtime end-to-end</td><td>Async breakdown, JSON Schema, review/apply, feedback, evaluation</td></tr><tr><td>AI 2</td><td>Có schema và công thức thiết kế; chưa có engine</td><td>Candidate ranking giải thích được, quyết định cuối bởi người dùng, hậu kiểm</td></tr><tr><td>DataOps</td><td>Có 7 bảng schema; UI placeholder</td><td>Dataset version/freeze, PII redaction, dedup, export, train/evaluate</td></tr><tr><td>CI</td><td>PR vào <code>develop</code>: build/test/lint/container build</td><td>Thêm security scan, integration/E2E, migration validation, quality gates</td></tr><tr><td>CD TEST</td><td>Build artifact, self-hosted Windows runner, IIS, health, rollback</td><td>Artifact bất biến, smoke test rộng hơn, migration/DB rollback plan</td></tr><tr><td>Kiểm thử hiện tại</td><td>Backend 2/2 pass; lint pass; build Angular pass; 22 test chạy</td><td>Sửa 2 async error; tăng unit/integration/architecture/E2E</td></tr></tbody></table></div>
+<h3 id="2-1-ban-chat-san-pham">2.1 Bản chất sản phẩm</h3>
+<p>ProjectMgmt không chỉ là bảng Kanban. Sản phẩm phải quản lý xuyên suốt:</p>
+<ol>
+<li>Danh tính, hồ sơ, kỹ năng và quyền theo phạm vi.</li>
+<li>Organization, Project, workflow, issue type, priority và board.</li>
+<li>Product Backlog, Sprint Backlog, capacity và snapshot báo cáo.</li>
+<li>Issue đa cấp, liên kết, cộng tác và lịch sử thay đổi.</li>
+<li>Thông báo lưu bền và realtime.</li>
+<li>Hai AI có nhiệm vụ, dữ liệu, chỉ số đánh giá và quyền áp dụng khác nhau.</li>
+<li>Dataset, training run, evaluation và model/prompt governance.</li>
+<li>Quy trình build, test, triển khai, health check, backup và rollback.</li>
+</ol>
+<h3 id="2-2-nguyen-tac-khong-thay-oi">2.2 Nguyên tắc không thay đổi</h3>
+<ul>
+<li>Một cơ sở dữ liệu MySQL vật lý; module sở hữu bảng logic của mình.</li>
+<li>Không tạo foreign key hoặc SQL join xuyên module trong <strong>luồng command/transaction</strong> cho các cột <code>XMOD</code>. Bốn reporting view do Delivery sở hữu là ngoại lệ read-only đã được phê duyệt; không dùng chúng để ghi dữ liệu hay cưỡng chế rule. “XMOD có index” là target; trước khi chuẩn hóa đủ 64 cột, index được quyết định theo query pattern + <code>EXPLAIN</code> và audit phải nêu rõ phần chưa đạt.</li>
+<li>Giao tiếp xuyên module qua interface/DTO trong <code>ProjectMgmt.Contracts</code>.</li>
+<li>Repository/service truyền thống; không áp CQRS/Event Sourcing vào code hiện tại nếu chưa có nhu cầu được chứng minh.</li>
+<li>AI đưa ra <strong>gợi ý</strong>, con người chịu trách nhiệm áp dụng hoặc override.</li>
+<li>Không hard-code secret; không commit connection string thật, token, mật khẩu hoặc key OAuth.</li>
+<li>Không chạy DDL có <code>DROP DATABASE</code> vào DB hiện hữu.</li>
+<li>Không coi UI đẹp hoặc schema đầy đủ là bằng chứng nghiệp vụ đã chạy.</li>
+</ul>
+<h2 id="3-cach-oc-va-thu-tu-nguon-su-that">3. Cách đọc và thứ tự nguồn sự thật</h2>
+<h3 id="3-1-nhan-bang-chung">3.1 Nhãn bằng chứng</h3>
+<ul>
+<li><span class="evidence verified">VERIFIED</span> Đã đối chiếu trực tiếp từ mã nguồn, workflow, DDL, kết quả command hoặc tài liệu v3 hiện hành.</li>
+<li><span class="evidence inferred">INFERRED</span> Suy luận hợp lý từ nhiều bằng chứng nhưng chưa có test/runtime xác nhận đầy đủ.</li>
+<li><span class="evidence recommendation">RECOMMENDATION</span> Thiết kế đích hoặc hành động nên làm; không phải trạng thái hiện tại.</li>
+</ul>
+<h3 id="3-2-thu-tu-uu-tien-khi-co-mau-thuan">3.2 Thứ tự ưu tiên khi có mâu thuẫn</h3>
+<ol>
+<li>Mã nguồn đang chạy, workflow CI/CD và <code>docs/projectmgmt_schema_mysql_optimized.sql</code>.</li>
+<li><code>07_Thiet_ke_co_so_du_lieu_v3.pdf</code> và ERD v3 55 bảng.</li>
+<li><code>Phan_bo_vai_tro_module_nhom_3_nguoi.pdf</code>.</li>
+<li><code>Mo_ta_bai_toan_va_pham_vi_du_an_v2.docx</code>.</li>
+<li>Excel/Jira plan và các CSV import mới nhất.</li>
+<li>PDF mô tả hệ thống cũ và prompt Sprint 1.</li>
+<li>Lịch sử phiên Codex — hữu ích để hiểu quyết định, nhưng luôn phải kiểm lại trên source.</li>
+</ol>
+<h3 id="3-3-cac-mau-thuan-a-uoc-giai-quyet">3.3 Các mâu thuẫn đã được giải quyết</h3>
+<div class="table-wrap"><table><thead><tr><th>Chủ đề</th><th>Tài liệu cũ/đề xuất</th><th>Nguồn hiện hành</th><th>Quyết định dùng trong handbook</th></tr></thead><tbody><tr><td>CSDL</td><td>SQL Server, 31 bảng</td><td>MySQL, 55 bảng, 4 view, 2 trigger</td><td>MySQL là nguồn thật</td></tr><tr><td>Kiến trúc xử lý</td><td>CQRS/Event Sourcing/CRDT được nêu trong scope nghiên cứu</td><td>Người dùng chốt repository truyền thống; source đang dùng service/repository</td><td>Giữ repository; các kỹ thuật kia là nghiên cứu tùy chọn, không là baseline</td></tr><tr><td>Module vật lý</td><td>9–10 project nghiệp vụ</td><td>3 module lớn, mỗi module 3 layer</td><td>3 module vật lý; 10 module chỉ là vùng nghiệp vụ logic</td></tr><tr><td>DbContext</td><td>Từng có kế hoạch 9 context</td><td>Source có 3 context và 3 migration history</td><td>Dùng 3 context</td></tr><tr><td>AI</td><td>Tài liệu scope nêu nhiều bài toán ML</td><td>Kế hoạch và DB chốt Breakdown + Assignment</td><td>Hai AI sản phẩm; estimation/process mining là submodel tương lai</td></tr><tr><td>EF provider</td><td>Kỳ vọng EF Core 10</td><td>Source hiện dùng EF/Pomelo 9 trên <code>net10.0</code></td><td>Ghi đúng package đang có; chỉ nâng khi Pomelo tương thích và test pass</td></tr><tr><td>Trạng thái Sprint</td><td>Excel/Jira ghi các story <code>To Do</code> theo lịch</td><td>Source đã có một phần UI/API nhưng thiếu core</td><td>Đánh giá theo code/test, không theo ngày kế hoạch</td></tr><tr><td>AiCore ownership</td><td>Role PDF chia <code>AiPromptTemplate</code> cho A, <code>AiModel</code> cho C</td><td>Cả hai table/config hiện nằm trong IdentityExperience</td><td>A/C đồng sở hữu logic; một người chịu migration tại một thời điểm</td></tr></tbody></table></div>
+<h3 id="3-4-pham-vi-quet-va-loai-tru">3.4 Phạm vi quét và loại trừ</h3>
+<p><span class="evidence verified">VERIFIED</span> Audit đã đọc solution/project files, C# tự viết, Angular source/config, Docker, GitHub Actions, PowerShell deploy, DDL/README/docs, PDF/DOCX/XLSX/CSV/ảnh ERD trong thư mục tài liệu và lịch sử phiên <code>01a09072-8caa-7743-8a5f-be64f3d5c3b8</code>.</p>
+<p>Các thư mục sinh tự động như <code>.git</code>, <code>.vs</code>, <code>bin</code>, <code>obj</code>, <code>node_modules</code>, <code>dist</code>, cache và binary PDF không được coi là source nghiệp vụ. Tệp <code>promt thực tập.txt</code> mô tả một đề tài AI Import Excel cho hệ thống khác; nó không thuộc phạm vi ProjectMgmt và không được trộn vào backlog sản phẩm này. <code>AI id.txt</code> và <code>Ngữ cảnh AI/Sestion.txt</code> chỉ chứa ID phiên khác, không phải đặc tả nghiệp vụ.</p>
+<h2 id="4-phan-tich-bai-toan-va-pham-vi">4. Phân tích bài toán và phạm vi</h2>
+<h3 id="4-1-bai-toan-can-giai-quyet">4.1 Bài toán cần giải quyết</h3>
+<p>Nhóm dự án Scrum nhỏ thường gặp bốn vấn đề:</p>
+<ul>
+<li>Story Point phụ thuộc cảm tính và không đồng nhất giữa thành viên.</li>
+<li>Việc phân rã yêu cầu thành task/Acceptance Criteria tốn thời gian và dễ bỏ sót.</li>
+<li>Việc gán task ít dựa vào tải, kỹ năng, capacity và kết quả lịch sử.</li>
+<li>Quy trình khai báo trên công cụ có thể khác quy trình thực tế; dữ liệu lịch sử không được biến thành phản hồi cải tiến.</li>
+</ul>
+<p>ProjectMgmt giải quyết lớp quản lý Scrum trước, sau đó tận dụng dữ liệu do chính hệ thống sinh ra để hỗ trợ phân rã và phân công. AI không được đứng ngoài quy trình: mọi generation, edit, accept, override và outcome phải truy vết được.</p>
+<h3 id="4-2-muc-tieu-chuc-nang">4.2 Mục tiêu chức năng</h3>
+<ul>
+<li>Quản lý user, profile, skill, đăng nhập và phân quyền theo System/Organization/Project.</li>
+<li>Tạo Organization/Project với ProjectKey và cấu hình workflow/board mặc định.</li>
+<li>Quản lý backlog, issue hierarchy, sprint lifecycle, capacity, board/WIP và lịch sử.</li>
+<li>Hỗ trợ comment, attachment, watcher, label, component, version và acceptance criteria.</li>
+<li>Báo cáo workload, velocity, burndown, chất lượng breakdown và độ chính xác assignment.</li>
+<li>Gửi notification persistence + realtime theo user/project/entity.</li>
+<li>Chạy AI Breakdown bất đồng bộ, có preview/edit/apply.</li>
+<li>Chạy AI Assignment giải thích được, có accept/override/reject và outcome evaluation.</li>
+<li>Quản trị dataset/model/prompt theo version, PII, checksum và metric tái lập.</li>
+</ul>
+<h3 id="4-3-tac-nhan-va-quyen-ien-hinh">4.3 Tác nhân và quyền điển hình</h3>
+<div class="table-wrap"><table><thead><tr><th>Tác nhân</th><th>Quyền/nghiệp vụ chính</th></tr></thead><tbody><tr><td>System Admin</td><td>Quản trị user, role, permission, AI model/prompt governance, vận hành</td></tr><tr><td>Project Manager</td><td>Tạo project, member/scope role, release, báo cáo, quyết định assignment</td></tr><tr><td>Scrum Master</td><td>Workflow/board/WIP, sprint lifecycle, capacity, xử lý blocker</td></tr><tr><td>Product Owner/Tech Lead</td><td>Backlog, ưu tiên, AC, breakdown review, component/version</td></tr><tr><td>Developer</td><td>Xem/nhận issue, cập nhật trạng thái, comment, log effort, phản hồi AI</td></tr><tr><td>Viewer/Stakeholder</td><td>Xem dashboard/report theo quyền, không thay đổi dữ liệu</td></tr><tr><td>Background Worker</td><td>Chạy AI/job/snapshot/notification bằng service identity bị giới hạn quyền</td></tr></tbody></table></div>
+<h3 id="4-4-trong-va-ngoai-pham-vi">4.4 Trong và ngoài phạm vi</h3>
+<p><strong>Trong phạm vi v1:</strong> web SPA, Google OAuth nếu đủ thời gian, REST API, SignalR, MySQL, local AI, issue/sprint/board/report, hai AI, DataOps, CI/CD TEST và production-ready runbook.</p>
+<p><strong>Ngoài phạm vi v1:</strong> mobile native, billing, marketplace/plugin, pretrain LLM từ đầu, tự động sinh code, microservice hóa toàn hệ thống, tích hợp hàng loạt OAuth provider, tự động quyết định nhân sự không cần con người.</p>
+<h3 id="4-5-ieu-kien-thanh-cong">4.5 Điều kiện thành công</h3>
+<p>Sản phẩm chỉ được xem là hoàn thiện khi một người dùng có thể đăng nhập thật, tạo project, cấu hình hoặc dùng workflow mặc định, tạo backlog/issue, lập sprint, kéo issue qua board hợp lệ, nhận notification, chạy hai AI với feedback, xem report, và toàn bộ luồng vượt qua test trên TEST environment.</p>
+<h2 id="5-cac-phat-hien-chinh-tu-ma-nguon">5. Các phát hiện chính từ mã nguồn</h2>
+<h3 id="5-1-iem-manh-hien-tai">5.1 Điểm mạnh hiện tại</h3>
+<ul>
+<li><span class="evidence verified">VERIFIED</span> Solution <code>ProjectMgmt.slnx</code> có 13 project: Contracts/Core, 9 project thuộc ba module, Host và một test project.</li>
+<li><span class="evidence verified">VERIFIED</span> 55 entity/table configuration và 4 keyless view đã được phân vào ba DbContext; mỗi configuration tách file.</li>
+<li><span class="evidence verified">VERIFIED</span> Planning có API/service/repository thực cho Organization, Project, workflow transition và Board.</li>
+<li><span class="evidence verified">VERIFIED</span> Angular có route lazy, design system, responsive layout và nhiều màn hình nghiệp vụ.</li>
+<li><span class="evidence verified">VERIFIED</span> CI tách backend, frontend, container; CD TEST có artifact, IIS, health check, backup và rollback ứng dụng.</li>
+<li><span class="evidence verified">VERIFIED</span> Connection string không chứa secret trong Git; staging/prod dùng file cấu hình ngoài artifact.</li>
+</ul>
+<h3 id="5-2-khoang-trong-chan-phat-hanh">5.2 Khoảng trống chặn phát hành</h3>
+<div class="table-wrap"><table><thead><tr><th>Mức</th><th>Khoảng trống</th><th>Bằng chứng/ảnh hưởng</th></tr></thead><tbody><tr><td>P0</td><td>Authentication chưa được bật</td><td><code>Program.cs</code> có <code>AddAuthorization</code> nhưng không <code>AddAuthentication</code>; controller chưa có <code>[Authorize]</code></td></tr><tr><td>P0</td><td>Auth service/controller chưa hoàn chỉnh</td><td>Login thiếu <code>await</code>; register/OTP placeholder; verify chưa implement; frontend dùng <code>mock-jwt-token</code> và admin mặc định</td></tr><tr><td>P0</td><td>Frontend phần lớn dùng mock state</td><td><code>project-management.service.ts</code> không gọi HttpClient; identity service dùng dữ liệu in-memory</td></tr><tr><td>P0</td><td>Issue/Sprint/AI/Notification thiếu API end-to-end</td><td>Delivery Application gần như rỗng; không có Hub được map; route issue/DataOps là placeholder</td></tr><tr><td>P0</td><td>Frontend test job đang đỏ</td><td>22 test pass nhưng có 2 unhandled timer error tại <code>auth-page.ts:110</code></td></tr><tr><td>P1</td><td>Contract liên module thiếu</td><td>Hiện chỉ có Identity lookup/skill và Project lookup, chưa đủ contract đã thiết kế</td></tr><tr><td>P1</td><td>XMOD index cần review</td><td>Script read-only báo 32/64 cột XMOD không có index left-prefix độc lập</td></tr><tr><td>P1</td><td>CORS/Serilog chỉ có config</td><td><code>Program.cs</code> chưa gọi middleware/registration tương ứng</td></tr><tr><td>P1</td><td>Test backend quá mỏng</td><td>Chỉ 2 Result tests; chưa có integration/architecture/security tests</td></tr><tr><td>P1</td><td>Deploy không quản lý migration DB</td><td>Pipeline deploy app; chưa có validate/apply migration có kiểm soát hoặc DB rollback</td></tr><tr><td>P2</td><td>CODEOWNERS/contract docs/evaluation set chưa tồn tại</td><td>Các tệp mục tiêu trong prompt Sprint 1 chưa có trong repo hiện tại</td></tr></tbody></table></div>
+<h3 id="5-3-trang-thai-theo-vung-nghiep-vu">5.3 Trạng thái theo vùng nghiệp vụ</h3>
+<div class="table-wrap"><table><thead><tr><th>Vùng</th><th>Schema</th><th>Backend</th><th>Frontend</th><th>Mức sẵn sàng</th></tr></thead><tbody><tr><td>Identity/RBAC</td><td>Đủ nền tảng</td><td>Một phần, có lỗi/placeholder</td><td>UI phong phú nhưng mock</td><td>1/4</td></tr><tr><td>Project/Workflow/Board config</td><td>Đủ</td><td>Có API/service/repository chính</td><td>Có màn hình; service vẫn mock</td><td>2/4</td></tr><tr><td>Sprint/Backlog</td><td>Đủ</td><td>Chưa đủ service/controller</td><td>UI backlog/board có</td><td>1/4</td></tr><tr><td>Issue collaboration</td><td>Đủ</td><td>Application gần như trống</td><td>Issue detail placeholder</td><td>0.5/4</td></tr><tr><td>Notification/realtime</td><td>Có table</td><td>Chưa map Hub</td><td>UI/mock</td><td>0.5/4</td></tr><tr><td>AI Breakdown</td><td>Có 2 table + model/prompt</td><td>Chưa có orchestrator/worker</td><td>Component/UI định hướng</td><td>0.5/4</td></tr><tr><td>AI Assignment</td><td>Có 5 bảng + 1 view</td><td>Chưa có engine/API</td><td>Chưa có review flow đầy đủ</td><td>0.5/4</td></tr><tr><td>AI DataOps</td><td>Có 7 table</td><td>Chưa có pipeline</td><td>Placeholder</td><td>0.5/4</td></tr><tr><td>CI/CD</td><td>N/A</td><td>Build/test/deploy script</td><td>Build artifact</td><td>2.5/4</td></tr></tbody></table></div>
+<h2 id="6-kien-truc-muc-tieu-va-kien-truc-hien-tai">6. Kiến trúc mục tiêu và kiến trúc hiện tại</h2>
+<h3 id="6-1-so-o-ngu-canh">6.1 Sơ đồ ngữ cảnh</h3>
+<figure class="diagram"><figcaption>Flow — quan hệ thành phần</figcaption><div class="diagram-row"><span class="node">Admin / PM / SM / PO / Dev / Viewer</span><span class="arrow">→</span><span class="node">Angular SPA</span></div><div class="diagram-row"><span class="node">Angular SPA</span><span class="arrow">→</span><span class="node">ASP.NET Core Host</span><span class="edge-label">REST /api</span></div><div class="diagram-row"><span class="node">Angular SPA</span><span class="arrow">→</span><span class="node">ASP.NET Core Host</span><span class="edge-label">SignalR /hubs</span></div><div class="diagram-row"><span class="node">ASP.NET Core Host</span><span class="arrow">→</span><span class="node">IdentityExperience</span></div><div class="diagram-row"><span class="node">ASP.NET Core Host</span><span class="arrow">→</span><span class="node">Planning</span></div><div class="diagram-row"><span class="node">ASP.NET Core Host</span><span class="arrow">→</span><span class="node">DeliveryIntelligence</span></div><div class="diagram-row"><span class="node">IdentityExperience</span><span class="arrow">→</span><span class="node">MySQL projectmgmt</span></div><div class="diagram-row"><span class="node">Planning</span><span class="arrow">→</span><span class="node">MySQL projectmgmt</span></div><div class="diagram-row"><span class="node">DeliveryIntelligence</span><span class="arrow">→</span><span class="node">MySQL projectmgmt</span></div><div class="diagram-row"><span class="node">ASP.NET Core Host</span><span class="arrow">→</span><span class="node">Background jobs</span></div><div class="diagram-row"><span class="node">Background jobs</span><span class="arrow">→</span><span class="node">AI 1 Breakdown service</span></div><div class="diagram-row"><span class="node">Background jobs</span><span class="arrow">→</span><span class="node">AI 2 Assignment service</span></div><div class="diagram-row"><span class="node">AI 1 Breakdown service</span><span class="arrow">→</span><span class="node">Ollama / pinned model</span></div><div class="diagram-row"><span class="node">AI 1 Breakdown service</span><span class="arrow">→</span><span class="node">ASP.NET Core Host</span><span class="edge-label">structured result</span></div><div class="diagram-row"><span class="node">AI 2 Assignment service</span><span class="arrow">→</span><span class="node">ASP.NET Core Host</span><span class="edge-label">ranked candidates</span></div><div class="diagram-row"><span class="node">ASP.NET Core Host</span><span class="arrow">→</span><span class="node">Logs / metrics / traces</span></div><details><summary>Mermaid source</summary><pre><code>flowchart LR
+  U[Admin / PM / SM / PO / Dev / Viewer] --&gt; WEB[Angular SPA]
+  WEB --&gt;|REST /api| HOST[ASP.NET Core Host]
+  WEB &lt;--&gt;|SignalR /hubs| HOST
+  HOST --&gt; ID[IdentityExperience]
+  HOST --&gt; PL[Planning]
+  HOST --&gt; DI[DeliveryIntelligence]
+  ID --&gt; DB[(MySQL projectmgmt)]
+  PL --&gt; DB
+  DI --&gt; DB
+  HOST --&gt; Q[Background jobs]
+  Q --&gt; AI1[AI 1 Breakdown service]
+  Q --&gt; AI2[AI 2 Assignment service]
+  AI1 --&gt; OLLAMA[Ollama / pinned model]
+  AI1 -. structured result .-&gt; HOST
+  AI2 -. ranked candidates .-&gt; HOST
+  HOST --&gt; OBS[Logs / metrics / traces]</code></pre></details></figure>
+<h3 id="6-2-cau-truc-vat-ly-hien-tai">6.2 Cấu trúc vật lý hiện tại</h3>
+<pre><code class="language-text">ProjectMgmt/
+├─ ProjectMgmt.Contracts/
+├─ ProjectMgmt.Core/
+├─ ProjectMgmt.Modules.IdentityExperience/
+│  ├─ Domain/
+│  ├─ Application/
+│  └─ Infrastructure/
+├─ ProjectMgmt.Modules.Planning/
+│  ├─ Domain/
+│  ├─ Application/
+│  ├─ Infrastructure/
+│  └─ ProjectManagement/        # mã legacy được compile include, cần dọn dần
+├─ ProjectMgmt.Modules.DeliveryIntelligence/
+│  ├─ Domain/
+│  ├─ Application/
+│  └─ Infrastructure/
+├─ ProjectMgmt.Solution/        # composition root / API host
+├─ ProjectMgmt.Tests/
+├─ frontend/projectmgmt-web/
+├─ docs/
+├─ scripts/
+├─ .github/workflows/
+└─ docker-compose*.yml</code></pre>
+<h3 id="6-3-quy-tac-dependency">6.3 Quy tắc dependency</h3>
+<figure class="diagram"><figcaption>Flow — quan hệ thành phần</figcaption><div class="diagram-row"><span class="node">Host / Composition Root</span><span class="arrow">→</span><span class="node">Identity Application</span></div><div class="diagram-row"><span class="node">Host / Composition Root</span><span class="arrow">→</span><span class="node">Planning Application</span></div><div class="diagram-row"><span class="node">Host / Composition Root</span><span class="arrow">→</span><span class="node">Delivery Application</span></div><div class="diagram-row"><span class="node">Host / Composition Root</span><span class="arrow">→</span><span class="node">Identity Infrastructure</span></div><div class="diagram-row"><span class="node">Host / Composition Root</span><span class="arrow">→</span><span class="node">Planning Infrastructure</span></div><div class="diagram-row"><span class="node">Host / Composition Root</span><span class="arrow">→</span><span class="node">Delivery Infrastructure</span></div><div class="diagram-row"><span class="node">Identity Application</span><span class="arrow">→</span><span class="node">Identity Domain</span></div><div class="diagram-row"><span class="node">Planning Application</span><span class="arrow">→</span><span class="node">Planning Domain</span></div><div class="diagram-row"><span class="node">Delivery Application</span><span class="arrow">→</span><span class="node">Delivery Domain</span></div><div class="diagram-row"><span class="node">Identity Application</span><span class="arrow">→</span><span class="node">Contracts</span></div><div class="diagram-row"><span class="node">Planning Application</span><span class="arrow">→</span><span class="node">Contracts</span></div><div class="diagram-row"><span class="node">Delivery Application</span><span class="arrow">→</span><span class="node">Contracts</span></div><div class="diagram-row"><span class="node">Identity Infrastructure</span><span class="arrow">→</span><span class="node">Identity Application</span></div><div class="diagram-row"><span class="node">Identity Infrastructure</span><span class="arrow">→</span><span class="node">Identity Domain</span></div><div class="diagram-row"><span class="node">Planning Infrastructure</span><span class="arrow">→</span><span class="node">Planning Application</span></div><div class="diagram-row"><span class="node">Planning Infrastructure</span><span class="arrow">→</span><span class="node">Planning Domain</span></div><div class="diagram-row"><span class="node">Delivery Infrastructure</span><span class="arrow">→</span><span class="node">Delivery Application</span></div><div class="diagram-row"><span class="node">Delivery Infrastructure</span><span class="arrow">→</span><span class="node">Delivery Domain</span></div><div class="diagram-row"><span class="node">Contracts</span><span class="arrow">→</span><span class="node">Core abstractions</span></div><details><summary>Mermaid source</summary><pre><code>flowchart TD
+  HOST[Host / Composition Root] --&gt; IA[Identity Application]
+  HOST --&gt; PA[Planning Application]
+  HOST --&gt; DA[Delivery Application]
+  HOST --&gt; II[Identity Infrastructure]
+  HOST --&gt; PI[Planning Infrastructure]
+  HOST --&gt; DI[Delivery Infrastructure]
+  IA --&gt; ID[Identity Domain]
+  PA --&gt; PD[Planning Domain]
+  DA --&gt; DD[Delivery Domain]
+  IA --&gt; C[Contracts]
+  PA --&gt; C
+  DA --&gt; C
+  II --&gt; IA
+  II --&gt; ID
+  PI --&gt; PA
+  PI --&gt; PD
+  DI --&gt; DA
+  DI --&gt; DD
+  C --&gt; CORE[Core abstractions]</code></pre></details></figure>
+<ul>
+<li>Domain không reference Infrastructure hoặc Host.</li>
+<li>Application điều phối use case; không chứa HTTP hoặc EF-specific query nếu có thể tránh.</li>
+<li>Infrastructure cài repository, DbContext, adapter external.</li>
+<li>Host là nơi duy nhất ghép module, middleware và endpoint.</li>
+<li>Module không reference implementation của module khác.</li>
+<li>DTO contract không được chứa EF entity/navigation property.</li>
+</ul>
+<h3 id="6-4-modular-monolith-khong-phai-microservice-gia">6.4 Modular monolith, không phải microservice giả</h3>
+<p><span class="evidence recommendation">RECOMMENDATION</span> Giữ một process .NET và một DB để phù hợp nhóm ba người. Hai AI có thể là hai process Python/FastAPI độc lập vì vòng đời model, GPU và dependency khác .NET; chúng chỉ nhận DTO qua API/job và không đọc DB trực tiếp. Điều này giữ monolith nghiệp vụ nhưng tách runtime ML hợp lý.</p>
+<h3 id="6-5-current-va-target-runtime">6.5 Current và target runtime</h3>
+<div class="table-wrap"><table><thead><tr><th>Thành phần</th><th>Current</th><th>Target</th></tr></thead><tbody><tr><td>Host</td><td>REST, Swagger, health, static SPA</td><td>AuthN/AuthZ, ProblemDetails, CORS, rate limit, SignalR, job scheduler, telemetry</td></tr><tr><td>Module</td><td>3 DbContext, một phần service</td><td>Đủ use case, transaction boundary, outbox/event nội process khi cần</td></tr><tr><td>AI runtime</td><td>Chưa có</td><td>Hai service có <code>/health</code>, version, timeout, retry, schema validation</td></tr><tr><td>Realtime</td><td>Frontend client có skeleton</td><td>Hub theo user/project; reconnect, idempotency, authorization</td></tr><tr><td>Observability</td><td>Cấu hình rời rạc</td><td>Structured log + correlation ID + metrics/traces + alert</td></tr></tbody></table></div>
+<h2 id="7-phan-ranh-ba-module-va-trach-nhiem-ba-thanh-vien">7. Phân ranh ba module và trách nhiệm ba thành viên</h2>
+<h3 id="7-1-thanh-vien-a-tran-van-hoang-identityexperience">7.1 Thành viên A — Trần Văn Hoàng — IdentityExperience</h3>
+<p><strong>Vùng logic:</strong> M1 Identity &amp; Access, M6 AI Core phần prompt/model governance, M7 AI Breakdown, M10 Notification. <strong>Bảng hiện thuộc DbContext:</strong> 16 bảng — 11 Identity, 2 AiCore, 2 Breakdown, 1 Notification.</p>
+<p>Trách nhiệm chính:</p>
+<ul>
+<li>Register/login, password hash, normalized email, OTP, refresh rotation, Google external login.</li>
+<li>Scoped RBAC/ReBAC với <code>UserRole.ScopeType/ScopeId</code> và permission code.</li>
+<li>Profile/skill cung cấp contract cho Planning và Delivery.</li>
+<li>Notification persistence, unread, deep-link, SignalR theo user/project.</li>
+<li>AI Breakdown: request, prompt/model selection, worker, JSON validation, preview/edit/apply/reject và feedback export.</li>
+<li>Frontend: auth, profile, RBAC admin, notification, AI governance, shared breakdown.</li>
+</ul>
+<p>Không được làm:</p>
+<ul>
+<li>Ghi trực tiếp <code>Issue</code> hoặc <code>Project</code> bằng DbContext của module khác.</li>
+<li>Cho model tự tạo issue mà không gọi <code>IIssueService</code> và không có user apply.</li>
+<li>Đưa mật khẩu/OTP/token/prompt nhạy cảm vào log.</li>
+</ul>
+<h3 id="7-2-thanh-vien-b-nguyen-the-hoai-planning">7.2 Thành viên B — Nguyễn Thế Hoài — Planning</h3>
+<p><strong>Vùng logic:</strong> M2 Organization &amp; Project, M3 Workflow/Board, M4 Sprint &amp; Backlog, M8 AI Assignment. <strong>Bảng hiện thuộc DbContext:</strong> 18 bảng.</p>
+<p>Trách nhiệm chính:</p>
+<ul>
+<li>Organization/Project CRUD, ProjectKey, IssueCounter an toàn đồng thời.</li>
+<li>Workflow status/transition, issue type/priority, Board/Column/WIP.</li>
+<li>Sprint lifecycle, một sprint Active mỗi project, capacity, snapshot/report.</li>
+<li>Backlog planning qua contract của Delivery, không query <code>Issue</code> trực tiếp.</li>
+<li>AI Assignment: feature snapshot, candidate ranking, explanation, decision và outcome.</li>
+<li>Frontend: projects, settings, backlog, board, roadmap, reports, assignment review.</li>
+</ul>
+<p>Không được làm:</p>
+<ul>
+<li>Tính lại feature lịch sử khi huấn luyện; phải dùng <code>FeatureSnapshot</code> tại thời điểm đề xuất.</li>
+<li>Tự gán user mà bỏ qua quyền, capacity hoặc quyết định cuối của PM/SM.</li>
+<li>SQL join trực tiếp sang Identity/Issue tables.</li>
+</ul>
+<h3 id="7-3-thanh-vien-c-hoang-tran-huy-hoang-deliveryintelligence">7.3 Thành viên C — Hoàng Trần Huy Hoàng — DeliveryIntelligence</h3>
+<p><strong>Vùng logic:</strong> M5 Issue Tracking và M9 AI Dataset/Training. <strong>Bảng hiện thuộc DbContext:</strong> 21 bảng — 14 Issue và 7 DataOps; thêm 4 keyless reporting view.</p>
+<p>Trách nhiệm chính:</p>
+<ul>
+<li>Issue CRUD/hierarchy, issue number, RankOrder, transition validation qua contract.</li>
+<li>Link, watcher, comment, attachment, label, component/version/skill, AC.</li>
+<li>Status/assignment/activity history đầy đủ và audit-friendly.</li>
+<li>Dataset/version/sample, cleaning rule, quality flag, freeze/checksum/export.</li>
+<li>Training/evaluation metadata, PII redaction, dedup, reproducibility.</li>
+<li>Frontend: issue detail/timeline, DataOps, evaluation dashboard.</li>
+</ul>
+<p>Không được làm:</p>
+<ul>
+<li>Query User/Project DbContext để “tiện”; phải dùng lookup contract.</li>
+<li>Sửa sample đã freeze; mọi thay đổi phải tạo dataset version mới.</li>
+<li>Đưa raw production text chứa PII vào train set trước khi review/redaction.</li>
+</ul>
+<h3 id="7-4-ma-tran-raci-toi-thieu">7.4 Ma trận RACI tối thiểu</h3>
+<div class="table-wrap"><table><thead><tr><th>Công việc</th><th>A</th><th>B</th><th>C</th></tr></thead><tbody><tr><td>Auth/RBAC/Profile</td><td>A/R</td><td>C</td><td>C</td></tr><tr><td>Project/Workflow/Sprint/Board</td><td>C</td><td>A/R</td><td>C</td></tr><tr><td>Issue/Collaboration/History</td><td>C</td><td>C</td><td>A/R</td></tr><tr><td>AI Breakdown</td><td>A/R</td><td>C</td><td>C/Data feedback</td></tr><tr><td>AI Assignment</td><td>C/User features</td><td>A/R</td><td>C/Issue outcome</td></tr><tr><td>Dataset/Training/Evaluation</td><td>C</td><td>C</td><td>A/R</td></tr><tr><td>AiPromptTemplate logic</td><td>A/R</td><td>C</td><td>C</td></tr><tr><td>AiModel registry/migration</td><td>C</td><td>C</td><td>A/R</td></tr><tr><td>CI/CD TEST</td><td>R</td><td>R</td><td>R/test gate</td></tr><tr><td>Production approval</td><td>R/pipeline</td><td>R/DB</td><td>R/quality sign-off</td></tr></tbody></table></div>
+<p><code>A</code> = Accountable, <code>R</code> = Responsible, <code>C</code> = Consulted.</p>
+<h2 id="8-hop-ong-lien-module">8. Hợp đồng liên module</h2>
+<h3 id="8-1-hop-ong-hien-co">8.1 Hợp đồng hiện có</h3>
+<p><span class="evidence verified">VERIFIED</span> <code>ProjectMgmt.Contracts</code> hiện có các nhóm Identity, Planning và Result. Các năng lực cốt lõi quan sát được gồm lookup user/display, user skill/profile feature và project lookup. Đây là nền tốt nhưng chưa đủ cho luồng Sprint/Issue/AI.</p>
+<h3 id="8-2-bo-contract-can-hoan-thien">8.2 Bộ contract cần hoàn thiện</h3>
+<div class="table-wrap"><table><thead><tr><th>Provider</th><th>Contract</th><th>Consumer chính</th><th>Mục đích</th></tr></thead><tbody><tr><td>Identity</td><td><code>IUserLookupService</code></td><td>Planning, Delivery</td><td>Tồn tại, display info theo một/nhiều ID</td></tr><tr><td>Identity</td><td><code>IUserSkillService</code></td><td>AI Assignment</td><td>Skill và profile feature; không trả EF entity</td></tr><tr><td>Identity</td><td><code>ICurrentUserContext</code></td><td>Mọi module/Host</td><td><code>UserId</code>, <code>SecurityStamp</code>, trạng thái authenticated; không chứa token thô</td></tr><tr><td>Identity</td><td><code>IPermissionEvaluator</code></td><td>Policies/Module use case</td><td>Kiểm permission theo resource và System/Organization/Project scope</td></tr><tr><td>Identity</td><td><code>IRoleAssignmentService</code></td><td>Admin/Project membership</td><td>Grant/revoke role theo scope, audit actor và chống escalation</td></tr><tr><td>Identity/Notification</td><td><code>INotificationSender</code></td><td>Planning, Delivery, AI</td><td>Lưu + phát notification idempotent</td></tr><tr><td>Planning</td><td><code>IProjectLookupService</code></td><td>Delivery</td><td>ProjectKey, issue types, statuses, tồn tại</td></tr><tr><td>Planning</td><td><code>IWorkflowValidationService</code></td><td>Delivery</td><td>Initial status, transition, WIP và lý do từ chối</td></tr><tr><td>Planning</td><td><code>IIssueNumberGenerator</code></td><td>Delivery</td><td>Cấp số issue atomic theo project</td></tr><tr><td>Delivery</td><td><code>IIssueService</code></td><td>AI Breakdown</td><td>Tạo issue/sub-task qua use case hợp lệ</td></tr><tr><td>Delivery</td><td><code>IIssueReadService</code></td><td>Planning/AI</td><td>Đọc issue, sprint, assignee và history dạng DTO</td></tr><tr><td>Delivery</td><td><code>IIssueSprintService</code></td><td>Planning</td><td>Move to sprint/return backlog</td></tr><tr><td>Delivery</td><td><code>IIssueSkillService</code></td><td>AI Assignment</td><td>Required skill của issue</td></tr><tr><td>AI Breakdown</td><td><code>IAiBreakdownFeedbackExportService</code></td><td>DataOps</td><td>Raw output + user edit + action</td></tr><tr><td>AI Assignment</td><td><code>IAiAssignmentFeedbackExportService</code></td><td>DataOps</td><td>Candidate snapshot + decision + outcome</td></tr></tbody></table></div>
+<h3 id="8-3-chuan-contract">8.3 Chuẩn contract</h3>
+<ul>
+<li>Mọi method async nhận <code>CancellationToken</code>.</li>
+<li>Trả <code>Result&lt;T&gt;</code> cho lỗi nghiệp vụ dự đoán được; exception cho lỗi bất thường.</li>
+<li>DTO bất biến hoặc record, field có meaning/unit rõ.</li>
+<li>Không expose IQueryable, DbContext, navigation hoặc lazy-loading proxy.</li>
+<li>Method mới được phép add backward-compatible; rename/remove phải cập nhật changelog và đồng thuận nhóm.</li>
+<li>Consumer test bằng fake/deterministic stub; provider có contract/integration test.</li>
+<li>Correlation ID đi qua REST, job, AI service và notification.</li>
+</ul>
+<p><span class="evidence recommendation">RECOMMENDATION</span> Chuẩn hóa lỗi nghiệp vụ về <code>ProjectMgmt.Contracts.Results.Result&lt;T&gt;</code>. Auth hiện còn kiểu <code>IdentityExperience.Application.Dto.Result/ResultLogin</code>; trong giai đoạn chuyển đổi, controller map kiểu cũ sang Result/ProblemDetails chuẩn, sau đó xóa duplicate chỉ khi toàn bộ caller và test đã chuyển. Không đổi đồng loạt mà thiếu characterization test.</p>
+<h3 id="8-4-mau-contract-goi-y">8.4 Mẫu contract gợi ý</h3>
+<pre><code class="language-csharp">public interface IWorkflowValidationService
+{
+    Task&lt;Result&lt;TransitionDecisionDto&gt;&gt; CanTransitionAsync(
+        Guid projectId,
+        Guid issueId,
+        Guid fromStatusId,
+        Guid toStatusId,
+        IReadOnlySet&lt;string&gt; permissionCodes,
+        CancellationToken cancellationToken = default);
+}
+
+public sealed record TransitionDecisionDto(
+    bool Allowed,
+    string? ReasonCode,
+    string? Message,
+    int? CurrentWip,
+    int? WipLimit);</code></pre>
+<h2 id="9-kien-truc-du-lieu-mysql-55-bang">9. Kiến trúc dữ liệu MySQL 55 bảng</h2>
+<h3 id="9-1-danh-muc-theo-module-logic-va-module-vat-ly">9.1 Danh mục theo module logic và module vật lý</h3>
+<div class="table-wrap"><table><thead><tr><th>Module logic</th><th>Owner</th><th>Module vật lý</th><th>Bảng</th></tr></thead><tbody><tr><td>M1 Identity &amp; Access</td><td>A</td><td>IdentityExperience</td><td><code>User</code>, <code>UserProfile</code>, <code>ExternalLogin</code>, <code>OtpCode</code>, <code>RefreshToken</code>, <code>Role</code>, <code>Permission</code>, <code>RolePermission</code>, <code>UserRole</code>, <code>SkillCatalog</code>, <code>UserSkill</code></td></tr><tr><td>M2 Organization &amp; Project</td><td>B</td><td>Planning</td><td><code>Organization</code>, <code>Project</code>, <code>ProjectComponent</code>, <code>ProjectVersion</code></td></tr><tr><td>M3 Workflow &amp; Board</td><td>B</td><td>Planning</td><td><code>WorkflowStatus</code>, <code>WorkflowTransition</code>, <code>IssueType</code>, <code>Priority</code>, <code>Board</code>, <code>BoardColumn</code></td></tr><tr><td>M4 Sprint &amp; Backlog</td><td>B</td><td>Planning</td><td><code>Sprint</code>, <code>SprintSnapshot</code>, <code>SprintMemberCapacity</code></td></tr><tr><td>M5 Issue Tracking</td><td>C</td><td>DeliveryIntelligence</td><td><code>Issue</code>, <code>IssueLink</code>, <code>IssueWatcher</code>, <code>Comment</code>, <code>Attachment</code>, <code>ActivityLog</code>, <code>IssueStatusHistory</code>, <code>IssueAssignmentHistory</code>, <code>Label</code>, <code>IssueLabel</code>, <code>IssueComponentLink</code>, <code>IssueVersionLink</code>, <code>IssueRequiredSkill</code>, <code>AcceptanceCriteria</code></td></tr><tr><td>M6 AI Core</td><td>A/C</td><td>IdentityExperience hiện tại</td><td><code>AiModel</code>, <code>AiPromptTemplate</code></td></tr><tr><td>M7 AI Breakdown</td><td>A</td><td>IdentityExperience</td><td><code>AiGenerationLog</code>, <code>AiSuggestedTask</code></td></tr><tr><td>M8 AI Assignment</td><td>B</td><td>Planning</td><td><code>UserWorkloadSnapshot</code>, <code>UserPerformanceMetric</code>, <code>AiAssignmentRun</code>, <code>AiAssignmentCandidate</code>, <code>AiAssignmentDecision</code></td></tr><tr><td>M9 AI DataOps</td><td>C</td><td>DeliveryIntelligence</td><td><code>AiDataset</code>, <code>AiDatasetVersion</code>, <code>AiDatasetSample</code>, <code>AiDataCleaningRule</code>, <code>AiDataQualityFlag</code>, <code>AiTrainingRun</code>, <code>AiEvaluationResult</code></td></tr><tr><td>M10 Notification</td><td>A</td><td>IdentityExperience</td><td><code>Notification</code></td></tr></tbody></table></div>
+<p>Tổng vật lý: IdentityExperience 16, Planning 18, DeliveryIntelligence 21 = <strong>55 bảng</strong>.</p>
+<h3 id="9-2-view-va-trigger">9.2 View và trigger</h3>
+<div class="table-wrap"><table><thead><tr><th>Loại</th><th>Tên</th><th>Ý nghĩa</th></tr></thead><tbody><tr><td>View</td><td><code>vw_UserActiveWorkload</code></td><td>Workload đang mở theo user; read-model ngoại lệ join xuyên module</td></tr><tr><td>View</td><td><code>vw_SprintVelocity</code></td><td>Velocity/current sprint scope; cần snapshot lúc Start nếu muốn “commitment” lịch sử</td></tr><tr><td>View</td><td><code>vw_AiBreakdownQuality</code></td><td>Keep/edit/reject; <code>AvgLatencyMs</code> hiện có thể bị weight theo số suggested task, cần sửa trước khi dùng làm SLO</td></tr><tr><td>View</td><td><code>vw_AiAssignmentAccuracy</code></td><td>Mức chấp nhận/override và outcome assignment</td></tr><tr><td>Trigger</td><td><code>TRG_Issue_NoSelfParent_Insert</code></td><td>Không cho issue tự làm parent khi insert</td></tr><tr><td>Trigger</td><td><code>TRG_Issue_NoSelfParent_Update</code></td><td>Không cho issue tự làm parent khi update</td></tr></tbody></table></div>
+<h3 id="9-3-rang-buoc-quan-trong">9.3 Ràng buộc quan trọng</h3>
+<ul>
+<li><code>Project(OrgId, ProjectKey)</code> unique; ProjectKey theo regex chữ hoa/số.</li>
+<li><code>Issue(ProjectId, IssueNumber)</code> unique; cấp số phải atomic.</li>
+<li><code>Sprint.ActiveGuard</code> generated + unique bảo đảm một Active sprint/project ngay cả khi concurrent.</li>
+<li><code>UserRole.ScopeKey</code> xử lý uniqueness khi <code>ScopeId</code> null ở System scope.</li>
+<li>Workflow transition unique, không self-transition; status/category có check.</li>
+<li><code>AiDatasetSample(DatasetVersionId, ContentHash)</code> chặn trùng; schema có field freeze/checksum/seed nhưng <strong>chưa có trigger/constraint</strong> ngăn sửa sample sau freeze hoặc buộc <code>Approved =&gt; IsPiiRedacted=1</code>. Application service và integration test phải cưỡng chế, hoặc bổ sung DB guard được review.</li>
+<li><code>AiAssignmentCandidate.FeatureSnapshot</code> lưu dữ liệu tại thời điểm gợi ý. Nó chỉ chống leakage khi payload có <code>asOf</code>, <code>featureSchemaVersion</code>, mọi metric dùng cutoff <code>&lt;= asOf</code>, và training chỉ đọc snapshot bất biến; bản thân cột JSON không tự bảo đảm điều đó.</li>
+<li>Decision lưu suggested, final, override reason và outcome sau hoàn thành.</li>
+</ul>
+<h3 id="9-4-quy-tac-xmod">9.4 Quy tắc XMOD</h3>
+<p><code>XMOD</code> là GUID tham chiếu logic sang module khác: có index, không FK vật lý, được validate qua contract. Ví dụ <code>Issue.ProjectId</code>, <code>Issue.AssigneeId</code>, <code>Sprint.ProjectId</code>, <code>Notification.UserId</code>.</p>
+<p><span class="evidence verified">VERIFIED</span> Script <code>scripts/validate-xmod-indexes.ps1</code> đọc DDL hiện tại và báo 64 cột XMOD, trong đó 32 cột chưa là cột đầu của một index sử dụng được. Danh sách cần review:</p>
+<pre><code class="language-text">UserRole.ScopeId
+ProjectComponent.LeadUserId, ProjectComponent.DefaultSkillId
+SprintMemberCapacity.UserId
+Issue.StatusId, Issue.IssueTypeId, Issue.PriorityId
+IssueLink.CreatedBy, Attachment.UploadedBy
+IssueStatusHistory.FromStatusId, ToStatusId, ChangedBy
+IssueAssignmentHistory.FromAssigneeId, AssignedBy, AiCandidateId
+AcceptanceCriteria.MetBy, AcceptanceCriteria.AiGenerationLogId
+AiModel.TrainingRunId, AiPromptTemplate.CreatedBy
+AiSuggestedTask.ReviewedBy
+AiAssignmentRun.SprintId, AiAssignmentRun.RequestedBy
+AiAssignmentCandidate.CandidateUserId
+AiAssignmentDecision.SuggestedUserId, FinalUserId, DecidedBy
+AiDataset.CreatedBy, AiDatasetSample.SourceRefId, ReviewedBy
+AiDataQualityFlag.ResolvedBy, AiTrainingRun.CreatedBy
+Notification.ActorId</code></pre>
+<p><span class="evidence recommendation">RECOMMENDATION</span> Không thêm máy móc 32 index. Với từng cột, viết query pattern, dùng <code>EXPLAIN</code>, kiểm cardinality/write cost, rồi thêm index left-prefix khi truy vấn độc lập thực sự cần. Tuy nhiên rule tài liệu đang nói “mọi XMOD có index”; hoặc DDL phải đáp ứng, hoặc rule phải được sửa rõ thành “có index phù hợp với query pattern”.</p>
+<p>Luôn truyền DDL trong repo vì default hiện tại của script có thể tìm nhầm bản <code>projectmgmt_schema_mysql.sql</code> ngoài repo và cho kết quả khác:</p>
+<pre><code class="language-powershell">&amp; .\scripts\validate-xmod-indexes.ps1 `
+  -DdlPath .\docs\projectmgmt_schema_mysql_optimized.sql</code></pre>
+<p>Các contract validate XMOD hiện còn thiếu một phần; câu “validate qua contract” là kiến trúc đích, không phải bảo đảm đầy đủ của source hiện tại.</p>
+<h3 id="9-5-dbcontext-va-migration">9.5 DbContext và migration</h3>
+<div class="table-wrap"><table><thead><tr><th>DbContext</th><th>Migration history hiện tại</th><th>Sở hữu</th></tr></thead><tbody><tr><td><code>IdentityExperienceDbContext</code></td><td><code>__EFMigrationsHistory_IdentityExperience</code></td><td>16 bảng</td></tr><tr><td><code>PlanningDbContext</code></td><td><code>__EFMigrationsHistory_Planning</code></td><td>18 bảng</td></tr><tr><td><code>DeliveryIntelligenceDbContext</code></td><td><code>__EFMigrationsHistory_DeliveryIntelligence</code></td><td>21 bảng + 4 view</td></tr></tbody></table></div>
+<ul>
+<li>Không gọi <code>EnsureCreated</code>, <code>EnsureDeleted</code> hoặc tự <code>Migrate()</code> khi app start.</li>
+<li>Một migration chỉ sửa bảng thuộc context đó.</li>
+<li>Trước merge: generate SQL idempotent, review DDL, backup/restore rehearsal trên TEST.</li>
+<li>Production: backup → maintenance/readiness gate → migration được duyệt → smoke → rollback app; thay đổi DB phá hủy phải có forward-fix/restore plan riêng.</li>
+</ul>
+<h3 id="9-6-an-toan-ddl-va-docker">9.6 An toàn DDL và Docker</h3>
+<p><span class="evidence verified">VERIFIED</span> DDL tối ưu hiện có <code>DROP DATABASE IF EXISTS projectmgmt</code>. <code>docker-compose.yml</code> mount nó vào <code>/docker-entrypoint-initdb.d</code> cho MySQL container riêng. Script init chỉ nên dùng với <strong>volume Docker mới và cô lập</strong>; tuyệt đối không chạy file này thủ công trên instance MySQL đang có dữ liệu. <code>docker compose down -v</code> sẽ xóa volume local và phải được xem là thao tác phá hủy.</p>
+<h2 id="10-backend-va-api">10. Backend và API</h2>
+<h3 id="10-1-nen-tang-ky-thuat">10.1 Nền tảng kỹ thuật</h3>
+<ul>
+<li>Target framework: <code>net10.0</code>.</li>
+<li>ASP.NET Core Controllers, Swagger/OpenAPI, ProblemDetails định hướng.</li>
+<li>EF Core + Pomelo MySQL; server version mặc định <code>8.0.46</code>.</li>
+<li>FluentValidation packages có trong Application projects.</li>
+<li><code>Result</code>/<code>Result&lt;T&gt;</code> và Error trong Contracts/Core.</li>
+<li>BCrypt package đã có nhưng auth use case chưa hoàn thiện.</li>
+</ul>
+<h3 id="10-2-api-hien-co">10.2 API hiện có</h3>
+<p><span class="evidence verified">VERIFIED</span> Host có khoảng 25 controller actions và 2 health endpoints:</p>
+<div class="table-wrap"><table><thead><tr><th>Nhóm</th><th>Endpoint chính</th><th>Trạng thái</th></tr></thead><tbody><tr><td>Account</td><td><code>POST /api/Account/Login</code>, <code>Register</code>, <code>PostOtp</code></td><td>Có controller nhưng chưa production-ready</td></tr><tr><td>Users</td><td><code>GET /api/users</code>, display, skills query</td><td>Dữ liệu/service còn giả lập</td></tr><tr><td>Organizations</td><td><code>GET/POST /api/organizations</code></td><td>Có implementation</td></tr><tr><td>Projects</td><td>list/get/create/update/delete</td><td>Có implementation chính</td></tr><tr><td>Project config</td><td>issue-types, statuses, workflow transitions, boards</td><td>Có implementation chính</td></tr><tr><td>Workflow</td><td>update/delete transition</td><td>Có implementation</td></tr><tr><td>Boards</td><td>columns list/add/reorder/delete</td><td>Có implementation</td></tr><tr><td>Health</td><td><code>/health</code>, <code>/health/live</code></td><td>Có</td></tr></tbody></table></div>
+<h3 id="10-3-chuan-endpoint-muc-tieu">10.3 Chuẩn endpoint mục tiêu</h3>
+<ul>
+<li>URL danh từ số nhiều, status code đúng, lỗi theo RFC ProblemDetails.</li>
+<li>Input từ body cho command phức tạp; không truyền credential qua query string.</li>
+<li>Validation trả field errors; conflict trả 409; permission trả 403; chưa đăng nhập trả 401.</li>
+<li>Pagination cursor/page cho issue, activity, notification, dataset sample.</li>
+<li>ETag/concurrency token hoặc optimistic concurrency cho board/order/config dễ xung đột.</li>
+<li>Idempotency key cho request AI và command có thể retry.</li>
+<li>Mọi endpoint thay đổi dữ liệu ghi actor, UTC timestamp, correlation ID.</li>
+</ul>
+<h3 id="10-4-backlog-api-bat-buoc">10.4 Backlog API bắt buộc</h3>
+<div class="table-wrap"><table><thead><tr><th>Vùng</th><th>API cần có trước v1</th></tr></thead><tbody><tr><td>Auth</td><td>register, login, refresh, revoke/logout, OTP request/verify, current user; external callback là stretch</td></tr><tr><td>RBAC</td><td>role/permission query, assign/revoke scoped role, permission evaluation</td></tr><tr><td>Profile</td><td>get/update profile, skill CRUD/verify</td></tr><tr><td>Project</td><td>component/version/member/config CRUD</td></tr><tr><td>Sprint</td><td>create/update/start/complete, capacity, move issues, snapshots</td></tr><tr><td>Issue</td><td>CRUD, hierarchy, transition, rank, assignee, comment, attachment, watcher, label, AC, history</td></tr><tr><td>Notification</td><td>inbox, unread count, mark read/all read, SignalR hub</td></tr><tr><td>AI 1</td><td>request/status/result/apply/reject; prompt/model version visible</td></tr><tr><td>AI 2</td><td>request/status/candidates/decision/outcome; explanation visible</td></tr><tr><td>DataOps</td><td>dataset/version/sample/rule/flag/freeze/export/train/evaluate</td></tr><tr><td>Report</td><td>workload, velocity, burndown, AI quality/accuracy</td></tr></tbody></table></div>
+<p>Google external login là <strong>stretch scope</strong> của v1: chỉ đưa <code>external callback</code> vào release gate nếu auth email/password, refresh rotation và scoped authorization đã ổn định. Nó không chặn vertical slice P0.</p>
+<h3 id="10-5-transaction-va-consistency">10.5 Transaction và consistency</h3>
+<ul>
+<li>Tạo Project + default config là một transaction trong Planning. <code>Project.LeadUserId</code> cấp quyền owner ngầm qua policy/lookup ở v1; không grant <code>UserRole</code> xuyên module trong cùng command để tránh trạng thái “project đã commit nhưng role grant thất bại”. Việc gán thêm member/role là command Identity riêng, retry/idempotent và có audit.</li>
+<li>Cấp IssueNumber phải dùng atomic update/lock trong Planning rồi Delivery tạo Issue; thiết kế retry khi xung đột.</li>
+<li>Transition Issue: Delivery đọc current state → gọi workflow validator → cập nhật Issue/history trong một transaction → phát notification sau commit.</li>
+<li>AI apply: chỉ tạo sub-task qua <code>IIssueService</code>; generation log và apply count phải nhất quán/idempotent.</li>
+<li>Cross-module event có thể dispatch in-process sau commit. Nếu cần retry bền vững, thêm outbox nhỏ theo module; không cần triển khai event sourcing.</li>
+</ul>
+<h3 id="10-6-vertical-slice-p0-chinh-thuc-auth-that-en-project-that">10.6 Vertical slice P0 chính thức — Auth thật đến Project thật</h3>
+<p>Đây là slice đầu tiên cả nhóm dùng làm mẫu. Owner chính: <strong>A</strong> cho Auth, <strong>B</strong> cho Project, <strong>C</strong> review contract/integration test. Không đưa Google OAuth, SignalR hoặc AI vào PR này.</p>
+<h4 id="api-contract-v1">API contract v1</h4>
+<div class="table-wrap"><table><thead><tr><th>Method/path</th><th>Request</th><th>Success</th><th>Lỗi chính</th></tr></thead><tbody><tr><td><code>POST /api/auth/login</code></td><td><code>{ email, password }</code></td><td>200 <code>{ accessToken, expiresAt, user }</code>; refresh token được set bằng cookie HttpOnly</td><td>400 validation; 401 generic invalid credentials; 429 rate limit</td></tr><tr><td><code>POST /api/auth/refresh</code></td><td>Không body; refresh cookie</td><td>200 access token mới + rotate refresh cookie</td><td>401 expired/revoked/reuse; reuse revoke cả token family</td></tr><tr><td><code>POST /api/auth/logout</code></td><td>Không body</td><td>204, revoke refresh token/family hiện tại</td><td>401 nếu session không hợp lệ</td></tr><tr><td><code>GET /api/auth/me</code></td><td>Bearer access token</td><td>200 user/profile/scope summary tối thiểu</td><td>401 token invalid/stamp stale</td></tr><tr><td><code>GET /api/projects</code></td><td>Bearer token</td><td>200 danh sách project caller được xem</td><td>401/403</td></tr><tr><td><code>POST /api/projects</code></td><td><code>{ orgId, projectKey, name, description?, leadUserId }</code></td><td>201 + <code>Location</code> + Project DTO; default config được seed atomic</td><td>400; 403 <code>project.create</code>; 409 duplicate key</td></tr></tbody></table></div>
+<p>Quyết định token v1:</p>
+<ul>
+<li>Access JWT TTL 10 phút, issuer/audience từ config, ký HS256 bằng key ngẫu nhiên tối thiểu 256 bit nằm ngoài Git; hỗ trợ current+previous key khi rotate.</li>
+<li>Claims tối thiểu: <code>sub</code>, <code>jti</code>, <code>security_stamp</code>, <code>iat</code>, <code>exp</code>; không nhồi toàn bộ permission dài hạn vào token.</li>
+<li>Access token giữ trong memory của SPA. Refresh token ngẫu nhiên chỉ nằm trong cookie <code>HttpOnly</code>, <code>Secure</code> trên TEST/PROD, <code>SameSite=Strict</code>, path <code>/api/auth</code>; lưu hash + family + expiry trong DB.</li>
+<li>Production phục vụ SPA/API cùng site. Nếu sau này tách cross-site, phải bổ sung CSRF token và CORS credentials có allowlist; không đổi <code>SameSite=None</code> một cách đơn lẻ.</li>
+<li>Absolute refresh lifetime 14 ngày, rotate mỗi lần dùng; reuse/revocation/security stamp change làm session mất hiệu lực.</li>
+</ul>
+<h4 id="file-bat-au-va-chien-luoc-tuong-thich">File bắt đầu và chiến lược tương thích</h4>
+<div class="table-wrap"><table><thead><tr><th>Owner</th><th>Điểm chạm</th></tr></thead><tbody><tr><td>A</td><td><code>ProjectMgmt.Solution/Program.cs</code>, Account/Auth controller, <code>IdentityExperience.Application</code> account service/DTO, Identity repository, frontend auth/token store/interceptor</td></tr><tr><td>B</td><td>Projects controller, <code>Planning</code> project service/repository/DTO, frontend project service/pages</td></tr><tr><td>Shared</td><td><code>ProjectMgmt.Contracts/Identity</code>, <code>ProjectMgmt.Contracts/Planning</code>, Result/ProblemDetails mapping, integration test fixture</td></tr></tbody></table></div>
+<p>Endpoint cũ <code>/api/Account/*</code> được giữ tạm tối đa một sprint với deprecation note hoặc chuyển thẳng nếu chưa có consumer thật; không duy trì hai implementation auth. Project API hiện có được giữ URL, bổ sung authorization và contract tests.</p>
+<h4 id="acceptance-criteria">Acceptance Criteria</h4>
+<ol>
+<li>User hợp lệ login được; sai email/password luôn trả thông báo generic; không log credential/token.</li>
+<li>Refresh rotate thành công; token cũ reuse làm revoke family; logout làm refresh không dùng lại được.</li>
+<li><code>/api/auth/me</code> và Project endpoints trả 401 khi thiếu/sai token; Project create trả 403 nếu sai scope.</li>
+<li>Create Project tạo default workflow/board trong một transaction và không tạo bản ghi dở khi seed lỗi.</li>
+<li>Angular không còn admin mặc định, <code>mock-jwt-token</code> hoặc OTP hard-code trên luồng này; reload dùng refresh cookie.</li>
+<li>Backend unit + integration, frontend service/component và một E2E smoke pass; Swagger mô tả request/response/error.</li>
+<li>Không sửa DB thật bằng <code>EnsureCreated/Migrate</code> lúc app start; test dùng database cô lập.</li>
+</ol>
+<h2 id="11-frontend-angular">11. Frontend Angular</h2>
+<h3 id="11-1-stack-va-cau-truc">11.1 Stack và cấu trúc</h3>
+<ul>
+<li>Angular 21 standalone components, Router, Signals, RxJS 7.8.</li>
+<li>SignalR client 10, Angular CDK, GSAP 3.15 và Three.js 0.186.</li>
+<li>Environment development: API <code>http://localhost:5083/api</code>, hub cùng host.</li>
+<li>Lazy routes cho auth, dashboard, profile, RBAC, AI governance, project settings, backlog, board, task list, roadmap, reports, issue detail, notification, DataOps.</li>
+</ul>
+<h3 id="11-2-route-inventory-va-integration-target">11.2 Route inventory và integration target</h3>
+<div class="table-wrap"><table><thead><tr><th>Route</th><th>UI hiện tại</th><th>API/contract cần nối</th></tr></thead><tbody><tr><td><code>/auth</code></td><td>Màn hình hoàn chỉnh về giao diện</td><td>Auth/OTP/refresh; bỏ mã OTP <code>123456</code> và mock token</td></tr><tr><td><code>/for-you</code></td><td>Dashboard</td><td>My issues, notification, sprint/project summary</td></tr><tr><td><code>/project/summary</code>, <code>/project/members</code></td><td>Có UI</td><td>Project/member/scoped role API</td></tr><tr><td><code>/profile</code></td><td>Có UI mock</td><td>Current user/profile/skill API</td></tr><tr><td><code>/admin/identity</code></td><td>Có UI mock</td><td>Role/permission/scoped assignment API</td></tr><tr><td><code>/admin/ai-governance</code></td><td>Có UI</td><td>Model/prompt version/activation/audit API</td></tr><tr><td><code>/projects*</code></td><td>Có UI</td><td>Project CRUD/settings API thật</td></tr><tr><td><code>/backlog</code></td><td>Có UI phong phú</td><td>Issue/Sprint/read/move/rank API</td></tr><tr><td><code>/board</code></td><td>Có UI phong phú</td><td>Issue query/transition/WIP/SignalR</td></tr><tr><td><code>/task-list</code>, <code>/roadmap</code>, <code>/reports</code></td><td>Có UI</td><td>Query/report API thật</td></tr><tr><td><code>/issues/:id</code></td><td>Placeholder</td><td>Issue detail/collaboration/history</td></tr><tr><td><code>/notifications</code></td><td>Có UI mock</td><td>Inbox/read/SignalR</td></tr><tr><td><code>/ai-dataops</code></td><td>Placeholder</td><td>Dataset/training/evaluation API</td></tr></tbody></table></div>
+<h3 id="11-3-khoang-trong-tich-hop">11.3 Khoảng trống tích hợp</h3>
+<p><span class="evidence verified">VERIFIED</span> <code>project-management.service.ts</code> dùng Signals và <code>of(...)</code>, chưa gọi HttpClient dù có import. <code>identity.service.ts</code> lưu admin mặc định, mock token và OTP cố định. Routes chưa gắn auth/permission guard. Realtime service có client connection nhưng backend chưa map hub.</p>
+<p><span class="evidence recommendation">RECOMMENDATION</span> Không rewrite UI. Thay service mock theo từng vertical slice:</p>
+<ol>
+<li>Định nghĩa API DTO và adapter mapping sang view model.</li>
+<li>Giữ signal store hiện có, thay nguồn dữ liệu bằng HttpClient.</li>
+<li>Thêm loading/error/empty/retry state.</li>
+<li>Thêm auth interceptor và refresh single-flight.</li>
+<li>Gắn <code>CanMatch</code>/guard theo permission sau khi Auth thật pass.</li>
+<li>Kết nối SignalR sau khi REST baseline ổn định; event chỉ invalidates/refetch hoặc patch idempotent.</li>
+</ol>
+<h3 id="11-4-chuan-ux-bat-buoc">11.4 Chuẩn UX bắt buộc</h3>
+<ul>
+<li>Keyboard/focus/ARIA cho dialog, menu, drag-and-drop và board.</li>
+<li><code>prefers-reduced-motion</code> cho GSAP/Three.js; scene trang trí không được chặn nghiệp vụ.</li>
+<li>Responsive ở 390 px, tablet và desktop; không giấu command quan trọng.</li>
+<li>Mọi AI output phải hiển thị trạng thái, model/prompt version, warning và hành động người dùng.</li>
+<li>Không optimistic update cho transition/assignment nếu server chưa xác nhận business rule.</li>
+</ul>
+<h2 id="12-hai-he-ai-va-vong-oi-du-lieu">12. Hai hệ AI và vòng đời dữ liệu</h2>
+<h3 id="12-1-phan-biet-chinh-xac-hai-ai">12.1 Phân biệt chính xác hai AI</h3>
+<div class="table-wrap"><table><thead><tr><th>Thuộc tính</th><th>AI 1 — Requirement Intelligence / Breakdown</th><th>AI 2 — Planning Intelligence / Assignment</th></tr></thead><tbody><tr><td>Câu hỏi</td><td>“Yêu cầu này cần những task và AC nào?”</td><td>“Ai phù hợp nhất để làm issue này và vì sao?”</td></tr><tr><td>Input</td><td>title, description, issue type, project context, constraint</td><td>issue feature, required skills, candidate profile, load, capacity, history</td></tr><tr><td>Output</td><td>JSON danh sách sub-task + mô tả + AC + skill/estimate gợi ý</td><td>danh sách candidate đã rank + component score + explanation</td></tr><tr><td>Kỹ thuật đầu tiên</td><td>Prompt + JSON Schema + local instruct LLM; RAG chỉ thêm sau khi có corpus/isolation/evaluation</td><td>Deterministic weighted ranker + constraint filter</td></tr><tr><td>Kỹ thuật nâng cấp</td><td>Project-scoped RAG, QLoRA/fine-tune, constrained decoding, embedding dedup</td><td>Learning-to-rank/GBDT, OR-Tools/NSGA-II, calibrated estimator</td></tr><tr><td>Người quyết định</td><td>PO/Tech Lead/PM review rồi Apply</td><td>PM/SM accept/override/reject</td></tr><tr><td>Dữ liệu phản hồi</td><td>raw output, edited output, keep/edit/reject</td><td>features tại thời điểm chạy, rank, final user, outcome</td></tr><tr><td>Owner</td><td>A; C quản trị dataset/model</td><td>B; C quản trị dataset/model</td></tr></tbody></table></div>
+<p>Story Point estimation và predictive late-risk có thể là submodel của <strong>Planning Intelligence</strong> ở giai đoạn sau. Process mining là năng lực phân tích quy trình, không nên xuất hiện như “AI thứ ba” đối với người dùng v1.</p>
+<h3 id="12-2-kien-truc-runtime-e-xuat">12.2 Kiến trúc runtime đề xuất</h3>
+<pre><code class="language-text">ai-services/
+├─ requirement-intelligence/
+│  ├─ app/                 # FastAPI, schema, prompt/RAG, health
+│  ├─ evaluation/
+│  ├─ training/            # notebook/script QLoRA, không chạy trong API
+│  └─ tests/
+└─ planning-intelligence/
+   ├─ app/                 # ranker/optimizer API, health
+   ├─ evaluation/
+   ├─ training/
+   └─ tests/</code></pre>
+<p>Hai service:</p>
+<ul>
+<li>Là peer với source .NET, không đặt trong Domain/Application.</li>
+<li>Không có quyền truy cập MySQL; .NET gửi DTO tối thiểu.</li>
+<li>Có model/version endpoint, health/readiness, timeout và request ID.</li>
+<li>Image/container/model artifact được pin version; không tự kéo “latest” khi deploy.</li>
+<li>Có contract test JSON giữa .NET và Python.</li>
+</ul>
+<h3 id="12-3-luong-ai-1-breakdown">12.3 Luồng AI 1 — Breakdown</h3>
+<figure class="diagram"><figcaption>Sequence — luồng tương tác</figcaption><div class="diagram-row sequence-row"><span class="step">1</span><span class="node">PO/PM/Tech Lead</span><span class="arrow">→</span><span class="node">.NET API</span><span class="edge-label">Request breakdown(issueId, options)</span></div><div class="diagram-row sequence-row"><span class="step">2</span><span class="node">.NET API</span><span class="arrow">→</span><span class="node">MySQL</span><span class="edge-label">AiGenerationLog = Pending</span></div><div class="diagram-row sequence-row"><span class="step">3</span><span class="node">.NET API</span><span class="arrow">→</span><span class="node">PO/PM/Tech Lead</span><span class="edge-label">202 + generationId</span></div><div class="diagram-row sequence-row"><span class="step">4</span><span class="node">Background Worker</span><span class="arrow">→</span><span class="node">MySQL</span><span class="edge-label">Pending -&gt; Processing</span></div><div class="diagram-row sequence-row"><span class="step">5</span><span class="node">Background Worker</span><span class="arrow">→</span><span class="node">Breakdown Service</span><span class="edge-label">Structured input + schema + versions</span></div><div class="diagram-row sequence-row"><span class="step">6</span><span class="node">Breakdown Service</span><span class="arrow">→</span><span class="node">Background Worker</span><span class="edge-label">JSON subTasks</span></div><div class="diagram-row sequence-row"><span class="step">7</span><span class="node">Background Worker</span><span class="arrow">→</span><span class="node">Background Worker</span><span class="edge-label">Validate/sanitize/schema check</span></div><div class="diagram-row sequence-row"><span class="step">8</span><span class="node">Background Worker</span><span class="arrow">→</span><span class="node">MySQL</span><span class="edge-label">SuggestedTasks + raw response + Completed</span></div><div class="diagram-row sequence-row"><span class="step">9</span><span class="node">.NET API</span><span class="arrow">→</span><span class="node">PO/PM/Tech Lead</span><span class="edge-label">SignalR/poll completed</span></div><div class="diagram-row sequence-row"><span class="step">10</span><span class="node">PO/PM/Tech Lead</span><span class="arrow">→</span><span class="node">.NET API</span><span class="edge-label">Edit / Reject / Apply</span></div><div class="diagram-row sequence-row"><span class="step">11</span><span class="node">.NET API</span><span class="arrow">→</span><span class="node">Issue Contract</span><span class="edge-label">CreateIssueAsync for accepted tasks</span></div><div class="diagram-row sequence-row"><span class="step">12</span><span class="node">.NET API</span><span class="arrow">→</span><span class="node">MySQL</span><span class="edge-label">user action + edited content + applied count</span></div><details><summary>Mermaid source</summary><pre><code>sequenceDiagram
+  actor U as PO/PM/Tech Lead
+  participant API as .NET API
+  participant DB as MySQL
+  participant JOB as Background Worker
+  participant AI as Breakdown Service
+  participant ISSUE as Issue Contract
+  U-&gt;&gt;API: Request breakdown(issueId, options)
+  API-&gt;&gt;DB: AiGenerationLog = Pending
+  API--&gt;&gt;U: 202 + generationId
+  JOB-&gt;&gt;DB: Pending -&gt; Processing
+  JOB-&gt;&gt;AI: Structured input + schema + versions
+  AI--&gt;&gt;JOB: JSON subTasks
+  JOB-&gt;&gt;JOB: Validate/sanitize/schema check
+  JOB-&gt;&gt;DB: SuggestedTasks + raw response + Completed
+  API--&gt;&gt;U: SignalR/poll completed
+  U-&gt;&gt;API: Edit / Reject / Apply
+  API-&gt;&gt;ISSUE: CreateIssueAsync for accepted tasks
+  API-&gt;&gt;DB: user action + edited content + applied count</code></pre></details></figure>
+<h4 id="output-contract-toi-thieu">Output contract tối thiểu</h4>
+<pre><code class="language-json">{
+  &quot;schemaVersion&quot;: &quot;1.0&quot;,
+  &quot;subTasks&quot;: [
+    {
+      &quot;summary&quot;: &quot;Tạo endpoint refresh token&quot;,
+      &quot;description&quot;: &quot;Rotate refresh token và vô hiệu token cũ.&quot;,
+      &quot;acceptanceCriteria&quot;: [
+        &quot;Token cũ không dùng lại được&quot;,
+        &quot;Concurrent refresh chỉ một request thành công&quot;
+      ],
+      &quot;requiredSkills&quot;: [&quot;dotnet&quot;, &quot;security&quot;],
+      &quot;suggestedStoryPoints&quot;: 5
+    }
+  ]
+}</code></pre>
+<h4 id="guardrail">Guardrail</h4>
+<ul>
+<li>Giới hạn kích thước input/output, timeout, retry có backoff và circuit breaker.</li>
+<li>JSON phải parse và match schema trước khi lưu thành suggested task.</li>
+<li>Không để prompt injection lấy secret/system prompt; project context phải được delimit và sanitize.</li>
+<li>Không tự apply; yêu cầu permission <code>ai.breakdown.request</code> và <code>ai.breakdown.apply</code> tách biệt.</li>
+<li>Log raw response được bảo vệ và có retention; UI dùng dữ liệu đã sanitize.</li>
+</ul>
+<h4 id="chi-so">Chỉ số</h4>
+<ul>
+<li><code>json_valid_rate</code>, <code>schema_match_rate</code>.</li>
+<li><code>keep_rate</code>, <code>edit_rate</code>, <code>reject_rate</code>, average edit distance.</li>
+<li>AC coverage/testability do reviewer chấm.</li>
+<li>Duplicate/hallucination rate.</li>
+<li>p50/p95 latency, timeout/error rate, token/compute cost.</li>
+</ul>
+<h3 id="12-4-luong-ai-2-assignment">12.4 Luồng AI 2 — Assignment</h3>
+<p>AI Assignment không nên bắt đầu bằng LLM. Bản v1 dùng filter constraint + ranking tái lập và giải thích được:</p>
+<pre><code class="language-text">TotalScore = 0.40 × LoadBalanceScore
+           + 0.30 × SkillMatchScore
+           + 0.20 × HistoryScore
+           + 0.10 × CapacityScore</code></pre>
+<p>Quy tắc:</p>
+<ol>
+<li>Loại candidate không có quyền/project membership hoặc unavailable.</li>
+<li>Snapshot feature vào <code>AiAssignmentCandidate.FeatureSnapshot</code>.</li>
+<li>Snapshot phải có <code>asOf</code>, <code>featureSchemaVersion</code>, nguồn/cutoff của metric; không dùng dữ liệu phát sinh sau run.</li>
+<li>Normalize component score về cùng thang, ghi weight/version/strategy.</li>
+<li>Cold-start dùng profile/skill/seniority thay cho lịch sử rỗng.</li>
+<li>Rank top N, sinh explanation từ score thật; không bịa explanation bằng LLM.</li>
+<li>PM/SM accept/override/reject; lưu lý do và final user.</li>
+<li>Khi issue Done/Reassigned, cập nhật cycle time/on-time/reassigned outcome.</li>
+</ol>
+<p>Acceptance/override phản ánh quyết định của PM, không phải ground truth tuyệt đối về “người tốt nhất”; outcome cũng chỉ quan sát được cho người thực sự được giao, không có counterfactual cho candidate còn lại. Vì vậy:</p>
+<ul>
+<li>Dùng acceptance/override để đo mức hệ thống mô phỏng/chấp nhận được theo quyết định PM.</li>
+<li>Chỉ dùng Precision@1/NDCG@3 khi relevance label đã được curated và định nghĩa rõ.</li>
+<li>Tách metric “agreement with PM” khỏi “business outcome” như workload gap, reassignment, cycle time và on-time.</li>
+<li>Báo cáo theo project/team/time window để theo dõi bias/fairness; không xếp hạng con người công khai từ dữ liệu ít.</li>
+</ul>
+<h3 id="12-5-dataops-khong-phai-ai-thu-ba">12.5 DataOps không phải AI thứ ba</h3>
+<p>DataOps là control plane dùng chung:</p>
+<figure class="diagram"><figcaption>Flow — quan hệ thành phần</figcaption><div class="diagram-row"><span class="node">Breakdown feedback</span><span class="arrow">→</span><span class="node">Raw samples</span></div><div class="diagram-row"><span class="node">Assignment decision/outcome</span><span class="arrow">→</span><span class="node">Raw samples</span></div><div class="diagram-row"><span class="node">Raw samples</span><span class="arrow">→</span><span class="node">PII redaction + rules + dedup</span></div><div class="diagram-row"><span class="node">PII redaction + rules + dedup</span><span class="arrow">→</span><span class="node">Human review</span></div><div class="diagram-row"><span class="node">Human review</span><span class="arrow">→</span><span class="node">Dataset version + seed + checksum</span></div><div class="diagram-row"><span class="node">Dataset version + seed + checksum</span><span class="arrow">→</span><span class="node">Training run</span></div><div class="diagram-row"><span class="node">Training run</span><span class="arrow">→</span><span class="node">Fixed test set + metrics</span></div><div class="diagram-row"><span class="node">Fixed test set + metrics</span><span class="arrow">→</span><span class="node">Better and safe?</span></div><div class="diagram-row"><span class="node">Better and safe?</span><span class="arrow">→</span><span class="node">Model registry / activation</span><span class="edge-label">Yes</span></div><div class="diagram-row"><span class="node">Better and safe?</span><span class="arrow">→</span><span class="node">Keep baseline</span><span class="edge-label">No</span></div><details><summary>Mermaid source</summary><pre><code>flowchart LR
+  FB1[Breakdown feedback] --&gt; RAW[Raw samples]
+  FB2[Assignment decision/outcome] --&gt; RAW
+  RAW --&gt; CLEAN[PII redaction + rules + dedup]
+  CLEAN --&gt; REVIEW[Human review]
+  REVIEW --&gt; FREEZE[Dataset version + seed + checksum]
+  FREEZE --&gt; TRAIN[Training run]
+  TRAIN --&gt; EVAL[Fixed test set + metrics]
+  EVAL --&gt; GATE{Better and safe?}
+  GATE --&gt;|Yes| REG[Model registry / activation]
+  GATE --&gt;|No| REJECT[Keep baseline]</code></pre></details></figure>
+<p>Yêu cầu tái lập:</p>
+<ul>
+<li>Freeze version, split seed, SHA-256 checksum, code/model/prompt version. Application hiện phải enforce freeze/PII vì DB chưa cưỡng chế đầy đủ.</li>
+<li>Dedup/near-dedup trước khi split; group theo <code>IssueId</code>/generation/run/project và tách theo thời gian để sibling không rơi vào nhiều tập.</li>
+<li>Dùng train để fit, validation để tune/chọn prompt/model; locked holdout test chỉ mở ở release gate, không lặp đi lặp lại để chọn model.</li>
+<li>PII redaction phải pass trước <code>Approved</code>, có integration test chặn update/delete sample thuộc frozen version.</li>
+<li>Baseline prompt/rule và candidate model được đo trên cùng locked holdout tại release gate.</li>
+<li>Model activation có canary/rollback; dữ liệu production mới không tự train lại.</li>
+<li>“Huấn luyện tiếp không từ đầu” là continued fine-tuning/parameter-efficient fine-tuning; với LLM ưu tiên LoRA/QLoRA, nhưng chỉ sau khi baseline chứng minh cần thiết.</li>
+</ul>
+<p>Nếu bật RAG, phải có contract riêng cho corpus, chunk/index version, provenance, freshness, permission filter theo project và test chống cross-project retrieval. Trước khi đủ các điều kiện đó, dùng prompt + context DTO tối thiểu, không quảng bá RAG là năng lực đã có.</p>
+<h4 id="data-dictionary-nhan-ai-v1">Data dictionary nhãn AI v1</h4>
+<div class="table-wrap"><table><thead><tr><th>Trường</th><th>Giá trị/kiểu</th><th>Ý nghĩa và cách dùng</th></tr></thead><tbody><tr><td><code>breakdownUserAction</code></td><td><code>Kept</code>, <code>Edited</code>, <code>Rejected</code>, <code>Applied</code></td><td>Hành động trên từng suggested task; <code>Applied</code> không đồng nghĩa nội dung không bị sửa</td></tr><tr><td><code>breakdownEditDistance</code></td><td>số chuẩn hóa 0..1</td><td>Mức thay đổi original→final; dùng kèm action, không dùng đơn độc làm quality</td></tr><tr><td><code>assignmentDecision</code></td><td><code>Accepted</code>, <code>Overridden</code>, <code>Rejected</code></td><td>Agreement với đề xuất tại thời điểm PM quyết định</td></tr><tr><td><code>overrideReasonCode</code></td><td>enum versioned + note tùy chọn</td><td>Skill mismatch, overload, unavailable, mentoring, priority/context khác</td></tr><tr><td><code>relevanceGrade</code></td><td>0..3, curated</td><td>Chỉ dùng cho Precision/NDCG khi ít nhất hai reviewer hoặc adjudication đã chấm</td></tr><tr><td><code>businessOutcome</code></td><td>cycle time, on-time, reassigned</td><td>Kết quả của <strong>final assignee</strong>, không phải counterfactual cho candidate khác</td></tr><tr><td><code>asOf</code></td><td>UTC timestamp</td><td>Cutoff feature; mọi source metric phải có thời điểm <code>&lt;= asOf</code></td></tr><tr><td><code>labelSchemaVersion</code></td><td>semantic version</td><td>Bắt buộc để dataset/model biết định nghĩa label nào đã dùng</td></tr></tbody></table></div>
+<p>Định nghĩa này phải được version hóa trong code/schema dataset; thay enum/meaning tạo dataset version mới, không reinterpret dữ liệu cũ im lặng.</p>
+<h2 id="13-cac-luong-nghiep-vu-au-cuoi">13. Các luồng nghiệp vụ đầu-cuối</h2>
+<h3 id="13-1-tao-project-san-sang-su-dung">13.1 Tạo project sẵn sàng sử dụng</h3>
+<ol>
+<li>User có <code>project.create</code> tại Organization.</li>
+<li>Validate Organization, ProjectKey, name.</li>
+<li>Tạo Project và seed issue types, priorities, workflow statuses/transitions, board/columns trong transaction Planning.</li>
+<li><code>LeadUserId</code> được policy coi là owner ngầm ở v1; role/member bổ sung dùng Identity command riêng, idempotent và audit được.</li>
+<li>Trả Project DTO; frontend chuyển tới settings/summary.</li>
+<li>Integration test xác nhận rollback toàn bộ nếu seed lỗi.</li>
+</ol>
+<h3 id="13-2-tao-issue">13.2 Tạo issue</h3>
+<ol>
+<li>Delivery nhận command và current user.</li>
+<li>Dùng Project lookup kiểm project, issue type, priority và initial status.</li>
+<li>Dùng IssueNumberGenerator cấp số atomic.</li>
+<li>Validate parent/epic hierarchy và assignee qua contracts.</li>
+<li>Lưu Issue + AC/skills/history trong transaction Delivery.</li>
+<li>Gửi notification sau commit; trả key dạng <code>PROJ-123</code>.</li>
+</ol>
+<h3 id="13-3-chuyen-trang-thai-tren-board">13.3 Chuyển trạng thái trên Board</h3>
+<ol>
+<li>UI gửi issueId, targetStatusId, expected version.</li>
+<li>Delivery gọi WorkflowValidation với permissions và board context.</li>
+<li>Planning kiểm transition, required permission, WIP.</li>
+<li>Delivery cập nhật status + history atomic.</li>
+<li>Notification/event phát sau commit; UI patch/refetch.</li>
+<li>Concurrent/stale request trả 409 thay vì ghi đè im lặng.</li>
+</ol>
+<h3 id="13-4-sprint-lifecycle">13.4 Sprint lifecycle</h3>
+<ul>
+<li>Planned → Active: kiểm dates, capacity, permission; DB <code>ActiveGuard</code> chặn concurrent active sprint.</li>
+<li>Move backlog: Planning gọi <code>IIssueSprintService</code>; không update table Issue trực tiếp.</li>
+<li>Snapshot: job UTC theo ngày, idempotent <code>(SprintId, SnapshotDate)</code>.</li>
+<li>Complete: chốt snapshot, xử lý issue chưa Done theo lựa chọn rõ, ghi actual completion.</li>
+</ul>
+<h3 id="13-5-chuoi-hai-ai">13.5 Chuỗi hai AI</h3>
+<p>Breakdown → người dùng edit/apply → Issue/sub-task thật → feature snapshot → Assignment rank → PM quyết định → issue thực thi → outcome → DataOps. Không gọi Assignment trên suggested task chưa Apply; không đưa raw unreviewed breakdown vào approved dataset.</p>
+<h2 id="14-bao-mat-va-phan-quyen">14. Bảo mật và phân quyền</h2>
+<h3 id="14-1-hien-trang-rui-ro">14.1 Hiện trạng rủi ro</h3>
+<ul>
+<li>Không có authentication middleware nhưng có API thay đổi dữ liệu.</li>
+<li>Chưa thấy <code>[Authorize]</code>/policy trên controller.</li>
+<li>Frontend có admin session/token mock và auth guard chưa áp dụng.</li>
+<li>Login action có lỗi async và binding không phù hợp credential.</li>
+<li>OTP/register/refresh chưa có bảo vệ replay/brute-force hoàn chỉnh.</li>
+<li>CORS có trong appsettings nhưng chưa được wiring trong <code>Program.cs</code>.</li>
+<li>Realtime chưa có user/project authorization.</li>
+</ul>
+<h3 id="14-2-mo-hinh-ich">14.2 Mô hình đích</h3>
+<div class="table-wrap"><table><thead><tr><th>Lớp</th><th>Yêu cầu</th></tr></thead><tbody><tr><td>Authentication</td><td>JWT access ngắn hạn; refresh token hash + rotation + reuse detection; external login theo provider key</td></tr><tr><td>Authorization</td><td>Permission code <code>group.action</code>; role gán theo System/Organization/Project; policy kiểm resource scope</td></tr><tr><td>OTP</td><td>Random CSPRNG, chỉ lưu hash, TTL, purpose, attempt limit, resend cooldown, one-time use</td></tr><tr><td>Password</td><td>BCrypt/Argon2 cấu hình cost, password policy hợp lý, generic error chống user enumeration</td></tr><tr><td>API</td><td>HTTPS, rate limit, request size, validation, ProblemDetails không lộ stack/secret</td></tr><tr><td>SignalR</td><td>Access token, user identifier server-side, chỉ join group sau permission check</td></tr><tr><td>File</td><td>MIME/signature/size scan, tên file sinh lại, storage ngoài web root, authorization khi download</td></tr><tr><td>AI</td><td>Prompt injection defense, PII minimization, output schema, permission tách request/apply, audit</td></tr><tr><td>Secret</td><td>User Secrets/CI environment/file staging ACL; rotation và không log</td></tr><tr><td>Audit</td><td>Login, role grant, workflow config, sprint state, issue transition, AI apply/override, model activation</td></tr></tbody></table></div>
+<h3 id="14-3-permission-catalog-toi-thieu">14.3 Permission catalog tối thiểu</h3>
+<pre><code class="language-text">organization.read, organization.manage
+project.read, project.create, project.manage, project.member.manage
+workflow.read, workflow.manage
+sprint.read, sprint.manage, sprint.start, sprint.complete
+issue.read, issue.create, issue.update, issue.assign, issue.transition, issue.delete
+comment.create, attachment.upload
+notification.read
+ai.breakdown.request, ai.breakdown.review, ai.breakdown.apply
+ai.assignment.request, ai.assignment.decide
+ai.dataset.manage, ai.training.run, ai.model.activate
+report.read</code></pre>
+<h3 id="14-4-threat-driven-test-bat-buoc">14.4 Threat-driven test bắt buộc</h3>
+<ul>
+<li>Access/refresh token expired, forged, reuse, revoked, security stamp changed.</li>
+<li>Cross-project IDOR: user Project A không đọc/sửa ID Project B.</li>
+<li>Role scope escalation và mass assignment.</li>
+<li>OTP replay/brute force/resend abuse.</li>
+<li>Unauthorized SignalR group join.</li>
+<li>Attachment path traversal/polyglot/oversize.</li>
+<li>Prompt injection và JSON output vượt schema.</li>
+<li>AI apply/assignment replay/idempotency.</li>
+</ul>
+<h2 id="15-hieu-nang-quan-sat-va-o-tin-cay">15. Hiệu năng, quan sát và độ tin cậy</h2>
+<h3 id="15-1-muc-tieu-phi-chuc-nang-e-xuat">15.1 Mục tiêu phi chức năng đề xuất</h3>
+<div class="table-wrap"><table><thead><tr><th>Chỉ số</th><th>Mục tiêu v1</th></tr></thead><tbody><tr><td>REST read p95</td><td>&lt; 400 ms trên TEST data mục tiêu</td></tr><tr><td>REST command p95</td><td>&lt; 800 ms, không tính AI</td></tr><tr><td>Board initial load</td><td>&lt; 2 s với 500 issue/project sau pagination</td></tr><tr><td>AI Breakdown p95</td><td>&lt; 60 s hoặc timeout có trạng thái rõ</td></tr><tr><td>AI Assignment p95</td><td>&lt; 3 s cho candidate set của một team nhỏ</td></tr><tr><td>Availability</td><td>99.5% cho đồ án/demo; health/readiness chính xác</td></tr><tr><td>Error rate</td><td>&lt; 1% request không do validation/user</td></tr><tr><td>Recovery</td><td>Deploy rollback ứng dụng &lt; 10 phút trên TEST</td></tr></tbody></table></div>
+<h3 id="15-2-du-lieu-va-query">15.2 Dữ liệu và query</h3>
+<ul>
+<li>Tránh <code>Include</code> graph lớn; projection DTO và <code>AsNoTracking</code> cho read.</li>
+<li>Pagination cho issue/activity/notification/sample.</li>
+<li>Query board theo Project/Sprint/Status và select field cần thiết.</li>
+<li>Dùng index theo query plan; không thêm index đơn lẻ cho mọi GUID mà không đo.</li>
+<li>GUID <code>CHAR(36)</code> chấp nhận được ở quy mô đồ án; chỉ cân nhắc <code>BINARY(16)</code> sau benchmark và migration plan.</li>
+<li>Không query reporting view trong command transaction.</li>
+<li>RankOrder cần job rebalance khi khoảng cách quá nhỏ, có lock/project scope.</li>
+</ul>
+<h3 id="15-3-observability">15.3 Observability</h3>
+<p>Mỗi log phải có <code>TraceId</code>, <code>CorrelationId</code>, <code>UserId</code> đã pseudonymize nếu cần, <code>ProjectId</code>, <code>Module</code>, <code>Operation</code>, duration và result code. Không log password, token, OTP, connection string, raw attachment hoặc raw prompt chứa PII.</p>
+<p>Metrics tối thiểu:</p>
+<ul>
+<li>HTTP request duration/error theo route/status.</li>
+<li>DB command duration, pool saturation, retry/deadlock.</li>
+<li>Job queue depth, retry, age, failure.</li>
+<li>SignalR connection/reconnect/message error.</li>
+<li>AI latency/error/schema failure theo model/prompt version.</li>
+<li>Business: active sprint, transition rejection, breakdown apply, assignment override.</li>
+</ul>
+<h2 id="16-ci-cd-moi-truong-va-van-hanh">16. CI/CD, môi trường và vận hành</h2>
+<h3 id="16-1-pipeline-hien-tai">16.1 Pipeline hiện tại</h3>
+<figure class="diagram"><figcaption>Flow — quan hệ thành phần</figcaption><div class="diagram-row"><span class="node">Pull request → develop</span><span class="arrow">→</span><span class="node">Backend restore/build/test</span></div><div class="diagram-row"><span class="node">Pull request → develop</span><span class="arrow">→</span><span class="node">Frontend npm ci/lint/test/build</span></div><div class="diagram-row"><span class="node">Pull request → develop</span><span class="arrow">→</span><span class="node">Compose validate + container build</span></div><div class="diagram-row"><span class="node">Backend restore/build/test</span><span class="arrow">→</span><span class="node">CI status</span></div><div class="diagram-row"><span class="node">Frontend npm ci/lint/test/build</span><span class="arrow">→</span><span class="node">CI status</span></div><div class="diagram-row"><span class="node">Compose validate + container build</span><span class="arrow">→</span><span class="node">CI status</span></div><div class="diagram-row"><span class="node">CI status</span><span class="arrow">→</span><span class="node">Merge develop</span><span class="edge-label">required only if branch protection enforces it</span></div><div class="diagram-row"><span class="node">Merge develop</span><span class="arrow">→</span><span class="node">Push develop</span></div><div class="diagram-row"><span class="node">Push develop</span><span class="arrow">→</span><span class="node">Deploy workflow builds artifacts</span></div><div class="diagram-row"><span class="node">Manual dispatch</span><span class="arrow">→</span><span class="node">Deploy workflow builds artifacts</span></div><div class="diagram-row"><span class="node">Deploy workflow builds artifacts</span><span class="arrow">→</span><span class="node">Self-hosted Windows runner</span></div><div class="diagram-row"><span class="node">Self-hosted Windows runner</span><span class="arrow">→</span><span class="node">Backup current app</span></div><div class="diagram-row"><span class="node">Backup current app</span><span class="arrow">→</span><span class="node">Deploy IIS API + Web</span></div><div class="diagram-row"><span class="node">Deploy IIS API + Web</span><span class="arrow">→</span><span class="node">Health check</span></div><div class="diagram-row"><span class="node">Health check</span><span class="arrow">→</span><span class="node">Rollback app backup</span><span class="edge-label">Fail</span></div><div class="diagram-row"><span class="node">Health check</span><span class="arrow">→</span><span class="node">TEST ready</span><span class="edge-label">Pass</span></div><details><summary>Mermaid source</summary><pre><code>flowchart LR
+  PR[Pull request → develop] --&gt; B1[Backend restore/build/test]
+  PR --&gt; F1[Frontend npm ci/lint/test/build]
+  PR --&gt; C1[Compose validate + container build]
+  B1 --&gt; G[CI status]
+  F1 --&gt; G
+  C1 --&gt; G
+  G -. required only if branch protection enforces it .-&gt; M[Merge develop]
+  M --&gt; P[Push develop]
+  P --&gt; A[Deploy workflow builds artifacts]
+  MAN[Manual dispatch] --&gt; A
+  A --&gt; R[Self-hosted Windows runner]
+  R --&gt; BK[Backup current app]
+  BK --&gt; IIS[Deploy IIS API + Web]
+  IIS --&gt; H[Health check]
+  H --&gt;|Fail| RB[Rollback app backup]
+  H --&gt;|Pass| OK[TEST ready]</code></pre></details></figure>
+<h3 id="16-2-ci-a-co">16.2 CI đã có</h3>
+<ul>
+<li>Trigger PR vào <code>develop</code> hoặc manual.</li>
+<li>Ubuntu + .NET 10: restore/build/test.</li>
+<li>Node 24: <code>npm ci</code>, lint, unit test, production build.</li>
+<li>Docker Compose config validation và Buildx build API/web image.</li>
+<li>Chưa có dependency/secret/container scan, architecture/integration/E2E gate riêng.</li>
+<li>Branch protection/required checks là cấu hình GitHub ngoài repo và <strong>chưa được xác minh</strong> trong audit này. Vì vậy không được mặc định rằng CI xanh là điều kiện kỹ thuật bắt buộc để merge.</li>
+</ul>
+<h3 id="16-3-cd-test-a-co">16.3 CD TEST đã có</h3>
+<ul>
+<li>Trigger push <code>develop</code> hoặc manual; concurrency không cancel deploy đang chạy.</li>
+<li>Build artifact backend/frontend trên Ubuntu.</li>
+<li>Self-hosted Windows runner có tag <code>projectmgmt-test</code>.</li>
+<li><code>deploy-test.ps1</code> kiểm path, backup, <code>app_offline</code>, app pool, copy artifact/config, health check, rollback và giữ 5 backup.</li>
+<li>Config staging ở ngoài Git; connection string yêu cầu TLS.</li>
+<li><code>deploy-test.yml</code> là workflow độc lập, không có <code>needs</code>/workflow dependency với <code>ci.yml</code>. Direct push hoặc manual dispatch có thể deploy dù CI PR không chạy/không xanh; phải cấu hình branch protection hoặc bổ sung gate/check artifact trước production hóa.</li>
+</ul>
+<h3 id="16-4-khoang-trong-ci-cd">16.4 Khoảng trống CI/CD</h3>
+<ul>
+<li>Frontend test hiện làm pipeline đỏ vì 2 unhandled error dù assertions pass.</li>
+<li>Backend chỉ có 2 unit test; chưa đủ để gate release.</li>
+<li>Deploy chưa có migration artifact/gate, backup DB hoặc DB rollback/forward-fix.</li>
+<li>Path IIS/backup/log đang hard-code cho runner cụ thể; nên chuyển sang environment variables/vars có validate.</li>
+<li>Artifact build chưa ký/SBOM/scan; image chưa push immutable registry trong pipeline này.</li>
+<li>Health check chỉ chứng minh process sống; cần readiness có DB và smoke business read-only.</li>
+</ul>
+<h3 id="16-5-moi-truong">16.5 Môi trường</h3>
+<div class="table-wrap"><table><thead><tr><th>Môi trường</th><th>Trigger</th><th>Data/secret</th><th>Mục tiêu</th></tr></thead><tbody><tr><td>DEV native</td><td>Manual</td><td>User Secrets, MySQL local</td><td>Phát triển nhanh từng module</td></tr><tr><td>DEV Compose</td><td>Manual</td><td><code>.env</code> ignored; volume local</td><td>Stack tái lập API/web/MySQL</td></tr><tr><td>TEST IIS</td><td>Merge <code>develop</code></td><td><code>appsettings.Staging.json</code> ACL ngoài repo</td><td>Integration, smoke, demo nội bộ</td></tr><tr><td>STAGING</td><td><span class="evidence recommendation">RECOMMENDATION</span> release candidate</td><td>Dữ liệu giả gần production</td><td>E2E/UAT/performance/security</td></tr><tr><td>PRODUCTION</td><td><span class="evidence recommendation">RECOMMENDATION</span> manual approval artifact đã pass</td><td>Secret manager/file ACL + backup</td><td>Người dùng thật</td></tr></tbody></table></div>
+<h3 id="16-6-release-gate-muc-tieu">16.6 Release gate mục tiêu</h3>
+<ol>
+<li>Source/branch/CODEOWNERS/contract review.</li>
+<li>Secret/dependency/license/static analysis.</li>
+<li>Build backend/frontend.</li>
+<li>Unit + architecture + integration.</li>
+<li>Container build/scan; tag commit SHA.</li>
+<li>Deploy STAGING và migration dry-run.</li>
+<li>Smoke/E2E/performance budget/security baseline.</li>
+<li>Manual approval.</li>
+<li>DB backup + migration được duyệt.</li>
+<li>Promote cùng artifact/image, không rebuild.</li>
+<li>Smoke, metrics green; rollback app hoặc forward-fix/restore DB theo plan.</li>
+</ol>
+<h2 id="17-chien-luoc-kiem-thu-va-tieu-chi-chat-luong">17. Chiến lược kiểm thử và tiêu chí chất lượng</h2>
+<h3 id="17-1-ket-qua-audit-ngay-20-09-2026">17.1 Kết quả audit ngày 20/09/2026</h3>
+<div class="table-wrap"><table><thead><tr><th>Command</th><th>Kết quả</th></tr></thead><tbody><tr><td><code>dotnet test ProjectMgmt.slnx -c Release --no-restore -m:1</code></td><td>Pass 2/2; có analyzer warnings</td></tr><tr><td><code>npm run lint</code></td><td>Pass khi cấp heap phù hợp</td></tr><tr><td><code>npm test -- --watch=false</code></td><td>5 files, 22 tests pass nhưng process fail vì 2 unhandled timer errors ở auth page</td></tr><tr><td><code>npm run build</code></td><td>Pass; warning <code>backlog-page.scss</code> vượt style budget 3.52 kB</td></tr><tr><td><code>docker compose config --quiet</code></td><td>Không chạy được vì máy hiện tại không có Docker CLI</td></tr><tr><td>XMOD validator</td><td>Fail audit: 32/64 cột chưa có usable left-prefix index</td></tr></tbody></table></div>
+<p>Lần chạy song song đầu tiên từng thiếu tài nguyên/Node heap; chạy tuần tự với <code>NODE_OPTIONS=--max-old-space-size=4096</code> cho lint/build thành công. Đây là vấn đề môi trường kiểm tra, khác với hai lỗi async thật trong frontend test.</p>
+<h3 id="17-2-test-pyramid-can-at">17.2 Test pyramid cần đạt</h3>
+<div class="table-wrap"><table><thead><tr><th>Lớp</th><th>Nội dung</th><th>Owner</th></tr></thead><tbody><tr><td>Unit</td><td>domain rule, validator, score, mapper, Result</td><td>Từng module</td></tr><tr><td>Contract</td><td>DTO/schema giữa module và .NET↔AI</td><td>Provider + consumer</td></tr><tr><td>Integration</td><td>MySQL Testcontainers/instance cô lập, repository, transaction, index/constraint</td><td>Từng module</td></tr><tr><td>API</td><td>auth, status/ProblemDetails, permission, idempotency</td><td>Host + module</td></tr><tr><td>Architecture</td><td>project reference, Contracts không có EF entity, no cross implementation</td><td>Shared</td></tr><tr><td>Component UI</td><td>signal store, form, guard, timer cleanup, a11y</td><td>FE owner</td></tr><tr><td>E2E</td><td>login → project → issue → sprint → board; hai AI review</td><td>C dẫn QA, cả nhóm</td></tr><tr><td>Non-functional</td><td>load, security, backup/rollback, AI eval</td><td>Shared</td></tr></tbody></table></div>
+<h3 id="17-3-definition-of-ready">17.3 Definition of Ready</h3>
+<ul>
+<li>User value, scope và Acceptance Criteria kiểm thử được.</li>
+<li>Owner/module/provider-consumer xác định.</li>
+<li>API/contract/data dependency có version hoặc fake.</li>
+<li>Security/permission, error cases, test data và migration impact được ghi.</li>
+<li>Không phụ thuộc feature tương lai chưa có contract/fake.</li>
+<li>Story nhỏ đủ hoàn thành trong sprint và có estimate/risk.</li>
+</ul>
+<h3 id="17-4-definition-of-done">17.4 Definition of Done</h3>
+<ul>
+<li>Code review bởi ít nhất một thành viên khác; CODEOWNERS nếu có.</li>
+<li>Build/lint/unit/integration/architecture test liên quan pass.</li>
+<li>AuthZ, validation, audit/log, failure/retry case được test.</li>
+<li>Migration và rollback/forward plan được review nếu đổi DB.</li>
+<li>Swagger/API contract và handbook/changelog cập nhật.</li>
+<li>Không secret, PII hoặc debug bypass.</li>
+<li>Demo trên đúng environment; Jira trạng thái/AC/evidence cập nhật.</li>
+<li>Không còn Sev-1/Sev-2; performance budget không bị phá không giải thích.</li>
+</ul>
+<h3 id="17-5-ai-evaluation-gate">17.5 AI evaluation gate</h3>
+<p>AI 1 cần tập 60–100 mẫu curated song ngữ ban đầu, JSON Schema gate và review rubric: coverage, specificity, feasibility, duplicate, hallucination, AC testability. Dedup/group/time split trước; validation dùng để tune, locked holdout chỉ dùng ở release gate. AI 2 cần replay dataset có label được định nghĩa rõ; acceptance/override đo agreement với PM, còn outcome đo workload/reassignment/on-time và không tạo counterfactual cho người không được chọn. Chỉ dùng Precision@1/NDCG@3 trên relevance label curated. Không activate model chỉ vì loss thấp.</p>
+<h2 id="18-lo-trinh-hoan-thien-theo-muc-uu-tien">18. Lộ trình hoàn thiện theo mức ưu tiên</h2>
+<p>Kế hoạch Excel có 13 sprint, 138 work item và mốc release đến 30/11/2026. Đây là kế hoạch tham khảo. Lộ trình dưới đây sắp lại theo dependency thực của code hiện tại.</p>
+<h3 id="18-1-p0-lam-baseline-an-toan-va-tich-hop-uoc">18.1 P0 — Làm baseline an toàn và tích hợp được</h3>
+<ol>
+<li>Sửa 2 unhandled timer error; giữ CI frontend xanh ổn định.</li>
+<li>Hoàn thiện authentication, JWT/refresh/OTP và gắn middleware/policy.</li>
+<li>Bỏ mock admin/token/OTP; nối Auth/Profile đầu-cuối.</li>
+<li>Nối frontend Project/Workflow/Board với API hiện có.</li>
+<li>Hoàn thiện ProblemDetails, validation, CORS và correlation ID.</li>
+<li>Đóng băng contract v1; thêm contract docs/changelog, fake và architecture tests.</li>
+<li>Review XMOD indexes theo query plan; chốt migration policy.</li>
+<li>Thêm CODEOWNERS, test strategy và AI evaluation seed.</li>
+</ol>
+<p><strong>Exit:</strong> login thật; project config thật; CI xanh; không endpoint write công khai; integration test MySQL cơ bản.</p>
+<h3 id="18-2-p1-hoan-thien-scrum-core">18.2 P1 — Hoàn thiện Scrum core</h3>
+<ol>
+<li>Issue CRUD/hierarchy/number/history/collaboration.</li>
+<li>Sprint lifecycle/capacity/backlog move/snapshot.</li>
+<li>Board transition/WIP và concurrent conflict.</li>
+<li>Notification persistence + SignalR.</li>
+<li>Frontend issue detail, backlog/board data thật và reports nền.</li>
+</ol>
+<p><strong>Exit:</strong> Project → Issue → Sprint → Board → Report chạy E2E, không cần AI.</p>
+<h3 id="18-3-p2-ai-1-breakdown">18.3 P2 — AI 1 Breakdown</h3>
+<ol>
+<li>Model/prompt governance và input/output schema.</li>
+<li>Background job, timeout/retry/status, local Ollama baseline.</li>
+<li>Preview/edit/reject/apply idempotent.</li>
+<li>Feedback export, curated evaluation, metrics dashboard.</li>
+<li>Chỉ thử QLoRA nếu baseline không đạt rubric.</li>
+</ol>
+<p><strong>Exit:</strong> AI gợi ý có truy vết, người dùng kiểm soát, evaluation report tái lập.</p>
+<h3 id="18-4-p3-ai-2-assignment-va-dataops">18.4 P3 — AI 2 Assignment và DataOps</h3>
+<ol>
+<li>Workload/performance/capacity snapshots.</li>
+<li>Deterministic filter + weighted ranking + explanation.</li>
+<li>Review/override/reject và outcome job.</li>
+<li>Data cleaning/freeze/export/training/evaluation UI/API.</li>
+<li>Learned ranker/optimizer chỉ sau khi có đủ labels.</li>
+</ol>
+<p><strong>Exit:</strong> chuỗi Breakdown → Apply → Assignment → Decision → Outcome → Dataset chạy E2E.</p>
+<h3 id="18-5-p4-hardening-va-release">18.5 P4 — Hardening và release</h3>
+<ul>
+<li>Security/load/accessibility/E2E, observability dashboard.</li>
+<li>STAGING giống production, backup/restore và rollback drill.</li>
+<li>Dependency/container/secret scan, immutable artifact.</li>
+<li>UAT, data retention, privacy notice, runbook và final demo.</li>
+</ul>
+<h2 id="19-playbook-rieng-cho-tung-thanh-vien">19. Playbook riêng cho từng thành viên</h2>
+<h3 id="19-1-playbook-a-tran-van-hoang-identityexperience">19.1 Playbook A — Trần Văn Hoàng — IdentityExperience</h3>
+<p><strong>Bắt đầu tại:</strong> <code>ProjectMgmt.Modules.IdentityExperience/*</code>, Account controller/service, frontend auth/profile/identity/notifications.</p>
+<p>Thứ tự:</p>
+<ol>
+<li>Viết auth contract/use cases và tests trước; sửa controller async/body binding.</li>
+<li>Password hash, normalized email unique, refresh rotation/reuse detection.</li>
+<li>OTP hashed/TTL/attempt/rate limit; external login theo Provider+ProviderKey.</li>
+<li>CurrentUser + permission evaluator; gắn policies cho endpoint hiện có.</li>
+<li>Profile/skill API và lookup contracts thật.</li>
+<li>Notification repository/API/hub với authorized groups.</li>
+<li>AI Breakdown job/orchestrator sau khi <code>IIssueService</code> của C ổn định.</li>
+<li>Frontend bỏ mock theo từng luồng; timer/subscription cleanup bằng lifecycle-safe pattern.</li>
+</ol>
+<p>DoD riêng: security tests, token/OTP không log, cross-scope denial, SignalR auth, breakdown schema và apply idempotent.</p>
+<h3 id="19-2-playbook-b-nguyen-the-hoai-planning">19.2 Playbook B — Nguyễn Thế Hoài — Planning</h3>
+<p><strong>Bắt đầu tại:</strong> <code>ProjectMgmt.Modules.Planning/*</code>, nested <code>ProjectManagement</code>, Projects/Workflow/Boards controllers, frontend projects/backlog/board/reports.</p>
+<p>Thứ tự:</p>
+<ol>
+<li>Viết characterization tests cho API Project/Workflow/Board hiện có.</li>
+<li>Dọn dần nested compile include mà không đổi namespace hàng loạt trong một PR.</li>
+<li>Hoàn thiện Project components/versions/default config transaction.</li>
+<li>Implement workflow validator và issue number generator contract.</li>
+<li>Sprint lifecycle/capacity/snapshot; test concurrent active sprint.</li>
+<li>Backlog orchestration qua Delivery contracts.</li>
+<li>Nối frontend Project/Workflow/Board rồi Sprint/Backlog.</li>
+<li>AI Assignment deterministic; version weights và snapshot features.</li>
+</ol>
+<p>DoD riêng: no cross-module SQL join, query plan cho board/report, concurrent tests, explanation khớp score, override/outcome lưu đủ.</p>
+<h3 id="19-3-playbook-c-hoang-tran-huy-hoang-deliveryintelligence">19.3 Playbook C — Hoàng Trần Huy Hoàng — DeliveryIntelligence</h3>
+<p><strong>Bắt đầu tại:</strong> <code>ProjectMgmt.Modules.DeliveryIntelligence/*</code>, frontend issue-detail và ai-dataops.</p>
+<p>Thứ tự:</p>
+<ol>
+<li>Thiết kế use-case API và repository cho Issue tối thiểu; dùng contract/fake của A/B.</li>
+<li>Tạo issue/hierarchy/number/status history; transaction tests.</li>
+<li>Transition, assignment history, rank/rebalance và optimistic concurrency.</li>
+<li>Comment/attachment/watcher/label/component/version/skill/AC.</li>
+<li>Issue read/sprint/skill contracts cho B và AI.</li>
+<li>Issue detail/timeline UI thật.</li>
+<li>DataOps API: dataset/version/sample/rules/flags/freeze/export.</li>
+<li>Training/evaluation metadata, PII/dedup/reproducibility; không huấn luyện trong web process.</li>
+</ol>
+<p>DoD riêng: authorization theo project, attachment security, immutable frozen dataset, checksum/split seed, no data leakage.</p>
+<h3 id="19-4-cach-phoi-hop-khong-chan-nhau">19.4 Cách phối hợp không chặn nhau</h3>
+<ul>
+<li>Ngày đầu sprint: chốt DTO/signature/example/error; commit contract riêng.</li>
+<li>Consumer dùng fake ngay, provider phát triển song song.</li>
+<li>Mọi thay đổi contract có changelog và reviewer của consumer.</li>
+<li>Migration mỗi module tách commit; không để hai người sửa cùng context/migration snapshot.</li>
+<li>Integration window cố định giữa sprint; không đợi cuối sprint mới ghép.</li>
+<li>Feature flag cho API/UI chưa hoàn thiện; không merge bypass security.</li>
+</ul>
+<h3 id="19-5-starter-pr-uoc-khuyen-nghi">19.5 Starter PR được khuyến nghị</h3>
+<div class="table-wrap"><table><thead><tr><th>Thứ tự</th><th>Owner/reviewer</th><th>Scope một PR</th><th>Acceptance Criteria</th></tr></thead><tbody><tr><td>PR-0</td><td>A; C review</td><td>Sửa timer lifecycle <code>auth-page.ts:110</code>, thêm fake-timer/destroy test</td><td><code>npm test -- --watch=false</code> exit 0, không unhandled error; không đổi nghiệp vụ</td></tr><tr><td>PR-1A</td><td>A; B review</td><td>Auth contract + login/refresh/logout/me backend, chưa nối toàn UI</td><td>Unit/integration security cases trong §10.6 pass; Swagger rõ</td></tr><tr><td>PR-1B</td><td>B; C review</td><td>Characterization tests cho Project/Workflow/Board hiện có</td><td>Ghi behavior hiện tại, transaction/default seed và error mapping pass</td></tr><tr><td>PR-1C</td><td>C; B review</td><td><code>IIssueService</code>/DTO/fake + create-issue domain validation skeleton</td><td>Contract compile; fake deterministic; chưa cần CRUD UI</td></tr><tr><td>PR-2</td><td>A+B; C review</td><td>Nối Angular Auth + Project list/create bằng API thật</td><td>Không mock token/admin; E2E smoke login→project pass</td></tr></tbody></table></div>
+<p>Nếu có thành viên frontend/full-stack mới chưa được gán module, bắt đầu PR-0 rồi tham gia PR-2; không tự mở thêm màn hình mock.</p>
+<p>Mặc định tạo <code>feature/&lt;module&gt;/&lt;short-description&gt;</code> từ <code>develop</code> đã đồng bộ và mở PR về <code>develop</code>. Dependency: PR-0 độc lập; PR-1A/1B/1C có thể song song sau khi contract commit được chốt; PR-2 chỉ bắt đầu sau PR-1A và API Project characterization pass. Test bắt buộc tương ứng: PR-0 chạy <code>npm run lint</code> và <code>npm test -- --watch=false</code>; PR-1A/1B/1C chạy <code>dotnet test ProjectMgmt.slnx -c Release -m:1</code>; PR-2 chạy cả hai bộ cùng <code>npm run build</code>. PR description phải ghi test file mới/sửa và paste summary, không chỉ ghi “pass”.</p>
+<h2 id="20-huong-dan-khoi-ong-cho-thanh-vien-moi">20. Hướng dẫn khởi động cho thành viên mới</h2>
+<h3 id="20-1-yeu-cau-cong-cu">20.1 Yêu cầu công cụ</h3>
+<ul>
+<li>Git.</li>
+<li>.NET SDK 10.x.</li>
+<li>Node.js 24 và npm theo lockfile.</li>
+<li>MySQL 8.0.16+; source đang mặc định 8.0.46, Compose dùng 8.4.</li>
+<li>Docker Desktop/Compose nếu chạy stack container.</li>
+<li>IDE bất kỳ hỗ trợ C#/Angular; PowerShell 7/Windows PowerShell cho scripts.</li>
+</ul>
+<h3 id="20-2-clone-va-backend-native">20.2 Clone và backend native</h3>
+<pre><code class="language-powershell">git clone --branch hoangtv https://github.com/TranHoang2k40525/ProjectMgmt.git ProjectMgmt
+Set-Location ProjectMgmt
+git fetch origin --prune
+git checkout --detach 05ce307951635dfd92b40ee1009400f38c25b7c9
+git rev-parse HEAD
+dotnet restore ProjectMgmt.slnx
+dotnet user-secrets set --project ProjectMgmt.Solution/ProjectMgmt.Solution.csproj `
+  &quot;ConnectionStrings:ProjectMgmt&quot; `
+  &quot;Server=localhost;Port=3306;Database=projectmgmt;User=&lt;user&gt;;Password=&lt;password&gt;;CharSet=utf8mb4;&quot;
+dotnet run --project ProjectMgmt.Solution/ProjectMgmt.Solution.csproj --launch-profile http</code></pre>
+<p><code>git rev-parse HEAD</code> phải in đúng <code>05ce307951635dfd92b40ee1009400f38c25b7c9</code>. Hiện commit này chưa có trên <code>origin/hoangtv</code> tại thời điểm audit; nếu clone/fetch báo không tìm thấy object, dừng và yêu cầu owner push/tag baseline, không âm thầm dùng <code>main</code> hoặc commit khác. <code>UserSecretsId</code> đã có trong host, không chạy <code>user-secrets init</code> lần nữa. Kiểm tra <code>http://localhost:5083/health/live</code> và Swagger tại <code>http://localhost:5083/swagger</code> ở Development. Trước khi P0 có registration/bootstrap-admin, health/Swagger có thể chạy nhưng chưa có đường login hợp lệ. Không dùng mật khẩu từng xuất hiện trong tài liệu/chat; phải tạo hoặc rotate credential local riêng.</p>
+<h4 id="chuan-bi-schema-cho-backend-native">Chuẩn bị schema cho backend native</h4>
+<ul>
+<li>Nếu dùng DB development <strong>đã có schema v3</strong>, chỉ cấu hình connection string; không chạy DDL/migration tự động.</li>
+<li>Nếu cần DB mới, cách an toàn nhất là dùng MySQL container/volume cô lập ở §20.4.</li>
+<li>Nếu bắt buộc dùng MySQL native mới và rỗng, cài <code>dotnet-ef</code> đúng version package (<code>9.0.19</code>), backup/xác minh target rồi apply theo thứ tự Identity → Planning → Delivery; Delivery cuối cùng tạo view/trigger phụ thuộc bảng module khác:</li>
+</ul>
+<pre><code class="language-powershell">dotnet tool install --global dotnet-ef --version 9.0.19
+
+dotnet ef database update `
+  --project ProjectMgmt.Modules.IdentityExperience/Infrastructure/IdentityExperience.Infrastructure.csproj `
+  --startup-project ProjectMgmt.Solution/ProjectMgmt.Solution.csproj `
+  --context IdentityExperienceDbContext
+
+dotnet ef database update `
+  --project ProjectMgmt.Modules.Planning/Infrastructure/Planning.Infrastructure.csproj `
+  --startup-project ProjectMgmt.Solution/ProjectMgmt.Solution.csproj `
+  --context PlanningDbContext
+
+dotnet ef database update `
+  --project ProjectMgmt.Modules.DeliveryIntelligence/Infrastructure/DeliveryIntelligence.Infrastructure.csproj `
+  --startup-project ProjectMgmt.Solution/ProjectMgmt.Solution.csproj `
+  --context DeliveryIntelligenceDbContext</code></pre>
+<p>Chỉ chạy trên database rỗng/cô lập sau khi review generated SQL. Migrations seed role/permission/skill/model/prompt reference, <strong>không seed admin user</strong>. P0 phải có registration thật hoặc bootstrap-admin command one-time đọc secret từ environment; không thêm mật khẩu mặc định vào migration.</p>
+<h3 id="20-3-frontend">20.3 Frontend</h3>
+<pre><code class="language-powershell">Set-Location frontend/projectmgmt-web
+npm ci
+$env:NODE_OPTIONS='--max-old-space-size=4096'
+npm run lint
+npm test -- --watch=false
+npm start</code></pre>
+<p>Frontend mặc định <code>http://localhost:4200</code>; API development <code>http://localhost:5083</code>.</p>
+<h3 id="20-4-docker-local">20.4 Docker local</h3>
+<pre><code class="language-powershell">Copy-Item .env.example .env
+# Sửa .env bằng credential local mạnh, không commit.
+docker compose config --quiet
+docker compose up --build -d
+docker compose ps</code></pre>
+<p>Cảnh báo: stack mount DDL có <code>DROP DATABASE</code> nhưng chỉ được chấp nhận cho MySQL container/volume cô lập. Không trỏ file init này vào DB hiện hữu. Không chạy <code>docker compose down -v</code> nếu cần giữ dữ liệu local.</p>
+<div class="table-wrap"><table><thead><tr><th>Biến <code>.env</code></th><th>Mục đích</th><th>Mặc định/mẫu</th></tr></thead><tbody><tr><td><code>MYSQL_USER</code></td><td>App user local</td><td>Bắt buộc đổi</td></tr><tr><td><code>MYSQL_PASSWORD</code></td><td>Mật khẩu app user</td><td>Bắt buộc đổi, không commit</td></tr><tr><td><code>MYSQL_ROOT_PASSWORD</code></td><td>Root của container</td><td>Bắt buộc đổi, không commit</td></tr><tr><td><code>MYSQL_PORT</code></td><td>Host → MySQL</td><td><code>3306</code></td></tr><tr><td><code>API_PORT</code></td><td>Host → API</td><td><code>5083</code></td></tr><tr><td><code>WEB_PORT</code></td><td>Host → web</td><td><code>4200</code></td></tr></tbody></table></div>
+<p>Compose hiện chỉ có MySQL, API và web; hai AI service/Ollama chưa tồn tại trong stack hiện hành, vì vậy chưa có lệnh local hợp lệ để chạy chúng. Khi P2/P3 tạo service, phải bổ sung image, model version, health, resource limit và runbook trước khi cập nhật phần này.</p>
+<h3 id="20-5-kiem-tra-truoc-pr">20.5 Kiểm tra trước PR</h3>
+<pre><code class="language-powershell">dotnet test ProjectMgmt.slnx -c Release -m:1
+Set-Location frontend/projectmgmt-web
+$env:NODE_OPTIONS='--max-old-space-size=4096'
+npm run lint
+npm test -- --watch=false
+npm run build</code></pre>
+<p>Thêm integration/architecture/E2E command khi các suite đó được tạo. Không bỏ qua test đỏ bằng cách đổi CI thành continue-on-error.</p>
+<h2 id="21-runbook-xu-ly-su-co">21. Runbook xử lý sự cố</h2>
+<h3 id="21-1-api-khong-khoi-ong">21.1 API không khởi động</h3>
+<ol>
+<li>Kiểm <code>ConnectionStrings__ProjectMgmt</code>/User Secrets không rỗng.</li>
+<li>Kiểm MySQL reachable, version/config và TLS mode phù hợp.</li>
+<li>Kiểm ba DbContext registration/migration history.</li>
+<li>Không dùng <code>EnsureCreated</code> để “chữa nhanh”.</li>
+<li>Xem structured log theo TraceId, không bật sensitive logging trên TEST/PROD.</li>
+</ol>
+<h3 id="21-2-health-live-pass-nhung-nghiep-vu-loi">21.2 Health live pass nhưng nghiệp vụ lỗi</h3>
+<p><code>/health/live</code> chỉ chứng minh process sống. Kiểm <code>/health</code> và thêm readiness có <code>CanConnect</code>/query read-only. Chạy smoke: login, current user, list project, read board. Nếu deploy vừa xảy ra, so config artifact, DB schema version và frontend/API compatibility.</p>
+<h3 id="21-3-frontend-test-co-unhandled-timer">21.3 Frontend test có unhandled timer</h3>
+<p>Hiện lỗi ở <code>auth-page.ts:110</code>: callback timeout chạy sau khi ViewChild/fixture không còn. Cần clear timer trong destroy, dùng lifecycle-aware utility, hoặc test với fake timers và flush/clear. Không chỉ suppress unhandled error vì assertion pass.</p>
+<h3 id="21-4-board-transition-conflict">21.4 Board/transition conflict</h3>
+<ul>
+<li>409: refetch issue/version, hiển thị người dùng trạng thái mới.</li>
+<li>422/validation: hiển thị lý do transition/WIP từ server.</li>
+<li>Không tự kéo card về state optimistic trước khi server xác nhận.</li>
+<li>Kiểm status/board mapping và permission scope.</li>
+</ul>
+<h3 id="21-5-ai-timeout-hoac-json-loi">21.5 AI timeout hoặc JSON lỗi</h3>
+<ul>
+<li>Generation/Run chuyển <code>Failed</code> với reason code; không để <code>Processing</code> vô hạn.</li>
+<li>Retry chỉ lỗi transient và idempotent; schema invalid không retry vô hạn cùng prompt/model.</li>
+<li>Giữ raw response hạn chế quyền để debug; UI hiển thị thông báo an toàn.</li>
+<li>Có fallback tạo task thủ công/weighted assignment baseline.</li>
+</ul>
+<h3 id="21-6-deploy-test-fail">21.6 Deploy TEST fail</h3>
+<ol>
+<li>Đọc <code>C:\Logs\ProjectMgmt\deploy-test.log</code>.</li>
+<li>Xác minh artifact có đủ backend/frontend và staging config tồn tại.</li>
+<li>Kiểm app pool/site ACL và Hosting Bundle.</li>
+<li>Nếu health fail, script phải rollback app backup gần nhất.</li>
+<li>Nếu schema mismatch, không tự rollback DB bằng lệnh phá hủy; dừng, đánh giá forward-fix hoặc restore backup đã kiểm chứng.</li>
+</ol>
+<h2 id="22-cac-quyet-inh-kien-truc">22. Các quyết định kiến trúc</h2>
+<div class="table-wrap"><table><thead><tr><th>ADR</th><th>Quyết định</th><th>Lý do</th><th>Hệ quả</th></tr></thead><tbody><tr><td>ADR-01</td><td>Modular monolith 3 module vật lý</td><td>Nhóm 3 người, một DB, giảm project/merge overhead</td><td>Boundary phải được kiểm bằng contract/test, không bằng process isolation</td></tr><tr><td>ADR-02</td><td>Repository/service, không CQRS/Event Sourcing baseline</td><td>Phù hợp năng lực, code hiện tại và tốc độ đồ án</td><td>Có thể dùng command/query object cục bộ nhưng không áp framework nặng</td></tr><tr><td>ADR-03</td><td>MySQL là nguồn dữ liệu thật</td><td>DDL/ERD v3 và source hiện tại</td><td>Tài liệu SQL Server cũ bị supersede</td></tr><tr><td>ADR-04</td><td>XMOD không FK vật lý</td><td>Module độc lập migration</td><td>Validate qua contract; cần index/query discipline</td></tr><tr><td>ADR-05</td><td>Ba DbContext/migration history</td><td>Khớp ba ownership lớn</td><td>AiCore logic đồng sở hữu nhưng migration phải điều phối</td></tr><tr><td>ADR-06</td><td>Hai AI tách nhiệm vụ</td><td>Dễ đánh giá, giải thích và quản trị rủi ro</td><td>Hai schema/metric/feedback flow riêng</td></tr><tr><td>ADR-07</td><td>Human-in-the-loop</td><td>AI output có thể sai/hallucinate/bias</td><td>Không auto apply/assign; lưu quyết định người dùng</td></tr><tr><td>ADR-08</td><td>Deterministic Assignment trước ML</td><td>Ít dữ liệu ban đầu, cần explain/reproduce</td><td>Learned ranker chỉ thay khi thắng baseline trên test set</td></tr><tr><td>ADR-09</td><td>AI service không truy cập DB</td><td>Giảm coupling và rò rỉ dữ liệu</td><td>.NET chịu orchestration, auth, persistence</td></tr><tr><td>ADR-10</td><td>Artifact/config/secret tách rời</td><td>Deploy lặp lại và an toàn</td><td>Cần quản lý version config/model rõ</td></tr></tbody></table></div>
+<h2 id="23-khuyen-nghi-va-ket-luan">23. Khuyến nghị và kết luận</h2>
+<h3 id="23-1-key-findings">23.1 Key findings</h3>
+<p>Kiến trúc nền và dữ liệu của ProjectMgmt đã mạnh hơn mức một prototype trống: schema đủ sâu, module đã được gom hợp lý, Planning có code thực và UI/DevOps đã có nền đáng kể. Vấn đề lớn nhất không phải “thiếu thêm framework”, mà là khoảng cách giữa thiết kế và luồng chạy thật: auth chưa bảo vệ API, frontend dùng mock, Issue/Sprint/AI thiếu orchestration, test chưa đủ chứng minh.</p>
+<h3 id="23-2-he-qua-neu-khong-xu-ly-ung-thu-tu">23.2 Hệ quả nếu không xử lý đúng thứ tự</h3>
+<div class="table-wrap"><table><thead><tr><th>Nếu làm trước</th><th>Rủi ro</th></tr></thead><tbody><tr><td>AI trước Scrum core</td><td>AI không có input/output contract thật, feedback không đáng tin, demo rời rạc</td></tr><tr><td>UI tiếp tục mở rộng trước API integration</td><td>Mock debt tăng; khó biết nghiệp vụ nào thật</td></tr><tr><td>Tách thêm microservice/module</td><td>Tăng deployment/contract overhead, ba người bị chia nhỏ</td></tr><tr><td>Fine-tune LLM sớm</td><td>Tốn compute, dataset bẩn/leak, không biết có hơn baseline</td></tr><tr><td>Deploy migration tự động không review</td><td>Có thể mất dữ liệu và không rollback được</td></tr><tr><td>Bỏ qua auth để demo</td><td>Tạo lỗ hổng IDOR/privilege escalation ngay trong thiết kế</td></tr></tbody></table></div>
+<h3 id="23-3-khuyen-nghi-hanh-ong-ngay">23.3 Khuyến nghị hành động ngay</h3>
+<ol>
+<li>Đóng băng một sprint P0 chỉ cho auth, contract, API integration, test xanh và DB audit.</li>
+<li>Dùng một vertical slice chuẩn làm mẫu: login → current user → list/create project → UI thật.</li>
+<li>Sau đó làm issue/sprint/board end-to-end trước AI.</li>
+<li>Giữ AI Breakdown và Assignment tách runtime/schema/metric; DataOps phục vụ cả hai.</li>
+<li>Dùng bảng maturity và exit criteria trong handbook để review hằng sprint.</li>
+<li>Cập nhật handbook trong cùng PR khi thay contract, schema, pipeline hoặc quyết định kiến trúc.</li>
+</ol>
+<h3 id="23-4-ket-luan">23.4 Kết luận</h3>
+<p>ProjectMgmt nên được hoàn thiện như một <strong>modular monolith có kỷ luật</strong>, không phải tập hợp màn hình và bảng dữ liệu. Ba module là ba ownership lớn; Contracts là biên làm việc chung; MySQL v3 là nguồn thật; hai AI là hai sản phẩm hỗ trợ có con người kiểm soát. Khi P0 và Scrum core đã chạy E2E, phần AI mới có dữ liệu đúng, feedback đúng và giá trị đo được.</p>
+<h2 id="24-phu-luc-tra-cuu">24. Phụ lục tra cứu</h2>
+<h3 id="24-1-file-quan-trong-trong-repo">24.1 File quan trọng trong repo</h3>
+<div class="table-wrap"><table><thead><tr><th>File/thư mục</th><th>Vai trò</th></tr></thead><tbody><tr><td><code>ProjectMgmt.slnx</code></td><td>Danh mục project và dependency cấp solution</td></tr><tr><td><code>ProjectMgmt.Solution/Program.cs</code></td><td>Composition root, DbContext, middleware, health/static SPA</td></tr><tr><td><code>ProjectMgmt.Contracts/</code></td><td>DTO/Result/interface liên module</td></tr><tr><td><code>ProjectMgmt.Modules.*/</code></td><td>Ba module vật lý</td></tr><tr><td><code>docs/projectmgmt_schema_mysql_optimized.sql</code></td><td>DDL hiện hành 55 bảng</td></tr><tr><td><code>frontend/projectmgmt-web/src/app/app.routes.ts</code></td><td>Route frontend</td></tr><tr><td><code>frontend/projectmgmt-web/src/app/core/services/</code></td><td>Service/mock/realtime/health</td></tr><tr><td><code>.github/workflows/ci.yml</code></td><td>CI PR</td></tr><tr><td><code>.github/workflows/deploy-test.yml</code></td><td>CD TEST IIS</td></tr><tr><td><code>scripts/deploy-test.ps1</code></td><td>Backup/deploy/health/rollback</td></tr><tr><td><code>scripts/validate-xmod-indexes.ps1</code></td><td>Audit index XMOD read-only</td></tr><tr><td><code>docker-compose.yml</code></td><td>Local MySQL/API/web</td></tr><tr><td><code>docker-compose.test.yml</code></td><td>Container TEST override</td></tr></tbody></table></div>
+<h3 id="24-2-nguon-tai-lieu-ngoai-repo-a-tong-hop">24.2 Nguồn tài liệu ngoài repo đã tổng hợp</h3>
+<div class="table-wrap"><table><thead><tr><th>Nguồn</th><th>Nội dung lấy vào handbook</th></tr></thead><tbody><tr><td><code>Hệ thống Quản lý Dự án Scrum + AI-Nhóm 7 Kỹ Sư (1).pdf</code></td><td>Nghiệp vụ nền, workflow AI Breakdown, local/HITL; các claim SQL Server/31 bảng bị supersede</td></tr><tr><td><code>Phan_bo_vai_tro_module_nhom_3_nguoi.pdf</code></td><td>Ownership, 10 vùng logic, 2 AI, contract-first, trách nhiệm A/B/C</td></tr><tr><td><code>Mo_ta_bai_toan_va_pham_vi_du_an_v2.docx</code></td><td>Vấn đề, mục tiêu nghiên cứu, actor, scope/out-of-scope, risk</td></tr><tr><td><code>07_Thiet_ke_co_so_du_lieu_v3.pdf</code></td><td>MySQL 55 bảng, 4 view, constraint/index/XMOD</td></tr><tr><td><code>ERD_v3_He_thong_Scrum_AI_55bang (1).png</code></td><td>Quan hệ và boundary dữ liệu</td></tr><tr><td><code>Ke_hoach_Jira_Scrum_AI_3_nguoi_2026.xlsx</code></td><td>13 sprint, epic, RACI, risk, environment, scoring/DoD</td></tr><tr><td><code>JiraImport_FINAL_CO_SPRINT_ID.csv</code> và CSV liên quan</td><td>138 work item và mapping sprint</td></tr><tr><td><code>PROMPT_CODE_X_HOAN_THIEN_SPRINT1_PROJECTMGMT.md</code></td><td>Baseline foundation mong muốn; được đối chiếu với source hiện tại</td></tr><tr><td>Lịch sử phiên <code>01a09072-8caa-7743-8a5f-be64f3d5c3b8</code></td><td>Lý do chuyển 3 module, EF/MySQL, CI/CD/IIS, Swagger, responsive/motion</td></tr></tbody></table></div>
+<h3 id="24-3-cac-rui-ro-du-an-chinh">24.3 Các rủi ro dự án chính</h3>
+<div class="table-wrap"><table><thead><tr><th>Rủi ro</th><th>Xác suất/Tác động</th><th>Giảm thiểu</th></tr></thead><tbody><tr><td>Scope quá lớn cho 3 người</td><td>Cao/Cao</td><td>P0/P1 trước, cắt stretch, exit criteria rõ</td></tr><tr><td>AI local chậm/JSON lỗi</td><td>TB/Cao</td><td>schema, async job, timeout, baseline nhỏ, fallback</td></tr><tr><td>Dependency chặn nhau</td><td>TB/Cao</td><td>contract-first, fake, integration window</td></tr><tr><td>Migration xung đột/mất dữ liệu</td><td>TB/Cao</td><td>3 history, owner, SQL review, backup/restore rehearsal</td></tr><tr><td>Auth/IDOR</td><td>Cao/Cao</td><td>P0, policy/resource tests, không endpoint write công khai</td></tr><tr><td>PII/duplicate/leakage AI</td><td>TB/Cao</td><td>redaction, hash, freeze, split discipline, review</td></tr><tr><td>TEST khác PROD</td><td>TB/Cao</td><td>cùng artifact/config pattern, staging rehearsal</td></tr><tr><td>UI đẹp nhưng mock</td><td>Cao/Cao</td><td>vertical slice API thật, maturity tracking</td></tr></tbody></table></div>
+<h3 id="24-4-checklist-review-pr">24.4 Checklist review PR</h3>
+<ul>
+<li>[ ] Đúng module ownership, không reference implementation chéo.</li>
+<li>[ ] Contract/DTO/changelog được cập nhật nếu thay biên.</li>
+<li>[ ] AuthN/AuthZ và resource scope test.</li>
+<li>[ ] Validation, error mapping, cancellation và idempotency phù hợp.</li>
+<li>[ ] Transaction/history/audit/event sau commit đúng.</li>
+<li>[ ] Migration/index/query plan/rollback được xem xét.</li>
+<li>[ ] Không secret, token, OTP, PII, raw prompt nhạy cảm trong Git/log.</li>
+<li>[ ] Unit/integration/architecture/frontend/E2E liên quan pass.</li>
+<li>[ ] UI có loading/error/empty/accessibility/reduced-motion.</li>
+<li>[ ] AI thay đổi có fixed evaluation, version và Human-in-the-loop.</li>
+<li>[ ] Docs/Swagger/Jira/runbook cập nhật.</li>
+</ul>
+<h3 id="24-5-lenh-tai-sinh-ba-tai-lieu">24.5 Lệnh tái sinh ba tài liệu</h3>
+<p>Sau khi sửa bản Markdown nguồn:</p>
+<pre><code class="language-powershell">node scripts/render-technical-handbook.cjs</code></pre>
+<p>Lệnh này sinh lại bản HTML và TXT từ cùng nội dung, giúp ba định dạng không bị lệch.</p>
+<hr>
+<p><strong>Chủ sở hữu tài liệu:</strong> cả nhóm; mỗi module owner chịu cập nhật phần module của mình. <strong>Chu kỳ review:</strong> cuối mỗi sprint và bắt buộc khi thay schema, contract, AI model/prompt activation hoặc pipeline deploy. <strong>Tiêu chí tài liệu còn hiệu lực:</strong> baseline commit, bảng maturity, command kiểm thử và file path vẫn khớp repo.</p></main>
+  </div>
+  <footer>ProjectMgmt Technical Handbook · Nội dung sinh từ một nguồn Markdown duy nhất · Cập nhật 20/09/2026</footer>
+</body>
+</html>

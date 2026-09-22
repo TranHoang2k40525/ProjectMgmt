@@ -541,6 +541,99 @@ import { ToastService } from '../../core/services/toast.service';
       padding: 2.5rem;
       color: #64748b;
     }
+
+    @media (max-width: 1279px) {
+      .board-settings-container {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        padding: 1rem;
+      }
+      .board-settings-container *,
+      .card,
+      .col-info {
+        min-width: 0;
+      }
+      .settings-tabs {
+        overflow-x: auto;
+        overscroll-behavior-inline: contain;
+        scroll-snap-type: x proximity;
+        scrollbar-width: thin;
+      }
+      .tab-item {
+        flex: 0 0 auto;
+        scroll-snap-align: start;
+      }
+      .board-header {
+        gap: 1rem;
+        flex-wrap: wrap;
+      }
+      .board-header > div {
+        flex: 1 1 420px;
+        min-width: 0;
+      }
+      .board-tabs {
+        min-width: 0;
+      }
+      .board-btn {
+        max-width: 100%;
+        white-space: normal;
+      }
+      .form-row {
+        align-items: stretch;
+        flex-wrap: wrap;
+      }
+      .form-row > .form-control:first-of-type {
+        flex: 1 1 360px;
+      }
+      .columns-management-grid {
+        grid-template-columns: minmax(280px, 1fr) minmax(280px, 340px);
+      }
+      .column-item {
+        align-items: flex-start;
+      }
+      .board-settings-container button,
+      .board-settings-container input,
+      .board-settings-container select {
+        min-height: 40px;
+      }
+      .btn-arrow,
+      .btn-delete {
+        min-width: 40px;
+      }
+      .col-title {
+        align-items: flex-start;
+        flex-wrap: wrap;
+      }
+    }
+
+    @media (max-width: 767px), (max-width: 932px) and (orientation: landscape) and (max-height: 520px) {
+      .board-settings-container { padding: 0; }
+      h1 { font-size: 1.35rem; line-height: 1.08; }
+      .subtitle { line-height: 1.45; }
+      .settings-tabs { gap: 0; margin: 1rem 0; }
+      .tab-item { padding: .75rem .9rem; font-size: .875rem; }
+      .card { padding: 1rem; margin-bottom: 1rem; }
+      .board-header {
+        align-items: stretch;
+        flex-direction: column;
+      }
+      .board-header > div {
+        flex: 0 1 auto;
+        width: 100%;
+      }
+      .board-header > .btn { width: 100%; justify-content: center; }
+      .board-tabs { flex-direction: column; }
+      .board-btn { width: 100%; justify-content: flex-start; }
+      .form-row { flex-direction: column; }
+      .form-row > * { width: 100% !important; max-width: none !important; flex-basis: auto !important; }
+      .columns-management-grid { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+      .column-item { gap: .75rem; padding: .75rem; }
+      .btn,
+      .btn-arrow,
+      .btn-delete { min-height: 42px; }
+      .btn-arrow { min-width: 42px; }
+    }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush
 })

@@ -1,90 +1,47 @@
-<div class="relative w-full min-h-screen bg-cover bg-center flex items-center justify-center p-4 sm:p-6 lg:p-10 font-body-md text-white overflow-x-hidden select-none"
-     style="background-image: linear-gradient(135deg, rgba(12, 54, 128, 0.88) 0%, rgba(26, 86, 219, 0.88) 100%), url('assets/images/huce-branding/huce-campus-bg.jpg');">
-  
-  <div class="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-center relative z-10">
-    
-    <!-- LEFT HERO SECTION (Stitch Screen 62e7ae8ad9ca4cb9be1fd9598ad02ce3) -->
-    <div class="lg:col-span-7 flex flex-col justify-between space-y-8 py-4">
-      
-      <!-- Top Left Brand Header -->
-      <div class="flex items-center gap-4">
-        <div class="w-14 h-14 rounded-2xl bg-white p-2 shadow-lg flex items-center justify-center shrink-0 ring-4 ring-white/20">
-          <img src="assets/images/huce-branding/huce-official-logo.png" alt="HUCE Logo" class="w-full h-full object-contain" />
-        </div>
-        <div class="flex flex-col">
-          <span class="text-xs font-bold uppercase tracking-widest text-blue-200">TRƯỜNG ĐẠI HỌC XÂY DỰNG HÀ NỘI (HUCE)</span>
-          <div class="flex items-center gap-2">
-            <h1 class="text-xl sm:text-2xl font-black tracking-tight text-white">Hệ Thống Scrum AI Management</h1>
-            <span class="px-2 py-0.5 rounded-full bg-white/20 text-white text-[11px] font-bold backdrop-blur-md">v2.0 Pro</span>
-          </div>
-        </div>
+<div #authPage class="auth-page font-body-md" [class.auth-page--panel-open]="panelOpen()">
+  @if (sceneVisible()) {
+    <app-sylva-arrival class="auth-arrival" (enter)="openAuth()" />
+  }
+
+  @if (!panelOpen()) {
+    <div class="arrival-bar">
+      <div class="arrival-brand">
+        <img src="assets/images/huce-branding/huce-official-logo.png" alt="Biểu trưng HUCE" />
+        <span>ProjectMgmt <small>by HUCE</small></span>
       </div>
-
-      <!-- Hero Main Content -->
-      <div class="space-y-5">
-        <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/15 backdrop-blur-md border border-white/20 text-blue-100 text-xs font-semibold">
-          <span class="material-symbols-outlined text-[16px] text-amber-300">auto_awesome</span>
-          <span>Tích hợp AI Auto Task Breakdown & Acceptance Criteria</span>
-        </div>
-
-        <h2 class="text-3xl sm:text-4xl lg:text-5xl font-black leading-tight tracking-tight text-white">
-          Chào mừng bạn đến với công cụ quản lý dự án
-        </h2>
-
-        <p class="text-sm sm:text-base text-blue-100 leading-relaxed max-w-2xl font-normal">
-          Nền tảng Scrum chuyên biệt dành cho giảng viên, sinh viên và các nhóm nghiên cứu Đại học Xây dựng Hà Nội. Quản lý Backlog, theo dõi tiến độ Sprint qua Board kéo thả, phân rã công việc tự động bằng Claude AI và đo lường báo cáo hiệu suất chuyên sâu.
-        </p>
-
-        <!-- 3 Glassmorphism Stat Cards -->
-        <div class="grid grid-cols-3 gap-4 pt-4">
-          <div class="p-4 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 flex flex-col gap-1">
-            <span class="text-2xl sm:text-3xl font-black text-white">31</span>
-            <span class="text-xs text-blue-200 font-medium">Bảng CSDL Chuẩn</span>
-          </div>
-
-          <div class="p-4 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 flex flex-col gap-1">
-            <span class="text-2xl sm:text-3xl font-black text-white">100%</span>
-            <span class="text-xs text-blue-200 font-medium">Chuẩn Agile/Scrum</span>
-          </div>
-
-          <div class="p-4 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 flex flex-col gap-1">
-            <span class="text-2xl sm:text-3xl font-black text-white">Realtime</span>
-            <span class="text-xs text-blue-200 font-medium">SignalR Tức thời</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Footer Brand Notice -->
-      <div class="text-xs text-blue-200/80 font-medium pt-4 border-t border-white/10 flex flex-wrap items-center gap-3">
-        <span>© 2026 HUCE Scrum Platform</span>
-        <span>•</span>
-        <span>Khoa Công nghệ Thông tin</span>
-        <span>•</span>
-        <span>Phiên bản tích hợp Anthropic AI</span>
-      </div>
+      <button type="button" class="arrival-skip" (click)="openAuth()">
+        Bỏ qua và đăng nhập <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
+      </button>
     </div>
+  }
 
-    <!-- RIGHT AUTH WINDOW CARD (Stitch Screen 62e7ae8ad9ca4cb9be1fd9598ad02ce3) -->
-    <div class="lg:col-span-5 w-full">
-      <div class="w-full max-w-md mx-auto rounded-3xl bg-white/90 backdrop-blur-2xl text-slate-900 shadow-2xl border border-white/40 overflow-hidden animate-fade-in">
-        
-        <!-- macOS Window Header -->
-        <div class="px-5 py-3 bg-slate-100/80 border-b border-slate-200/60 flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <div class="flex items-center gap-1.5">
-              <span class="w-3 h-3 rounded-full bg-red-400 inline-block"></span>
-              <span class="w-3 h-3 rounded-full bg-amber-400 inline-block"></span>
-              <span class="w-3 h-3 rounded-full bg-emerald-400 inline-block"></span>
-            </div>
-            <span class="text-[11px] font-bold text-slate-500 uppercase tracking-widest ml-2">CỔNG XÁC THỰC DỰ ÁN</span>
+  @if (panelOpen()) {
+    <main class="auth-panel-layer">
+      <div class="auth-panel-layout">
+        <section class="auth-panel-intro" aria-labelledby="auth-intro-heading">
+          <div class="auth-panel-brand">
+            <img src="assets/images/huce-branding/huce-official-logo.png" alt="" />
+            <span>HUCE <b>ProjectMgmt</b></span>
           </div>
-          <span class="text-[10px] text-slate-400 font-medium flex items-center gap-1">
-            <span class="material-symbols-outlined text-[12px]">drag_pan</span> Kéo thả vị trí
-          </span>
-        </div>
+          <div class="auth-panel-copy">
+            <span class="auth-eyebrow">Một nơi cho công việc của cả nhóm</span>
+            <h1 id="auth-intro-heading">Trở lại với điều<br />bạn đang xây dựng.</h1>
+            <p>Tiếp tục sprint, giải quyết việc cần chú ý và giữ mọi thành viên cùng một nhịp.</p>
+          </div>
+          <div class="auth-panel-footnote">Trường Đại học Xây dựng Hà Nội · Không gian làm việc nhóm</div>
+        </section>
+
+        <div class="auth-panel-form">
+          <div class="auth-card text-slate-900">
+            <div class="auth-card-topline">
+              <span>TRUY CẬP KHÔNG GIAN LÀM VIỆC</span>
+              @if (canReplayArrival()) {
+                <button type="button" (click)="reopenArrival()">Xem lại khu vườn</button>
+              }
+            </div>
 
         <!-- Auth Body Content -->
-        <div class="p-6 sm:p-8 space-y-6">
+        <div class="auth-card-body p-6 sm:p-8 space-y-6">
           
           <!-- Center Logo & Title -->
           <div class="text-center space-y-2">
@@ -143,20 +100,14 @@
                   <span class="material-symbols-outlined absolute left-3.5 text-slate-400 text-[18px]">lock</span>
                   <input
                     id="loginPass"
-                    type="password"
+                    [type]="passwordVisible() ? 'text' : 'password'"
                     formControlName="password"
                     placeholder="••••••••"
                     class="w-full h-11 pl-10 pr-10 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 text-sm font-medium focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
-                  <span class="material-symbols-outlined absolute right-3.5 text-slate-400 text-[18px] cursor-pointer">visibility</span>
+                  <button type="button" class="password-toggle" (click)="passwordVisible.set(!passwordVisible())" [attr.aria-label]="passwordVisible() ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'">
+                    <span class="material-symbols-outlined text-[18px]" aria-hidden="true">{{ passwordVisible() ? 'visibility_off' : 'visibility' }}</span>
+                  </button>
                 </div>
-              </div>
-
-              <div class="flex items-center justify-between pt-1 text-xs">
-                <label class="flex items-center gap-2 cursor-pointer select-none text-slate-600 font-medium">
-                  <input type="checkbox" checked class="w-4 h-4 rounded text-blue-600 accent-blue-600 cursor-pointer" />
-                  <span>Ghi nhớ đăng nhập</span>
-                </label>
-                <span class="text-slate-400 font-medium">Bảo mật JWT 256-bit</span>
               </div>
 
               <button
@@ -282,28 +233,7 @@
             </form>
           }
 
-          <!-- DIVIDER & GOOGLE OAUTH SSO -->
-          @if (mode() === 'LOGIN' || mode() === 'SIGNUP') {
-            <div class="space-y-4 pt-2">
-              <div class="relative flex py-1 items-center">
-                <div class="flex-grow h-px bg-slate-200"></div>
-                <span class="flex-shrink mx-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">HOẶC LIÊN KẾT NHANH</span>
-                <div class="flex-grow h-px bg-slate-200"></div>
-              </div>
-
-              <button type="button" (click)="onLogin()" class="w-full h-11 px-4 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer">
-                <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                  <path d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z" fill="#4285F4"/>
-                  <path d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z" fill="#34A853"/>
-                  <path d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z" fill="#FBBC05"/>
-                  <path d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z" fill="#EA4335"/>
-                </svg>
-                <span>Đăng nhập với Google OAuth</span>
-              </button>
-            </div>
-          }
-
-          <!-- BOTTOM FOOTER LINK (The exact bottom switcher from Stitch 62e7ae8ad9ca4cb9be1fd9598ad02ce3) -->
+          <!-- Chỉ hiển thị phương thức đăng nhập thực sự được cấu hình. -->
           <div class="pt-4 border-t border-slate-100 text-center text-xs text-slate-500 font-medium">
             @if (mode() === 'LOGIN') {
               <span>Chưa có tài khoản? </span>
@@ -320,7 +250,8 @@
         </div>
 
       </div>
-    </div>
-
-  </div>
+        </div>
+      </div>
+    </main>
+  }
 </div>

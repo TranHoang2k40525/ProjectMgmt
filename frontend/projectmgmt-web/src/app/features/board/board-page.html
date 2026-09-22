@@ -1,14 +1,24 @@
+<!-- Context Menu Component -->
+<app-context-menu
+  [visible]="contextMenuVisible()"
+  [x]="contextMenuX()"
+  [y]="contextMenuY()"
+  [itemKey]="contextMenuItem()?.issueKey || ''"
+  (action)="onContextMenuAction($event)"
+  (menuClose)="closeAllPopups()"
+></app-context-menu>
+
 <!-- Transparent Backdrop Overlay to Close Popups on Outside Click -->
-@if (activeMenuTaskId()) {
+@if (activeMenuTaskId() || contextMenuVisible()) {
   <button type="button" aria-label="Đóng menu" class="fixed inset-0 z-30 w-full h-full bg-transparent border-0" (click)="closeAllPopups()"></button>
 }
 
-<div class="p-6 max-w-[1650px] mx-auto font-body text-slate-900 dark:text-slate-100 space-y-5">
+<div class="board-page p-6 max-w-[1650px] mx-auto font-body text-slate-900 dark:text-slate-100 space-y-5">
 
   <!-- Clean Header & Page Context -->
   <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
     <div class="flex items-center gap-3">
-      <h1 class="text-xl font-medium tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+      <h1 class="text-xl font-headline font-semibold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
         <span class="material-symbols-outlined text-primary text-[24px]">view_kanban</span>
         Bảng Scrum (Kanban Board)
       </h1>
@@ -21,8 +31,8 @@
     </div>
   </div>
 
-  <!-- Filter Bar (Sticky when scrolling down board) -->
-  <div class="sticky top-28 z-20 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-sm transition-all">
+  <!-- Filter Bar -->
+  <div class="board-filter-toolbar sticky top-28 z-20 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-sm transition-all">
     <div class="flex items-center gap-2.5 flex-wrap flex-1">
       <!-- Search Input -->
       <div class="relative flex items-center max-w-xs w-full">
@@ -74,7 +84,7 @@
       </button>
     }
 
-    <!-- Quick Column Status Tabs Bar for Mobile/Tablet Swiping -->
+    <!-- Column Status Tabs -->
     <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 w-full border-t border-slate-100 dark:border-slate-800/80 pt-2">
       <button
         (click)="selectedStatusTab.set(null)"
@@ -129,12 +139,17 @@
     </div>
   </div>
 
-  <!-- Board Columns Grid / Touch Carousel for Mobile & Tablet -->
-  <div class="flex overflow-x-auto snap-x snap-mandatory gap-3.5 pb-4 md:grid md:grid-cols-2 lg:grid-cols-4 md:overflow-visible no-scrollbar">
+  <!-- Board Columns Grid with CDK Drag & Drop -->
+  <div class="kanban-grid flex overflow-x-auto snap-x snap-mandatory gap-3.5 pb-4 md:grid md:grid-cols-2 lg:grid-cols-4 md:overflow-visible no-scrollbar">
     
     <!-- COLUMN 1: TO DO -->
-    <div class="board-column min-w-[280px] sm:min-w-[320px] md:min-w-0 snap-center flex-1 rounded-xl bg-slate-100/80 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-3 sm:p-3.5 space-y-3">
-      <div class="flex items-center justify-between text-sm font-medium text-slate-900 dark:text-slate-100 pb-1">
+    <div 
+      cdkDropList
+      [cdkDropListData]="toDoItems()"
+      (cdkDropListDropped)="onDrop($event, 'To Do')"
+      class="board-column min-w-[280px] sm:min-w-[320px] md:min-w-0 snap-center flex-1 rounded-xl bg-slate-100/80 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-3 sm:p-3.5 space-y-3"
+    >
+      <div class="flex items-center justify-between text-sm font-headline font-semibold text-slate-900 dark:text-slate-100 pb-1">
         <div class="flex items-center gap-2">
           <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
           <span>To Do (Cần làm)</span>
@@ -149,12 +164,15 @@
           @let subInfo = getSubtaskCount(item.id);
 
           <div
+            cdkDrag
+            [cdkDragData]="item"
             (click)="openTaskDrawer(item, $event)"
-            (keydown.enter)="openTaskDrawer(item, $event)"
-            (keydown.space)="$event.preventDefault(); openTaskDrawer(item, $event)"
+            (contextmenu)="onContextMenu($event, item)"
+            (dblclick)="startInlineEdit(item, $event)"
             role="button"
             tabindex="0"
-            class="p-3.5 rounded-lg bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 shadow-2xs hover:shadow-sm transition-all cursor-pointer space-y-2.5 group relative"
+            class="board-task-card interactive-card p-3.5 rounded-lg bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 shadow-xs hover:shadow-md transition-all cursor-grab active:cursor-grabbing space-y-2.5 group relative"
+            [attr.data-flip-id]="item.id"
           >
             <!-- Card Top Bar -->
             <div class="flex items-center justify-between">
@@ -168,7 +186,7 @@
                   [class.text-blue-700]="item.issueType === 'Task'"
                   [class.bg-emerald-100]="item.issueType === 'Story'"
                   [class.text-emerald-700]="item.issueType === 'Story'"
-                  class="px-2 py-0.5 rounded text-xs font-normal uppercase"
+                  class="px-2 py-0.5 rounded text-xs font-semibold uppercase"
                 >
                   {{ item.issueType }}
                 </span>
@@ -180,34 +198,49 @@
                 }
               </div>
 
-              <span class="font-mono text-sm font-medium text-primary">{{ item.issueKey }}</span>
+              <span class="font-mono text-xs font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded">{{ item.issueKey }}</span>
             </div>
 
-            <!-- Title (Font 14px, font-normal) -->
-            <h4 class="text-sm font-normal text-slate-900 dark:text-white group-hover:text-primary transition-colors leading-snug">
-              {{ item.title }}
-            </h4>
+            <!-- Title (Double click inline edit or plain text) -->
+            @if (inlineEditingTaskId() === item.id) {
+              <div class="no-drawer flex items-center gap-1.5 focus:outline-none" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()" tabindex="0" role="region" aria-label="Chỉnh sửa tiêu đề">
+                <input 
+                  type="text" 
+                  [ngModel]="inlineTitleValue()"
+                  (ngModelChange)="inlineTitleValue.set($event)"
+                  (keyup.enter)="saveInlineEdit(item.id, $event)"
+                  (keyup.escape)="cancelInlineEdit()"
+                  class="w-full text-xs p-1 rounded border border-primary bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white"
+                  autoFocus
+                />
+                <button (click)="saveInlineEdit(item.id, $event)" class="text-xs bg-primary text-white px-2 py-1 rounded">Lưu</button>
+              </div>
+            } @else {
+              <h4 class="text-sm font-normal text-slate-900 dark:text-white group-hover:text-primary transition-colors leading-snug">
+                {{ item.title }}
+              </h4>
+            }
 
             @if (subInfo.total > 0) {
-              <div class="text-sm font-normal text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-1 rounded border border-amber-200 dark:border-amber-900">
+              <div class="text-xs font-normal text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-1 rounded border border-amber-200 dark:border-amber-900">
                 Sub-tasks: {{ subInfo.done }}/{{ subInfo.total }}
               </div>
             }
 
-            <!-- Card Bottom Quick Bar (Font 14px) -->
-            <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700/60 text-sm">
+            <!-- Card Bottom Quick Bar -->
+            <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700/60 text-xs">
               <button
                 (click)="moveStatus(item, 'next', $event)"
-                class="px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-normal hover:bg-blue-100 transition-colors flex items-center gap-0.5 cursor-pointer no-drawer text-sm"
+                class="px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-medium hover:bg-blue-100 transition-colors flex items-center gap-0.5 cursor-pointer no-drawer"
                 title="Chuyển sang In Progress"
               >
                 <span>Chuyển</span>
-                <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+                <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
               </button>
 
               <div class="flex items-center gap-2 no-drawer">
-                <span class="font-medium text-primary text-sm font-mono bg-primary/10 px-2 py-0.5 rounded">{{ item.storyPoints }} SP</span>
-                <span class="text-slate-500 font-normal text-sm">{{ item.assigneeName }}</span>
+                <span class="font-bold text-primary text-xs font-mono bg-primary/10 px-2 py-0.5 rounded">{{ item.storyPoints }} SP</span>
+                <span class="text-slate-500 font-normal text-xs">{{ item.assigneeName }}</span>
               </div>
             </div>
           </div>
@@ -216,8 +249,13 @@
     </div>
 
     <!-- COLUMN 2: IN PROGRESS -->
-    <div class="board-column min-w-[280px] sm:min-w-[320px] md:min-w-0 snap-center flex-1 rounded-xl bg-slate-100/80 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-3 sm:p-3.5 space-y-3">
-      <div class="flex items-center justify-between text-sm font-medium text-slate-900 dark:text-slate-100 pb-1">
+    <div 
+      cdkDropList
+      [cdkDropListData]="inProgressItems()"
+      (cdkDropListDropped)="onDrop($event, 'In Progress')"
+      class="board-column min-w-[280px] sm:min-w-[320px] md:min-w-0 snap-center flex-1 rounded-xl bg-slate-100/80 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-3 sm:p-3.5 space-y-3"
+    >
+      <div class="flex items-center justify-between text-sm font-headline font-semibold text-slate-900 dark:text-slate-100 pb-1">
         <div class="flex items-center gap-2">
           <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
           <span>In Progress (Đang làm)</span>
@@ -230,38 +268,56 @@
       <div class="space-y-2.5 min-h-[400px]">
         @for (item of inProgressItems(); track item.id) {
           <div
+            cdkDrag
+            [cdkDragData]="item"
             (click)="openTaskDrawer(item, $event)"
-            (keydown.enter)="openTaskDrawer(item, $event)"
-            (keydown.space)="$event.preventDefault(); openTaskDrawer(item, $event)"
+            (contextmenu)="onContextMenu($event, item)"
+            (dblclick)="startInlineEdit(item, $event)"
             role="button"
             tabindex="0"
-            class="p-3.5 rounded-lg bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 shadow-2xs hover:shadow-sm transition-all cursor-pointer space-y-2.5 group relative ring-1 ring-blue-500/30"
+            class="board-task-card interactive-card p-3.5 rounded-lg bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 shadow-xs hover:shadow-md transition-all cursor-grab active:cursor-grabbing space-y-2.5 group relative ring-1 ring-blue-500/30"
+            [attr.data-flip-id]="item.id"
           >
             <div class="flex items-center justify-between">
-              <span class="px-2 py-0.5 rounded text-xs font-normal uppercase bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+              <span class="px-2 py-0.5 rounded text-xs font-semibold uppercase bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
                 {{ item.issueType }}
               </span>
-              <span class="font-mono text-sm font-medium text-primary">{{ item.issueKey }}</span>
+              <span class="font-mono text-xs font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded">{{ item.issueKey }}</span>
             </div>
 
-            <h4 class="text-sm font-normal text-slate-900 dark:text-white group-hover:text-primary transition-colors leading-snug">
-              {{ item.title }}
-            </h4>
+            @if (inlineEditingTaskId() === item.id) {
+              <div class="no-drawer flex items-center gap-1.5 focus:outline-none" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()" tabindex="0" role="region" aria-label="Chỉnh sửa tiêu đề">
+                <input 
+                  type="text" 
+                  [ngModel]="inlineTitleValue()"
+                  (ngModelChange)="inlineTitleValue.set($event)"
+                  (keyup.enter)="saveInlineEdit(item.id, $event)"
+                  (keyup.escape)="cancelInlineEdit()"
+                  class="w-full text-xs p-1 rounded border border-primary bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white"
+                  autoFocus
+                />
+                <button (click)="saveInlineEdit(item.id, $event)" class="text-xs bg-primary text-white px-2 py-1 rounded">Lưu</button>
+              </div>
+            } @else {
+              <h4 class="text-sm font-normal text-slate-900 dark:text-white group-hover:text-primary transition-colors leading-snug">
+                {{ item.title }}
+              </h4>
+            }
 
-            <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700/60 text-sm">
+            <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700/60 text-xs">
               <div class="flex items-center gap-1 no-drawer">
                 <button (click)="moveStatus(item, 'prev', $event)" class="p-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200">
-                  <span class="material-symbols-outlined text-[16px]">arrow_back</span>
+                  <span class="material-symbols-outlined text-[14px]">arrow_back</span>
                 </button>
-                <button (click)="moveStatus(item, 'next', $event)" class="px-2 py-0.5 rounded bg-purple-50 text-purple-700 font-normal hover:bg-purple-100 flex items-center gap-0.5 text-sm">
+                <button (click)="moveStatus(item, 'next', $event)" class="px-2 py-0.5 rounded bg-purple-50 text-purple-700 font-medium hover:bg-purple-100 flex items-center gap-0.5 text-xs">
                   <span>Review</span>
-                  <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+                  <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
                 </button>
               </div>
 
               <div class="flex items-center gap-2 no-drawer">
-                <span class="font-medium text-primary text-sm font-mono bg-primary/10 px-2 py-0.5 rounded">{{ item.storyPoints }} SP</span>
-                <span class="text-slate-500 font-normal text-sm">{{ item.assigneeName }}</span>
+                <span class="font-bold text-primary text-xs font-mono bg-primary/10 px-2 py-0.5 rounded">{{ item.storyPoints }} SP</span>
+                <span class="text-slate-500 font-normal text-xs">{{ item.assigneeName }}</span>
               </div>
             </div>
           </div>
@@ -270,8 +326,13 @@
     </div>
 
     <!-- COLUMN 3: CODE REVIEW -->
-    <div class="board-column min-w-[280px] sm:min-w-[320px] md:min-w-0 snap-center flex-1 rounded-xl bg-slate-100/80 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-3 sm:p-3.5 space-y-3">
-      <div class="flex items-center justify-between text-sm font-medium text-slate-900 dark:text-slate-100 pb-1">
+    <div 
+      cdkDropList
+      [cdkDropListData]="codeReviewItems()"
+      (cdkDropListDropped)="onDrop($event, 'Code Review')"
+      class="board-column min-w-[280px] sm:min-w-[320px] md:min-w-0 snap-center flex-1 rounded-xl bg-slate-100/80 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-3 sm:p-3.5 space-y-3"
+    >
+      <div class="flex items-center justify-between text-sm font-headline font-semibold text-slate-900 dark:text-slate-100 pb-1">
         <div class="flex items-center gap-2">
           <span class="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
           <span>Code Review</span>
@@ -284,38 +345,56 @@
       <div class="space-y-2.5 min-h-[400px]">
         @for (item of codeReviewItems(); track item.id) {
           <div
+            cdkDrag
+            [cdkDragData]="item"
             (click)="openTaskDrawer(item, $event)"
-            (keydown.enter)="openTaskDrawer(item, $event)"
-            (keydown.space)="$event.preventDefault(); openTaskDrawer(item, $event)"
+            (contextmenu)="onContextMenu($event, item)"
+            (dblclick)="startInlineEdit(item, $event)"
             role="button"
             tabindex="0"
-            class="p-3.5 rounded-lg bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 shadow-2xs hover:shadow-sm transition-all cursor-pointer space-y-2.5 group relative"
+            class="board-task-card interactive-card p-3.5 rounded-lg bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 shadow-xs hover:shadow-md transition-all cursor-grab active:cursor-grabbing space-y-2.5 group relative"
+            [attr.data-flip-id]="item.id"
           >
             <div class="flex items-center justify-between">
-              <span class="px-2 py-0.5 rounded text-xs font-normal uppercase bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300">
+              <span class="px-2 py-0.5 rounded text-xs font-semibold uppercase bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300">
                 {{ item.issueType }}
               </span>
-              <span class="font-mono text-sm font-medium text-primary">{{ item.issueKey }}</span>
+              <span class="font-mono text-xs font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded">{{ item.issueKey }}</span>
             </div>
 
-            <h4 class="text-sm font-normal text-slate-900 dark:text-white group-hover:text-primary transition-colors leading-snug">
-              {{ item.title }}
-            </h4>
+            @if (inlineEditingTaskId() === item.id) {
+              <div class="no-drawer flex items-center gap-1.5 focus:outline-none" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()" tabindex="0" role="region" aria-label="Chỉnh sửa tiêu đề">
+                <input 
+                  type="text" 
+                  [ngModel]="inlineTitleValue()"
+                  (ngModelChange)="inlineTitleValue.set($event)"
+                  (keyup.enter)="saveInlineEdit(item.id, $event)"
+                  (keyup.escape)="cancelInlineEdit()"
+                  class="w-full text-xs p-1 rounded border border-primary bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white"
+                  autoFocus
+                />
+                <button (click)="saveInlineEdit(item.id, $event)" class="text-xs bg-primary text-white px-2 py-1 rounded">Lưu</button>
+              </div>
+            } @else {
+              <h4 class="text-sm font-normal text-slate-900 dark:text-white group-hover:text-primary transition-colors leading-snug">
+                {{ item.title }}
+              </h4>
+            }
 
-            <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700/60 text-sm">
+            <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700/60 text-xs">
               <div class="flex items-center gap-1 no-drawer">
                 <button (click)="moveStatus(item, 'prev', $event)" class="p-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200">
-                  <span class="material-symbols-outlined text-[16px]">arrow_back</span>
+                  <span class="material-symbols-outlined text-[14px]">arrow_back</span>
                 </button>
-                <button (click)="moveStatus(item, 'next', $event)" class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-normal hover:bg-emerald-100 flex items-center gap-0.5 text-sm">
+                <button (click)="moveStatus(item, 'next', $event)" class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-medium hover:bg-emerald-100 flex items-center gap-0.5 text-xs">
                   <span>Approve</span>
-                  <span class="material-symbols-outlined text-[16px]">check</span>
+                  <span class="material-symbols-outlined text-[14px]">check</span>
                 </button>
               </div>
 
               <div class="flex items-center gap-2 no-drawer">
-                <span class="font-medium text-primary text-sm font-mono bg-primary/10 px-2 py-0.5 rounded">{{ item.storyPoints }} SP</span>
-                <span class="text-slate-500 font-normal text-sm">{{ item.assigneeName }}</span>
+                <span class="font-bold text-primary text-xs font-mono bg-primary/10 px-2 py-0.5 rounded">{{ item.storyPoints }} SP</span>
+                <span class="text-slate-500 font-normal text-xs">{{ item.assigneeName }}</span>
               </div>
             </div>
           </div>
@@ -324,8 +403,13 @@
     </div>
 
     <!-- COLUMN 4: DONE -->
-    <div class="board-column min-w-[280px] sm:min-w-[320px] md:min-w-0 snap-center flex-1 rounded-xl bg-slate-100/80 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-3 sm:p-3.5 space-y-3">
-      <div class="flex items-center justify-between text-sm font-medium text-slate-900 dark:text-slate-100 pb-1">
+    <div 
+      cdkDropList
+      [cdkDropListData]="doneItems()"
+      (cdkDropListDropped)="onDrop($event, 'Done')"
+      class="board-column min-w-[280px] sm:min-w-[320px] md:min-w-0 snap-center flex-1 rounded-xl bg-slate-100/80 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-3 sm:p-3.5 space-y-3"
+    >
+      <div class="flex items-center justify-between text-sm font-headline font-semibold text-slate-900 dark:text-slate-100 pb-1">
         <div class="flex items-center gap-2">
           <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
           <span>Done (Hoàn thành)</span>
@@ -338,32 +422,50 @@
       <div class="space-y-2.5 min-h-[400px]">
         @for (item of doneItems(); track item.id) {
           <div
+            cdkDrag
+            [cdkDragData]="item"
             (click)="openTaskDrawer(item, $event)"
-            (keydown.enter)="openTaskDrawer(item, $event)"
-            (keydown.space)="$event.preventDefault(); openTaskDrawer(item, $event)"
+            (contextmenu)="onContextMenu($event, item)"
+            (dblclick)="startInlineEdit(item, $event)"
             role="button"
             tabindex="0"
-            class="p-3.5 rounded-lg bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 shadow-2xs opacity-85 hover:opacity-100 transition-all cursor-pointer space-y-2.5 group relative"
+            class="board-task-card interactive-card p-3.5 rounded-lg bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 shadow-xs opacity-85 hover:opacity-100 transition-all cursor-grab active:cursor-grabbing space-y-2.5 group relative"
+            [attr.data-flip-id]="item.id"
           >
             <div class="flex items-center justify-between">
-              <span class="px-2 py-0.5 rounded text-xs font-normal uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+              <span class="px-2 py-0.5 rounded text-xs font-semibold uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
                 Verified
               </span>
-              <span class="font-mono text-sm font-medium text-primary">{{ item.issueKey }}</span>
+              <span class="font-mono text-xs font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded">{{ item.issueKey }}</span>
             </div>
 
-            <h4 class="text-sm font-normal text-slate-900 dark:text-white line-through leading-snug">
-              {{ item.title }}
-            </h4>
+            @if (inlineEditingTaskId() === item.id) {
+              <div class="no-drawer flex items-center gap-1.5 focus:outline-none" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()" tabindex="0" role="region" aria-label="Chỉnh sửa tiêu đề">
+                <input 
+                  type="text" 
+                  [ngModel]="inlineTitleValue()"
+                  (ngModelChange)="inlineTitleValue.set($event)"
+                  (keyup.enter)="saveInlineEdit(item.id, $event)"
+                  (keyup.escape)="cancelInlineEdit()"
+                  class="w-full text-xs p-1 rounded border border-primary bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white"
+                  autoFocus
+                />
+                <button (click)="saveInlineEdit(item.id, $event)" class="text-xs bg-primary text-white px-2 py-1 rounded">Lưu</button>
+              </div>
+            } @else {
+              <h4 class="text-sm font-normal text-slate-900 dark:text-white line-through leading-snug">
+                {{ item.title }}
+              </h4>
+            }
 
-            <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700/60 text-sm">
+            <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700/60 text-xs">
               <button (click)="moveStatus(item, 'prev', $event)" class="p-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200 no-drawer" title="Mở lại">
-                <span class="material-symbols-outlined text-[16px]">replay</span>
+                <span class="material-symbols-outlined text-[14px]">replay</span>
               </button>
 
               <div class="flex items-center gap-2 no-drawer">
-                <span class="font-medium text-emerald-600 text-sm font-mono bg-emerald-50 px-2 py-0.5 rounded">{{ item.storyPoints }} SP</span>
-                <span class="text-slate-500 font-normal text-sm">{{ item.assigneeName }}</span>
+                <span class="font-bold text-emerald-600 text-xs font-mono bg-emerald-50 px-2 py-0.5 rounded">{{ item.storyPoints }} SP</span>
+                <span class="text-slate-500 font-normal text-xs">{{ item.assigneeName }}</span>
               </div>
             </div>
           </div>
@@ -373,3 +475,4 @@
 
   </div>
 </div>
+

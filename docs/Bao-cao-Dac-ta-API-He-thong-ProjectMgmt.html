@@ -1,0 +1,3966 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BÁO CÁO ĐẶC TẢ API CHUẨN MỰC TOÀN DIỆN HỆ THỐNG - DỰ ÁN PROJECTMGMT (HUCE SCRUM PLATFORM)</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+  <style>
+    :root {
+      --primary: #0052cc;
+      --primary-dark: #003d9b;
+      --bg: #090d16;
+      --surface: #0f172a;
+      --card-bg: #1e293b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --border: rgba(255, 255, 255, 0.12);
+      --get-bg: #10b981;
+      --post-bg: #3b82f6;
+      --put-bg: #f59e0b;
+      --delete-bg: #ef4444;
+      --ws-bg: #8b5cf6;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+    .layout { display: flex; min-height: 100vh; }
+    .sidebar { width: 350px; background: var(--surface); border-right: 1px solid var(--border); position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 2rem 1.25rem; }
+    .sidebar h2 { font-size: 1.05rem; color: #38bdf8; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .sidebar ul { list-style: none; }
+    .sidebar li { margin-bottom: 0.4rem; }
+    .sidebar a { color: var(--text-muted); text-decoration: none; font-size: 0.88rem; transition: color 0.2s; display: block; padding: 0.35rem 0.5rem; border-radius: 6px; }
+    .sidebar a:hover { color: #ffffff; background: rgba(255, 255, 255, 0.06); }
+    .main-content { flex: 1; padding: 3rem 4rem; max-width: 1450px; }
+    .header-banner { background: linear-gradient(135deg, #0052cc 0%, #003d9b 100%); border-radius: 1rem; padding: 2.5rem; margin-bottom: 3rem; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
+    .header-banner h1 { font-size: 1.9rem; font-weight: 800; margin-bottom: 0.75rem; color: #ffffff; }
+    .header-banner p { color: #cbd5e1; font-size: 0.98rem; }
+    .meta-pills { display: flex; gap: 0.75rem; margin-top: 1.5rem; flex-wrap: wrap; }
+    .pill { background: rgba(255,255,255,0.18); backdrop-filter: blur(10px); padding: 0.4rem 0.9rem; border-radius: 9999px; font-size: 0.82rem; color: #ffffff; font-weight: 600; }
+    .section-card { background: var(--surface); border: 1px solid var(--border); border-radius: 1rem; padding: 2.25rem; margin-bottom: 2.5rem; }
+    .section-title { font-size: 1.45rem; font-weight: 700; color: #38bdf8; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; }
+    .endpoint-card { background: var(--card-bg); border: 1px solid rgba(255,255,255,0.08); border-radius: 0.75rem; padding: 1.5rem; margin-bottom: 1.75rem; }
+    .endpoint-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
+    .method-badge { font-weight: 800; font-size: 0.78rem; padding: 0.35rem 0.75rem; border-radius: 6px; color: #ffffff; text-transform: uppercase; }
+    .method-GET { background: var(--get-bg); }
+    .method-POST { background: var(--post-bg); }
+    .method-PUT { background: var(--put-bg); }
+    .method-DELETE { background: var(--delete-bg); }
+    .method-WEBSOCKET { background: var(--ws-bg); }
+    .endpoint-path { font-family: monospace; font-size: 1.05rem; font-weight: 700; color: #f1f5f9; }
+    .endpoint-summary { font-size: 0.98rem; font-weight: 600; color: #e2e8f0; margin-bottom: 0.5rem; }
+    .code-block { background: #090d16; border: 1px solid var(--border); border-radius: 6px; padding: 0.85rem; font-family: monospace; font-size: 0.83rem; color: #38bdf8; overflow-x: auto; white-space: pre-wrap; margin-top: 0.4rem; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; margin-bottom: 1rem; font-size: 0.88rem; }
+    th, td { border: 1px solid var(--border); padding: 0.65rem 0.85rem; text-align: left; }
+    th { background: rgba(255,255,255,0.05); color: #38bdf8; font-weight: 700; }
+    .db-tag { display: inline-block; background: rgba(56, 189, 248, 0.15); color: #38bdf8; padding: 0.25rem 0.65rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <div class="sidebar">
+      <h2>Mục Lục API (128 Endpoints)</h2>
+      <ul>
+        <li><a href="#conventions">1. Quy Tắc Chuẩn Tắc API</a></li>
+        <li><a href="#module-1">Module 1: IdentityExperience (Tài Khoản, Bảo Mật, Hồ Sơ, Phân Quyền Vai Trò Dự Án RBAC, Kỹ Năng, Thông Báo & AI 1 Core)</a></li><li><a href="#module-2">Module 2: Planning (Không Gian Dự Án, Cấu Hình Workflow & Board, Sprint, Capacity & AI 2 Phân Công)</a></li><li><a href="#module-3">Module 3: DeliveryIntelligence (Thực Thi Công Việc, AC, Cộng Tác, DataOps & Analytics)</a></li>
+      </ul>
+    </div>
+    <div class="main-content">
+      <div class="header-banner">
+        <h1>BÁO CÁO ĐẶC TẢ API CHUẨN MỰC TOÀN DIỆN HỆ THỐNG - DỰ ÁN PROJECTMGMT (HUCE SCRUM PLATFORM)</h1>
+        <p>Báo cáo đặc tả kỹ thuật chi tiết chuyên sâu toàn bộ 128 API Endpoints bao phủ 100% các mục nhỏ trên giao diện Frontend và 55 bảng MySQL trong Cẩm nang kỹ thuật.</p>
+        <div class="meta-pills">
+          <span class="pill">Tác giả: Nhóm 7 — Tran Hoang (IdentityExperience), Thế Hoài (Planning), Huy Hoàng (DeliveryIntelligence)</span>
+          <span class="pill">Phiên bản: 2.1.0 (Strict Frontend-Backend Alignment Release)</span>
+          <span class="pill">Tổng Endpoints: 128</span>
+          <span class="pill">Số bảng DB: 55</span>
+        </div>
+      </div>
+
+      <!-- CONVENTIONS -->
+      <div class="section-card" id="conventions">
+        <h2 class="section-title">1. Quy Tắc Chuẩn Tắc & Thiết Kế API Toàn Hệ Thống</h2>
+        <p><strong>Base URL:</strong> <code>https://api.projectmgmt.huce.edu.vn/api/v1</code></p>
+        <p><strong>Auth Header:</strong> <code>Authorization: Bearer <jwt_access_token></code></p>
+        
+        <h3 style="margin-top:1.5rem; color:#e2e8f0;">1.1 Ma Trận Quy Tắc Đặt Tên (Naming Rules)</h3>
+        <table>
+          <thead>
+            <tr><th>Đối Tượng</th><th>Quy Tắc Đặt Tên</th><th>Ví Dụ Cụ Thể</th></tr>
+          </thead>
+          <tbody>
+            
+              <tr>
+                <td><strong>URL Endpoint</strong></td>
+                <td>kebab-case danh từ số nhiều (plural)</td>
+                <td><code>/api/v1/work-items, /api/v1/workflow-transitions</code></td>
+              </tr>
+            
+              <tr>
+                <td><strong>Query Parameter</strong></td>
+                <td>camelCase</td>
+                <td><code>pageSize=20&isRead=false&searchQuery=CRM</code></td>
+              </tr>
+            
+              <tr>
+                <td><strong>JSON Body Request/Response</strong></td>
+                <td>camelCase đồng nhất 100% 3 module</td>
+                <td><code>issueKey, storyPoints, createdById, acceptanceCriteria</code></td>
+              </tr>
+            
+              <tr>
+                <td><strong>Database Mapping</strong></td>
+                <td>snake_case (MySQL) / PascalCase (.NET EF Core)</td>
+                <td><code>issue_key -> issueKey, user_id -> userId</code></td>
+              </tr>
+            
+              <tr>
+                <td><strong>Datetime</strong></td>
+                <td>ISO 8601 UTC string format</td>
+                <td><code>2026-09-22T19:54:00.000Z</code></td>
+              </tr>
+            
+              <tr>
+                <td><strong>UUID / GUID</strong></td>
+                <td>UUID v4 string (36 ký tự lowercase)</td>
+                <td><code>01a09072-8caa-7743-8a5f-be64f3d5c3b8</code></td>
+              </tr>
+            
+          </tbody>
+        </table>
+
+        <h3 style="margin-top:1.5rem; color:#e2e8f0;">1.2 Cấu Trúc Phản Hồi Chuẩn (Standard Response Wrapper)</h3>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+          <div>
+            <strong>Single Object Response:</strong>
+            <pre class="code-block">{
+  "success": true,
+  "code": "200",
+  "message": "Thao tác thành công",
+  "data": { ... }
+}</pre>
+          </div>
+          <div>
+            <strong>Paged List Response:</strong>
+            <pre class="code-block">{
+  "success": true,
+  "code": "200",
+  "message": "Thao tác thành công",
+  "data": {
+    "items": [ ... ],
+    "totalCount": 128,
+    "page": 1,
+    "pageSize": 20,
+    "totalPages": 7
+  }
+}</pre>
+          </div>
+        </div>
+
+        <h3 style="margin-top:1.5rem; color:#e2e8f0;">1.3 Cấu Trúc Báo Lỗi RFC 7807 (ProblemDetails)</h3>
+        <pre class="code-block">{
+  "type": "https://api.projectmgmt.huce.edu.vn/errors/invalid-workflow-transition",
+  "title": "Chuyển đổi trạng thái Workflow không hợp lệ",
+  "status": 400,
+  "detail": "Không thể chuyển trạng thái Issue CRM-102 từ 'In Progress' trực tiếp sang 'Done' khi chưa hoàn thành 2 Acceptance Criteria bắt buộc.",
+  "instance": "/api/v1/issues/CRM-102/status",
+  "code": "INVALID_WORKFLOW_TRANSITION",
+  "errors": {
+    "targetStatusId": ["Chuyển đổi không nằm trong danh sách WorkflowTransition được cấu hình cho dự án."],
+    "acceptanceCriteria": ["Vẫn còn 2 tiêu chí AC chưa được xác nhận IsMet = true."]
+  },
+  "traceId": "00-4bf92f3577b34da6a3ce929d0e0e4736-00"
+}</pre>
+      </div>
+
+      <!-- MODULE SECTIONS -->
+      
+        <div class="section-card" id="module-1">
+          <h2 class="section-title">Module 1: IdentityExperience (Tài Khoản, Bảo Mật, Hồ Sơ, Phân Quyền Vai Trò Dự Án RBAC, Kỹ Năng, Thông Báo & AI 1 Core)</h2>
+          <p><strong>Phụ trách Module:</strong> Trần Văn Hoàng (A)</p>
+          <p style="margin-bottom:1.5rem;"><strong>Bảng DB sở hữu:</strong> 16 Bảng DB (`User`, `UserProfile`, `ExternalLogin`, `OtpCode`, `RefreshToken`, `Role`, `Permission`, `RolePermission`, `UserRole`, `SkillCatalog`, `UserSkill`, `AiModel`, `AiPromptTemplate`, `AiGenerationLog`, `AiSuggestedTask`, `Notification`)</p>
+
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/auth/register</span>
+              </div>
+              <div class="endpoint-summary">Đăng ký tài khoản mới</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "email": "string (email format)",
+  "password": "string (min 8 chars)",
+  "fullName": "string",
+  "phoneNumber": "string"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "userId": "UUID",
+  "email": "string",
+  "status": "PendingVerification"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `User`, `UserProfile`, `OtpCode`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/auth/login</span>
+              </div>
+              <div class="endpoint-summary">Đăng nhập & Cấp JWT Token</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "email": "string",
+  "password": "string"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "accessToken": "JWT string",
+  "refreshToken": "UUID v4",
+  "expiresInSeconds": 900,
+  "user": {
+    "userId": "UUID",
+    "fullName": "string",
+    "roles": [
+      "string"
+    ]
+  }
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `User`, `RefreshToken`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/auth/refresh-token</span>
+              </div>
+              <div class="endpoint-summary">Làm mới Access Token (Rotation)</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "refreshToken": "string (UUID v4)"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "accessToken": "JWT string",
+  "refreshToken": "New rotated UUID",
+  "expiresInSeconds": 900
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `RefreshToken`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/auth/logout</span>
+              </div>
+              <div class="endpoint-summary">Đăng xuất & Thu hồi Refresh Token</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "refreshToken": "string"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "message": "Đã thu hồi token an toàn"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `RefreshToken` (IsRevoked = 1)</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/auth/forgot-password</span>
+              </div>
+              <div class="endpoint-summary">Gửi mã OTP Quên Mật Khẩu qua email</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "email": "string"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "otpId": "UUID",
+  "expiresAt": "ISO 8601"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `OtpCode` (Purpose = ResetPassword)</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/auth/reset-password</span>
+              </div>
+              <div class="endpoint-summary">Đặt lại Mật Khẩu mới bằng mã OTP</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "email": "string",
+  "code": "string (6 digits)",
+  "newPassword": "string (min 8 chars)"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "passwordReset": true
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `User` (PasswordHash), `OtpCode` (IsUsed = 1)</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-PUT">PUT</span>
+                <span class="endpoint-path">/api/v1/users/me/password</span>
+              </div>
+              <div class="endpoint-summary">Đổi Mật Khẩu cá nhân</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "currentPassword": "string",
+  "newPassword": "string"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "passwordChanged": true
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `User` (PasswordHash, SecurityStamp)</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/auth/otp/send</span>
+              </div>
+              <div class="endpoint-summary">Gửi mã OTP (VerifyEmail / ResetPassword / Login2FA)</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "email": "string",
+  "purpose": "VerifyEmail | ResetPassword | Login2FA"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "otpId": "UUID",
+  "expiresAt": "ISO 8601"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `OtpCode`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/auth/otp/verify</span>
+              </div>
+              <div class="endpoint-summary">Xác minh mã OTP</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "email": "string",
+  "code": "string",
+  "purpose": "string"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "verified": true
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `OtpCode`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/auth/external-login</span>
+              </div>
+              <div class="endpoint-summary">Đăng nhập OAuth2 (Google/Microsoft)</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "provider": "Google | Microsoft",
+  "providerKey": "string",
+  "email": "string",
+  "fullName": "string"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "accessToken": "JWT",
+  "refreshToken": "UUID",
+  "user": "Object"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `ExternalLogin`, `User`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/users/me</span>
+              </div>
+              <div class="endpoint-summary">Lấy hồ sơ cá nhân hiện tại</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "userId": "UUID",
+  "email": "string",
+  "fullName": "string",
+  "avatarUrl": "string",
+  "bio": "string",
+  "timezone": "Asia/Ho_Chi_Minh",
+  "jobTitle": "string",
+  "seniorityLevel": "Senior",
+  "yearsOfExperience": 4.5,
+  "skills": [
+    {
+      "skillId": "UUID",
+      "skillName": "Angular",
+      "proficiencyLevel": 4,
+      "verified": true
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `User`, `UserProfile`, `UserSkill`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-PUT">PUT</span>
+                <span class="endpoint-path">/api/v1/users/me/profile</span>
+              </div>
+              <div class="endpoint-summary">Cập nhật hồ sơ cá nhân</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "fullName": "string",
+  "phoneNumber": "string",
+  "bio": "string",
+  "timezone": "string",
+  "jobTitle": "string",
+  "seniorityLevel": "Intern | Junior | Middle | Senior | Lead",
+  "yearsOfExperience": 3.5
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "userId": "UUID",
+  "updatedAt": "ISO 8601"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `UserProfile`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/users/me/avatar</span>
+              </div>
+              <div class="endpoint-summary">Tải lên ảnh đại diện Avatar</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">Multipart FormData (avatar: Binary file)</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "avatarUrl": "https://storage.../avatar.jpg"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `UserProfile` (AvatarUrl)</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/users/for-you</span>
+              </div>
+              <div class="endpoint-summary">Dữ liệu trang cá nhân For You (Assigned & Recent Work)</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "assignedIssues": [
+    {
+      "issueKey": "CRM-102",
+      "title": "string"
+    }
+  ],
+  "recentIssues": [
+    {
+      "issueKey": "CRM-99",
+      "title": "string"
+    }
+  ],
+  "attentionFocus": [
+    "string"
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Gộp dữ liệu từ Delivery & Identity (`User`, `Issue`)</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/skills</span>
+              </div>
+              <div class="endpoint-summary">Tra cứu Danh mục Kỹ năng (SkillCatalog)</div>
+              <p style="font-size:0.85rem; color:#38bdf8; margin-top:0.4rem;"><strong>Query Params:</strong> <code>category=Backend|Frontend|Database|QA|DevOps&searchQuery=string</code></p>
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "items": [
+    {
+      "skillId": "UUID",
+      "code": "dotnet",
+      "name": ".NET / C#",
+      "category": "Backend",
+      "isActive": true
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `SkillCatalog`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/skills</span>
+              </div>
+              <div class="endpoint-summary">Thêm mới kỹ năng vào Danh mục chuẩn</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "code": "string",
+  "name": "string",
+  "category": "string"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "skillId": "UUID",
+  "code": "string"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `SkillCatalog`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/users/{userId}/skills</span>
+              </div>
+              <div class="endpoint-summary">Lấy ma trận kỹ năng của thành viên</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "userId": "UUID",
+  "skills": [
+    {
+      "skillId": "UUID",
+      "code": "sql",
+      "name": "SQL",
+      "proficiencyLevel": 5,
+      "yearsOfExperience": 3,
+      "isSelfDeclared": false
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `UserSkill`, `SkillCatalog`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-PUT">PUT</span>
+                <span class="endpoint-path">/api/v1/users/me/skills</span>
+              </div>
+              <div class="endpoint-summary">Cập nhật danh mục kỹ năng cá nhân</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "skills": [
+    {
+      "skillId": "UUID",
+      "proficiencyLevel": "1-5",
+      "yearsOfExperience": 2
+    }
+  ]
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "updatedCount": 3
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `UserSkill`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-PUT">PUT</span>
+                <span class="endpoint-path">/api/v1/users/{userId}/skills/{skillId}/verify</span>
+              </div>
+              <div class="endpoint-summary">Tech Lead xác nhận độ tin cậy kỹ năng</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "verified": true,
+  "level": "1-5"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "isSelfDeclared": false
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `UserSkill` (`IsSelfDeclared = 0`)</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/roles</span>
+              </div>
+              <div class="endpoint-summary">Lấy danh sách Vai trò (Roles)</div>
+              <p style="font-size:0.85rem; color:#38bdf8; margin-top:0.4rem;"><strong>Query Params:</strong> <code>scope=System|Organization|Project</code></p>
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "items": [
+    {
+      "roleId": "UUID",
+      "name": "ScrumMaster",
+      "scope": "Project",
+      "isSystem": true,
+      "description": "string"
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Role`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/roles</span>
+              </div>
+              <div class="endpoint-summary">Tạo Vai trò phân quyền mới</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "name": "string",
+  "scope": "Organization | Project",
+  "description": "string",
+  "permissionIds": [
+    "UUID"
+  ]
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "roleId": "UUID",
+  "name": "string"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Role`, `RolePermission`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/permissions</span>
+              </div>
+              <div class="endpoint-summary">Lấy danh mục Quyền hạn (Permissions)</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "items": [
+    {
+      "permissionId": "UUID",
+      "code": "issue.create",
+      "grouping": "Issue",
+      "description": "string"
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Permission`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-PUT">PUT</span>
+                <span class="endpoint-path">/api/v1/roles/{roleId}/permissions</span>
+              </div>
+              <div class="endpoint-summary">Cập nhật ma trận quyền cho Role</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "permissionIds": [
+    "array of UUID"
+  ]
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "roleId": "UUID",
+  "updatedPermissionCount": 15
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `RolePermission`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/users/{userId}/roles</span>
+              </div>
+              <div class="endpoint-summary">Lấy danh sách vai trò có phạm vi của User</div>
+              <p style="font-size:0.85rem; color:#38bdf8; margin-top:0.4rem;"><strong>Query Params:</strong> <code>scopeType=Project|Organization&scopeId=UUID</code></p>
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "roles": [
+    {
+      "userRoleId": "UUID",
+      "roleName": "ProjectManager",
+      "scopeType": "Project",
+      "scopeId": "UUID"
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `UserRole`, `Role`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/users/{userId}/roles</span>
+              </div>
+              <div class="endpoint-summary">Gán Vai trò theo phạm vi cho User</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "roleId": "UUID",
+  "scopeType": "Project | Organization",
+  "scopeId": "UUID"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "userRoleId": "UUID",
+  "grantedAt": "ISO 8601"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `UserRole`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-DELETE">DELETE</span>
+                <span class="endpoint-path">/api/v1/users/{userId}/roles/{userRoleId}</span>
+              </div>
+              <div class="endpoint-summary">Gỡ Vai trò khỏi User</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "success": true
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `UserRole`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/projects/{projectKey}/members</span>
+              </div>
+              <div class="endpoint-summary">Danh sách thành viên & Vai trò trong Dự án</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "members": [
+    {
+      "userId": "UUID",
+      "fullName": "Trần Văn Hoàng",
+      "email": "string",
+      "avatarUrl": "string",
+      "roleId": "UUID",
+      "roleName": "ScrumMaster",
+      "grantedAt": "ISO 8601"
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `UserRole` (`ScopeType = 'Project'`, `ScopeId = ProjectId`), `User`, `Role`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/projects/{projectKey}/members</span>
+              </div>
+              <div class="endpoint-summary">Mời / Phân công thành viên mới vào Dự án</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "userId": "UUID",
+  "roleId": "UUID (e.g. ProductOwner, ScrumMaster, Developer)"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "userRoleId": "UUID",
+  "roleName": "ProductOwner"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `UserRole`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-PUT">PUT</span>
+                <span class="endpoint-path">/api/v1/projects/{projectKey}/members/{userId}/role</span>
+              </div>
+              <div class="endpoint-summary">Thay đổi Vai trò chức danh của thành viên trong Dự án</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "newRoleId": "UUID (Switch Developer -> ScrumMaster)"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "userId": "UUID",
+  "newRoleName": "ScrumMaster"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `UserRole`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-DELETE">DELETE</span>
+                <span class="endpoint-path">/api/v1/projects/{projectKey}/members/{userId}</span>
+              </div>
+              <div class="endpoint-summary">Gỡ thành viên khỏi Dự án</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "removed": true
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `UserRole`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/notifications</span>
+              </div>
+              <div class="endpoint-summary">Hộp thư thông báo Inbox (Paged)</div>
+              <p style="font-size:0.85rem; color:#38bdf8; margin-top:0.4rem;"><strong>Query Params:</strong> <code>isRead=boolean&page=1&pageSize=20</code></p>
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "items": [
+    {
+      "notificationId": "UUID",
+      "type": "IssueAssigned",
+      "title": "string",
+      "content": "string",
+      "entityType": "Issue",
+      "entityId": "UUID",
+      "isRead": false,
+      "createdAt": "ISO 8601"
+    }
+  ],
+  "unreadCount": 5
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Notification`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/notifications/unread-count</span>
+              </div>
+              <div class="endpoint-summary">Lấy số lượng thông báo chưa đọc</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "unreadCount": 5
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Notification`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-PUT">PUT</span>
+                <span class="endpoint-path">/api/v1/notifications/{id}/read</span>
+              </div>
+              <div class="endpoint-summary">Đánh dấu 1 thông báo đã đọc</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "notificationId": "UUID",
+  "isRead": true
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Notification`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-PUT">PUT</span>
+                <span class="endpoint-path">/api/v1/notifications/read-all</span>
+              </div>
+              <div class="endpoint-summary">Đánh dấu tất cả thông báo đã đọc</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "readCount": 5
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Notification`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-WEBSOCKET">WEBSOCKET</span>
+                <span class="endpoint-path">/hubs/notifications</span>
+              </div>
+              <div class="endpoint-summary">SignalR WebSocket Hub Push Realtime</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">Header Bearer JWT Token</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">"Event push: ReceiveNotification(NotificationDTO)"</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Lớp Transport Realtime SignalR</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/ai/breakdown/generate</span>
+              </div>
+              <div class="endpoint-summary">AI 1: Đề xuất phân rã User Story thành Sub-tasks</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "issueId": "UUID",
+  "storyTitle": "string",
+  "storyDescription": "string",
+  "projectContext": "string"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "generationId": "UUID",
+  "status": "Completed | Processing",
+  "suggestedSubTasks": [
+    {
+      "tempId": "temp_1",
+      "title": "string",
+      "description": "string",
+      "estimatedHours": 3,
+      "acceptanceCriteria": [
+        "string"
+      ]
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AiGenerationLog`, `AiSuggestedTask`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/ai/breakdown/{generationId}</span>
+              </div>
+              <div class="endpoint-summary">Lấy chi tiết kết quả đề xuất AI 1</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "generationId": "UUID",
+  "modelVersion": "qwen2.5:3b-instruct",
+  "promptVersion": "v1.0",
+  "suggestedSubTasks": [
+    "array of TaskDTO"
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AiGenerationLog`, `AiSuggestedTask`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/ai/breakdown/apply</span>
+              </div>
+              <div class="endpoint-summary">AI 1: Chấp nhận & tạo Sub-tasks thật</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "generationId": "UUID",
+  "parentIssueId": "UUID",
+  "selectedSubTasks": [
+    {
+      "title": "string",
+      "description": "string",
+      "estimatedHours": 4,
+      "acceptanceCriteria": [
+        "string"
+      ]
+    }
+  ]
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "createdSubTasks": [
+    {
+      "issueId": "UUID",
+      "issueKey": "CRM-105",
+      "title": "string"
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Gửi UseCase sang DeliveryIntelligence (`Issue`, `AcceptanceCriteria`)</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/ai/breakdown/feedback</span>
+              </div>
+              <div class="endpoint-summary">AI 1: Ghi nhận phản hồi đánh giá gợi ý</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "generationId": "UUID",
+  "suggestedTaskId": "UUID",
+  "userAction": "Kept | Edited | Rejected",
+  "finalSummary": "string",
+  "editDistanceRatio": 0.15
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "feedbackLogged": true
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AiSuggestedTask` (UserAction, EditDistanceRatio)</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/ai/prompt-templates</span>
+              </div>
+              <div class="endpoint-summary">Danh sách Prompt Templates</div>
+              <p style="font-size:0.85rem; color:#38bdf8; margin-top:0.4rem;"><strong>Query Params:</strong> <code>taskType=Breakdown|Assignment</code></p>
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "items": [
+    {
+      "promptId": "UUID",
+      "code": "breakdown.system",
+      "version": 1,
+      "isActive": true,
+      "jsonSchema": "Object"
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AiPromptTemplate`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/ai/prompt-templates</span>
+              </div>
+              <div class="endpoint-summary">Tạo mới Prompt Template kèm JSON Schema</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "code": "string",
+  "taskType": "Breakdown",
+  "systemPrompt": "string",
+  "userTemplate": "string",
+  "jsonSchema": "Object"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "promptId": "UUID",
+  "version": 1
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AiPromptTemplate`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-PUT">PUT</span>
+                <span class="endpoint-path">/api/v1/ai/prompt-templates/{id}/activate</span>
+              </div>
+              <div class="endpoint-summary">Kích hoạt phiên bản Prompt Template</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "isActive": true
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AiPromptTemplate`</div>
+            </div>
+          
+        </div>
+      
+        <div class="section-card" id="module-2">
+          <h2 class="section-title">Module 2: Planning (Không Gian Dự Án, Cấu Hình Workflow & Board, Sprint, Capacity & AI 2 Phân Công)</h2>
+          <p><strong>Phụ trách Module:</strong> Nguyễn Thế Hoài (B)</p>
+          <p style="margin-bottom:1.5rem;"><strong>Bảng DB sở hữu:</strong> 18 Bảng DB (`Organization`, `Project`, `ProjectComponent`, `ProjectVersion`, `WorkflowStatus`, `WorkflowTransition`, `IssueType`, `Priority`, `Board`, `BoardColumn`, `Sprint`, `SprintSnapshot`, `SprintMemberCapacity`, `UserWorkloadSnapshot`, `UserPerformanceMetric`, `AiAssignmentRun`, `AiAssignmentCandidate`, `AiAssignmentDecision`)</p>
+
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/organizations</span>
+              </div>
+              <div class="endpoint-summary">Danh sách Tổ chức (Workspace)</div>
+              <p style="font-size:0.85rem; color:#38bdf8; margin-top:0.4rem;"><strong>Query Params:</strong> <code>searchQuery=string</code></p>
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "items": [
+    {
+      "orgId": "UUID",
+      "name": "HUCE University",
+      "slug": "huce-edu",
+      "ownerId": "UUID"
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Organization`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/organizations</span>
+              </div>
+              <div class="endpoint-summary">Tạo Tổ chức mới</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "name": "string",
+  "slug": "string (unique)"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "orgId": "UUID",
+  "slug": "string"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Organization`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/organizations/{orgId}/members</span>
+              </div>
+              <div class="endpoint-summary">Danh sách thành viên Tổ chức</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "members": [
+    {
+      "userId": "UUID",
+      "fullName": "string",
+      "roleName": "OrgOwner"
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `UserRole`, `User`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/organizations/{orgId}/members/invite</span>
+              </div>
+              <div class="endpoint-summary">Mời thành viên vào Tổ chức</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "email": "string",
+  "roleId": "UUID"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "inviteSent": true
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `UserRole`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/projects</span>
+              </div>
+              <div class="endpoint-summary">Danh sách Không gian Dự án</div>
+              <p style="font-size:0.85rem; color:#38bdf8; margin-top:0.4rem;"><strong>Query Params:</strong> <code>orgId=UUID&searchQuery=string</code></p>
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "items": [
+    {
+      "projectId": "UUID",
+      "projectKey": "CRM",
+      "name": "Hệ thống CRM",
+      "leadUserName": "Trần Văn Hoàng",
+      "activeSprintName": "Sprint 12"
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Project`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/projects</span>
+              </div>
+              <div class="endpoint-summary">Tạo Không gian Dự án mới</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "orgId": "UUID",
+  "projectKey": "PROJ",
+  "name": "string",
+  "description": "string",
+  "leadUserId": "UUID"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "projectId": "UUID",
+  "projectKey": "PROJ",
+  "defaultBoardId": "UUID"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Project`, `WorkflowStatus`, `Board`, `BoardColumn`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/projects/{projectKey}</span>
+              </div>
+              <div class="endpoint-summary">Chi tiết Không gian Dự án</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "projectId": "UUID",
+  "projectKey": "CRM",
+  "name": "string",
+  "leadUserId": "UUID",
+  "issueCounter": 105
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Project`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-PUT">PUT</span>
+                <span class="endpoint-path">/api/v1/projects/{projectKey}</span>
+              </div>
+              <div class="endpoint-summary">Cập nhật thông tin Dự án</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "name": "string",
+  "description": "string",
+  "leadUserId": "UUID"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "projectKey": "CRM",
+  "updatedAt": "ISO 8601"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Project`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-DELETE">DELETE</span>
+                <span class="endpoint-path">/api/v1/projects/{projectKey}</span>
+              </div>
+              <div class="endpoint-summary">Lưu trữ / Xóa mềm Dự án</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "isDeleted": true
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Project` (`IsDeleted = 1`)</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/projects/{projectKey}/summary</span>
+              </div>
+              <div class="endpoint-summary">Tổng quan thống kê Dashboard Dự án</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "projectKey": "CRM",
+  "activeSprint": {
+    "sprintId": "UUID",
+    "name": "Sprint 12",
+    "completedPoints": 24,
+    "totalPoints": 40
+  },
+  "statusCounts": {
+    "toDo": 10,
+    "inProgress": 8,
+    "done": 24
+  }
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: View `vw_SprintVelocity` và bảng `Project`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/projects/{projectKey}/components</span>
+              </div>
+              <div class="endpoint-summary">Danh sách Component Dự án</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "items": [
+    {
+      "componentId": "UUID",
+      "name": "Backend API",
+      "leadUserId": "UUID",
+      "defaultSkillName": "ASP.NET Core"
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `ProjectComponent`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/projects/{projectKey}/components</span>
+              </div>
+              <div class="endpoint-summary">Tạo Component mới</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "name": "string",
+  "description": "string",
+  "leadUserId": "UUID",
+  "defaultSkillId": "UUID"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "componentId": "UUID",
+  "name": "string"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `ProjectComponent`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-PUT">PUT</span>
+                <span class="endpoint-path">/api/v1/components/{componentId}</span>
+              </div>
+              <div class="endpoint-summary">Cập nhật Component</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "name": "string",
+  "description": "string",
+  "leadUserId": "UUID",
+  "defaultSkillId": "UUID"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "componentId": "UUID"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `ProjectComponent`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-DELETE">DELETE</span>
+                <span class="endpoint-path">/api/v1/components/{componentId}</span>
+              </div>
+              <div class="endpoint-summary">Xóa Component</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "success": true
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `ProjectComponent`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/projects/{projectKey}/versions</span>
+              </div>
+              <div class="endpoint-summary">Danh sách Fix Versions / Releases</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "items": [
+    {
+      "versionId": "UUID",
+      "name": "v1.2.0",
+      "startDate": "2026-09-01",
+      "releaseDate": "2026-09-30",
+      "isReleased": false
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `ProjectVersion`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/projects/{projectKey}/versions</span>
+              </div>
+              <div class="endpoint-summary">Tạo Version Release mới</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "name": "v1.3.0",
+  "description": "string",
+  "startDate": "2026-10-01",
+  "releaseDate": "2026-10-15"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "versionId": "UUID"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `ProjectVersion`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-PUT">PUT</span>
+                <span class="endpoint-path">/api/v1/versions/{versionId}/release</span>
+              </div>
+              <div class="endpoint-summary">Chốt phát hành Release Version</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "isReleased": true,
+  "releaseDate": "2026-09-22"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "versionId": "UUID",
+  "isReleased": true
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `ProjectVersion`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/projects/{projectKey}/statuses</span>
+              </div>
+              <div class="endpoint-summary">Danh sách Trạng thái Workflow</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "items": [
+    {
+      "statusId": "UUID",
+      "name": "In Progress",
+      "category": "InProgress",
+      "colorHex": "#0052CC",
+      "orderIndex": 2,
+      "isInitial": false
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `WorkflowStatus`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/projects/{projectKey}/statuses</span>
+              </div>
+              <div class="endpoint-summary">Tạo trạng thái Workflow mới</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "name": "In QA Review",
+  "category": "InProgress",
+  "colorHex": "#FFAB00",
+  "orderIndex": 3
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "statusId": "UUID"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `WorkflowStatus`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-PUT">PUT</span>
+                <span class="endpoint-path">/api/v1/statuses/{statusId}</span>
+              </div>
+              <div class="endpoint-summary">Sửa trạng thái Workflow</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "name": "string",
+  "colorHex": "string",
+  "orderIndex": 4
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "statusId": "UUID"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `WorkflowStatus`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/projects/{projectKey}/transitions</span>
+              </div>
+              <div class="endpoint-summary">Danh sách luật chuyển trạng thái</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "items": [
+    {
+      "transitionId": "UUID",
+      "fromStatusId": "UUID",
+      "toStatusId": "UUID",
+      "name": "Gửi QA",
+      "requiredPermissionCode": "issue.transition"
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `WorkflowTransition`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/projects/{projectKey}/transitions</span>
+              </div>
+              <div class="endpoint-summary">Tạo luật chuyển trạng thái hợp lệ</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "fromStatusId": "UUID",
+  "toStatusId": "UUID",
+  "name": "string",
+  "requiredPermissionCode": "string"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "transitionId": "UUID"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `WorkflowTransition`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-DELETE">DELETE</span>
+                <span class="endpoint-path">/api/v1/transitions/{transitionId}</span>
+              </div>
+              <div class="endpoint-summary">Xóa luật chuyển trạng thái</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "success": true
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `WorkflowTransition`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/projects/{projectKey}/boards</span>
+              </div>
+              <div class="endpoint-summary">Danh sách Bảng công việc (Board)</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "items": [
+    {
+      "boardId": "UUID",
+      "name": "Main Scrum Board",
+      "type": "Scrum",
+      "isDefault": true
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Board`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/projects/{projectKey}/boards</span>
+              </div>
+              <div class="endpoint-summary">Tạo Bảng công việc mới</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "name": "Kanban Support Board",
+  "type": "Kanban"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "boardId": "UUID"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Board`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/boards/{boardId}/columns</span>
+              </div>
+              <div class="endpoint-summary">Cấu hình cột của Bảng</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "columns": [
+    {
+      "columnId": "UUID",
+      "statusId": "UUID",
+      "name": "Đang Làm",
+      "orderIndex": 2,
+      "wipLimit": 5
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `BoardColumn`, `WorkflowStatus`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-PUT">PUT</span>
+                <span class="endpoint-path">/api/v1/boards/{boardId}/columns</span>
+              </div>
+              <div class="endpoint-summary">Cập nhật thứ tự cột & Giới hạn WIP</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "columns": [
+    {
+      "columnId": "UUID",
+      "statusId": "UUID",
+      "name": "string",
+      "orderIndex": 1,
+      "wipLimit": 4
+    }
+  ]
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "updatedCount": 4
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `BoardColumn`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/projects/{projectKey}/sprints</span>
+              </div>
+              <div class="endpoint-summary">Danh sách Sprints</div>
+              <p style="font-size:0.85rem; color:#38bdf8; margin-top:0.4rem;"><strong>Query Params:</strong> <code>status=Planned|Active|Completed</code></p>
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "items": [
+    {
+      "sprintId": "UUID",
+      "name": "Sprint 12",
+      "status": "Active",
+      "startDate": "2026-09-15",
+      "endDate": "2026-09-29"
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Sprint`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/projects/{projectKey}/sprints</span>
+              </div>
+              <div class="endpoint-summary">Tạo Sprint mới</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "name": "Sprint 13",
+  "goal": "Hoàn thiện API backend"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "sprintId": "UUID",
+  "status": "Planned"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Sprint`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-PUT">PUT</span>
+                <span class="endpoint-path">/api/v1/sprints/{sprintId}</span>
+              </div>
+              <div class="endpoint-summary">Cập nhật Sprint</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "name": "string",
+  "goal": "string",
+  "startDate": "date",
+  "endDate": "date"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "sprintId": "UUID"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Sprint`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/sprints/{sprintId}/start</span>
+              </div>
+              <div class="endpoint-summary">Bắt đầu Sprint (Active Guard)</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "startDate": "date",
+  "endDate": "date",
+  "goal": "string"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "sprintId": "UUID",
+  "status": "Active",
+  "committedPoints": 35
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Sprint` (ActiveGuard constraint), `SprintSnapshot`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/sprints/{sprintId}/complete</span>
+              </div>
+              <div class="endpoint-summary">Hoàn thành & Đóng Sprint</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "moveUnfinishedToSprintId": "UUID (or null for backlog)"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "sprintId": "UUID",
+  "status": "Completed",
+  "movedIssuesCount": 3
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Sprint`, `SprintSnapshot`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/sprints/{sprintId}/burndown</span>
+              </div>
+              <div class="endpoint-summary">Dữ liệu biểu đồ Burndown Chart</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "sprintId": "UUID",
+  "snapshots": [
+    {
+      "snapshotDate": "2026-09-16",
+      "totalPoints": 40,
+      "remainingPoints": 32,
+      "completedPoints": 8,
+      "addedPoints": 2
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `SprintSnapshot`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/projects/{projectKey}/velocity</span>
+              </div>
+              <div class="endpoint-summary">Dữ liệu biểu đồ Velocity Chart</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "sprints": [
+    {
+      "sprintName": "Sprint 10",
+      "committedPoints": 30,
+      "completedPoints": 28
+    },
+    {
+      "sprintName": "Sprint 11",
+      "committedPoints": 35,
+      "completedPoints": 35
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: View `vw_SprintVelocity`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/sprints/{sprintId}/capacity</span>
+              </div>
+              <div class="endpoint-summary">Năng lực thành viên trong Sprint</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "members": [
+    {
+      "userId": "UUID",
+      "fullName": "Trần Văn Hoàng",
+      "capacityPoints": 10,
+      "availableHours": 35,
+      "note": "On-call 2 ngày"
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `SprintMemberCapacity`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-PUT">PUT</span>
+                <span class="endpoint-path">/api/v1/sprints/{sprintId}/capacity/{userId}</span>
+              </div>
+              <div class="endpoint-summary">Cập nhật Capacity từng người</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "capacityPoints": 12,
+  "availableHours": 40,
+  "note": "string"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "userId": "UUID",
+  "updated": true
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `SprintMemberCapacity`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/projects/{projectKey}/workload-snapshots</span>
+              </div>
+              <div class="endpoint-summary">Lấy snapshot tải công việc hiện tại</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "workloads": [
+    {
+      "userId": "UUID",
+      "openPoints": 15,
+      "inProgressCount": 2,
+      "utilizationRatio": 1.25
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: View `vw_UserActiveWorkload` & bảng `UserWorkloadSnapshot`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/ai/smart-assign/recommend</span>
+              </div>
+              <div class="endpoint-summary">AI 2: Đề xuất xếp hạng phân công thành viên</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "issueId": "UUID",
+  "projectKey": "CRM",
+  "requiredSkillIds": [
+    "UUID"
+  ],
+  "estimatedHours": 8
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "runId": "UUID",
+  "issueId": "UUID",
+  "asOfTime": "ISO 8601",
+  "candidates": [
+    {
+      "rank": 1,
+      "userId": "UUID",
+      "fullName": "Trần Văn Hoàng",
+      "totalScore": 0.885,
+      "breakdown": {
+        "loadBalanceScore": 0.9,
+        "skillMatchScore": 0.95,
+        "historyScore": 0.8,
+        "capacityScore": 0.75
+      },
+      "isColdStart": false,
+      "explanation": "Khớp 95% kỹ năng Angular, tải làm việc hiện tại 60%"
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AiAssignmentRun`, `AiAssignmentCandidate`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/ai/smart-assign/runs/{runId}</span>
+              </div>
+              <div class="endpoint-summary">Lấy kết quả chi tiết lượt chạy AI 2</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "runId": "UUID",
+  "strategy": "WeightedScore",
+  "weights": {
+    "load": 0.4,
+    "skill": 0.3,
+    "history": 0.2,
+    "capacity": 0.1
+  },
+  "candidates": [
+    "array of CandidateDTO"
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AiAssignmentRun`, `AiAssignmentCandidate`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/ai/smart-assign/confirm</span>
+              </div>
+              <div class="endpoint-summary">AI 2: PM/SM xác nhận phân công</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "runId": "UUID",
+  "issueId": "UUID",
+  "selectedUserId": "UUID",
+  "isOverride": false,
+  "overrideReason": "string (if override)"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "decisionId": "UUID",
+  "status": "Confirmed"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AiAssignmentDecision`, chuyển event gán người sang Delivery</div>
+            </div>
+          
+        </div>
+      
+        <div class="section-card" id="module-3">
+          <h2 class="section-title">Module 3: DeliveryIntelligence (Thực Thi Công Việc, AC, Cộng Tác, DataOps & Analytics)</h2>
+          <p><strong>Phụ trách Module:</strong> Hoàng Trần Huy Hoàng (C)</p>
+          <p style="margin-bottom:1.5rem;"><strong>Bảng DB sở hữu:</strong> 21 Bảng DB (`Issue`, `IssueLink`, `IssueWatcher`, `Comment`, `Attachment`, `ActivityLog`, `IssueStatusHistory`, `IssueAssignmentHistory`, `Label`, `IssueLabel`, `IssueComponentLink`, `IssueVersionLink`, `IssueRequiredSkill`, `AcceptanceCriteria`, `AiDataset`, `AiDatasetVersion`, `AiDatasetSample`, `AiDataCleaningRule`, `AiDataQualityFlag`, `AiTrainingRun`, `AiEvaluationResult`)</p>
+
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/projects/{projectKey}/issues</span>
+              </div>
+              <div class="endpoint-summary">Danh sách Issue / Work Items (Paged & Filtered)</div>
+              <p style="font-size:0.85rem; color:#38bdf8; margin-top:0.4rem;"><strong>Query Params:</strong> <code>sprintId=UUID&statusId=UUID&assigneeId=UUID&issueType=Story|Task|Bug&searchQuery=string&page=1&pageSize=20</code></p>
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "items": [
+    {
+      "issueId": "UUID",
+      "issueKey": "CRM-102",
+      "title": "string",
+      "statusName": "In Progress",
+      "assigneeName": "Trần Văn Hoàng",
+      "storyPoints": 5,
+      "updatedAt": "ISO 8601"
+    }
+  ],
+  "totalCount": 105
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Issue`, `IssueType`, `Priority`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/issues</span>
+              </div>
+              <div class="endpoint-summary">Tạo Issue mới (Cấp IssueNumber nguyên tử)</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "projectKey": "CRM",
+  "title": "string",
+  "description": "string",
+  "issueType": "Story | Task | Bug | Sub-task | Epic",
+  "priority": "High",
+  "sprintId": "UUID",
+  "parentIssueId": "UUID",
+  "assigneeId": "UUID",
+  "storyPoints": 3,
+  "acceptanceCriteria": [
+    "string"
+  ]
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "issueId": "UUID",
+  "issueKey": "CRM-106",
+  "title": "string",
+  "statusName": "To Do"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Issue`, `AcceptanceCriteria`, `ActivityLog`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/issues/{issueKey}</span>
+              </div>
+              <div class="endpoint-summary">Xem chi tiết đầy đủ của Issue</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "issueId": "UUID",
+  "issueKey": "CRM-102",
+  "title": "string",
+  "description": "string",
+  "storyPoints": 5,
+  "acceptanceCriteria": [
+    {
+      "criteriaId": "UUID",
+      "content": "string",
+      "isMet": true
+    }
+  ],
+  "subTasks": [
+    {
+      "issueKey": "CRM-103",
+      "title": "string"
+    }
+  ],
+  "commentsCount": 4,
+  "attachmentsCount": 2
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Issue`, `AcceptanceCriteria`, `Comment`, `Attachment`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-PUT">PUT</span>
+                <span class="endpoint-path">/api/v1/issues/{issueKey}</span>
+              </div>
+              <div class="endpoint-summary">Cập nhật thông tin chi tiết Issue</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "title": "string",
+  "description": "string",
+  "storyPoints": 5,
+  "originalEstimateMinutes": 480,
+  "dueDate": "date"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "issueKey": "CRM-102",
+  "updatedAt": "ISO 8601"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Issue`, `ActivityLog`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-DELETE">DELETE</span>
+                <span class="endpoint-path">/api/v1/issues/{issueKey}</span>
+              </div>
+              <div class="endpoint-summary">Xóa mềm Issue</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "isDeleted": true
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Issue` (`IsDeleted = 1`)</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-PUT">PUT</span>
+                <span class="endpoint-path">/api/v1/issues/{issueKey}/status</span>
+              </div>
+              <div class="endpoint-summary">Chuyển trạng thái Workflow Transition</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "targetStatusId": "UUID",
+  "comment": "string"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "issueKey": "CRM-102",
+  "previousStatusId": "UUID",
+  "newStatusId": "UUID"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Issue`, `IssueStatusHistory`, `ActivityLog`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-PUT">PUT</span>
+                <span class="endpoint-path">/api/v1/issues/{issueKey}/move-sprint</span>
+              </div>
+              <div class="endpoint-summary">Chuyển Issue giữa các Sprint / Backlog</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "targetSprintId": "UUID (null for Backlog)"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "issueKey": "CRM-102",
+  "newSprintId": "UUID"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Issue` (SprintId)</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-PUT">PUT</span>
+                <span class="endpoint-path">/api/v1/issues/{issueKey}/rank</span>
+              </div>
+              <div class="endpoint-summary">Sắp xếp lại vị trí ưu tiên (RankOrder)</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "previousIssueKey": "CRM-101",
+  "nextIssueKey": "CRM-103"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "issueKey": "CRM-102",
+  "newRankOrder": 15.5
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Issue` (RankOrder interpolation)</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/issues/batch-update</span>
+              </div>
+              <div class="endpoint-summary">Cập nhật hàng loạt nhiều Issue</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "issueKeys": [
+    "CRM-101",
+    "CRM-102"
+  ],
+  "statusId": "UUID",
+  "assigneeId": "UUID",
+  "sprintId": "UUID"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "updatedCount": 2
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Issue`, `ActivityLog`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/issues/{issueKey}/hierarchy</span>
+              </div>
+              <div class="endpoint-summary">Xem cây phân cấp Epic -> Story -> Sub-task</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "epic": {
+    "issueKey": "CRM-1",
+    "title": "Epic 1"
+  },
+  "stories": [
+    {
+      "issueKey": "CRM-102",
+      "subTasks": [
+        {
+          "issueKey": "CRM-103"
+        }
+      ]
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Issue` (ParentId, EpicId)</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/issues/{issueKey}/links</span>
+              </div>
+              <div class="endpoint-summary">Tạo liên kết giữa 2 Issue</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "targetIssueKey": "CRM-105",
+  "linkType": "Blocks | IsBlockedBy | Relates | Duplicates"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "linkId": "UUID",
+  "linkType": "Blocks"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `IssueLink`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-DELETE">DELETE</span>
+                <span class="endpoint-path">/api/v1/issue-links/{linkId}</span>
+              </div>
+              <div class="endpoint-summary">Xóa liên kết Issue</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "success": true
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `IssueLink`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/issues/{issueKey}/acceptance-criteria</span>
+              </div>
+              <div class="endpoint-summary">Danh sách Tiêu chí Nghiệm thu (AC)</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "criteria": [
+    {
+      "criteriaId": "UUID",
+      "content": "string",
+      "isMet": false,
+      "source": "AI | Manual"
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AcceptanceCriteria`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/issues/{issueKey}/acceptance-criteria</span>
+              </div>
+              <div class="endpoint-summary">Thêm mới Tiêu chí Nghiệm thu (AC)</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "content": "string",
+  "source": "Manual"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "criteriaId": "UUID",
+  "content": "string"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AcceptanceCriteria`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-PUT">PUT</span>
+                <span class="endpoint-path">/api/v1/acceptance-criteria/{criteriaId}</span>
+              </div>
+              <div class="endpoint-summary">Sửa nội dung AC / Đánh dấu hoàn thành</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "content": "string",
+  "isMet": true
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "criteriaId": "UUID",
+  "isMet": true,
+  "metAt": "ISO 8601"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AcceptanceCriteria`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-DELETE">DELETE</span>
+                <span class="endpoint-path">/api/v1/acceptance-criteria/{criteriaId}</span>
+              </div>
+              <div class="endpoint-summary">Xóa Tiêu chí Nghiệm thu (AC)</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "success": true
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AcceptanceCriteria`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/issues/{issueKey}/required-skills</span>
+              </div>
+              <div class="endpoint-summary">Danh sách kỹ năng yêu cầu của Task</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "skills": [
+    {
+      "id": "UUID",
+      "skillName": "Angular",
+      "minLevel": 3,
+      "weight": 1
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `IssueRequiredSkill`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/issues/{issueKey}/required-skills</span>
+              </div>
+              <div class="endpoint-summary">Thêm kỹ năng yêu cầu cho Task</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "skillId": "UUID",
+  "minLevel": 3,
+  "weight": 1
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "id": "UUID"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `IssueRequiredSkill`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-DELETE">DELETE</span>
+                <span class="endpoint-path">/api/v1/issue-required-skills/{id}</span>
+              </div>
+              <div class="endpoint-summary">Xóa kỹ năng yêu cầu khỏi Task</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "success": true
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `IssueRequiredSkill`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/issues/{issueKey}/comments</span>
+              </div>
+              <div class="endpoint-summary">Danh sách Bình luận (Hỗ trợ reply lồng)</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "comments": [
+    {
+      "commentId": "UUID",
+      "authorName": "Trần Văn Hoàng",
+      "content": "string",
+      "parentCommentId": "UUID",
+      "createdAt": "ISO 8601"
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Comment`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/issues/{issueKey}/comments</span>
+              </div>
+              <div class="endpoint-summary">Tạo Bình luận mới (Quét `@mention`)</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "content": "string",
+  "parentCommentId": "UUID",
+  "mentionedUserIds": [
+    "UUID"
+  ]
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "commentId": "UUID",
+  "content": "string"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Comment`, gửi event thông báo sang IdentityExperience</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-PUT">PUT</span>
+                <span class="endpoint-path">/api/v1/comments/{commentId}</span>
+              </div>
+              <div class="endpoint-summary">Sửa nội dung Bình luận</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "content": "string"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "commentId": "UUID",
+  "isEdited": true
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Comment`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-DELETE">DELETE</span>
+                <span class="endpoint-path">/api/v1/comments/{commentId}</span>
+              </div>
+              <div class="endpoint-summary">Xóa mềm Bình luận</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "isDeleted": true
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Comment`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/issues/{issueKey}/attachments</span>
+              </div>
+              <div class="endpoint-summary">Tải lên Tệp đính kèm</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">Multipart FormData (file: Binary)</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "attachmentId": "UUID",
+  "fileName": "spec.pdf",
+  "fileUrl": "https://storage...",
+  "fileSizeBytes": 102400
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Attachment`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/attachments/{attachmentId}/download</span>
+              </div>
+              <div class="endpoint-summary">Tải xuống Tệp đính kèm</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">"File Binary Stream with Content-Disposition header"</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Attachment`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-DELETE">DELETE</span>
+                <span class="endpoint-path">/api/v1/attachments/{attachmentId}</span>
+              </div>
+              <div class="endpoint-summary">Xóa Tệp đính kèm</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "success": true
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `Attachment`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/issues/{issueKey}/watchers</span>
+              </div>
+              <div class="endpoint-summary">Đăng ký theo dõi Issue</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "isWatching": true
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `IssueWatcher`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-DELETE">DELETE</span>
+                <span class="endpoint-path">/api/v1/issues/{issueKey}/watchers/me</span>
+              </div>
+              <div class="endpoint-summary">Hủy theo dõi Issue</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "isWatching": false
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `IssueWatcher`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/issues/{issueKey}/activity-log</span>
+              </div>
+              <div class="endpoint-summary">Nhật ký lịch sử thay đổi chi tiết</div>
+              <p style="font-size:0.85rem; color:#38bdf8; margin-top:0.4rem;"><strong>Query Params:</strong> <code>page=1&pageSize=20</code></p>
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "logs": [
+    {
+      "logId": "UUID",
+      "actorName": "Trần Văn Hoàng",
+      "action": "StatusChanged",
+      "fieldName": "Status",
+      "oldValue": "To Do",
+      "newValue": "In Progress",
+      "createdAt": "ISO 8601"
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `ActivityLog`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/issues/{issueKey}/status-history</span>
+              </div>
+              <div class="endpoint-summary">Lịch sử thời gian chuyển trạng thái (Cycle time)</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "history": [
+    {
+      "fromStatus": "In Progress",
+      "toStatus": "Done",
+      "durationSeconds": 172800,
+      "changedAt": "ISO 8601"
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `IssueStatusHistory`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/issues/{issueKey}/assignment-history</span>
+              </div>
+              <div class="endpoint-summary">Lịch sử giao việc & nguồn gán</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "history": [
+    {
+      "fromAssigneeName": "Hoài",
+      "toAssigneeName": "Hoàng",
+      "assignmentSource": "AiSuggested",
+      "reason": "Khớp kỹ năng Angular"
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `IssueAssignmentHistory`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/ai/models</span>
+              </div>
+              <div class="endpoint-summary">Danh sách AI Models</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "items": [
+    {
+      "modelId": "UUID",
+      "code": "qwen2.5:3b-instruct",
+      "provider": "Ollama",
+      "taskType": "Breakdown",
+      "isActive": true
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AiModel`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/ai/models</span>
+              </div>
+              <div class="endpoint-summary">Khai báo AI Model mới</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "code": "qwen2.5:3b-scrum-lora-v1",
+  "displayName": "Qwen 3B Fine-tuned",
+  "provider": "Ollama",
+  "taskType": "Breakdown",
+  "adapterPath": "/models/lora.gguf"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "modelId": "UUID"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AiModel`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-PUT">PUT</span>
+                <span class="endpoint-path">/api/v1/ai/models/{modelId}/activate</span>
+              </div>
+              <div class="endpoint-summary">Kích hoạt Model chạy Production</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "modelId": "UUID",
+  "isActive": true
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AiModel` (`IsActive = 1`)</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/ai/datasets</span>
+              </div>
+              <div class="endpoint-summary">Danh sách Dataset huấn luyện</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "items": [
+    {
+      "datasetId": "UUID",
+      "code": "breakdown-vi-v1",
+      "name": "Bộ dữ liệu phân rã tiếng Việt",
+      "taskType": "Breakdown"
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AiDataset`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/ai/datasets</span>
+              </div>
+              <div class="endpoint-summary">Khai báo Dataset mới</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "code": "string",
+  "name": "string",
+  "taskType": "Breakdown | Assignment"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "datasetId": "UUID"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AiDataset`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/ai/datasets/{datasetId}/versions</span>
+              </div>
+              <div class="endpoint-summary">Khởi tạo Dataset Version mới</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "versionTag": "v1.0.0",
+  "splitSeed": 42,
+  "notes": "string"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "datasetVersionId": "UUID",
+  "versionTag": "v1.0.0"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AiDatasetVersion`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-PUT">PUT</span>
+                <span class="endpoint-path">/api/v1/ai/dataset-versions/{versionId}/freeze</span>
+              </div>
+              <div class="endpoint-summary">Đóng băng Dataset Version (IsFrozen = 1)</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "versionId": "UUID",
+  "isFrozen": true,
+  "checksum": "SHA256 hex"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AiDatasetVersion`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/ai/dataset-versions/{versionId}/samples</span>
+              </div>
+              <div class="endpoint-summary">Danh sách mẫu dữ liệu huấn luyện</div>
+              <p style="font-size:0.85rem; color:#38bdf8; margin-top:0.4rem;"><strong>Query Params:</strong> <code>splitType=Train|Validation|Test&qualityStatus=Approved</code></p>
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "items": [
+    {
+      "sampleId": "UUID",
+      "instruction": "string",
+      "inputJson": "Object",
+      "outputJson": "Object",
+      "qualityStatus": "Approved",
+      "isPiiRedacted": true
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AiDatasetSample`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/ai/dataset-versions/{versionId}/samples</span>
+              </div>
+              <div class="endpoint-summary">Thêm mẫu dữ liệu mới</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "instruction": "string",
+  "inputJson": "Object",
+  "outputJson": "Object",
+  "splitType": "Train",
+  "qualityStatus": "Raw"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "sampleId": "UUID"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AiDatasetSample`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-PUT">PUT</span>
+                <span class="endpoint-path">/api/v1/ai/dataset-samples/{sampleId}/review</span>
+              </div>
+              <div class="endpoint-summary">Duyệt chất lượng mẫu dữ liệu</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "reviewStatus": "Approved | Rejected",
+  "qualityScore": 0.95,
+  "isPiiRedacted": true,
+  "reviewNote": "string"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "sampleId": "UUID",
+  "reviewStatus": "Approved"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AiDatasetSample`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/ai/data-cleaning-rules</span>
+              </div>
+              <div class="endpoint-summary">Danh sách Quy tắc làm sạch dữ liệu DataOps</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "items": [
+    {
+      "ruleId": "UUID",
+      "code": "pii.email",
+      "name": "Khử email rò rỉ",
+      "ruleType": "PiiDetection",
+      "severity": "Error"
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AiDataCleaningRule`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/ai/data-cleaning-rules</span>
+              </div>
+              <div class="endpoint-summary">Thêm quy tắc làm sạch dữ liệu mới</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "code": "string",
+  "name": "string",
+  "ruleType": "PiiDetection",
+  "severity": "Error",
+  "config": "Object"
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "ruleId": "UUID"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AiDataCleaningRule`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/ai/dataset-samples/{sampleId}/flags</span>
+              </div>
+              <div class="endpoint-summary">Danh sách cờ vi phạm quy tắc dữ liệu</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "flags": [
+    {
+      "flagId": "UUID",
+      "ruleCode": "pii.email",
+      "severity": "Error",
+      "message": "Phát hiện rò rỉ email"
+    }
+  ]
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AiDataQualityFlag`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/ai/training-runs</span>
+              </div>
+              <div class="endpoint-summary">Khởi chạy tiến trình Fine-tuning AI Model</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "datasetVersionId": "UUID",
+  "name": "LoRA Run 1",
+  "baseModelCode": "qwen2.5:3b-instruct",
+  "method": "LoRA",
+  "hyperparameters": {
+    "lora_r": 16,
+    "lr": 0.0002,
+    "epochs": 3
+  }
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "runId": "UUID",
+  "status": "Queued"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AiTrainingRun`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/ai/training-runs/{runId}</span>
+              </div>
+              <div class="endpoint-summary">Xem trạng thái & Log tiến trình Fine-tuning</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "runId": "UUID",
+  "status": "Running | Completed",
+  "trainLoss": 0.045,
+  "artifactPath": "/models/lora.gguf"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AiTrainingRun`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-POST">POST</span>
+                <span class="endpoint-path">/api/v1/ai/evaluations</span>
+              </div>
+              <div class="endpoint-summary">Ghi nhận chỉ số kết quả đánh giá Model</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <pre class="code-block">{
+  "trainingRunId": "UUID",
+  "modelId": "UUID",
+  "datasetVersionId": "UUID",
+  "splitType": "Test",
+  "metricName": "json_valid_rate",
+  "metricValue": 0.985
+}</pre>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "evalId": "UUID"
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: Bảng `AiEvaluationResult`</div>
+            </div>
+          
+            <div class="endpoint-card">
+              <div class="endpoint-header">
+                <span class="method-badge method-GET">GET</span>
+                <span class="endpoint-path">/api/v1/analytics/quality-health</span>
+              </div>
+              <div class="endpoint-summary">Báo cáo tổng hợp sức khỏe DataOps & AI Accuracy</div>
+              
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
+                <div>
+                  <strong>Dữ liệu truyền từ FE (Request):</strong>
+                  <p style="color:#94a3b8; font-size:0.85rem; margin-top:0.4rem;">None (Không cần Request Body)</p>
+                </div>
+                <div>
+                  <strong>Dữ liệu trả về cho FE (Response Data):</strong>
+                  <pre class="code-block">{
+  "totalSamples": 5000,
+  "cleanPercentage": 98.5,
+  "ai1AcceptanceRate": 84.2,
+  "ai2AgreementRate": 79.5
+}</pre>
+                </div>
+              </div>
+              <div class="db-tag">Bảng / View MySQL tương ứng: View `vw_AiBreakdownQuality`, `vw_AiAssignmentAccuracy`</div>
+            </div>
+          
+        </div>
+      
+
+    </div>
+  </div>
+</body>
+</html>

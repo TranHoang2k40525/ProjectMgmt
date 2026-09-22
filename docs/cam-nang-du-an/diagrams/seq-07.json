@@ -1,0 +1,72 @@
+{
+  "title": "07 Tạo Issue",
+  "participants": [
+    {
+      "id": "u",
+      "label": "Người dùng",
+      "actor": true
+    },
+    {
+      "id": "api",
+      "label": "API / Delivery"
+    },
+    {
+      "id": "id",
+      "label": "Identity"
+    },
+    {
+      "id": "plan",
+      "label": "Planning"
+    },
+    {
+      "id": "db",
+      "label": "Issue DB"
+    }
+  ],
+  "messages": [
+    {
+      "from": "u",
+      "to": "api",
+      "label": "POST /api/issues"
+    },
+    {
+      "from": "api",
+      "to": "id",
+      "label": "Kiểm quyền Project"
+    },
+    {
+      "from": "id",
+      "to": "api",
+      "label": "Allow / Deny",
+      "return": true
+    },
+    {
+      "from": "api",
+      "to": "plan",
+      "label": "Kiểm Project + cấp số + initial status"
+    },
+    {
+      "from": "plan",
+      "to": "api",
+      "label": "Project context",
+      "return": true
+    },
+    {
+      "from": "api",
+      "to": "db",
+      "label": "Tạo Issue + history (transaction)"
+    },
+    {
+      "from": "db",
+      "to": "api",
+      "label": "IssueId + IssueNumber",
+      "return": true
+    },
+    {
+      "from": "api",
+      "to": "u",
+      "label": "201 Created",
+      "return": true
+    }
+  ]
+}

@@ -506,3 +506,118 @@
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+@media (max-width: 1279px) {
+  .profile-page,
+  .profile-hero-layout,
+  .profile-overview-layout,
+  .profile-content-grid,
+  .profile-content-grid > * {
+    min-width: 0;
+  }
+
+  .profile-page {
+    padding-inline: 1rem;
+  }
+
+  .profile-hero-actions,
+  .profile-quick-actions {
+    flex-wrap: wrap;
+  }
+
+  .profile-tabs {
+    max-width: 100%;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+  }
+
+  .profile-tabs > button {
+    flex: 0 0 auto;
+    min-height: 42px;
+    scroll-snap-align: start;
+  }
+
+  .profile-page button,
+  .profile-page input,
+  .profile-page select {
+    min-height: 40px;
+  }
+}
+
+@media (max-width: 1023px) {
+  .profile-hero-layout {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .profile-hero-actions {
+    align-self: stretch;
+  }
+}
+
+@media (max-width: 767px) {
+  .profile-page {
+    padding: .5rem 0 1rem;
+  }
+
+  .profile-hero,
+  .profile-overview {
+    padding: 1rem;
+  }
+
+  .profile-hero h1 {
+    font-size: 1.75rem;
+    line-height: 1.12;
+  }
+
+  .profile-hero-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+  }
+
+  .profile-hero-actions button,
+  .profile-quick-actions button {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .profile-quick-actions {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .profile-overview-layout {
+    align-items: stretch;
+  }
+
+  .profile-tabs {
+    padding-bottom: .4rem;
+  }
+
+  .profile-skill-field {
+    flex-basis: 100%;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 932px) and (orientation: landscape) and (max-height: 520px) {
+  .profile-page {
+    padding-block: .5rem;
+  }
+
+  .profile-hero {
+    padding: 1rem 1.25rem;
+  }
+
+  .profile-hero-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, auto);
+  }
+
+  .profile-hero-actions {
+    align-content: center;
+  }
+}

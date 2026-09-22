@@ -275,6 +275,24 @@ import {
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
+
+    @media (max-width: 1279px) {
+      .create-project-container { width: 100%; max-width: 700px; min-width: 0; padding: 1rem; }
+      .form-card, form { min-width: 0; }
+    }
+
+    @media (max-width: 767px) {
+      .create-project-container { padding: 0; }
+      .form-card { padding: 1rem; }
+      h1 { font-size: 1.35rem; }
+      .form-actions { align-items: stretch; flex-direction: column-reverse; }
+      .form-actions .btn { justify-content: center; min-height: 44px; width: 100%; }
+    }
+
+    @media (max-width: 932px) and (orientation: landscape) and (max-height: 520px) {
+      .create-project-container { padding-block: .5rem; }
+      .form-card { padding: 1rem; }
+    }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush
 })

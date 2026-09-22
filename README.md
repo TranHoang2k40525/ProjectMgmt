@@ -1,4 +1,6 @@
-# ProjectMgmt — Modular Monolith
+# Hệ thống Quản lý Dự án Scrum tích hợp AI
+
+Tên mã nguồn `ProjectMgmt` được giữ ổn định. **[Cẩm nang kỹ thuật của sản phẩm](docs/cam-nang-du-an/Cam-nang-ky-thuat.md)** là điểm bắt đầu chính thức cho người đọc, nhóm phát triển và người tiếp quản: bài toán, hai AI, ba module, kiến trúc Modular Monolith + Clean Architecture, sơ đồ, kiểm thử và CI/CD.
 
 Backend được tổ chức thành đúng ba business module:
 
@@ -32,7 +34,7 @@ dotnet user-secrets --project .\ProjectMgmt.Solution set `
 
 ## Tài liệu
 
-- Kế hoạch nguồn có thể chỉnh sửa: `docs/plane.txt`
-- Báo cáo HTML đầy đủ: `docs/project-structure-guide.html`
+- Cẩm nang chuẩn tắc: `docs/cam-nang-du-an/Cam-nang-ky-thuat.md` (có bản Word, PDF, HTML, TXT và draw.io cùng thư mục).
+- Tư liệu cấu trúc mã nguồn để đối chiếu (không thay cẩm nang): `docs/plane.txt`, `docs/project-structure-guide.html`.
 
 Lưu ý: database `projectmgmt` hiện hữu chưa có ba bảng lịch sử EF Migration. Không chạy các initial migration lên database đó trước khi thực hiện baseline. Quy trình an toàn được ghi rõ trong tài liệu HTML.
