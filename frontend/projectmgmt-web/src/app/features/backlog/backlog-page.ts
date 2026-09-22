@@ -2,14 +2,16 @@ import { ChangeDetectionStrategy, Component, HostListener, inject, signal, compu
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ConnectedPosition, OverlayModule } from '@angular/cdk/overlay';
+import { DragDropModule, CdkDragDrop } from '@angular/cdk/drag-drop';
 import { ProjectManagementService, WorkItem, Sprint } from '../../core/services/project-management.service';
 import { ExcelDataService } from '../../core/services/excel-data.service';
 import { ToastService } from '../../core/services/toast.service';
+import { ContextMenuComponent, ContextMenuItemAction } from '../../shared/components/context-menu.component';
 
 @Component({
   selector: 'app-backlog-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, OverlayModule],
+  imports: [CommonModule, FormsModule, OverlayModule, DragDropModule, ContextMenuComponent],
   templateUrl: './backlog-page.html',
   styleUrl: './backlog-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -26,6 +28,12 @@ export class BacklogPage {
   selectedAssigneeFilter = signal<string | null>(null);
   selectedEpicFilter = signal<string | null>(null);
   onlyMineFilter = signal<boolean>(false);
+
+  // Context Menu State
+  contextMenuVisible = signal<boolean>(false);
+  contextMenuX = signal<number>(0);
+  contextMenuY = signal<number>(0);
+  contextMenuItem = signal<WorkItem | null>(null);
 
   // Filter Popover Menu Toggle
   isFilterMenuOpen = signal<boolean>(false);
@@ -153,6 +161,71 @@ export class BacklogPage {
     return items;
   });
 
+  // CDK Drag and Drop across Sprints
+  onSprintDrop(event: CdkDragDrop<WorkItem[]>, targetSprintId: string, targetSprintName: string): void {
+    const item = event.item.data as WorkItem;
+    if (item && item.sprintId !== targetSprintId) {
+      this.projectService.updateWorkItemSprint(item.id, targetSprintId, targetSprintName);
+      this.toastService.success('Đã Chuyển Sprint', `Công việc [${item.issueKey}] -> ${targetSprintName}`);
+    }
+  }
+
+  // Context Menu Handlers
+  onContextMenu(event: MouseEvent, item: WorkItem): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.contextMenuX.set(event.clientX);
+    this.contextMenuY.set(event.clientY);
+    this.contextMenuItem.set(item);
+    this.contextMenuVisible.set(true);
+  }
+
+  onContextMenuAction(event: ContextMenuItemAction): void {
+    const item = this.contextMenuItem();
+    if (!item) return;
+
+    switch (event.action) {
+      case 'status':
+        if (event.value) {
+          const statusMap: Record<string, string> = {
+            'TO_DO': 'To Do',
+            'IN_PROGRESS': 'In Progress',
+            'CODE_REVIEW': 'Code Review',
+            'DONE': 'Done'
+          };
+          const targetStatus = statusMap[event.value] || event.value;
+          this.projectService.updateWorkItemStatus(item.id, targetStatus);
+          this.toastService.success('Cập Nhật Trạng Thái', `[${item.issueKey}] -> ${targetStatus}`);
+        }
+        break;
+
+      case 'assign':
+        this.projectService.updateWorkItemAssignee(item.id, 'Trần Văn Hoàng');
+        this.toastService.success('Đã Gán Cho Bạn', `[${item.issueKey}] đã giao cho bạn`);
+        break;
+
+      case 'ai-breakdown':
+        this.projectService.activeDrawerTask.set(item);
+        this.toastService.info('AI Breakdown', `Mở xem gợi ý Sub-task cho [${item.issueKey}]`);
+        break;
+
+      case 'ai-assign':
+        this.projectService.activeDrawerTask.set(item);
+        this.toastService.info('AI Assign', `Đang gợi ý người xử lý cho [${item.issueKey}]`);
+        break;
+
+      case 'copy':
+        navigator.clipboard?.writeText?.(`${item.issueKey}: ${item.title}`);
+        this.toastService.success('Đã Sao Chép', `Đã chép [${item.issueKey}] vào clipboard`);
+        break;
+
+      case 'delete':
+        this.projectService.deleteWorkItem(item.id);
+        this.toastService.warning('Đã Xóa', `Đã xóa [${item.issueKey}]`);
+        break;
+    }
+  }
+
   resetFilters(): void {
     this.selectedTypeFilter.set(null);
     this.selectedPriorityFilter.set(null);
@@ -166,6 +239,7 @@ export class BacklogPage {
   closeAllPopups(): void {
     this.isFilterMenuOpen.set(false);
     this.isEpicPanelOpen.set(false);
+    this.contextMenuVisible.set(false);
     this.activeMenuTaskId.set(null);
     this.activeStatusDropdownTaskId.set(null);
     this.activeEpicDropdownTaskId.set(null);
@@ -569,3 +643,4 @@ export class BacklogPage {
     this.toastService.info('Phân Rã Tự Động', 'Hệ thống đang tự động phân rã các User Stories thành Subtasks.');
   }
 }
+

@@ -1,10 +1,20 @@
+<!-- Context Menu Component Overlay -->
+<app-context-menu
+  [visible]="contextMenuVisible()"
+  [x]="contextMenuX()"
+  [y]="contextMenuY()"
+  [itemKey]="contextMenuItem()?.issueKey || ''"
+  (action)="onContextMenuAction($event)"
+  (close)="closeAllPopups()"
+></app-context-menu>
+
 <section class="backlog-page" aria-labelledby="backlog-title">
   <header class="backlog-toolbar">
     <div class="backlog-heading-row">
       <div class="backlog-heading">
         <span class="material-symbols-outlined text-primary" aria-hidden="true">format_list_bulleted</span>
         <div>
-          <h1 id="backlog-title">Kế hoạch Sprint &amp; Backlog</h1>
+          <h1 id="backlog-title" class="font-headline">Kế hoạch Sprint &amp; Backlog</h1>
           <p>{{ workItems().length }} công việc · {{ epics().length }} Epic</p>
         </div>
       </div>
@@ -68,7 +78,12 @@
       @for (sprint of sprints(); track sprint.id) {
         @let sprintTasks = getSprintItems(sprint.id);
         @let sprintAssignees = getSprintAssignees(sprint.id);
-        <article class="sprint-section">
+        <article 
+          cdkDropList
+          [cdkDropListData]="sprintTasks"
+          (cdkDropListDropped)="onSprintDrop($event, sprint.id, sprint.name)"
+          class="sprint-section"
+        >
           <div class="sprint-header">
             <div class="sprint-info">
               @if (editingSprintId() === sprint.id) {
@@ -92,7 +107,12 @@
       }
 
       @let backlogPoolItems = getBacklogItems();
-      <article class="sprint-section backlog-pool">
+      <article 
+        cdkDropList
+        [cdkDropListData]="backlogPoolItems"
+        (cdkDropListDropped)="onSprintDrop($event, 'sp-backlog', 'Backlog Pool')"
+        class="sprint-section backlog-pool"
+      >
         <div class="sprint-header"><div class="sprint-info"><span class="material-symbols-outlined text-slate-500" aria-hidden="true">inbox</span><div><h2>Backlog</h2><p>Kho công việc chưa gán Sprint · {{ backlogPoolItems.length }} việc</p></div></div><button type="button" class="button button-primary" (click)="activeInlineSprintId.set(activeInlineSprintId() === 'sp-backlog' ? null : 'sp-backlog')"><span class="material-symbols-outlined" aria-hidden="true">add</span><span>Tạo việc</span></button></div>
         @if (activeInlineSprintId() === 'sp-backlog') { <div class="inline-create"><input type="text" [(ngModel)]="inlineTaskTitleMap['sp-backlog']" (keyup.enter)="createInlineSprintTask('sp-backlog', 'Backlog Pool')" placeholder="Nhập tên công việc vào Backlog" /><button type="button" class="button button-primary" (click)="createInlineSprintTask('sp-backlog', 'Backlog Pool')">Thêm</button><button type="button" class="button button-secondary" (click)="activeInlineSprintId.set(null)">Hủy</button></div> }
         @if (backlogPoolItems.length > 0) { <ng-container *ngTemplateOutlet="workItemList; context: { $implicit: backlogPoolItems }"></ng-container> } @else { <div class="empty-state"><span class="material-symbols-outlined" aria-hidden="true">inbox</span><p>Backlog đang trống.</p></div> }
@@ -115,7 +135,14 @@
     @for (item of items; track item.id) {
       @let subtasks = getSubtasks(item.id);
       <div class="work-item-group">
-        <div class="work-item-row" [class.is-selected]="isTaskSelected(item.id)">
+        <div 
+          cdkDrag
+          [cdkDragData]="item"
+          (contextmenu)="onContextMenu($event, item)"
+          (dblclick)="startEditingTaskTitle(item, $event)"
+          class="work-item-row interactive-card" 
+          [class.is-selected]="isTaskSelected(item.id)"
+        >
           <div class="cell-select no-drawer">@if (subtasks.length > 0) { <button type="button" class="icon-button icon-button-small" [title]="expandedSubtasks()[item.id] ? 'Thu gọn Sub-task' : 'Mở Sub-task'" (click)="toggleSubtasks(item.id, $event)"><span class="material-symbols-outlined" aria-hidden="true">{{ expandedSubtasks()[item.id] ? 'expand_more' : 'chevron_right' }}</span></button> } @else { <input type="checkbox" [checked]="isTaskSelected(item.id)" [attr.aria-label]="'Chọn ' + item.issueKey" (change)="toggleTaskSelection(item.id, $event)" /> }</div>
           <div class="cell-key"><span class="material-symbols-outlined issue-type-icon" [title]="item.issueType" aria-hidden="true">{{ getIssueTypeIcon(item.issueType) }}</span><strong>{{ item.issueKey }}</strong></div>
           <div class="cell-title">
@@ -157,3 +184,4 @@
     }
   </div>
 </ng-template>
+

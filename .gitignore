@@ -21,3 +21,5 @@ TestResults/
 *.py[cod]
 .tmp/
 **plane (1).txt
+.playwright-mcp
+**/scripts
