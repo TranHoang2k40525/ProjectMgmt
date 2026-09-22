@@ -96,7 +96,7 @@
     @if (identity.authState().currentUser; as user) {
       <div class="flex items-center gap-2 pl-1.5 sm:pl-2 border-l border-slate-200 dark:border-slate-800">
         <a routerLink="/profile" [title]="'Hồ sơ cá nhân: ' + user.displayName + ' (' + user.roleName + ')'" class="flex items-center gap-2 p-0.5 sm:p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors group">
-          <img [src]="user.avatarUrl || 'assets/images/huce-branding/huce-official-logo.png'" [alt]="user.displayName" class="w-7 h-7 sm:w-8 sm:h-8 rounded-full object-cover ring-2 ring-primary/30 shrink-0" />
+          <img [src]="user.avatarUrl || 'assets/images/huce-branding/huce-official-logo.png'" [alt]="user.displayName" (error)="useAvatarFallback($event)" class="w-7 h-7 sm:w-8 sm:h-8 rounded-full object-cover ring-2 ring-primary/30 shrink-0" />
           <div class="hidden xl:flex flex-col text-left">
             <span class="text-sm font-semibold text-slate-900 dark:text-white leading-tight group-hover:text-primary transition-colors">{{ user.displayName }}</span>
             <span class="text-xs text-slate-500 leading-none">{{ user.roleName }}</span>

@@ -123,6 +123,12 @@ export class AppShellComponent implements OnDestroy {
     this.motion.destroy();
   }
 
+  useAvatarFallback(event: Event): void {
+    const image = event.target as HTMLImageElement;
+    const fallback = 'assets/images/huce-branding/huce-official-logo.png';
+    if (image.getAttribute('src') !== fallback) image.src = fallback;
+  }
+
   toggleSidebar(): void {
     this.isMobileSearchOpen.set(false);
     this.isRecentFlyoutOpen.set(false);
