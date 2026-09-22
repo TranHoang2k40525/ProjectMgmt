@@ -5,7 +5,7 @@
   [y]="contextMenuY()"
   [itemKey]="contextMenuItem()?.issueKey || ''"
   (action)="onContextMenuAction($event)"
-  (close)="closeAllPopups()"
+  (menuClose)="closeAllPopups()"
 ></app-context-menu>
 
 <section class="backlog-page" aria-labelledby="backlog-title">

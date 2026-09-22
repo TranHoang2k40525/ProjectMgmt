@@ -5,7 +5,7 @@
   [y]="contextMenuY()"
   [itemKey]="contextMenuItem()?.issueKey || ''"
   (action)="onContextMenuAction($event)"
-  (close)="closeAllPopups()"
+  (menuClose)="closeAllPopups()"
 ></app-context-menu>
 
 <!-- Transparent Backdrop Overlay to Close Popups on Outside Click -->
@@ -203,7 +203,7 @@
 
             <!-- Title (Double click inline edit or plain text) -->
             @if (inlineEditingTaskId() === item.id) {
-              <div class="no-drawer flex items-center gap-1.5" (click)="$event.stopPropagation()">
+              <div class="no-drawer flex items-center gap-1.5 focus:outline-none" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()" tabindex="0" role="region" aria-label="Chỉnh sửa tiêu đề">
                 <input 
                   type="text" 
                   [ngModel]="inlineTitleValue()"
@@ -286,7 +286,7 @@
             </div>
 
             @if (inlineEditingTaskId() === item.id) {
-              <div class="no-drawer flex items-center gap-1.5" (click)="$event.stopPropagation()">
+              <div class="no-drawer flex items-center gap-1.5 focus:outline-none" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()" tabindex="0" role="region" aria-label="Chỉnh sửa tiêu đề">
                 <input 
                   type="text" 
                   [ngModel]="inlineTitleValue()"
@@ -363,7 +363,7 @@
             </div>
 
             @if (inlineEditingTaskId() === item.id) {
-              <div class="no-drawer flex items-center gap-1.5" (click)="$event.stopPropagation()">
+              <div class="no-drawer flex items-center gap-1.5 focus:outline-none" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()" tabindex="0" role="region" aria-label="Chỉnh sửa tiêu đề">
                 <input 
                   type="text" 
                   [ngModel]="inlineTitleValue()"
@@ -440,7 +440,7 @@
             </div>
 
             @if (inlineEditingTaskId() === item.id) {
-              <div class="no-drawer flex items-center gap-1.5" (click)="$event.stopPropagation()">
+              <div class="no-drawer flex items-center gap-1.5 focus:outline-none" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()" tabindex="0" role="region" aria-label="Chỉnh sửa tiêu đề">
                 <input 
                   type="text" 
                   [ngModel]="inlineTitleValue()"

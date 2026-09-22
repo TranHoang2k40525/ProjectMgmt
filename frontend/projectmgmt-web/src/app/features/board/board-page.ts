@@ -108,13 +108,14 @@ export class BoardPage implements OnDestroy {
     switch (event.action) {
       case 'status':
         if (event.value) {
+          const val = event.value;
           const statusMap: Record<string, string> = {
             'TO_DO': 'To Do',
             'IN_PROGRESS': 'In Progress',
             'CODE_REVIEW': 'Code Review',
             'DONE': 'Done'
           };
-          const targetStatus = statusMap[event.value] || event.value;
+          const targetStatus = statusMap[val] || val;
           this.animateBoardChange(() => this.projectService.updateWorkItemStatus(item.id, targetStatus));
           this.toastService.success('Đã Chuyển Trạng Thái', `Thẻ [${item.issueKey}] -> ${targetStatus}`);
         }
