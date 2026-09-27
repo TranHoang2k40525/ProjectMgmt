@@ -1,4 +1,5 @@
 using IdentityExperience.Domain.Entities;
+using IdentityExperience.Domain.Models;
 
 namespace IdentityExperience.Domain.IRepositories;
 
@@ -26,5 +27,15 @@ public interface IIdentityRepository
         User user,
         UserProfile profile,
         OtpCode otpCode,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Khóa tài khoản, kiểm tra cooldown, vô hiệu OTP cũ và lưu OTP mới trong một transaction.
+    /// </summary>
+    Task<OtpIssueResult> ReplaceEmailVerificationOtpAsync(
+        Guid userId,
+        OtpCode newOtpCode,
+        DateTime nowUtc,
+        TimeSpan minimumInterval,
         CancellationToken cancellationToken = default);
 }

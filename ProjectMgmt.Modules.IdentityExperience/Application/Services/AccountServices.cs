@@ -4,6 +4,7 @@ using IdentityExperience.Application.Dto;
 using IdentityExperience.Application.IServices;
 using IdentityExperience.Domain.Entities;
 using IdentityExperience.Domain.IRepositories;
+using IdentityExperience.Domain.Models;
 using PhoneNumbers;
 
 namespace IdentityExperience.Application.Services;
@@ -20,17 +21,20 @@ public class AccountServices : IAccountServices
     private readonly IIdentityRepository _identityRepository;
     private readonly IPasswordService _passwordService;
     private readonly IOtpCodeService _otpCodeService;
+    private readonly IEmailService _emailService;
     private readonly TimeProvider _timeProvider;
 
     public AccountServices(
         IIdentityRepository identityRepository,
         IPasswordService passwordService,
         IOtpCodeService otpCodeService,
+        IEmailService emailService,
         TimeProvider timeProvider)
     {
         _identityRepository = identityRepository;
         _passwordService = passwordService;
         _otpCodeService = otpCodeService;
+        _emailService = emailService;
         _timeProvider = timeProvider;
     }
 
@@ -129,10 +133,32 @@ public class AccountServices : IAccountServices
                 "Email hoặc số điện thoại vừa được sử dụng bởi một yêu cầu khác.");
         }
 
+        var emailDelivered = await _emailService.SendOtpAsync(
+            email,
+            profile.DisplayName,
+            otpCode,
+            otpExpiresAt,
+            cancellationToken);
+
+        if (!emailDelivered)
+        {
+            return new RegisterResult
+            {
+                Success = false,
+                ErrorCode = "AUTH_EMAIL_DELIVERY_FAILED",
+                Message = "Tài khoản đã được tạo ở trạng thái chờ xác minh nhưng chưa gửi được email OTP. Hãy thử gửi lại.",
+                UserId = userId,
+                Email = email,
+                Status = "PendingVerification",
+                OtpExpiresAt = otpExpiresAt,
+                ResendAfterSeconds = OtpResendAfterSeconds
+            };
+        }
+
         return new RegisterResult
         {
             Success = true,
-            Message = "Đã tạo tài khoản chờ xác minh email.",
+            Message = "Đã tạo tài khoản và gửi mã OTP xác minh email.",
             UserId = userId,
             Email = email,
             Status = "PendingVerification",
@@ -153,16 +179,115 @@ public class AccountServices : IAccountServices
         });
     }
 
-    public Task<OtpResult> SendOtpAsync(
+    public async Task<OtpResult> SendOtpAsync(
         AccountDto account,
         CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(new OtpResult
+        if (!TryNormalizeEmail(account.Email, out var email, out var normalizedEmail))
         {
-            Success = false,
-            ErrorCode = "AUTH_OTP_DELIVERY_NOT_IMPLEMENTED",
-            Message = "Gửi OTP qua email sẽ được hoàn thiện ở mốc SMTP."
-        });
+            return OtpFailure("AUTH_EMAIL_INVALID", "Email không hợp lệ.");
+        }
+
+        var purpose = string.IsNullOrWhiteSpace(account.Purpose)
+            ? VerifyEmailPurpose
+            : account.Purpose.Trim();
+        if (!string.Equals(purpose, VerifyEmailPurpose, StringComparison.Ordinal))
+        {
+            return OtpFailure(
+                "AUTH_OTP_PURPOSE_INVALID",
+                "Endpoint này chỉ hỗ trợ mục đích VerifyEmail.");
+        }
+
+        var user = await _identityRepository.GetUserByNormalizedEmailAsync(
+            normalizedEmail,
+            cancellationToken: cancellationToken);
+        if (user is null)
+        {
+            return OtpFailure("AUTH_ACCOUNT_NOT_FOUND", "Không tìm thấy tài khoản với email này.");
+        }
+
+        if (user.IsEmailVerified)
+        {
+            return OtpFailure("AUTH_EMAIL_ALREADY_VERIFIED", "Email đã được xác minh.");
+        }
+
+        var profile = await _identityRepository.GetUserProfileAsync(
+            user.Id,
+            cancellationToken: cancellationToken);
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var otpCode = _otpCodeService.GenerateCode();
+        var otp = new OtpCode
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            CodeHash = _otpCodeService.Hash(normalizedEmail, VerifyEmailPurpose, otpCode),
+            Purpose = VerifyEmailPurpose,
+            ExpiresAt = now.Add(OtpLifetime),
+            IsUsed = false,
+            AttemptCount = 0,
+            CreatedAt = now
+        };
+
+        var issueResult = await _identityRepository.ReplaceEmailVerificationOtpAsync(
+            user.Id,
+            otp,
+            now,
+            TimeSpan.FromSeconds(OtpResendAfterSeconds),
+            cancellationToken);
+
+        if (issueResult.Status == OtpIssueStatus.RateLimited)
+        {
+            return new OtpResult
+            {
+                Success = false,
+                ErrorCode = "AUTH_OTP_RATE_LIMITED",
+                Message = "OTP vừa được cấp. Vui lòng chờ trước khi yêu cầu mã mới.",
+                Email = email,
+                Status = "PendingVerification",
+                OtpExpiresAt = issueResult.ExpiresAt,
+                ResendAfterSeconds = issueResult.RetryAfterSeconds
+            };
+        }
+
+        if (issueResult.Status == OtpIssueStatus.EmailAlreadyVerified)
+        {
+            return OtpFailure("AUTH_EMAIL_ALREADY_VERIFIED", "Email đã được xác minh.");
+        }
+
+        if (issueResult.Status == OtpIssueStatus.UserNotFound)
+        {
+            return OtpFailure("AUTH_ACCOUNT_NOT_FOUND", "Tài khoản không còn tồn tại.");
+        }
+
+        var emailDelivered = await _emailService.SendOtpAsync(
+            email,
+            profile?.DisplayName ?? email,
+            otpCode,
+            otp.ExpiresAt,
+            cancellationToken);
+        if (!emailDelivered)
+        {
+            return new OtpResult
+            {
+                Success = false,
+                ErrorCode = "AUTH_EMAIL_DELIVERY_FAILED",
+                Message = "Đã tạo OTP mới nhưng chưa gửi được email. Hãy thử lại sau thời gian chờ.",
+                Email = email,
+                Status = "PendingVerification",
+                OtpExpiresAt = otp.ExpiresAt,
+                ResendAfterSeconds = OtpResendAfterSeconds
+            };
+        }
+
+        return new OtpResult
+        {
+            Success = true,
+            Message = "Đã gửi mã OTP mới.",
+            Email = email,
+            Status = "PendingVerification",
+            OtpExpiresAt = otp.ExpiresAt,
+            ResendAfterSeconds = OtpResendAfterSeconds
+        };
     }
 
     public Task<OtpResult> VerifyOtpAsync(
@@ -237,6 +362,22 @@ public class AccountServices : IAccountServices
         return null;
     }
 
+    private static bool TryNormalizeEmail(
+        string? rawEmail,
+        out string email,
+        out string normalizedEmail)
+    {
+        email = rawEmail?.Trim() ?? string.Empty;
+        normalizedEmail = string.Empty;
+        if (email.Length is 0 or > 256 || !new EmailAddressAttribute().IsValid(email))
+        {
+            return false;
+        }
+
+        normalizedEmail = email.ToUpperInvariant();
+        return true;
+    }
+
     private static bool TryNormalizePhone(string rawPhoneNumber, out string phoneNumber)
     {
         phoneNumber = string.Empty;
@@ -261,6 +402,16 @@ public class AccountServices : IAccountServices
     private static RegisterResult Failure(string errorCode, string message)
     {
         return new RegisterResult
+        {
+            Success = false,
+            ErrorCode = errorCode,
+            Message = message
+        };
+    }
+
+    private static OtpResult OtpFailure(string errorCode, string message)
+    {
+        return new OtpResult
         {
             Success = false,
             ErrorCode = errorCode,

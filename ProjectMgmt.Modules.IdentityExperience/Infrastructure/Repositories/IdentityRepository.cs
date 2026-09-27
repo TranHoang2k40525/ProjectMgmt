@@ -1,5 +1,6 @@
 using IdentityExperience.Domain.Entities;
 using IdentityExperience.Domain.IRepositories;
+using IdentityExperience.Domain.Models;
 using Microsoft.EntityFrameworkCore;
 using MySqlConnector;
 
@@ -86,5 +87,75 @@ public class IdentityRepository : IIdentityRepository
         });
 
         return created;
+    }
+
+    public async Task<OtpIssueResult> ReplaceEmailVerificationOtpAsync(
+        Guid userId,
+        OtpCode newOtpCode,
+        DateTime nowUtc,
+        TimeSpan minimumInterval,
+        CancellationToken cancellationToken = default)
+    {
+        var executionStrategy = _context.Database.CreateExecutionStrategy();
+
+        return await executionStrategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+
+            var lockedUsers = await _context.Users
+                .FromSqlInterpolated($"SELECT * FROM `User` WHERE `Id` = {userId} FOR UPDATE")
+                .ToListAsync(cancellationToken);
+            var user = lockedUsers.SingleOrDefault();
+
+            if (user is null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return new OtpIssueResult { Status = OtpIssueStatus.UserNotFound };
+            }
+
+            if (user.IsEmailVerified)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return new OtpIssueResult { Status = OtpIssueStatus.EmailAlreadyVerified };
+            }
+
+            var otpCodes = await _context.OtpCodes
+                .Where(otp => otp.UserId == userId && otp.Purpose == newOtpCode.Purpose)
+                .OrderByDescending(otp => otp.CreatedAt)
+                .ToListAsync(cancellationToken);
+
+            var latestOtp = otpCodes.FirstOrDefault();
+            if (latestOtp is not null)
+            {
+                var elapsed = nowUtc - latestOtp.CreatedAt;
+                if (elapsed < minimumInterval)
+                {
+                    var retryAfter = (int)Math.Ceiling((minimumInterval - elapsed).TotalSeconds);
+                    await transaction.RollbackAsync(cancellationToken);
+                    return new OtpIssueResult
+                    {
+                        Status = OtpIssueStatus.RateLimited,
+                        ExpiresAt = latestOtp.ExpiresAt,
+                        RetryAfterSeconds = Math.Max(1, retryAfter)
+                    };
+                }
+            }
+
+            foreach (var otpCode in otpCodes.Where(otp => !otp.IsUsed))
+            {
+                otpCode.IsUsed = true;
+            }
+
+            await _context.OtpCodes.AddAsync(newOtpCode, cancellationToken);
+            await _context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            return new OtpIssueResult
+            {
+                Status = OtpIssueStatus.Issued,
+                ExpiresAt = newOtpCode.ExpiresAt,
+                RetryAfterSeconds = (int)minimumInterval.TotalSeconds
+            };
+        });
     }
 }
