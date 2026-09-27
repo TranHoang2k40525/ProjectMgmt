@@ -49,4 +49,28 @@ public interface IIdentityRepository
         DateTime nowUtc,
         int maximumAttempts,
         CancellationToken cancellationToken = default);
+
+    Task<List<string>> GetSystemRoleNamesAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default);
+
+    Task<LoginSessionStatus> CreateLoginSessionAsync(
+        Guid userId,
+        RefreshToken refreshToken,
+        DateTime nowUtc,
+        CancellationToken cancellationToken = default);
+
+    Task<AuthSessionContext?> GetRefreshSessionContextAsync(
+        string refreshTokenHash,
+        CancellationToken cancellationToken = default);
+
+    Task<TokenRotationStatus> RotateRefreshTokenAsync(
+        string currentTokenHash,
+        RefreshToken replacementToken,
+        DateTime nowUtc,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> RevokeRefreshTokenAsync(
+        string refreshTokenHash,
+        CancellationToken cancellationToken = default);
 }

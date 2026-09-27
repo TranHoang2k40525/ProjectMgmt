@@ -253,6 +253,206 @@ public class IdentityRepository : IIdentityRepository
         });
     }
 
+    public Task<List<string>> GetSystemRoleNamesAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        return (from userRole in _context.UserRoles.AsNoTracking()
+                join role in _context.Roles.AsNoTracking() on userRole.RoleId equals role.Id
+                where userRole.UserId == userId
+                      && userRole.ScopeType == "System"
+                      && userRole.ScopeId == null
+                select role.Name)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<LoginSessionStatus> CreateLoginSessionAsync(
+        Guid userId,
+        RefreshToken refreshToken,
+        DateTime nowUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var executionStrategy = _context.Database.CreateExecutionStrategy();
+
+        return await executionStrategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+            var lockedUsers = await _context.Users
+                .FromSqlInterpolated($"SELECT * FROM `User` WHERE `Id` = {userId} FOR UPDATE")
+                .ToListAsync(cancellationToken);
+            var user = lockedUsers.SingleOrDefault();
+
+            if (user is null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return LoginSessionStatus.UserNotFound;
+            }
+
+            if (!user.IsActive)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return LoginSessionStatus.AccountDisabled;
+            }
+
+            if (!user.IsEmailVerified)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return LoginSessionStatus.EmailNotVerified;
+            }
+
+            user.LastLoginAt = nowUtc;
+            await _context.RefreshTokens.AddAsync(refreshToken, cancellationToken);
+            await _context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return LoginSessionStatus.Created;
+        });
+    }
+
+    public async Task<AuthSessionContext?> GetRefreshSessionContextAsync(
+        string refreshTokenHash,
+        CancellationToken cancellationToken = default)
+    {
+        var token = await _context.RefreshTokens
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                refreshToken => refreshToken.TokenHash == refreshTokenHash,
+                cancellationToken);
+        if (token is null)
+        {
+            return null;
+        }
+
+        var user = await _context.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(candidate => candidate.Id == token.UserId, cancellationToken);
+        if (user is null)
+        {
+            return null;
+        }
+
+        return new AuthSessionContext
+        {
+            User = user,
+            Profile = await _context.UserProfiles
+                .AsNoTracking()
+                .FirstOrDefaultAsync(profile => profile.UserId == user.Id, cancellationToken),
+            SystemRoles = await GetSystemRoleNamesAsync(user.Id, cancellationToken)
+        };
+    }
+
+    public async Task<TokenRotationStatus> RotateRefreshTokenAsync(
+        string currentTokenHash,
+        RefreshToken replacementToken,
+        DateTime nowUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var executionStrategy = _context.Database.CreateExecutionStrategy();
+
+        return await executionStrategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+            var lockedTokens = await _context.RefreshTokens
+                .FromSqlInterpolated($"SELECT * FROM `RefreshToken` WHERE `TokenHash` = {currentTokenHash} FOR UPDATE")
+                .ToListAsync(cancellationToken);
+            var currentToken = lockedTokens.SingleOrDefault();
+
+            if (currentToken is null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return TokenRotationStatus.TokenNotFound;
+            }
+
+            if (currentToken.IsRevoked)
+            {
+                if (currentToken.ReplacedByTokenId is not null)
+                {
+                    var activeTokens = await _context.RefreshTokens
+                        .Where(token => token.UserId == currentToken.UserId && !token.IsRevoked)
+                        .ToListAsync(cancellationToken);
+                    foreach (var activeToken in activeTokens)
+                    {
+                        activeToken.IsRevoked = true;
+                    }
+
+                    await _context.SaveChangesAsync(cancellationToken);
+                    await transaction.CommitAsync(cancellationToken);
+                    return TokenRotationStatus.ReuseDetected;
+                }
+
+                await transaction.RollbackAsync(cancellationToken);
+                return TokenRotationStatus.TokenRevoked;
+            }
+
+            if (currentToken.ExpiresAt <= nowUtc)
+            {
+                currentToken.IsRevoked = true;
+                await _context.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return TokenRotationStatus.TokenExpired;
+            }
+
+            var lockedUsers = await _context.Users
+                .FromSqlInterpolated($"SELECT * FROM `User` WHERE `Id` = {currentToken.UserId} FOR UPDATE")
+                .ToListAsync(cancellationToken);
+            var user = lockedUsers.SingleOrDefault();
+            if (user is null || !user.IsActive)
+            {
+                currentToken.IsRevoked = true;
+                await _context.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return TokenRotationStatus.AccountDisabled;
+            }
+
+            if (!user.IsEmailVerified)
+            {
+                currentToken.IsRevoked = true;
+                await _context.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return TokenRotationStatus.EmailNotVerified;
+            }
+
+            replacementToken.UserId = currentToken.UserId;
+            await _context.RefreshTokens.AddAsync(replacementToken, cancellationToken);
+            currentToken.IsRevoked = true;
+            currentToken.ReplacedByTokenId = replacementToken.Id;
+
+            await _context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return TokenRotationStatus.Rotated;
+        });
+    }
+
+    public async Task<bool> RevokeRefreshTokenAsync(
+        string refreshTokenHash,
+        CancellationToken cancellationToken = default)
+    {
+        var executionStrategy = _context.Database.CreateExecutionStrategy();
+
+        return await executionStrategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+            var lockedTokens = await _context.RefreshTokens
+                .FromSqlInterpolated($"SELECT * FROM `RefreshToken` WHERE `TokenHash` = {refreshTokenHash} FOR UPDATE")
+                .ToListAsync(cancellationToken);
+            var refreshToken = lockedTokens.SingleOrDefault();
+            if (refreshToken is null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return false;
+            }
+
+            if (!refreshToken.IsRevoked)
+            {
+                refreshToken.IsRevoked = true;
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+            return true;
+        });
+    }
+
     private static bool HashesMatch(string expectedHash, string storedHash)
     {
         try

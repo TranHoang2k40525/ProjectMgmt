@@ -2,6 +2,7 @@ using IdentityExperience.Application.Dto;
 using IdentityExperience.Application.IServices;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace ProjectMgmt.Solution.Controller;
 
@@ -18,6 +19,7 @@ public class AccountController : ControllerBase
     }
 
     [HttpPost("register")]
+    [EnableRateLimiting("auth-otp")]
     [ProducesResponseType(typeof(RegisterResult), StatusCodes.Status202Accepted)]
     [ProducesResponseType(typeof(RegisterResult), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(RegisterResult), StatusCodes.Status409Conflict)]
@@ -42,6 +44,7 @@ public class AccountController : ControllerBase
     }
 
     [HttpPost("otp/send")]
+    [EnableRateLimiting("auth-otp")]
     [ProducesResponseType(typeof(OtpResult), StatusCodes.Status202Accepted)]
     [ProducesResponseType(typeof(OtpResult), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(OtpResult), StatusCodes.Status404NotFound)]
@@ -75,6 +78,7 @@ public class AccountController : ControllerBase
     }
 
     [HttpPost("otp/verify")]
+    [EnableRateLimiting("auth-otp")]
     [ProducesResponseType(typeof(OtpResult), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(OtpResult), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(OtpResult), StatusCodes.Status404NotFound)]
@@ -102,13 +106,60 @@ public class AccountController : ControllerBase
     }
 
     [HttpPost("login")]
+    [EnableRateLimiting("auth-login")]
     [ProducesResponseType(typeof(ResultLogin), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ResultLogin), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Login(
         [FromBody] AccountDto request,
         CancellationToken cancellationToken)
     {
-        var result = await _accountServices.LoginAsync(request, cancellationToken);
-        return result.Success ? Ok(result) : Unauthorized(result);
+        var result = await _accountServices.LoginAsync(
+            request,
+            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            Request.Headers.UserAgent.ToString(),
+            cancellationToken);
+        if (result.Success)
+        {
+            return Ok(result);
+        }
+
+        return result.ErrorCode is "AUTH_ACCOUNT_DISABLED" or "AUTH_EMAIL_NOT_VERIFIED"
+            ? StatusCode(StatusCodes.Status403Forbidden, result)
+            : Unauthorized(result);
+    }
+
+    [HttpPost("refresh-token")]
+    [ProducesResponseType(typeof(ResultLogin), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ResultLogin), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ResultLogin), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> RefreshToken(
+        [FromBody] AccountDto request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _accountServices.RefreshTokenAsync(
+            request.RefreshToken ?? string.Empty,
+            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            Request.Headers.UserAgent.ToString(),
+            cancellationToken);
+        if (result.Success)
+        {
+            return Ok(result);
+        }
+
+        return result.ErrorCode is "AUTH_ACCOUNT_DISABLED" or "AUTH_EMAIL_NOT_VERIFIED"
+            ? StatusCode(StatusCodes.Status403Forbidden, result)
+            : Unauthorized(result);
+    }
+
+    [HttpPost("logout")]
+    [ProducesResponseType(typeof(Result), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Logout(
+        [FromBody] AccountDto request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _accountServices.LogoutAsync(
+            request.RefreshToken ?? string.Empty,
+            cancellationToken);
+        return Ok(result);
     }
 }

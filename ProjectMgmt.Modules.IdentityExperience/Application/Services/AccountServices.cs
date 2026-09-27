@@ -23,6 +23,7 @@ public class AccountServices : IAccountServices
     private readonly IPasswordService _passwordService;
     private readonly IOtpCodeService _otpCodeService;
     private readonly IEmailService _emailService;
+    private readonly ITokenService _tokenService;
     private readonly TimeProvider _timeProvider;
 
     public AccountServices(
@@ -30,12 +31,14 @@ public class AccountServices : IAccountServices
         IPasswordService passwordService,
         IOtpCodeService otpCodeService,
         IEmailService emailService,
+        ITokenService tokenService,
         TimeProvider timeProvider)
     {
         _identityRepository = identityRepository;
         _passwordService = passwordService;
         _otpCodeService = otpCodeService;
         _emailService = emailService;
+        _tokenService = tokenService;
         _timeProvider = timeProvider;
     }
 
@@ -168,16 +171,66 @@ public class AccountServices : IAccountServices
         };
     }
 
-    public Task<ResultLogin> LoginAsync(
+    public async Task<ResultLogin> LoginAsync(
         AccountDto account,
+        string? ipAddress,
+        string? userAgent,
         CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(new ResultLogin
+        if (!TryNormalizeEmail(account.Email, out _, out var normalizedEmail)
+            || string.IsNullOrEmpty(account.Password)
+            || account.Password.Length > 128)
         {
-            Success = false,
-            ErrorCode = "AUTH_LOGIN_NOT_IMPLEMENTED",
-            Message = "Đăng nhập sẽ được hoàn thiện ở mốc JWT và refresh token."
-        });
+            return LoginFailure("AUTH_INVALID_CREDENTIALS", "Email hoặc mật khẩu không đúng.");
+        }
+
+        var user = await _identityRepository.GetUserByNormalizedEmailAsync(
+            normalizedEmail,
+            cancellationToken: cancellationToken);
+        if (user?.PasswordHash is null
+            || !_passwordService.Verify(account.Password, user.PasswordHash))
+        {
+            return LoginFailure("AUTH_INVALID_CREDENTIALS", "Email hoặc mật khẩu không đúng.");
+        }
+
+        if (!user.IsActive)
+        {
+            return LoginFailure("AUTH_ACCOUNT_DISABLED", "Tài khoản đã bị vô hiệu hóa.");
+        }
+
+        if (!user.IsEmailVerified)
+        {
+            return LoginFailure(
+                "AUTH_EMAIL_NOT_VERIFIED",
+                "Email chưa được xác minh. Hãy xác minh OTP trước khi đăng nhập.");
+        }
+
+        var profile = await _identityRepository.GetUserProfileAsync(
+            user.Id,
+            cancellationToken: cancellationToken);
+        var roles = await _identityRepository.GetSystemRoleNamesAsync(user.Id, cancellationToken);
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var tokenSet = _tokenService.CreateTokenSet(user, profile, roles, now);
+        var refreshToken = BuildRefreshToken(user.Id, tokenSet, ipAddress, userAgent, now);
+
+        var sessionStatus = await _identityRepository.CreateLoginSessionAsync(
+            user.Id,
+            refreshToken,
+            now,
+            cancellationToken);
+        if (sessionStatus != LoginSessionStatus.Created)
+        {
+            return sessionStatus switch
+            {
+                LoginSessionStatus.AccountDisabled =>
+                    LoginFailure("AUTH_ACCOUNT_DISABLED", "Tài khoản đã bị vô hiệu hóa."),
+                LoginSessionStatus.EmailNotVerified =>
+                    LoginFailure("AUTH_EMAIL_NOT_VERIFIED", "Email chưa được xác minh."),
+                _ => LoginFailure("AUTH_INVALID_CREDENTIALS", "Không thể tạo phiên đăng nhập.")
+            };
+        }
+
+        return BuildLoginSuccess(user, profile, roles, tokenSet, now);
     }
 
     public async Task<OtpResult> SendOtpAsync(
@@ -379,30 +432,85 @@ public class AccountServices : IAccountServices
         };
     }
 
-    public Task<ResultLogin> RefreshTokenAsync(
+    public async Task<ResultLogin> RefreshTokenAsync(
         string refreshToken,
         string? ipAddress,
         string? userAgent,
         CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(new ResultLogin
+        if (string.IsNullOrWhiteSpace(refreshToken) || refreshToken.Length > 512)
         {
-            Success = false,
-            ErrorCode = "AUTH_REFRESH_NOT_IMPLEMENTED",
-            Message = "Làm mới token sẽ được hoàn thiện ở mốc JWT và refresh token."
-        });
+            return LoginFailure("AUTH_REFRESH_TOKEN_INVALID", "Refresh token không hợp lệ.");
+        }
+
+        var currentTokenHash = _tokenService.HashRefreshToken(refreshToken.Trim());
+        var context = await _identityRepository.GetRefreshSessionContextAsync(
+            currentTokenHash,
+            cancellationToken);
+        if (context is null)
+        {
+            return LoginFailure("AUTH_REFRESH_TOKEN_INVALID", "Refresh token không hợp lệ.");
+        }
+
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var tokenSet = _tokenService.CreateTokenSet(
+            context.User,
+            context.Profile,
+            context.SystemRoles,
+            now);
+        var replacementToken = BuildRefreshToken(
+            context.User.Id,
+            tokenSet,
+            ipAddress,
+            userAgent,
+            now);
+
+        var rotationStatus = await _identityRepository.RotateRefreshTokenAsync(
+            currentTokenHash,
+            replacementToken,
+            now,
+            cancellationToken);
+        if (rotationStatus != TokenRotationStatus.Rotated)
+        {
+            return rotationStatus switch
+            {
+                TokenRotationStatus.TokenExpired =>
+                    LoginFailure("AUTH_REFRESH_TOKEN_EXPIRED", "Refresh token đã hết hạn."),
+                TokenRotationStatus.ReuseDetected =>
+                    LoginFailure(
+                        "AUTH_REFRESH_TOKEN_REUSE_DETECTED",
+                        "Phát hiện refresh token đã bị tái sử dụng; các phiên liên quan đã bị thu hồi."),
+                TokenRotationStatus.AccountDisabled =>
+                    LoginFailure("AUTH_ACCOUNT_DISABLED", "Tài khoản đã bị vô hiệu hóa."),
+                TokenRotationStatus.EmailNotVerified =>
+                    LoginFailure("AUTH_EMAIL_NOT_VERIFIED", "Email chưa được xác minh."),
+                _ => LoginFailure("AUTH_REFRESH_TOKEN_INVALID", "Refresh token không còn hiệu lực.")
+            };
+        }
+
+        return BuildLoginSuccess(
+            context.User,
+            context.Profile,
+            context.SystemRoles,
+            tokenSet,
+            now);
     }
 
-    public Task<Result> LogoutAsync(
+    public async Task<Result> LogoutAsync(
         string refreshToken,
         CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(new Result
+        if (!string.IsNullOrWhiteSpace(refreshToken) && refreshToken.Length <= 512)
         {
-            Success = false,
-            ErrorCode = "AUTH_LOGOUT_NOT_IMPLEMENTED",
-            Message = "Đăng xuất sẽ được hoàn thiện ở mốc JWT và refresh token."
-        });
+            var refreshTokenHash = _tokenService.HashRefreshToken(refreshToken.Trim());
+            await _identityRepository.RevokeRefreshTokenAsync(refreshTokenHash, cancellationToken);
+        }
+
+        return new Result
+        {
+            Success = true,
+            Message = "Đã thu hồi phiên đăng nhập an toàn."
+        };
     }
 
     private static RegisterResult? ValidateRegistration(AccountDto account)
@@ -494,5 +602,71 @@ public class AccountServices : IAccountServices
             ErrorCode = errorCode,
             Message = message
         };
+    }
+
+    private static RefreshToken BuildRefreshToken(
+        Guid userId,
+        TokenSet tokenSet,
+        string? ipAddress,
+        string? userAgent,
+        DateTime nowUtc)
+    {
+        return new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            TokenHash = tokenSet.RefreshTokenHash,
+            ExpiresAt = tokenSet.RefreshTokenExpiresAt,
+            IsRevoked = false,
+            CreatedByIp = Truncate(ipAddress, 45),
+            UserAgent = Truncate(userAgent, 400),
+            CreatedAt = nowUtc
+        };
+    }
+
+    private static ResultLogin BuildLoginSuccess(
+        User user,
+        UserProfile? profile,
+        List<string> roles,
+        TokenSet tokenSet,
+        DateTime nowUtc)
+    {
+        return new ResultLogin
+        {
+            Success = true,
+            Message = "Đăng nhập thành công.",
+            AccessToken = tokenSet.AccessToken,
+            RefreshToken = tokenSet.RefreshToken,
+            AccessTokenExpiresAt = tokenSet.AccessTokenExpiresAt,
+            RefreshTokenExpiresAt = tokenSet.RefreshTokenExpiresAt,
+            ExpiresInSeconds = Math.Max(
+                0,
+                (int)(tokenSet.AccessTokenExpiresAt - nowUtc).TotalSeconds),
+            UserId = user.Id,
+            Email = user.Email,
+            FullName = profile?.DisplayName,
+            Roles = roles
+        };
+    }
+
+    private static ResultLogin LoginFailure(string errorCode, string message)
+    {
+        return new ResultLogin
+        {
+            Success = false,
+            ErrorCode = errorCode,
+            Message = message
+        };
+    }
+
+    private static string? Truncate(string? value, int maximumLength)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var trimmed = value.Trim();
+        return trimmed.Length <= maximumLength ? trimmed : trimmed[..maximumLength];
     }
 }

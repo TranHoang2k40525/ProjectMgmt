@@ -47,6 +47,9 @@ services:
       Email__User: ${EMAIL_USER:?Set EMAIL_USER in .env}
       Email__Pass: ${EMAIL_PASS:?Set EMAIL_PASS in .env}
       Email__From: ${EMAIL_FROM:?Set EMAIL_FROM in .env}
+      Jwt__Issuer: ${JWT_ISSUER:-ProjectMgmt.Api}
+      Jwt__Audience: ${JWT_AUDIENCE:-ProjectMgmt.Web}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in .env}
     ports:
       - "${API_PORT:-5083}:8080"
     depends_on:
