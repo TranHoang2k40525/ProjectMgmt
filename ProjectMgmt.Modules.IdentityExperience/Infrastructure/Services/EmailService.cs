@@ -13,6 +13,12 @@ namespace IdentityExperience.Infrastructure.Services;
 /// </summary>
 public class EmailService : IEmailService
 {
+    private static readonly Action<ILogger, string, Exception?> LogOtpDeliveryFailure =
+        LoggerMessage.Define<string>(
+            LogLevel.Error,
+            new EventId(1001, "OtpEmailDeliveryFailed"),
+            "Không thể gửi email OTP tới tên miền {EmailDomain}.");
+
     private readonly EmailOptions _options;
     private readonly ILogger<EmailService> _logger;
 
@@ -63,10 +69,7 @@ public class EmailService : IEmailService
         catch (Exception exception)
             when (exception is SmtpException or InvalidOperationException or FormatException)
         {
-            _logger.LogError(
-                exception,
-                "Không thể gửi email OTP tới tên miền {EmailDomain}.",
-                GetEmailDomain(recipientEmail));
+            LogOtpDeliveryFailure(_logger, GetEmailDomain(recipientEmail), exception);
             return false;
         }
     }

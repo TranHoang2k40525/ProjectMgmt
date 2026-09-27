@@ -363,7 +363,7 @@ public class AccountServices : IAccountServices
                 "Endpoint này chỉ hỗ trợ mục đích VerifyEmail.");
         }
 
-        var otpCode = account.OtpCode?.Trim() ?? string.Empty;
+        var otpCode = (account.Code ?? account.OtpCode)?.Trim() ?? string.Empty;
         if (otpCode.Length != 6 || otpCode.Any(character => character is < '0' or > '9'))
         {
             return OtpFailure("AUTH_OTP_INVALID_FORMAT", "OTP phải gồm đúng 6 chữ số.");
