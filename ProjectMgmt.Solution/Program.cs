@@ -1,9 +1,10 @@
 using DeliveryIntelligence.Infrastructure;
 using IdentityExperience.Application.IServices;
 using IdentityExperience.Application.Services;
+using IdentityExperience.Domain.IRepositories;
 using IdentityExperience.Infrastructure;
-using IdentityExperience.Infrastructure.IRepository;
 using IdentityExperience.Infrastructure.Repository;
+using IdentityExperience.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
 using Planning.Infrastructure;
@@ -74,6 +75,9 @@ builder.Services.AddDbContext<DeliveryIntelligenceDbContext>(options =>
 // DI
 builder.Services.AddScoped<IIdentityRepository, IdentityRepository>();
 builder.Services.AddScoped<IAccountServices, AccountServices>();
+builder.Services.AddScoped<IPasswordService, PasswordService>();
+builder.Services.AddScoped<IOtpCodeService, OtpCodeService>();
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IProjectRepository, ProjectRepository>();
 builder.Services.AddScoped<IProjectManagementService, ProjectManagementService>();
 builder.Services.AddScoped<IProjectLookupService, ProjectLookupService>();

@@ -1,14 +1,30 @@
-using System.Linq.Expressions;
 using IdentityExperience.Domain.Entities;
-namespace IdentityExperience.Infrastructure.IRepository;
+
+namespace IdentityExperience.Domain.IRepositories;
 
 public interface IIdentityRepository
 {
+    Task<User?> GetUserByNormalizedEmailAsync(
+        string normalizedEmail,
+        bool tracking = false,
+        CancellationToken cancellationToken = default);
 
-    Task<List<TEntity>> Gets<TEntity>(Expression<Func<TEntity, bool>> parame) where TEntity : class;
-    Task<TEntity> GetBy<TEntity>(Expression<Func<TEntity, bool>> parame) where TEntity : class;
+    Task<UserProfile?> GetUserProfileAsync(
+        Guid userId,
+        bool tracking = false,
+        CancellationToken cancellationToken = default);
 
-    Task<(string, bool)> DeleteAsync<T>(T entity);
-    Task<(string, bool)> UpdateAsync<T>(T entity);
-    Task<(string, bool)> PostAsync<T>(T entity);
+    Task<bool> PhoneNumberExistsAsync(
+        string phoneNumber,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Lưu User, UserProfile và OtpCode trong cùng một transaction cơ sở dữ liệu.
+    /// Trả về false khi email hoặc số điện thoại bị trùng do yêu cầu đồng thời.
+    /// </summary>
+    Task<bool> CreatePendingRegistrationAsync(
+        User user,
+        UserProfile profile,
+        OtpCode otpCode,
+        CancellationToken cancellationToken = default);
 }

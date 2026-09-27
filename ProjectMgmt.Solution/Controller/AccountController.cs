@@ -1,59 +1,52 @@
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
 using IdentityExperience.Application.Dto;
-using System.Text.RegularExpressions;
 using IdentityExperience.Application.IServices;
-namespace ProjectMgmt.Solution.Controller
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 
+namespace ProjectMgmt.Solution.Controller;
+
+[Route("api/v1/auth")]
+[ApiController]
+[AllowAnonymous]
+public class AccountController : ControllerBase
 {
-    [Route("api/[controller]")]
-    [ApiController]
-    public class AccountController : ControllerBase
+    private readonly IAccountServices _accountServices;
+
+    public AccountController(IAccountServices accountServices)
     {
-        private readonly IAccountServices _accountServices;
-        public AccountController(IAccountServices accountServices) {
-            _accountServices = accountServices;
-        }
-        [HttpPost("Login")]
-        public async Task<IActionResult> Login(string username, string password)
+        _accountServices = accountServices;
+    }
+
+    [HttpPost("register")]
+    [ProducesResponseType(typeof(RegisterResult), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(RegisterResult), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(RegisterResult), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Register(
+        [FromBody] AccountDto request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _accountServices.RegisterAsync(request, cancellationToken);
+        if (result.Success)
         {
-
-            if (string.IsNullOrEmpty(username))
-            {
-                return BadRequest(new Result
-                {
-                    Message = "Vui lòng nhập tên đăng nhập",
-                    Success = false
-
-                });
-            }
-            if (string.IsNullOrEmpty(password))
-            {
-                return BadRequest(new Result
-                {
-                    Message = "Vui lòng nhập mật khẩu",
-                    Success = false
-
-                });
-            }
-            var pattern = @"^[a-zA-Z0-9_]+$";
-            if (!Regex.IsMatch(username, pattern)) return BadRequest(new Result { Message = "Username không hợp lệ. Chỉ được chứa chữ cái, số và dấu gạch dưới.\"", Success = false });
-
-
-            var data = _accountServices.LoginAsync(username, password);
-            return Ok(data);
-
+            return Accepted(result);
         }
-        [HttpPost("Register")]
-        public async Task<IActionResult> Register(AccountDto.Register request)
-        {
-            var data = "đăng nhập thành công";
-            return Ok(data);
-        }
-        [HttpPost("PostOtp")]
-        public async Task<IActionResult> PostOtp(AccountDto.Register request, string OtpRequest)
-        {
-            return Ok("xác thực thành công");
-        }
+
+        return result.ErrorCode is "AUTH_EMAIL_ALREADY_EXISTS"
+            or "AUTH_EMAIL_VERIFICATION_PENDING"
+            or "AUTH_PHONE_ALREADY_EXISTS"
+            or "AUTH_REGISTRATION_CONFLICT"
+            ? Conflict(result)
+            : BadRequest(result);
+    }
+
+    [HttpPost("login")]
+    [ProducesResponseType(typeof(ResultLogin), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ResultLogin), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Login(
+        [FromBody] AccountDto request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _accountServices.LoginAsync(request, cancellationToken);
+        return result.Success ? Ok(result) : Unauthorized(result);
     }
 }

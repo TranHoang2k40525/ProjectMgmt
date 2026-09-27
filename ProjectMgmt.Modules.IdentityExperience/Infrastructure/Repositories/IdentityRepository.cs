@@ -1,37 +1,90 @@
-
-using System.Linq;
 using IdentityExperience.Domain.Entities;
-using System.Linq.Expressions;
-using IdentityExperience.Infrastructure.IRepository;
+using IdentityExperience.Domain.IRepositories;
 using Microsoft.EntityFrameworkCore;
+using MySqlConnector;
+
 namespace IdentityExperience.Infrastructure.Repository;
 
 public class IdentityRepository : IIdentityRepository
 {
-private readonly IdentityExperienceDbContext _context;
-    public IdentityRepository(IdentityExperienceDbContext context) { _context = context; }
-    public async Task<(string, bool)> DeleteAsync<T>(T entity)
+    private readonly IdentityExperienceDbContext _context;
+
+    public IdentityRepository(IdentityExperienceDbContext context)
     {
-        throw new NotImplementedException();
+        _context = context;
     }
 
+    public Task<User?> GetUserByNormalizedEmailAsync(
+        string normalizedEmail,
+        bool tracking = false,
+        CancellationToken cancellationToken = default)
+    {
+        IQueryable<User> query = _context.Users;
+        if (!tracking)
+        {
+            query = query.AsNoTracking();
+        }
 
-
-    public async Task<List<TEntity>> Gets<TEntity>(Expression<Func<TEntity, bool>> parame) where TEntity : class
-    {
-        return await _context.Set<TEntity>().Where(parame).ToListAsync();
-    }
-    public async Task<TEntity> GetBy<TEntity>(Expression<Func<TEntity, bool>> parame) where TEntity : class
-    {
-        return await _context.Set<TEntity>().FirstOrDefaultAsync(parame);
-    }
-    public async Task<(string, bool)> PostAsync<TEntity>(TEntity entity)
-    {
-        return (null, true); //await _context.Set<TEntity>().AddAsync(entity);
+        return query.FirstOrDefaultAsync(
+            user => user.NormalizedEmail == normalizedEmail,
+            cancellationToken);
     }
 
-    public async Task<(string, bool)> UpdateAsync<T>(T entity)
+    public Task<UserProfile?> GetUserProfileAsync(
+        Guid userId,
+        bool tracking = false,
+        CancellationToken cancellationToken = default)
     {
-        throw new NotImplementedException();
+        IQueryable<UserProfile> query = _context.UserProfiles;
+        if (!tracking)
+        {
+            query = query.AsNoTracking();
+        }
+
+        return query.FirstOrDefaultAsync(
+            profile => profile.UserId == userId,
+            cancellationToken);
+    }
+
+    public Task<bool> PhoneNumberExistsAsync(
+        string phoneNumber,
+        CancellationToken cancellationToken = default)
+    {
+        return _context.UserProfiles
+            .AsNoTracking()
+            .AnyAsync(profile => profile.PhoneNumber == phoneNumber, cancellationToken);
+    }
+
+    public async Task<bool> CreatePendingRegistrationAsync(
+        User user,
+        UserProfile profile,
+        OtpCode otpCode,
+        CancellationToken cancellationToken = default)
+    {
+        var executionStrategy = _context.Database.CreateExecutionStrategy();
+        var created = false;
+
+        await executionStrategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+            try
+            {
+                await _context.Users.AddAsync(user, cancellationToken);
+                await _context.UserProfiles.AddAsync(profile, cancellationToken);
+                await _context.OtpCodes.AddAsync(otpCode, cancellationToken);
+                await _context.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                created = true;
+            }
+            catch (DbUpdateException exception)
+                when (exception.InnerException is MySqlException { Number: 1062 })
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                _context.ChangeTracker.Clear();
+                created = false;
+            }
+        });
+
+        return created;
     }
 }

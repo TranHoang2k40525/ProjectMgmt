@@ -4,6 +4,7 @@ using IdentityExperience.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace IdentityExperience.Infrastructure.Migrations
 {
     [DbContext(typeof(IdentityExperienceDbContext))]
-    partial class IdentityExperienceDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260927175522_AddUniqueUserProfilePhone")]
+    partial class AddUniqueUserProfilePhone
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
