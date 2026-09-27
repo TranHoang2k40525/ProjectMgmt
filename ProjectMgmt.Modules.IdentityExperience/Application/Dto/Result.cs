@@ -22,6 +22,7 @@ public class OtpResult : Result
     public string? Status { get; set; }
     public DateTime? OtpExpiresAt { get; set; }
     public int? ResendAfterSeconds { get; set; }
+    public int? AttemptsRemaining { get; set; }
 }
 
 public class ResultLogin : Result

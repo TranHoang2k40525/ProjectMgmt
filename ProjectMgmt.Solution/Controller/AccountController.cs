@@ -74,6 +74,33 @@ public class AccountController : ControllerBase
         };
     }
 
+    [HttpPost("otp/verify")]
+    [ProducesResponseType(typeof(OtpResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(OtpResult), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(OtpResult), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(OtpResult), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(OtpResult), StatusCodes.Status410Gone)]
+    [ProducesResponseType(typeof(OtpResult), StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> VerifyOtp(
+        [FromBody] AccountDto request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _accountServices.VerifyOtpAsync(request, cancellationToken);
+        if (result.Success)
+        {
+            return Ok(result);
+        }
+
+        return result.ErrorCode switch
+        {
+            "AUTH_ACCOUNT_NOT_FOUND" => NotFound(result),
+            "AUTH_ACCOUNT_DISABLED" => Conflict(result),
+            "AUTH_OTP_EXPIRED" => StatusCode(StatusCodes.Status410Gone, result),
+            "AUTH_OTP_ATTEMPTS_EXCEEDED" => StatusCode(StatusCodes.Status429TooManyRequests, result),
+            _ => BadRequest(result)
+        };
+    }
+
     [HttpPost("login")]
     [ProducesResponseType(typeof(ResultLogin), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ResultLogin), StatusCodes.Status401Unauthorized)]

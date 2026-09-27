@@ -3,6 +3,7 @@ using IdentityExperience.Domain.IRepositories;
 using IdentityExperience.Domain.Models;
 using Microsoft.EntityFrameworkCore;
 using MySqlConnector;
+using System.Security.Cryptography;
 
 namespace IdentityExperience.Infrastructure.Repository;
 
@@ -157,5 +158,123 @@ public class IdentityRepository : IIdentityRepository
                 RetryAfterSeconds = (int)minimumInterval.TotalSeconds
             };
         });
+    }
+
+    public async Task<OtpVerificationResult> VerifyEmailOtpAsync(
+        Guid userId,
+        string purpose,
+        string expectedCodeHash,
+        DateTime nowUtc,
+        int maximumAttempts,
+        CancellationToken cancellationToken = default)
+    {
+        var executionStrategy = _context.Database.CreateExecutionStrategy();
+
+        return await executionStrategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+
+            var lockedUsers = await _context.Users
+                .FromSqlInterpolated($"SELECT * FROM `User` WHERE `Id` = {userId} FOR UPDATE")
+                .ToListAsync(cancellationToken);
+            var user = lockedUsers.SingleOrDefault();
+
+            if (user is null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return VerificationResult(OtpVerificationStatus.UserNotFound);
+            }
+
+            if (!user.IsActive)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return VerificationResult(OtpVerificationStatus.AccountDisabled);
+            }
+
+            if (user.IsEmailVerified)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return VerificationResult(OtpVerificationStatus.AlreadyVerified);
+            }
+
+            var otpCode = await _context.OtpCodes
+                .Where(otp => otp.UserId == userId && otp.Purpose == purpose && !otp.IsUsed)
+                .OrderByDescending(otp => otp.CreatedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (otpCode is null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return VerificationResult(OtpVerificationStatus.NoActiveCode);
+            }
+
+            if (otpCode.ExpiresAt <= nowUtc)
+            {
+                otpCode.IsUsed = true;
+                await _context.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return VerificationResult(OtpVerificationStatus.Expired, 0);
+            }
+
+            if (otpCode.AttemptCount >= maximumAttempts)
+            {
+                otpCode.IsUsed = true;
+                await _context.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return VerificationResult(OtpVerificationStatus.AttemptsExceeded, 0);
+            }
+
+            if (!HashesMatch(expectedCodeHash, otpCode.CodeHash))
+            {
+                otpCode.AttemptCount++;
+                var attemptsRemaining = Math.Max(0, maximumAttempts - otpCode.AttemptCount);
+                if (attemptsRemaining == 0)
+                {
+                    otpCode.IsUsed = true;
+                }
+
+                await _context.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return VerificationResult(
+                    attemptsRemaining == 0
+                        ? OtpVerificationStatus.AttemptsExceeded
+                        : OtpVerificationStatus.InvalidCode,
+                    attemptsRemaining);
+            }
+
+            otpCode.IsUsed = true;
+            user.IsEmailVerified = true;
+            user.SecurityStamp = Guid.NewGuid();
+            user.UpdatedAt = nowUtc;
+
+            await _context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return VerificationResult(OtpVerificationStatus.Verified, maximumAttempts - otpCode.AttemptCount);
+        });
+    }
+
+    private static bool HashesMatch(string expectedHash, string storedHash)
+    {
+        try
+        {
+            return CryptographicOperations.FixedTimeEquals(
+                Convert.FromHexString(expectedHash),
+                Convert.FromHexString(storedHash));
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
+    private static OtpVerificationResult VerificationResult(
+        OtpVerificationStatus status,
+        int? attemptsRemaining = null)
+    {
+        return new OtpVerificationResult
+        {
+            Status = status,
+            AttemptsRemaining = attemptsRemaining
+        };
     }
 }

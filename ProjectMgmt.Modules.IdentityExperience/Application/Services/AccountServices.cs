@@ -14,6 +14,7 @@ public class AccountServices : IAccountServices
     private const string VerifyEmailPurpose = "VerifyEmail";
     private static readonly TimeSpan OtpLifetime = TimeSpan.FromMinutes(5);
     private const int OtpResendAfterSeconds = 60;
+    private const int OtpMaximumAttempts = 5;
     private static readonly Regex PasswordPattern = new(
         @"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,128}$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -290,16 +291,92 @@ public class AccountServices : IAccountServices
         };
     }
 
-    public Task<OtpResult> VerifyOtpAsync(
+    public async Task<OtpResult> VerifyOtpAsync(
         AccountDto account,
         CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(new OtpResult
+        if (!TryNormalizeEmail(account.Email, out var email, out var normalizedEmail))
         {
-            Success = false,
-            ErrorCode = "AUTH_OTP_VERIFICATION_NOT_IMPLEMENTED",
-            Message = "Xác minh OTP sẽ được hoàn thiện ở mốc kích hoạt tài khoản."
-        });
+            return OtpFailure("AUTH_EMAIL_INVALID", "Email không hợp lệ.");
+        }
+
+        var purpose = string.IsNullOrWhiteSpace(account.Purpose)
+            ? VerifyEmailPurpose
+            : account.Purpose.Trim();
+        if (!string.Equals(purpose, VerifyEmailPurpose, StringComparison.Ordinal))
+        {
+            return OtpFailure(
+                "AUTH_OTP_PURPOSE_INVALID",
+                "Endpoint này chỉ hỗ trợ mục đích VerifyEmail.");
+        }
+
+        var otpCode = account.OtpCode?.Trim() ?? string.Empty;
+        if (otpCode.Length != 6 || otpCode.Any(character => character is < '0' or > '9'))
+        {
+            return OtpFailure("AUTH_OTP_INVALID_FORMAT", "OTP phải gồm đúng 6 chữ số.");
+        }
+
+        var user = await _identityRepository.GetUserByNormalizedEmailAsync(
+            normalizedEmail,
+            cancellationToken: cancellationToken);
+        if (user is null)
+        {
+            return OtpFailure("AUTH_ACCOUNT_NOT_FOUND", "Không tìm thấy tài khoản với email này.");
+        }
+
+        var expectedHash = _otpCodeService.Hash(normalizedEmail, VerifyEmailPurpose, otpCode);
+        var verification = await _identityRepository.VerifyEmailOtpAsync(
+            user.Id,
+            VerifyEmailPurpose,
+            expectedHash,
+            _timeProvider.GetUtcNow().UtcDateTime,
+            OtpMaximumAttempts,
+            cancellationToken);
+
+        return verification.Status switch
+        {
+            OtpVerificationStatus.Verified => new OtpResult
+            {
+                Success = true,
+                Message = "Xác minh email thành công. Tài khoản đã sẵn sàng đăng nhập.",
+                Email = email,
+                Status = "Active",
+                AttemptsRemaining = verification.AttemptsRemaining
+            },
+            OtpVerificationStatus.AlreadyVerified => new OtpResult
+            {
+                Success = true,
+                Message = "Email đã được xác minh trước đó.",
+                Email = email,
+                Status = "Active"
+            },
+            OtpVerificationStatus.UserNotFound =>
+                OtpFailure("AUTH_ACCOUNT_NOT_FOUND", "Tài khoản không còn tồn tại."),
+            OtpVerificationStatus.AccountDisabled =>
+                OtpFailure("AUTH_ACCOUNT_DISABLED", "Tài khoản đã bị vô hiệu hóa."),
+            OtpVerificationStatus.NoActiveCode =>
+                OtpFailure("AUTH_OTP_NOT_FOUND", "Không có OTP đang hoạt động. Hãy yêu cầu mã mới."),
+            OtpVerificationStatus.Expired =>
+                OtpFailure("AUTH_OTP_EXPIRED", "OTP đã hết hạn. Hãy yêu cầu mã mới."),
+            OtpVerificationStatus.AttemptsExceeded => new OtpResult
+            {
+                Success = false,
+                ErrorCode = "AUTH_OTP_ATTEMPTS_EXCEEDED",
+                Message = "OTP đã bị khóa sau quá nhiều lần nhập sai. Hãy yêu cầu mã mới.",
+                Email = email,
+                Status = "PendingVerification",
+                AttemptsRemaining = 0
+            },
+            _ => new OtpResult
+            {
+                Success = false,
+                ErrorCode = "AUTH_OTP_INVALID",
+                Message = "OTP không đúng.",
+                Email = email,
+                Status = "PendingVerification",
+                AttemptsRemaining = verification.AttemptsRemaining
+            }
+        };
     }
 
     public Task<ResultLogin> RefreshTokenAsync(

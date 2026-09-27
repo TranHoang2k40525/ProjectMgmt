@@ -38,4 +38,15 @@ public interface IIdentityRepository
         DateTime nowUtc,
         TimeSpan minimumInterval,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Khóa tài khoản và xác minh OTP; trạng thái OTP và User được cập nhật nguyên tử.
+    /// </summary>
+    Task<OtpVerificationResult> VerifyEmailOtpAsync(
+        Guid userId,
+        string purpose,
+        string expectedCodeHash,
+        DateTime nowUtc,
+        int maximumAttempts,
+        CancellationToken cancellationToken = default);
 }
