@@ -1,8 +1,9 @@
-using System.Security.Claims;
 using IdentityExperience.Application.Dto;
 using IdentityExperience.Application.IServices;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using ProjectMgmt.IdentityAccess.Contracts;
+using ProjectMgmt.ProjectManagement.Contracts;
 
 namespace ProjectMgmt.Solution.Controllers;
 
@@ -18,13 +19,22 @@ public class SkillsController : ControllerBase
             "Lỗi không xử lý tại endpoint kỹ năng {Endpoint}.");
 
     private readonly ISkillServices _skillServices;
+    private readonly IPermissionEvaluator _permissions;
+    private readonly ICurrentUserContext _currentUser;
+    private readonly IProjectLookupService _projects;
     private readonly ILogger<SkillsController> _logger;
 
     public SkillsController(
         ISkillServices skillServices,
+        IPermissionEvaluator permissions,
+        ICurrentUserContext currentUser,
+        IProjectLookupService projects,
         ILogger<SkillsController> logger)
     {
         _skillServices = skillServices;
+        _permissions = permissions;
+        _currentUser = currentUser;
+        _projects = projects;
         _logger = logger;
     }
 
@@ -47,7 +57,7 @@ public class SkillsController : ControllerBase
     {
         try
         {
-            if (!User.IsInRole("Admin"))
+            if (!await HasSystemPermission("skill.catalog.manage"))
             {
                 return Forbidden("IDENTITY_SKILL_CATALOG_FORBIDDEN");
             }
@@ -69,10 +79,25 @@ public class SkillsController : ControllerBase
     }
 
     [HttpGet("users/{userId:guid}/skills")]
-    public async Task<IActionResult> GetUserSkills(Guid userId)
+    public async Task<IActionResult> GetUserSkills(Guid userId, Guid? projectId)
     {
         try
         {
+            if (!_currentUser.UserId.HasValue)
+            {
+                return UnauthorizedFailure();
+            }
+
+            if (_currentUser.UserId.Value != userId)
+            {
+                if (!projectId.HasValue
+                    || !await HasProjectPermission(projectId.Value, "member.read")
+                    || !await _permissions.IsProjectMemberAsync(userId, projectId.Value))
+                {
+                    return Forbidden("IDENTITY_SKILL_READ_FORBIDDEN");
+                }
+            }
+
             var result = await _skillServices.GetUserSkillsAsync(userId);
             return result.Success ? Ok(result) : NotFound(result);
         }
@@ -87,17 +112,14 @@ public class SkillsController : ControllerBase
     {
         try
         {
-            if (!Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
+            if (!_currentUser.UserId.HasValue)
             {
-                return Unauthorized(new SkillDto
-                {
-                    Success = false,
-                    ErrorCode = "AUTH_UNAUTHENTICATED",
-                    Message = "Phiên đăng nhập không hợp lệ."
-                });
+                return UnauthorizedFailure();
             }
 
-            var result = await _skillServices.UpdateMySkillsAsync(userId, request.Skills);
+            var result = await _skillServices.UpdateMySkillsAsync(
+                _currentUser.UserId.Value,
+                request.Skills);
             if (result.Success)
             {
                 return Ok(result);
@@ -117,11 +139,19 @@ public class SkillsController : ControllerBase
     public async Task<IActionResult> VerifyUserSkill(
         Guid userId,
         Guid skillId,
+        Guid? projectId,
         [FromBody] SkillDto request)
     {
         try
         {
-            if (!User.IsInRole("Admin"))
+            var allowed = await HasSystemPermission("skill.verify");
+            if (!allowed && projectId.HasValue)
+            {
+                allowed = await HasProjectPermission(projectId.Value, "skill.verify")
+                    && await _permissions.IsProjectMemberAsync(userId, projectId.Value);
+            }
+
+            if (!allowed)
             {
                 return Forbidden("IDENTITY_SKILL_VERIFY_FORBIDDEN");
             }
@@ -149,6 +179,44 @@ public class SkillsController : ControllerBase
                 ErrorCode = errorCode,
                 Message = "Bạn không có quyền thực hiện thao tác này."
             });
+    }
+
+    private UnauthorizedObjectResult UnauthorizedFailure()
+    {
+        return Unauthorized(new SkillDto
+        {
+            Success = false,
+            ErrorCode = "AUTH_UNAUTHENTICATED",
+            Message = "Phiên đăng nhập không hợp lệ."
+        });
+    }
+
+    private Task<bool> HasSystemPermission(string permissionCode)
+    {
+        return _currentUser.UserId.HasValue
+            ? _permissions.HasPermissionAsync(
+                _currentUser.UserId.Value,
+                permissionCode,
+                "System",
+                null)
+            : Task.FromResult(false);
+    }
+
+    private async Task<bool> HasProjectPermission(Guid projectId, string permissionCode)
+    {
+        if (!_currentUser.UserId.HasValue)
+        {
+            return false;
+        }
+
+        var project = await _projects.GetProjectScopeAsync(projectId);
+        return project is not null
+            && await _permissions.HasPermissionAsync(
+                _currentUser.UserId.Value,
+                permissionCode,
+                "Project",
+                projectId,
+                project.OrganizationId);
     }
 
     private ObjectResult InternalError(string endpoint, Exception exception)

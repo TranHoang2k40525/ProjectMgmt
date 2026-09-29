@@ -1,5 +1,6 @@
 using IdentityExperience.Application.Dto;
 using IdentityExperience.Application.IServices;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 
@@ -7,6 +8,7 @@ namespace ProjectMgmt.Solution.Controllers;
 
 [Route("api/v1/auth")]
 [ApiController]
+[AllowAnonymous]
 public class AccountController : ControllerBase
 {
     private static readonly Action<ILogger, string, Exception?> LogEndpointFailure =

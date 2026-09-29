@@ -1,8 +1,8 @@
-using System.Security.Claims;
 using IdentityExperience.Application.Dto;
 using IdentityExperience.Application.IServices;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using ProjectMgmt.IdentityAccess.Contracts;
 
 namespace ProjectMgmt.Solution.Controllers;
 
@@ -19,15 +19,18 @@ public class UsersController : ControllerBase
 
     private readonly IProfileServices _profileServices;
     private readonly IAccountServices _accountServices;
+    private readonly ICurrentUserContext _currentUser;
     private readonly ILogger<UsersController> _logger;
 
     public UsersController(
         IProfileServices profileServices,
         IAccountServices accountServices,
+        ICurrentUserContext currentUser,
         ILogger<UsersController> logger)
     {
         _profileServices = profileServices;
         _accountServices = accountServices;
+        _currentUser = currentUser;
         _logger = logger;
     }
 
@@ -163,7 +166,8 @@ public class UsersController : ControllerBase
 
     private bool TryGetUserId(out Guid userId)
     {
-        return Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out userId);
+        userId = _currentUser.UserId ?? Guid.Empty;
+        return userId != Guid.Empty;
     }
 
     private UnauthorizedObjectResult Unauthenticated()

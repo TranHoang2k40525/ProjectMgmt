@@ -5,6 +5,7 @@ using IdentityExperience.Domain.IRepositories;
 using IdentityExperience.Infrastructure;
 using IdentityExperience.Infrastructure.Repository;
 using IdentityExperience.Infrastructure.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +20,7 @@ using ProjectMgmt.Modules.Planning.ProjectManagement.Application.Services;
 using ProjectMgmt.Modules.Planning.ProjectManagement.Domain.IRepositories;
 using ProjectMgmt.Modules.Planning.ProjectManagement.Infrastructure.Repositories;
 using ProjectMgmt.ProjectManagement.Contracts;
+using ProjectMgmt.Solution.Security;
 using ProjectMgmt.Solution.Services;
 using Serilog;
 using System.Globalization;
@@ -128,7 +130,12 @@ builder.Services
             }
         };
     });
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.FallbackPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+});
 var allowedOrigins = builder.Configuration
     .GetSection("Cors:AllowedOrigins")
     .Get<string[]>() ?? ["http://localhost:4200"];
@@ -201,10 +208,16 @@ builder.Services.AddDbContext<DeliveryIntelligenceDbContext>(options =>
 builder.Services.AddScoped<IIdentityRepository, IdentityRepository>();
 builder.Services.AddScoped<IProfileRepository, ProfileRepository>();
 builder.Services.AddScoped<ISkillRepository, SkillRepository>();
+builder.Services.AddScoped<IRbacRepository, RbacRepository>();
 builder.Services.AddScoped<IAccountServices, AccountServices>();
 builder.Services.AddScoped<IProfileServices, ProfileServices>();
 builder.Services.AddScoped<ISkillServices, SkillServices>();
+builder.Services.AddScoped<IRoleServices, RoleServices>();
 builder.Services.AddScoped<IAvatarStorage, LocalAvatarStorage>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserContext, CurrentUserContext>();
+builder.Services.AddScoped<IPermissionEvaluator, PermissionEvaluator>();
+builder.Services.AddScoped<IRoleAssignmentService, RoleAssignmentService>();
 builder.Services.AddScoped<IPasswordService, PasswordService>();
 builder.Services.AddScoped<IOtpCodeService, OtpCodeService>();
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));

@@ -24,3 +24,32 @@ public interface IUserSkillService
 {
     Task<IReadOnlyList<UserSkillInfo>> GetUserSkillsAsync(IEnumerable<Guid> userIds);
 }
+
+public interface ICurrentUserContext
+{
+    bool IsAuthenticated { get; }
+    Guid? UserId { get; }
+}
+
+public interface IPermissionEvaluator
+{
+    Task<bool> HasPermissionAsync(
+        Guid userId,
+        string permissionCode,
+        string scopeType,
+        Guid? scopeId,
+        Guid? organizationId = null);
+
+    Task<bool> IsProjectMemberAsync(Guid userId, Guid projectId);
+}
+
+public interface IRoleAssignmentService
+{
+    Task<bool> GrantRoleForProvisioningAsync(
+        Guid userId,
+        string roleName,
+        string scopeType,
+        Guid? scopeId,
+        Guid grantedBy,
+        DateTime createdAtUtc);
+}
