@@ -4,6 +4,7 @@ using IdentityExperience.Domain.Models;
 using Microsoft.EntityFrameworkCore;
 using MySqlConnector;
 using System.Security.Cryptography;
+using System.Text;
 
 namespace IdentityExperience.Infrastructure.Repository;
 
@@ -27,6 +28,19 @@ public class IdentityRepository : IIdentityRepository
         }
 
         return query.FirstOrDefaultAsync(user => user.NormalizedEmail == normalizedEmail);
+    }
+
+    public Task<User?> GetUserByIdAsync(
+        Guid userId,
+        bool tracking = false)
+    {
+        IQueryable<User> query = _context.Users;
+        if (!tracking)
+        {
+            query = query.AsNoTracking();
+        }
+
+        return query.FirstOrDefaultAsync(user => user.Id == userId);
     }
 
     public Task<UserProfile?> GetUserProfileAsync(
@@ -242,6 +256,234 @@ public class IdentityRepository : IIdentityRepository
         });
     }
 
+    public async Task<OtpIssueResult> ReplacePasswordResetOtpAsync(
+        Guid userId,
+        OtpCode newOtpCode,
+        DateTime nowUtc,
+        TimeSpan minimumInterval)
+    {
+        var executionStrategy = _context.Database.CreateExecutionStrategy();
+
+        return await executionStrategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+
+            var lockedUsers = await _context.Users
+                .FromSqlInterpolated($"SELECT * FROM `User` WHERE `Id` = {userId} FOR UPDATE")
+                .ToListAsync();
+            var user = lockedUsers.SingleOrDefault();
+
+            if (user is null)
+            {
+                await transaction.RollbackAsync();
+                return new OtpIssueResult { Status = OtpIssueStatus.UserNotFound };
+            }
+
+            if (!user.IsActive)
+            {
+                await transaction.RollbackAsync();
+                return new OtpIssueResult { Status = OtpIssueStatus.AccountDisabled };
+            }
+
+            if (!user.IsEmailVerified)
+            {
+                await transaction.RollbackAsync();
+                return new OtpIssueResult { Status = OtpIssueStatus.EmailNotVerified };
+            }
+
+            var otpCodes = await _context.OtpCodes
+                .Where(otp => otp.UserId == userId && otp.Purpose == newOtpCode.Purpose)
+                .OrderByDescending(otp => otp.CreatedAt)
+                .ToListAsync();
+            var latestOtp = otpCodes.FirstOrDefault();
+
+            if (latestOtp is not null)
+            {
+                var elapsed = nowUtc - latestOtp.CreatedAt;
+                if (elapsed < minimumInterval)
+                {
+                    var retryAfter = (int)Math.Ceiling((minimumInterval - elapsed).TotalSeconds);
+                    await transaction.RollbackAsync();
+                    return new OtpIssueResult
+                    {
+                        Status = OtpIssueStatus.RateLimited,
+                        ExpiresAt = latestOtp.ExpiresAt,
+                        RetryAfterSeconds = Math.Max(1, retryAfter)
+                    };
+                }
+            }
+
+            foreach (var otpCode in otpCodes.Where(otp => !otp.IsUsed))
+            {
+                otpCode.IsUsed = true;
+            }
+
+            await _context.OtpCodes.AddAsync(newOtpCode);
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return new OtpIssueResult
+            {
+                Status = OtpIssueStatus.Issued,
+                ExpiresAt = newOtpCode.ExpiresAt,
+                RetryAfterSeconds = (int)minimumInterval.TotalSeconds
+            };
+        });
+    }
+
+    public async Task<PasswordResetResult> ResetPasswordAsync(
+        Guid userId,
+        string purpose,
+        string expectedCodeHash,
+        string newPasswordHash,
+        Guid newSecurityStamp,
+        DateTime nowUtc,
+        int maximumAttempts)
+    {
+        var executionStrategy = _context.Database.CreateExecutionStrategy();
+
+        return await executionStrategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            var lockedUsers = await _context.Users
+                .FromSqlInterpolated($"SELECT * FROM `User` WHERE `Id` = {userId} FOR UPDATE")
+                .ToListAsync();
+            var user = lockedUsers.SingleOrDefault();
+
+            if (user is null)
+            {
+                await transaction.RollbackAsync();
+                return PasswordResetResult(PasswordResetStatus.UserNotFound);
+            }
+
+            if (!user.IsActive)
+            {
+                await transaction.RollbackAsync();
+                return PasswordResetResult(PasswordResetStatus.AccountDisabled);
+            }
+
+            if (!user.IsEmailVerified)
+            {
+                await transaction.RollbackAsync();
+                return PasswordResetResult(PasswordResetStatus.EmailNotVerified);
+            }
+
+            var lockedOtpCodes = await _context.OtpCodes
+                .FromSqlInterpolated($"""
+                    SELECT * FROM `OtpCode`
+                    WHERE `UserId` = {userId} AND `Purpose` = {purpose} AND `IsUsed` = 0
+                    ORDER BY `CreatedAt` DESC LIMIT 1 FOR UPDATE
+                    """)
+                .ToListAsync();
+            var otpCode = lockedOtpCodes.SingleOrDefault();
+
+            if (otpCode is null)
+            {
+                await transaction.RollbackAsync();
+                return PasswordResetResult(PasswordResetStatus.NoActiveCode);
+            }
+
+            if (otpCode.ExpiresAt <= nowUtc)
+            {
+                otpCode.IsUsed = true;
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return PasswordResetResult(PasswordResetStatus.Expired, 0);
+            }
+
+            if (otpCode.AttemptCount >= maximumAttempts)
+            {
+                otpCode.IsUsed = true;
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return PasswordResetResult(PasswordResetStatus.AttemptsExceeded, 0);
+            }
+
+            if (!HashesMatch(expectedCodeHash, otpCode.CodeHash))
+            {
+                otpCode.AttemptCount++;
+                var attemptsRemaining = Math.Max(0, maximumAttempts - otpCode.AttemptCount);
+                if (attemptsRemaining == 0)
+                {
+                    otpCode.IsUsed = true;
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return PasswordResetResult(
+                    attemptsRemaining == 0
+                        ? PasswordResetStatus.AttemptsExceeded
+                        : PasswordResetStatus.InvalidCode,
+                    attemptsRemaining);
+            }
+
+            otpCode.IsUsed = true;
+            user.PasswordHash = newPasswordHash;
+            user.SecurityStamp = newSecurityStamp;
+            user.UpdatedAt = nowUtc;
+            await RevokeAllRefreshTokensAsync(userId);
+
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+            return PasswordResetResult(
+                PasswordResetStatus.Changed,
+                maximumAttempts - otpCode.AttemptCount);
+        });
+    }
+
+    public async Task<PasswordChangeResult> ChangePasswordAsync(
+        Guid userId,
+        string expectedCurrentPasswordHash,
+        string newPasswordHash,
+        Guid newSecurityStamp,
+        DateTime nowUtc)
+    {
+        var executionStrategy = _context.Database.CreateExecutionStrategy();
+
+        return await executionStrategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            var lockedUsers = await _context.Users
+                .FromSqlInterpolated($"SELECT * FROM `User` WHERE `Id` = {userId} FOR UPDATE")
+                .ToListAsync();
+            var user = lockedUsers.SingleOrDefault();
+
+            if (user is null)
+            {
+                await transaction.RollbackAsync();
+                return new PasswordChangeResult { Status = PasswordChangeStatus.UserNotFound };
+            }
+
+            if (!user.IsActive)
+            {
+                await transaction.RollbackAsync();
+                return new PasswordChangeResult { Status = PasswordChangeStatus.AccountDisabled };
+            }
+
+            if (!user.IsEmailVerified)
+            {
+                await transaction.RollbackAsync();
+                return new PasswordChangeResult { Status = PasswordChangeStatus.EmailNotVerified };
+            }
+
+            if (user.PasswordHash is null
+                || !TextMatches(user.PasswordHash, expectedCurrentPasswordHash))
+            {
+                await transaction.RollbackAsync();
+                return new PasswordChangeResult { Status = PasswordChangeStatus.CurrentPasswordChanged };
+            }
+
+            user.PasswordHash = newPasswordHash;
+            user.SecurityStamp = newSecurityStamp;
+            user.UpdatedAt = nowUtc;
+            await RevokeAllRefreshTokensAsync(userId);
+
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+            return new PasswordChangeResult { Status = PasswordChangeStatus.Changed };
+        });
+    }
+
     public Task<List<string>> GetSystemRoleNamesAsync(Guid userId)
     {
         return (from userRole in _context.UserRoles.AsNoTracking()
@@ -446,11 +688,36 @@ public class IdentityRepository : IIdentityRepository
         }
     }
 
+    private Task<int> RevokeAllRefreshTokensAsync(Guid userId)
+    {
+        return _context.RefreshTokens
+            .Where(token => token.UserId == userId && !token.IsRevoked)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(token => token.IsRevoked, true));
+    }
+
+    private static bool TextMatches(string left, string right)
+    {
+        return CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(left),
+            Encoding.UTF8.GetBytes(right));
+    }
+
     private static OtpVerificationResult VerificationResult(
         OtpVerificationStatus status,
         int? attemptsRemaining = null)
     {
         return new OtpVerificationResult
+        {
+            Status = status,
+            AttemptsRemaining = attemptsRemaining
+        };
+    }
+
+    private static PasswordResetResult PasswordResetResult(
+        PasswordResetStatus status,
+        int? attemptsRemaining = null)
+    {
+        return new PasswordResetResult
         {
             Status = status,
             AttemptsRemaining = attemptsRemaining

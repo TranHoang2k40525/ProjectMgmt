@@ -5,7 +5,9 @@ public enum OtpIssueStatus
     Issued,
     RateLimited,
     UserNotFound,
-    EmailAlreadyVerified
+    EmailAlreadyVerified,
+    AccountDisabled,
+    EmailNotVerified
 }
 
 public class OtpIssueResult

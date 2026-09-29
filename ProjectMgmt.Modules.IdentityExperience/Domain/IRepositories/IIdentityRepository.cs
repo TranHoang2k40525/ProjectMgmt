@@ -9,6 +9,10 @@ public interface IIdentityRepository
         string normalizedEmail,
         bool tracking = false);
 
+    Task<User?> GetUserByIdAsync(
+        Guid userId,
+        bool tracking = false);
+
     Task<UserProfile?> GetUserProfileAsync(
         Guid userId,
         bool tracking = false);
@@ -42,6 +46,28 @@ public interface IIdentityRepository
         string expectedCodeHash,
         DateTime nowUtc,
         int maximumAttempts);
+
+    Task<OtpIssueResult> ReplacePasswordResetOtpAsync(
+        Guid userId,
+        OtpCode newOtpCode,
+        DateTime nowUtc,
+        TimeSpan minimumInterval);
+
+    Task<PasswordResetResult> ResetPasswordAsync(
+        Guid userId,
+        string purpose,
+        string expectedCodeHash,
+        string newPasswordHash,
+        Guid newSecurityStamp,
+        DateTime nowUtc,
+        int maximumAttempts);
+
+    Task<PasswordChangeResult> ChangePasswordAsync(
+        Guid userId,
+        string expectedCurrentPasswordHash,
+        string newPasswordHash,
+        Guid newSecurityStamp,
+        DateTime nowUtc);
 
     Task<List<string>> GetSystemRoleNamesAsync(Guid userId);
 

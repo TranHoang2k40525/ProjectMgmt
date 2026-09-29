@@ -121,6 +121,65 @@ public class AccountController : ControllerBase
         }
     }
 
+    [HttpPost("forgot-password")]
+    [EnableRateLimiting("auth-otp")]
+    public async Task<IActionResult> ForgotPassword([FromBody] AccountDto request)
+    {
+        try
+        {
+            var result = await _accountServices.ForgotPasswordAsync(request.Email);
+            return Accepted(result);
+        }
+        catch (Exception exception)
+        {
+            return InternalError("forgot-password", exception);
+        }
+    }
+
+    [HttpPost("reset-password")]
+    [EnableRateLimiting("auth-otp")]
+    public async Task<IActionResult> ResetPassword([FromBody] AccountDto request)
+    {
+        try
+        {
+            var result = await _accountServices.ResetPasswordAsync(
+                request.Email,
+                request.Code ?? request.OtpCode,
+                request.NewPassword ?? request.Password);
+            if (result.Success)
+            {
+                return Ok(result);
+            }
+
+            return result.ErrorCode switch
+            {
+                "AUTH_ACCOUNT_DISABLED" or "AUTH_EMAIL_NOT_VERIFIED" =>
+                    StatusCode(StatusCodes.Status403Forbidden, result),
+                "AUTH_OTP_EXPIRED" => StatusCode(StatusCodes.Status410Gone, result),
+                "AUTH_OTP_ATTEMPTS_EXCEEDED" =>
+                    StatusCode(StatusCodes.Status429TooManyRequests, result),
+                _ => BadRequest(result)
+            };
+        }
+        catch (Exception exception)
+        {
+            return InternalError("reset-password", exception);
+        }
+    }
+
+    [HttpPost("external-login")]
+    public IActionResult ExternalLogin()
+    {
+        return StatusCode(
+            StatusCodes.Status503ServiceUnavailable,
+            new Result
+            {
+                Success = false,
+                ErrorCode = "AUTH_EXTERNAL_LOGIN_NOT_CONFIGURED",
+                Message = "Đăng nhập Google/Microsoft chưa được cấu hình ClientId và ClientSecret."
+            });
+    }
+
     [HttpPost("login")]
     [EnableRateLimiting("auth-login")]
     public async Task<IActionResult> Login([FromBody] AccountDto request)

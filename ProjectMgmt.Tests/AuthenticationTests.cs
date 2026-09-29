@@ -218,6 +218,113 @@ public class AuthenticationTests
         Assert.NotEqual(result.RefreshToken, repository.CreatedRefreshToken.TokenHash);
     }
 
+    [Fact]
+    public async Task ForgotPasswordDoesNotRevealWhetherAccountExists()
+    {
+        var service = CreateAccountService(
+            new FakeIdentityRepository(),
+            new FakeEmailService(),
+            CreateOtpService());
+
+        var existingShape = await service.ForgotPasswordAsync("missing@example.com");
+        var invalidShape = await service.ForgotPasswordAsync("not-an-email");
+
+        Assert.True(existingShape.Success);
+        Assert.True(invalidShape.Success);
+        Assert.Equal(existingShape.Message, invalidShape.Message);
+    }
+
+    [Fact]
+    public async Task ForgotPasswordCreatesPurposeBoundOtpBeforeSendingEmail()
+    {
+        var user = CreateUser(isEmailVerified: true);
+        var repository = new FakeIdentityRepository
+        {
+            User = user,
+            Profile = CreateProfile(user.Id)
+        };
+        var emailService = new FakeEmailService();
+        var otpService = CreateOtpService();
+        var service = CreateAccountService(repository, emailService, otpService);
+
+        var result = await service.ForgotPasswordAsync(user.Email);
+
+        Assert.True(result.Success);
+        Assert.NotNull(repository.CreatedOtp);
+        Assert.Equal("ResetPassword", repository.CreatedOtp.Purpose);
+        Assert.Equal(user.Email, emailService.PasswordResetRecipientEmail);
+        Assert.True(otpService.Verify(
+            user.NormalizedEmail,
+            "ResetPassword",
+            emailService.PasswordResetOtpCode!,
+            repository.CreatedOtp.CodeHash));
+    }
+
+    [Fact]
+    public async Task ResetPasswordReturnsSuccessOnlyAfterAtomicRepositoryChange()
+    {
+        var passwordService = new PasswordService();
+        var user = CreateUser(isEmailVerified: true);
+        user.PasswordHash = passwordService.Hash("OldPassword@123");
+        var repository = new FakeIdentityRepository
+        {
+            User = user,
+            Profile = CreateProfile(user.Id),
+            PasswordReset = new PasswordResetResult
+            {
+                Status = PasswordResetStatus.Changed,
+                AttemptsRemaining = 4
+            }
+        };
+        var emailService = new FakeEmailService();
+        var service = CreateAccountService(
+            repository,
+            emailService,
+            CreateOtpService(),
+            passwordService);
+
+        var result = await service.ResetPasswordAsync(
+            user.Email,
+            "123456",
+            "NewPassword@123");
+
+        Assert.True(result.Success);
+        Assert.True(repository.ResetPasswordCalled);
+        Assert.Equal(user.Email, emailService.PasswordChangedRecipientEmail);
+    }
+
+    [Fact]
+    public async Task ChangePasswordRequiresCurrentPasswordAndUsesAtomicRepositoryChange()
+    {
+        var passwordService = new PasswordService();
+        var user = CreateUser(isEmailVerified: true);
+        user.PasswordHash = passwordService.Hash("OldPassword@123");
+        var repository = new FakeIdentityRepository
+        {
+            User = user,
+            Profile = CreateProfile(user.Id)
+        };
+        var service = CreateAccountService(
+            repository,
+            new FakeEmailService(),
+            CreateOtpService(),
+            passwordService);
+
+        var rejected = await service.ChangePasswordAsync(
+            user.Id,
+            "WrongPassword@123",
+            "NewPassword@123");
+        var changed = await service.ChangePasswordAsync(
+            user.Id,
+            "OldPassword@123",
+            "NewPassword@123");
+
+        Assert.False(rejected.Success);
+        Assert.Equal("AUTH_CURRENT_PASSWORD_INVALID", rejected.ErrorCode);
+        Assert.True(changed.Success);
+        Assert.True(repository.ChangePasswordCalled);
+    }
+
     private static AccountServices CreateAccountService(
         FakeIdentityRepository repository,
         FakeEmailService emailService,
@@ -304,6 +411,9 @@ public class FakeEmailService : IEmailService
     public bool DeliverySucceeds { get; set; } = true;
     public string? RecipientEmail { get; private set; }
     public string? OtpCode { get; private set; }
+    public string? PasswordResetRecipientEmail { get; private set; }
+    public string? PasswordResetOtpCode { get; private set; }
+    public string? PasswordChangedRecipientEmail { get; private set; }
 
     public Task<bool> SendOtpAsync(
         string recipientEmail,
@@ -313,6 +423,26 @@ public class FakeEmailService : IEmailService
     {
         RecipientEmail = recipientEmail;
         OtpCode = otpCode;
+        return Task.FromResult(DeliverySucceeds);
+    }
+
+    public Task<bool> SendPasswordResetOtpAsync(
+        string recipientEmail,
+        string recipientName,
+        string otpCode,
+        DateTime expiresAtUtc)
+    {
+        PasswordResetRecipientEmail = recipientEmail;
+        PasswordResetOtpCode = otpCode;
+        return Task.FromResult(DeliverySucceeds);
+    }
+
+    public Task<bool> SendPasswordChangedAsync(
+        string recipientEmail,
+        string recipientName,
+        DateTime changedAtUtc)
+    {
+        PasswordChangedRecipientEmail = recipientEmail;
         return Task.FromResult(DeliverySucceeds);
     }
 }
@@ -354,15 +484,30 @@ public class FakeIdentityRepository : IIdentityRepository
     };
     public LoginSessionStatus LoginSession { get; set; } = LoginSessionStatus.Created;
     public TokenRotationStatus Rotation { get; set; } = TokenRotationStatus.Rotated;
+    public PasswordResetResult PasswordReset { get; set; } = new()
+    {
+        Status = PasswordResetStatus.Changed
+    };
+    public PasswordChangeResult PasswordChange { get; set; } = new()
+    {
+        Status = PasswordChangeStatus.Changed
+    };
     public AuthSessionContext? RefreshContext { get; set; }
     public User? CreatedUser { get; private set; }
     public UserProfile? CreatedProfile { get; private set; }
     public OtpCode? CreatedOtp { get; private set; }
     public RefreshToken? CreatedRefreshToken { get; private set; }
+    public bool ResetPasswordCalled { get; private set; }
+    public bool ChangePasswordCalled { get; private set; }
 
     public Task<User?> GetUserByNormalizedEmailAsync(
         string normalizedEmail,
         bool tracking = false)
+    {
+        return Task.FromResult(User);
+    }
+
+    public Task<User?> GetUserByIdAsync(Guid userId, bool tracking = false)
     {
         return Task.FromResult(User);
     }
@@ -408,6 +553,40 @@ public class FakeIdentityRepository : IIdentityRepository
         int maximumAttempts)
     {
         return Task.FromResult(OtpVerification);
+    }
+
+    public Task<OtpIssueResult> ReplacePasswordResetOtpAsync(
+        Guid userId,
+        OtpCode newOtpCode,
+        DateTime nowUtc,
+        TimeSpan minimumInterval)
+    {
+        CreatedOtp = newOtpCode;
+        return Task.FromResult(OtpIssue);
+    }
+
+    public Task<PasswordResetResult> ResetPasswordAsync(
+        Guid userId,
+        string purpose,
+        string expectedCodeHash,
+        string newPasswordHash,
+        Guid newSecurityStamp,
+        DateTime nowUtc,
+        int maximumAttempts)
+    {
+        ResetPasswordCalled = true;
+        return Task.FromResult(PasswordReset);
+    }
+
+    public Task<PasswordChangeResult> ChangePasswordAsync(
+        Guid userId,
+        string expectedCurrentPasswordHash,
+        string newPasswordHash,
+        Guid newSecurityStamp,
+        DateTime nowUtc)
+    {
+        ChangePasswordCalled = true;
+        return Task.FromResult(PasswordChange);
     }
 
     public Task<List<string>> GetSystemRoleNamesAsync(Guid userId)

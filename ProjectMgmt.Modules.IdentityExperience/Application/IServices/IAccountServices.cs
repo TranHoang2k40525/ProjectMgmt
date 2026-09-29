@@ -29,4 +29,16 @@ public interface IAccountServices
         string? userAgent);
 
     Task<Result> LogoutAsync(string? refreshToken);
+
+    Task<Result> ForgotPasswordAsync(string? email);
+
+    Task<OtpResult> ResetPasswordAsync(
+        string? email,
+        string? code,
+        string? newPassword);
+
+    Task<Result> ChangePasswordAsync(
+        Guid userId,
+        string? currentPassword,
+        string? newPassword);
 }

@@ -20,6 +20,7 @@ using ProjectMgmt.Modules.Planning.ProjectManagement.Infrastructure.Repositories
 using ProjectMgmt.ProjectManagement.Contracts;
 using Serilog;
 using System.Globalization;
+using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
 
@@ -98,6 +99,31 @@ builder.Services
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSigningKey)),
             ValidateLifetime = true,
             ClockSkew = TimeSpan.FromSeconds(30)
+        };
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var userIdValue = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+                var securityStampValue = context.Principal?.FindFirstValue("security_stamp");
+                if (!Guid.TryParse(userIdValue, out var userId)
+                    || !Guid.TryParse(securityStampValue, out var tokenSecurityStamp))
+                {
+                    context.Fail("Token không chứa định danh bảo mật hợp lệ.");
+                    return;
+                }
+
+                var identityRepository = context.HttpContext.RequestServices
+                    .GetRequiredService<IIdentityRepository>();
+                var user = await identityRepository.GetUserByIdAsync(userId);
+                if (user is null
+                    || !user.IsActive
+                    || !user.IsEmailVerified
+                    || user.SecurityStamp != tokenSecurityStamp)
+                {
+                    context.Fail("Token đã bị thu hồi hoặc tài khoản không còn hợp lệ.");
+                }
+            }
         };
     });
 builder.Services.AddAuthorization();

@@ -13,4 +13,6 @@ public class AccountDto
     public string? OtpCode { get; set; }
     public string? Purpose { get; set; }
     public string? RefreshToken { get; set; }
+    public string? CurrentPassword { get; set; }
+    public string? NewPassword { get; set; }
 }
