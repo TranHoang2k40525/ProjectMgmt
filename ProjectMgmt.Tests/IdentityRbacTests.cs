@@ -1,4 +1,5 @@
 using IdentityExperience.Application.Dto;
+using IdentityExperience.Application.IServices;
 using IdentityExperience.Application.Services;
 using IdentityExperience.Domain.Entities;
 using IdentityExperience.Domain.IRepositories;
@@ -91,6 +92,69 @@ public class IdentityRbacTests
 
         Assert.False(result.Success);
         Assert.Equal("RBAC_SCOPE_INVALID", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task AddingProjectMemberPublishesInvitationAfterRoleWrite()
+    {
+        var repository = new FakeRbacRepository();
+        var notifications = new CapturingNotificationServices();
+        var service = new RoleServices(
+            repository,
+            new FixedTimeProvider(TestNowUtc),
+            notifications);
+        var projectId = Guid.NewGuid();
+        var actorUserId = Guid.NewGuid();
+        var memberUserId = Guid.NewGuid();
+
+        var result = await service.AddProjectMemberAsync(
+            actorUserId,
+            projectId,
+            memberUserId,
+            Guid.NewGuid());
+
+        Assert.True(result.Success);
+        Assert.NotNull(notifications.Published);
+        Assert.Equal(NotificationTypes.ProjectInvitation, notifications.Published.Type);
+        Assert.Equal(memberUserId, notifications.Published.UserId);
+        Assert.Equal(projectId, notifications.Published.ProjectId);
+        Assert.Equal(actorUserId, notifications.Published.ActorId);
+        Assert.True(notifications.Published.SendEmail);
+    }
+}
+
+public class CapturingNotificationServices : INotificationServices
+{
+    public NotificationDto? Published { get; private set; }
+
+    public Task<NotificationDto> GetInboxAsync(
+        Guid userId,
+        bool? isRead,
+        int page,
+        int pageSize)
+    {
+        return Task.FromResult(new NotificationDto { Success = true });
+    }
+
+    public Task<NotificationDto> GetUnreadCountAsync(Guid userId)
+    {
+        return Task.FromResult(new NotificationDto { Success = true });
+    }
+
+    public Task<NotificationDto> MarkReadAsync(Guid userId, Guid notificationId)
+    {
+        return Task.FromResult(new NotificationDto { Success = true });
+    }
+
+    public Task<NotificationDto> MarkAllReadAsync(Guid userId)
+    {
+        return Task.FromResult(new NotificationDto { Success = true });
+    }
+
+    public Task<bool> PublishAsync(NotificationDto notification)
+    {
+        Published = notification;
+        return Task.FromResult(true);
     }
 }
 

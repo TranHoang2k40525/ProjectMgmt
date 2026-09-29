@@ -18,4 +18,21 @@ public interface IEmailService
         string recipientEmail,
         string recipientName,
         DateTime changedAtUtc);
+
+    Task<bool> SendProjectInvitationAsync(
+        string recipientEmail,
+        string recipientName,
+        Guid projectId,
+        string? roleName);
+
+    Task<bool> SendProjectRoleChangedAsync(
+        string recipientEmail,
+        string recipientName,
+        Guid projectId,
+        string? roleName);
+
+    Task<bool> SendProjectRoleRevokedAsync(
+        string recipientEmail,
+        string recipientName,
+        Guid projectId);
 }

@@ -76,6 +76,56 @@ public class EmailService : IEmailService
         return await SendMessageAsync(recipientEmail, "Mật khẩu đã được thay đổi", body);
     }
 
+    public Task<bool> SendProjectInvitationAsync(
+        string recipientEmail,
+        string recipientName,
+        Guid projectId,
+        string? roleName)
+    {
+        return SendMessageAsync(
+            recipientEmail,
+            "Bạn đã được thêm vào dự án",
+            BuildProjectMembershipBody(
+                recipientName,
+                projectId,
+                roleName,
+                "Bạn đã được thêm vào một dự án",
+                "Vai trò được giao"));
+    }
+
+    public Task<bool> SendProjectRoleChangedAsync(
+        string recipientEmail,
+        string recipientName,
+        Guid projectId,
+        string? roleName)
+    {
+        return SendMessageAsync(
+            recipientEmail,
+            "Vai trò dự án của bạn đã thay đổi",
+            BuildProjectMembershipBody(
+                recipientName,
+                projectId,
+                roleName,
+                "Vai trò của bạn trong dự án đã được thay đổi",
+                "Vai trò mới"));
+    }
+
+    public Task<bool> SendProjectRoleRevokedAsync(
+        string recipientEmail,
+        string recipientName,
+        Guid projectId)
+    {
+        return SendMessageAsync(
+            recipientEmail,
+            "Quyền truy cập dự án đã được thu hồi",
+            BuildProjectMembershipBody(
+                recipientName,
+                projectId,
+                null,
+                "Bạn đã được gỡ khỏi dự án",
+                null));
+    }
+
     private async Task<bool> SendMessageAsync(
         string recipientEmail,
         string subject,
@@ -150,6 +200,36 @@ public class EmailService : IEmailService
               <p style="font-size:28px;font-weight:700;letter-spacing:8px">{{safeCode}}</p>
               <p>Mã hết hạn lúc {{expiry}}. Không chia sẻ mã này cho bất kỳ ai.</p>
               <p>Nếu bạn không yêu cầu {{ignoredAction}}, hãy bỏ qua email này.</p>
+            </body>
+            </html>
+            """;
+    }
+
+    private static string BuildProjectMembershipBody(
+        string recipientName,
+        Guid projectId,
+        string? roleName,
+        string action,
+        string? roleLabel)
+    {
+        var safeName = WebUtility.HtmlEncode(recipientName);
+        var safeAction = WebUtility.HtmlEncode(action);
+        var safeRole = WebUtility.HtmlEncode(roleName);
+        var safeRoleLabel = WebUtility.HtmlEncode(roleLabel);
+        var roleParagraph = string.IsNullOrWhiteSpace(safeRole)
+            ? string.Empty
+            : $"<p>{safeRoleLabel}: <strong>{safeRole}</strong>.</p>";
+
+        return $$"""
+            <!doctype html>
+            <html lang="vi">
+            <body style="font-family:Arial,sans-serif;color:#111;line-height:1.6">
+              <p>Xin chào {{safeName}},</p>
+              <p>{{safeAction}}.</p>
+              <p>Mã dự án: <strong>{{projectId}}</strong>.</p>
+              {{roleParagraph}}
+              <p>Đăng nhập vào Hệ thống Quản lý Dự án Scrum tích hợp AI để xem chi tiết.</p>
+              <p>Nếu bạn cho rằng đây là nhầm lẫn, hãy liên hệ quản trị viên dự án.</p>
             </body>
             </html>
             """;

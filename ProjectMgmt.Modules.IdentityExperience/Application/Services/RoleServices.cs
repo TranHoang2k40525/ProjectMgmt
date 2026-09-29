@@ -16,11 +16,16 @@ public class RoleServices : IRoleServices
 
     private readonly IRbacRepository _rbacRepository;
     private readonly TimeProvider _timeProvider;
+    private readonly INotificationServices? _notificationServices;
 
-    public RoleServices(IRbacRepository rbacRepository, TimeProvider timeProvider)
+    public RoleServices(
+        IRbacRepository rbacRepository,
+        TimeProvider timeProvider,
+        INotificationServices? notificationServices = null)
     {
         _rbacRepository = rbacRepository;
         _timeProvider = timeProvider;
+        _notificationServices = notificationServices;
     }
 
     public async Task<RoleDto> GetRolesAsync(string? scope)
@@ -234,13 +239,27 @@ public class RoleServices : IRoleServices
             projectId,
             actorUserId,
             _timeProvider.GetUtcNow().UtcDateTime);
-        return result.Status switch
+        var response = result.Status switch
         {
             RbacWriteStatus.Created => AssignmentSuccess(result, "Đã thêm thành viên vào dự án."),
             RbacWriteStatus.UserNotFound => Failure("RBAC_USER_NOT_FOUND", "Không tìm thấy người dùng hoạt động."),
             RbacWriteStatus.RoleNotFound => Failure("RBAC_PROJECT_ROLE_NOT_FOUND", "Vai trò dự án không tồn tại."),
             _ => Failure("RBAC_MEMBER_ALREADY_EXISTS", "Người dùng đã là thành viên dự án.")
         };
+
+        if (response.Success)
+        {
+            await PublishProjectNotificationAsync(
+                userId.Value,
+                actorUserId,
+                projectId,
+                NotificationTypes.ProjectInvitation,
+                "Bạn đã được thêm vào dự án",
+                $"Bạn đã được thêm vào dự án với vai trò {response.RoleName}.",
+                response.RoleName);
+        }
+
+        return response;
     }
 
     public async Task<RoleDto> ChangeProjectMemberRoleAsync(
@@ -265,7 +284,7 @@ public class RoleServices : IRoleServices
             projectId,
             actorUserId,
             _timeProvider.GetUtcNow().UtcDateTime);
-        return result.Status switch
+        var response = result.Status switch
         {
             RbacWriteStatus.Updated => new RoleDto
             {
@@ -282,6 +301,20 @@ public class RoleServices : IRoleServices
             RbacWriteStatus.MemberNotFound => Failure("RBAC_MEMBER_NOT_FOUND", "Không tìm thấy thành viên dự án."),
             _ => Failure("RBAC_PROJECT_ROLE_NOT_FOUND", "Vai trò dự án không tồn tại.")
         };
+
+        if (response.Success)
+        {
+            await PublishProjectNotificationAsync(
+                userId,
+                actorUserId,
+                projectId,
+                NotificationTypes.ProjectRoleChanged,
+                "Vai trò dự án đã thay đổi",
+                $"Vai trò mới của bạn là {response.NewRoleName}.",
+                response.NewRoleName);
+        }
+
+        return response;
     }
 
     public async Task<RoleDto> RemoveProjectMemberAsync(
@@ -295,7 +328,7 @@ public class RoleServices : IRoleServices
         }
 
         var result = await _rbacRepository.RemoveProjectMemberAsync(userId, projectId);
-        return result.Status switch
+        var response = result.Status switch
         {
             RbacWriteStatus.Removed => new RoleDto
             {
@@ -308,6 +341,49 @@ public class RoleServices : IRoleServices
             RbacWriteStatus.LastProjectManager => LastManagerFailure(),
             _ => Failure("RBAC_MEMBER_NOT_FOUND", "Không tìm thấy thành viên dự án.")
         };
+
+        if (response.Success)
+        {
+            await PublishProjectNotificationAsync(
+                userId,
+                actorUserId,
+                projectId,
+                NotificationTypes.ProjectRoleRevoked,
+                "Quyền truy cập dự án đã được thu hồi",
+                "Bạn đã được gỡ khỏi dự án.",
+                null);
+        }
+
+        return response;
+    }
+
+    private Task<bool> PublishProjectNotificationAsync(
+        Guid userId,
+        Guid actorUserId,
+        Guid projectId,
+        string type,
+        string title,
+        string content,
+        string? roleName)
+    {
+        if (_notificationServices is null)
+        {
+            return Task.FromResult(false);
+        }
+
+        return _notificationServices.PublishAsync(new NotificationDto
+        {
+            UserId = userId,
+            Type = type,
+            Title = title,
+            Content = content,
+            EntityType = "Project",
+            EntityId = projectId,
+            ProjectId = projectId,
+            ActorId = actorUserId,
+            RoleName = roleName,
+            SendEmail = true
+        });
     }
 
     private static RoleDto MapRole(Role role)

@@ -26,6 +26,7 @@ public class AccountServices : IAccountServices
     private readonly IEmailService _emailService;
     private readonly ITokenService _tokenService;
     private readonly TimeProvider _timeProvider;
+    private readonly INotificationServices? _notificationServices;
 
     public AccountServices(
         IIdentityRepository identityRepository,
@@ -33,7 +34,8 @@ public class AccountServices : IAccountServices
         IOtpCodeService otpCodeService,
         IEmailService emailService,
         ITokenService tokenService,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        INotificationServices? notificationServices = null)
     {
         _identityRepository = identityRepository;
         _passwordService = passwordService;
@@ -41,6 +43,7 @@ public class AccountServices : IAccountServices
         _emailService = emailService;
         _tokenService = tokenService;
         _timeProvider = timeProvider;
+        _notificationServices = notificationServices;
     }
 
     public async Task<RegisterResult> RegisterAsync(
@@ -599,10 +602,7 @@ public class AccountServices : IAccountServices
         if (resetResult.Status == PasswordResetStatus.Changed)
         {
             var profile = await _identityRepository.GetUserProfileAsync(user.Id);
-            await _emailService.SendPasswordChangedAsync(
-                user.Email,
-                profile?.DisplayName ?? user.Email,
-                now);
+            await SendPasswordChangedNotificationAsync(user, profile, now);
 
             return new OtpResult
             {
@@ -705,16 +705,42 @@ public class AccountServices : IAccountServices
         }
 
         var profile = await _identityRepository.GetUserProfileAsync(userId);
-        await _emailService.SendPasswordChangedAsync(
-            user.Email,
-            profile?.DisplayName ?? user.Email,
-            now);
+        await SendPasswordChangedNotificationAsync(user, profile, now);
 
         return new Result
         {
             Success = true,
             Message = "Đổi mật khẩu thành công. Tất cả phiên đăng nhập cũ đã bị thu hồi."
         };
+    }
+
+    private async Task SendPasswordChangedNotificationAsync(
+        User user,
+        UserProfile? profile,
+        DateTime changedAtUtc)
+    {
+        var persisted = false;
+        if (_notificationServices is not null)
+        {
+            persisted = await _notificationServices.PublishAsync(new NotificationDto
+            {
+                UserId = user.Id,
+                Type = NotificationTypes.PasswordChanged,
+                Title = "Mật khẩu đã được thay đổi",
+                Content = "Mật khẩu đã thay đổi và tất cả phiên đăng nhập cũ đã bị thu hồi.",
+                EntityType = "User",
+                EntityId = user.Id,
+                SendEmail = true
+            });
+        }
+
+        if (!persisted)
+        {
+            await _emailService.SendPasswordChangedAsync(
+                user.Email,
+                profile?.DisplayName ?? user.Email,
+                changedAtUtc);
+        }
     }
 
     private static RegisterResult? ValidateRegistration(

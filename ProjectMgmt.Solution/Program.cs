@@ -21,6 +21,7 @@ using ProjectMgmt.Modules.Planning.ProjectManagement.Domain.IRepositories;
 using ProjectMgmt.Modules.Planning.ProjectManagement.Infrastructure.Repositories;
 using ProjectMgmt.ProjectManagement.Contracts;
 using ProjectMgmt.Solution.Security;
+using ProjectMgmt.Solution.Realtime;
 using ProjectMgmt.Solution.Services;
 using Serilog;
 using System.Globalization;
@@ -107,6 +108,17 @@ builder.Services
         };
         options.Events = new JwtBearerEvents
         {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                if (!string.IsNullOrWhiteSpace(accessToken)
+                    && context.HttpContext.Request.Path.StartsWithSegments("/hubs/notifications"))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            },
             OnTokenValidated = async context =>
             {
                 var userIdValue = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -174,6 +186,7 @@ builder.Services.AddRateLimiter(options =>
         }));
 });
 builder.Services.AddHealthChecks();
+builder.Services.AddSignalR();
 
 builder.Services.AddScoped(_ => new MySqlConnection(connectionString));
 
@@ -212,10 +225,12 @@ builder.Services.AddScoped<IIdentityRepository, IdentityRepository>();
 builder.Services.AddScoped<IProfileRepository, ProfileRepository>();
 builder.Services.AddScoped<ISkillRepository, SkillRepository>();
 builder.Services.AddScoped<IRbacRepository, RbacRepository>();
+builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
 builder.Services.AddScoped<IAccountServices, AccountServices>();
 builder.Services.AddScoped<IProfileServices, ProfileServices>();
 builder.Services.AddScoped<ISkillServices, SkillServices>();
 builder.Services.AddScoped<IRoleServices, RoleServices>();
+builder.Services.AddScoped<INotificationServices, NotificationServices>();
 builder.Services.AddScoped<IAvatarStorage, LocalAvatarStorage>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserContext, CurrentUserContext>();
@@ -226,6 +241,8 @@ builder.Services.AddScoped<IPasswordService, PasswordService>();
 builder.Services.AddScoped<IOtpCodeService, OtpCodeService>();
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
 builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<INotificationEmailDispatcher, NotificationEmailDispatcher>();
+builder.Services.AddScoped<INotificationRealtimeSender, SignalRNotificationSender>();
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddSingleton(TimeProvider.System);
@@ -278,6 +295,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
 app.MapControllers();
+app.MapHub<NotificationHub>("/hubs/notifications");
 app.MapHealthChecks("/health");
 app.MapGet("/health/live", () => Results.Ok(new { status = "Healthy" }));
 

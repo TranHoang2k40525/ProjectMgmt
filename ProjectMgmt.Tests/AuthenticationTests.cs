@@ -325,12 +325,44 @@ public class AuthenticationTests
         Assert.True(repository.ChangePasswordCalled);
     }
 
+    [Fact]
+    public async Task ChangedPasswordPublishesPersistedSecurityNotification()
+    {
+        var passwordService = new PasswordService();
+        var user = CreateUser(isEmailVerified: true);
+        user.PasswordHash = passwordService.Hash("OldPassword@123");
+        var repository = new FakeIdentityRepository
+        {
+            User = user,
+            Profile = CreateProfile(user.Id)
+        };
+        var notifications = new CapturingNotificationServices();
+        var service = CreateAccountService(
+            repository,
+            new FakeEmailService(),
+            CreateOtpService(),
+            passwordService,
+            notificationServices: notifications);
+
+        var result = await service.ChangePasswordAsync(
+            user.Id,
+            "OldPassword@123",
+            "NewPassword@123");
+
+        Assert.True(result.Success);
+        Assert.NotNull(notifications.Published);
+        Assert.Equal(NotificationTypes.PasswordChanged, notifications.Published.Type);
+        Assert.Equal(user.Id, notifications.Published.UserId);
+        Assert.True(notifications.Published.SendEmail);
+    }
+
     private static AccountServices CreateAccountService(
         FakeIdentityRepository repository,
         FakeEmailService emailService,
         IOtpCodeService otpService,
         IPasswordService? passwordService = null,
-        ITokenService? tokenService = null)
+        ITokenService? tokenService = null,
+        INotificationServices? notificationServices = null)
     {
         return new AccountServices(
             repository,
@@ -338,7 +370,8 @@ public class AuthenticationTests
             otpService,
             emailService,
             tokenService ?? new FakeTokenService(),
-            new FixedTimeProvider(TestNowUtc));
+            new FixedTimeProvider(TestNowUtc),
+            notificationServices);
     }
 
     private static OtpCodeService CreateOtpService()
@@ -443,6 +476,35 @@ public class FakeEmailService : IEmailService
         DateTime changedAtUtc)
     {
         PasswordChangedRecipientEmail = recipientEmail;
+        return Task.FromResult(DeliverySucceeds);
+    }
+
+    public Task<bool> SendProjectInvitationAsync(
+        string recipientEmail,
+        string recipientName,
+        Guid projectId,
+        string? roleName)
+    {
+        RecipientEmail = recipientEmail;
+        return Task.FromResult(DeliverySucceeds);
+    }
+
+    public Task<bool> SendProjectRoleChangedAsync(
+        string recipientEmail,
+        string recipientName,
+        Guid projectId,
+        string? roleName)
+    {
+        RecipientEmail = recipientEmail;
+        return Task.FromResult(DeliverySucceeds);
+    }
+
+    public Task<bool> SendProjectRoleRevokedAsync(
+        string recipientEmail,
+        string recipientName,
+        Guid projectId)
+    {
+        RecipientEmail = recipientEmail;
         return Task.FromResult(DeliverySucceeds);
     }
 }
