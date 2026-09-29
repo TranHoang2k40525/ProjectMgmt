@@ -8,6 +8,7 @@ using IdentityExperience.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Planning.Infrastructure;
@@ -18,6 +19,7 @@ using ProjectMgmt.Modules.Planning.ProjectManagement.Application.Services;
 using ProjectMgmt.Modules.Planning.ProjectManagement.Domain.IRepositories;
 using ProjectMgmt.Modules.Planning.ProjectManagement.Infrastructure.Repositories;
 using ProjectMgmt.ProjectManagement.Contracts;
+using ProjectMgmt.Solution.Services;
 using Serilog;
 using System.Globalization;
 using System.Security.Claims;
@@ -197,7 +199,12 @@ builder.Services.AddDbContext<DeliveryIntelligenceDbContext>(options =>
 
 // DI
 builder.Services.AddScoped<IIdentityRepository, IdentityRepository>();
+builder.Services.AddScoped<IProfileRepository, ProfileRepository>();
+builder.Services.AddScoped<ISkillRepository, SkillRepository>();
 builder.Services.AddScoped<IAccountServices, AccountServices>();
+builder.Services.AddScoped<IProfileServices, ProfileServices>();
+builder.Services.AddScoped<ISkillServices, SkillServices>();
+builder.Services.AddScoped<IAvatarStorage, LocalAvatarStorage>();
 builder.Services.AddScoped<IPasswordService, PasswordService>();
 builder.Services.AddScoped<IOtpCodeService, OtpCodeService>();
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
@@ -236,6 +243,13 @@ app.UseSerilogRequestLogging(options =>
 
 var frontendIndexPath = Path.Combine(app.Environment.WebRootPath ?? string.Empty, "index.html");
 var hasFrontendArtifact = File.Exists(frontendIndexPath);
+var avatarDirectory = Path.Combine(app.Environment.ContentRootPath, "Assets", "avatars");
+Directory.CreateDirectory(avatarDirectory);
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(avatarDirectory),
+    RequestPath = "/assets/avatars"
+});
 if (hasFrontendArtifact)
 {
     app.UseDefaultFiles();
