@@ -23,6 +23,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Update="local.settings.json"
+             CopyToOutputDirectory="Never"
+             CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\ProjectMgmt.Contracts\ProjectMgmt.Contracts.csproj" />
     <ProjectReference Include="..\ProjectMgmt.Core\ProjectMgmt.Core.csproj" />
     <ProjectReference Include="..\ProjectMgmt.Modules.DeliveryIntelligence\Application\DeliveryIntelligence.Application.csproj" />

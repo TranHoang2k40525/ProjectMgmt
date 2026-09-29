@@ -25,6 +25,14 @@ using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
+if (builder.Environment.IsDevelopment())
+{
+    builder.Configuration.AddJsonFile(
+        "local.settings.json",
+        optional: true,
+        reloadOnChange: true);
+}
+
 var logFilePath = Path.Combine(
     builder.Environment.ContentRootPath,
     "Logs",

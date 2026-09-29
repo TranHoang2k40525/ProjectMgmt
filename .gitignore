@@ -24,3 +24,4 @@ TestResults/
 .playwright-mcp
 **/scripts
 **/Logs/
+**/local.settings.json

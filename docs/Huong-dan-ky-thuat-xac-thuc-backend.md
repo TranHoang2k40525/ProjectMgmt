@@ -88,6 +88,8 @@ Các mã lỗi chính:
 
 Trên máy phát triển hiện tại, cấu hình SMTP tương thích đã được chuyển từ MovieTicket vào **.NET User Secrets** của `ProjectMgmt.Solution`; `Jwt:Issuer`, `Jwt:Audience`, một JWT signing key riêng cho ProjectMgmt và `Otp:HashKey` riêng cũng đã được thiết lập. Vì vậy ứng dụng không còn dừng với lỗi `Missing secure JWT configuration`. Các giá trị bí mật không nằm trong repository và không xuất hiện trong tài liệu này.
 
+Khi chạy bằng IIS local, tiến trình `w3wp.exe` có identity riêng và không đọc được User Secrets của tài khoản Windows. Development vì vậy có thể nạp thêm `ProjectMgmt.Solution/local.settings.json`. File này được ignore khỏi Git và bị loại khỏi output/publish; chỉ dùng để chuyển cấu hình bí mật cho IIS trên máy phát triển. Không tạo file này trên production: production phải dùng environment variables hoặc secret store của hạ tầng.
+
 Không dùng lại JWT signing key của MovieTicket: hai hệ thống dùng khóa riêng để token của ứng dụng này không thể được một ứng dụng khác tin cậy nhầm.
 
 Không ghi secret thật vào `appsettings.json` hoặc Git. Khi chạy local, cấu hình bằng User Secrets tại thư mục repository:
