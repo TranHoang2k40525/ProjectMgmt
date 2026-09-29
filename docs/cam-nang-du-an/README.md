@@ -9,6 +9,7 @@ Sản phẩm: **Hệ thống Quản lý Dự án Scrum tích hợp AI**. Đây l
 | `Cam-nang-ky-thuat-He-thong-Quan-ly-Du-an-Scrum-tich-hop-AI.pdf` | Bản phát hành/đọc/in. |
 | `Cam-nang-ky-thuat-He-thong-Quan-ly-Du-an-Scrum-tich-hop-AI.html` | Bản web tự chứa về nội dung, dùng SVG trong `diagrams/svg/`. |
 | `Cam-nang-ky-thuat-He-thong-Quan-ly-Du-an-Scrum-tich-hop-AI.txt` | Bản văn bản thuần để tìm kiếm nhanh. |
+| `../api/Module-1-IdentityExperience-API.md` | Hợp đồng API đang chạy và hướng dẫn tích hợp frontend cho Module 1: tài khoản, bảo mật, hồ sơ, RBAC, thông báo và AI 1. |
 | `diagrams/Cam-nang-so-do.drawio` | 16 sơ đồ nghiệp vụ, tuần tự, hoạt động, kiến trúc và CI/CD chỉnh sửa được. |
 | `diagrams/ERD-55-bang.drawio` | Ba trang ERD cho 55 bảng và 52 quan hệ FK trong DDL tham khảo; một FK chéo module được đánh dấu là ngoại lệ phải xử lý. |
 
