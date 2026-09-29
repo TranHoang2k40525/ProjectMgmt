@@ -18,10 +18,29 @@ using ProjectMgmt.Modules.Planning.ProjectManagement.Application.Services;
 using ProjectMgmt.Modules.Planning.ProjectManagement.Domain.IRepositories;
 using ProjectMgmt.Modules.Planning.ProjectManagement.Infrastructure.Repositories;
 using ProjectMgmt.ProjectManagement.Contracts;
+using Serilog;
+using System.Globalization;
 using System.Text;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var logFilePath = Path.Combine(
+    builder.Environment.ContentRootPath,
+    "Logs",
+    "ProjectMgmt-.log");
+
+builder.Host.UseSerilog((context, services, loggerConfiguration) => loggerConfiguration
+    .ReadFrom.Configuration(context.Configuration)
+    .ReadFrom.Services(services)
+    .Enrich.FromLogContext()
+    .WriteTo.Console(formatProvider: CultureInfo.InvariantCulture)
+    .WriteTo.File(
+        logFilePath,
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 14,
+        formatProvider: CultureInfo.InvariantCulture,
+        shared: true));
 
 var connectionString = builder.Configuration.GetConnectionString("ProjectMgmt");
 if (string.IsNullOrWhiteSpace(connectionString))
@@ -74,6 +93,20 @@ builder.Services
         };
     });
 builder.Services.AddAuthorization();
+var allowedOrigins = builder.Configuration
+    .GetSection("Cors:AllowedOrigins")
+    .Get<string[]>() ?? ["http://localhost:4200"];
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("Frontend", policy =>
+    {
+        policy
+            .WithOrigins(allowedOrigins)
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
+});
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -162,6 +195,11 @@ if (!app.Environment.IsDevelopment() && !app.Environment.IsStaging())
     app.UseHttpsRedirection();
 }
 
+app.UseSerilogRequestLogging(options =>
+{
+    options.MessageTemplate = "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000} ms";
+});
+
 var frontendIndexPath = Path.Combine(app.Environment.WebRootPath ?? string.Empty, "index.html");
 var hasFrontendArtifact = File.Exists(frontendIndexPath);
 if (hasFrontendArtifact)
@@ -170,6 +208,7 @@ if (hasFrontendArtifact)
     app.UseStaticFiles();
 }
 
+app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
