@@ -3,7 +3,7 @@ using IdentityExperience.Application.IServices;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 
-namespace ProjectMgmt.Solution.Controller;
+namespace ProjectMgmt.Solution.Controllers;
 
 [Route("api/v1/auth")]
 [ApiController]

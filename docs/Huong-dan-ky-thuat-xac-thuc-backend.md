@@ -157,7 +157,7 @@ Bộ test xác thực kiểm tra BCrypt, HMAC OTP ràng buộc theo email/mục 
 
 ## 9. Vị trí mã nguồn
 
-- API: `ProjectMgmt.Solution/Controller/AccountController.cs`
+- API: `ProjectMgmt.Solution/Controllers/AccountController.cs`
 - Điều phối use case: `ProjectMgmt.Modules.IdentityExperience/Application/Services/AccountServices.cs`
 - Repository contract: `ProjectMgmt.Modules.IdentityExperience/Domain/IRepositories/IIdentityRepository.cs`
 - Transaction EF Core: `ProjectMgmt.Modules.IdentityExperience/Infrastructure/Repositories/IdentityRepository.cs`
