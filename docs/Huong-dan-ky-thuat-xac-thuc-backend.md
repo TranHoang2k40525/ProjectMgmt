@@ -30,6 +30,14 @@ Các request gửi lại/xác minh OTP đều khóa hàng `User` bằng `SELECT 
 
 Base path: `/api/v1/auth`. Tất cả body dùng JSON. DTO dùng chung; mỗi endpoint chỉ đọc các trường được liệt kê.
 
+Quy ước triển khai của module xác thực:
+
+- Controller nhận một `AccountDto` dùng chung để model binding, sau đó truyền các giá trị đơn như `email`, `password`, `code` vào service. Không truyền DTO xuyên qua mọi tầng.
+- Các trường không dùng ở một endpoint được để `null`; không tạo thêm lớp Request/Response chỉ để chứa một hoặc hai giá trị.
+- Controller chỉ giữ attribute cần thiết cho route, HTTP method, body và rate limit. Mã trạng thái HTTP được quyết định trực tiếp trong thân hàm, không khai báo dày đặc bằng `ProducesResponseType`.
+- Mỗi action có `try/catch`, ghi exception nội bộ vào log và chỉ trả mã `AUTH_INTERNAL_ERROR` chung cho client. Không trả stack trace hoặc nội dung secret.
+- Luồng auth không truyền `CancellationToken`; service và repository dùng chữ ký tham số thông thường để mã dễ theo dõi.
+
 | Endpoint | Body cần dùng | Thành công | Ý nghĩa |
 |---|---|---:|---|
 | `POST /register` | `email`, `password`, `fullName`, `phoneNumber` | `202` | Tạo tài khoản pending và gửi OTP |
@@ -78,18 +86,28 @@ Các mã lỗi chính:
 
 ## 4. Cấu hình bí mật
 
+Trên máy phát triển hiện tại, cấu hình SMTP tương thích đã được chuyển từ MovieTicket vào **.NET User Secrets** của `ProjectMgmt.Solution`; `Jwt:Issuer`, `Jwt:Audience`, một JWT signing key riêng cho ProjectMgmt và `Otp:HashKey` riêng cũng đã được thiết lập. Vì vậy ứng dụng không còn dừng với lỗi `Missing secure JWT configuration`. Các giá trị bí mật không nằm trong repository và không xuất hiện trong tài liệu này.
+
+Không dùng lại JWT signing key của MovieTicket: hai hệ thống dùng khóa riêng để token của ứng dụng này không thể được một ứng dụng khác tin cậy nhầm.
+
 Không ghi secret thật vào `appsettings.json` hoặc Git. Khi chạy local, cấu hình bằng User Secrets tại thư mục repository:
 
 ```powershell
 dotnet user-secrets set "ConnectionStrings:ProjectMgmt" "Server=localhost;Port=3306;Database=projectmgmt;User=projectmgmt_app;Password=YOUR_PASSWORD;SslMode=None" --project ProjectMgmt.Solution
+dotnet user-secrets set "Jwt:Issuer" "ProjectMgmt.Api" --project ProjectMgmt.Solution
+dotnet user-secrets set "Jwt:Audience" "ProjectMgmt.Web" --project ProjectMgmt.Solution
 dotnet user-secrets set "Otp:HashKey" "A_RANDOM_SECRET_OF_AT_LEAST_32_CHARACTERS" --project ProjectMgmt.Solution
 dotnet user-secrets set "Jwt:SigningKey" "ANOTHER_RANDOM_SECRET_OF_AT_LEAST_32_CHARACTERS" --project ProjectMgmt.Solution
+dotnet user-secrets set "Email:SmtpHost" "smtp.gmail.com" --project ProjectMgmt.Solution
+dotnet user-secrets set "Email:Port" "587" --project ProjectMgmt.Solution
 dotnet user-secrets set "Email:User" "YOUR_SMTP_USERNAME" --project ProjectMgmt.Solution
 dotnet user-secrets set "Email:Pass" "YOUR_SMTP_APP_PASSWORD" --project ProjectMgmt.Solution
 dotnet user-secrets set "Email:From" "YOUR_SENDER_EMAIL" --project ProjectMgmt.Solution
 ```
 
 Cấu hình SMTP dùng cùng quy ước với MovieTicket: `Email:SmtpHost`, `Email:Port`, `Email:User`, `Email:Pass`, `Email:From`. Mặc định Gmail SMTP là `smtp.gmail.com:587`, SSL bật. Với Gmail phải dùng App Password, không dùng mật khẩu tài khoản chính.
+
+Development CORS cho phép các frontend local tại cổng `3000`, `4200` và `8080`. Khi deploy, phải giới hạn `Cors:AllowedOrigins` đúng domain thật, không dùng wildcard cùng credentials.
 
 Khi chạy Docker, sao chép `.env.example` thành `.env`, thay toàn bộ placeholder và không commit `.env`.
 
@@ -115,16 +133,27 @@ Swagger chạy ở `/swagger` trong môi trường Development hoặc Staging.
 - Access token cũ có thể còn hiệu lực tối đa 15 phút sau logout; đây là đặc tính của JWT tự chứa. Nếu cần thu hồi tức thời, bổ sung security-stamp validation hoặc deny-list phân tán.
 - Log không được chứa password, OTP, access token, refresh token hay toàn bộ địa chỉ email.
 
-## 7. Kiểm thử
+## 7. Log để kiểm tra và xử lý lỗi
+
+- Serilog ghi đồng thời ra console và `ProjectMgmt.Solution/Logs/ProjectMgmt-yyyyMMdd.log`.
+- File được tách theo ngày và giữ tối đa 14 file. Thư mục `Logs` đã được ignore khỏi Git.
+- Request log chỉ ghi HTTP method, path, status code và thời gian xử lý.
+- Exception ngoài dự kiến trong auth được controller ghi kèm tên endpoint; SMTP failure chỉ ghi domain của email.
+- Tuyệt đối không ghi password, OTP, access token, refresh token, secret hoặc toàn bộ địa chỉ email.
+- Khi kiểm tra lỗi, đọc file mới nhất bằng `Get-Content ProjectMgmt.Solution/Logs/ProjectMgmt-*.log -Tail 100` rồi đối chiếu timestamp, endpoint và status code.
+
+Ứng dụng cố ý dùng `try/catch` tại controller theo quy ước của dự án, không dùng `AddProblemDetails` hoặc `UseExceptionHandler` để thay thế luồng xử lý này.
+
+## 8. Kiểm thử
 
 ```powershell
 dotnet build ProjectMgmt.slnx --no-restore
 dotnet test ProjectMgmt.Tests/ProjectMgmt.Tests.csproj --no-build --no-restore
 ```
 
-Bộ test xác thực kiểm tra BCrypt, HMAC OTP ràng buộc theo email/mục đích, JWT/refresh hash, aggregate đăng ký pending, kích hoạt sau OTP và chặn đăng nhập khi email chưa xác minh. Kiểm thử tích hợp MySQL nên dùng database tách biệt và không dùng tài khoản SMTP thật.
+Bộ test xác thực kiểm tra BCrypt, HMAC OTP ràng buộc theo email/mục đích, JWT/refresh hash, aggregate đăng ký pending, trạng thái phục hồi khi SMTP lỗi, cooldown gửi lại OTP, kích hoạt sau OTP và chặn đăng nhập khi email chưa xác minh. Kiểm thử tích hợp MySQL nên dùng database tách biệt và không dùng tài khoản SMTP thật.
 
-## 8. Vị trí mã nguồn
+## 9. Vị trí mã nguồn
 
 - API: `ProjectMgmt.Solution/Controller/AccountController.cs`
 - Điều phối use case: `ProjectMgmt.Modules.IdentityExperience/Application/Services/AccountServices.cs`

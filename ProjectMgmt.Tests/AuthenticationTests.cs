@@ -68,13 +68,11 @@ public class AuthenticationTests
         var otpService = CreateOtpService();
         var service = CreateAccountService(repository, emailService, otpService);
 
-        var result = await service.RegisterAsync(new AccountDto
-        {
-            Email = "member@example.com",
-            Password = "StrongPassword@123",
-            FullName = "Nguyễn Văn Thành Viên",
-            PhoneNumber = "0901234567"
-        });
+        var result = await service.RegisterAsync(
+            "member@example.com",
+            "StrongPassword@123",
+            "Nguyễn Văn Thành Viên",
+            "0901234567");
 
         Assert.True(result.Success);
         Assert.Equal("PendingVerification", result.Status);
@@ -94,6 +92,50 @@ public class AuthenticationTests
     }
 
     [Fact]
+    public async Task RegistrationKeepsPendingAccountWhenSmtpDeliveryFails()
+    {
+        var repository = new FakeIdentityRepository();
+        var emailService = new FakeEmailService { DeliverySucceeds = false };
+        var service = CreateAccountService(repository, emailService, CreateOtpService());
+
+        var result = await service.RegisterAsync(
+            "member@example.com",
+            "StrongPassword@123",
+            "Nguyễn Văn Thành Viên",
+            "0901234567");
+
+        Assert.False(result.Success);
+        Assert.Equal("AUTH_EMAIL_DELIVERY_FAILED", result.ErrorCode);
+        Assert.Equal("PendingVerification", result.Status);
+        Assert.NotNull(repository.CreatedUser);
+        Assert.NotNull(repository.CreatedOtp);
+        Assert.False(repository.CreatedUser.IsEmailVerified);
+    }
+
+    [Fact]
+    public async Task ResendOtpReturnsCooldownFromRepositoryTransaction()
+    {
+        var user = CreateUser(isEmailVerified: false);
+        var repository = new FakeIdentityRepository
+        {
+            User = user,
+            OtpIssue = new OtpIssueResult
+            {
+                Status = OtpIssueStatus.RateLimited,
+                ExpiresAt = TestNowUtc.AddMinutes(4),
+                RetryAfterSeconds = 42
+            }
+        };
+        var service = CreateAccountService(repository, new FakeEmailService(), CreateOtpService());
+
+        var result = await service.SendOtpAsync(user.Email, "VerifyEmail");
+
+        Assert.False(result.Success);
+        Assert.Equal("AUTH_OTP_RATE_LIMITED", result.ErrorCode);
+        Assert.Equal(42, result.ResendAfterSeconds);
+    }
+
+    [Fact]
     public async Task VerificationReturnsActiveOnlyAfterRepositoryTransactionSucceeds()
     {
         var user = CreateUser(isEmailVerified: false);
@@ -108,12 +150,10 @@ public class AuthenticationTests
         };
         var service = CreateAccountService(repository, new FakeEmailService(), CreateOtpService());
 
-        var result = await service.VerifyOtpAsync(new AccountDto
-        {
-            Email = user.Email,
-            Code = "123456",
-            Purpose = "VerifyEmail"
-        });
+        var result = await service.VerifyOtpAsync(
+            user.Email,
+            "123456",
+            "VerifyEmail");
 
         Assert.True(result.Success);
         Assert.Equal("Active", result.Status);
@@ -134,7 +174,8 @@ public class AuthenticationTests
             passwordService);
 
         var result = await service.LoginAsync(
-            new AccountDto { Email = user.Email, Password = "StrongPassword@123" },
+            user.Email,
+            "StrongPassword@123",
             "127.0.0.1",
             "test-agent");
 
@@ -163,7 +204,8 @@ public class AuthenticationTests
             CreateRealTokenService());
 
         var result = await service.LoginAsync(
-            new AccountDto { Email = user.Email, Password = "StrongPassword@123" },
+            user.Email,
+            "StrongPassword@123",
             "127.0.0.1",
             "test-agent");
 
@@ -267,8 +309,7 @@ public class FakeEmailService : IEmailService
         string recipientEmail,
         string recipientName,
         string otpCode,
-        DateTime expiresAtUtc,
-        CancellationToken cancellationToken = default)
+        DateTime expiresAtUtc)
     {
         RecipientEmail = recipientEmail;
         OtpCode = otpCode;
@@ -321,23 +362,19 @@ public class FakeIdentityRepository : IIdentityRepository
 
     public Task<User?> GetUserByNormalizedEmailAsync(
         string normalizedEmail,
-        bool tracking = false,
-        CancellationToken cancellationToken = default)
+        bool tracking = false)
     {
         return Task.FromResult(User);
     }
 
     public Task<UserProfile?> GetUserProfileAsync(
         Guid userId,
-        bool tracking = false,
-        CancellationToken cancellationToken = default)
+        bool tracking = false)
     {
         return Task.FromResult(Profile);
     }
 
-    public Task<bool> PhoneNumberExistsAsync(
-        string phoneNumber,
-        CancellationToken cancellationToken = default)
+    public Task<bool> PhoneNumberExistsAsync(string phoneNumber)
     {
         return Task.FromResult(false);
     }
@@ -345,8 +382,7 @@ public class FakeIdentityRepository : IIdentityRepository
     public Task<bool> CreatePendingRegistrationAsync(
         User user,
         UserProfile profile,
-        OtpCode otpCode,
-        CancellationToken cancellationToken = default)
+        OtpCode otpCode)
     {
         CreatedUser = user;
         CreatedProfile = profile;
@@ -358,8 +394,7 @@ public class FakeIdentityRepository : IIdentityRepository
         Guid userId,
         OtpCode newOtpCode,
         DateTime nowUtc,
-        TimeSpan minimumInterval,
-        CancellationToken cancellationToken = default)
+        TimeSpan minimumInterval)
     {
         CreatedOtp = newOtpCode;
         return Task.FromResult(OtpIssue);
@@ -370,15 +405,12 @@ public class FakeIdentityRepository : IIdentityRepository
         string purpose,
         string expectedCodeHash,
         DateTime nowUtc,
-        int maximumAttempts,
-        CancellationToken cancellationToken = default)
+        int maximumAttempts)
     {
         return Task.FromResult(OtpVerification);
     }
 
-    public Task<List<string>> GetSystemRoleNamesAsync(
-        Guid userId,
-        CancellationToken cancellationToken = default)
+    public Task<List<string>> GetSystemRoleNamesAsync(Guid userId)
     {
         return Task.FromResult(SystemRoles);
     }
@@ -386,16 +418,13 @@ public class FakeIdentityRepository : IIdentityRepository
     public Task<LoginSessionStatus> CreateLoginSessionAsync(
         Guid userId,
         RefreshToken refreshToken,
-        DateTime nowUtc,
-        CancellationToken cancellationToken = default)
+        DateTime nowUtc)
     {
         CreatedRefreshToken = refreshToken;
         return Task.FromResult(LoginSession);
     }
 
-    public Task<AuthSessionContext?> GetRefreshSessionContextAsync(
-        string refreshTokenHash,
-        CancellationToken cancellationToken = default)
+    public Task<AuthSessionContext?> GetRefreshSessionContextAsync(string refreshTokenHash)
     {
         return Task.FromResult(RefreshContext);
     }
@@ -403,16 +432,13 @@ public class FakeIdentityRepository : IIdentityRepository
     public Task<TokenRotationStatus> RotateRefreshTokenAsync(
         string currentTokenHash,
         RefreshToken replacementToken,
-        DateTime nowUtc,
-        CancellationToken cancellationToken = default)
+        DateTime nowUtc)
     {
         CreatedRefreshToken = replacementToken;
         return Task.FromResult(Rotation);
     }
 
-    public Task<bool> RevokeRefreshTokenAsync(
-        string refreshTokenHash,
-        CancellationToken cancellationToken = default)
+    public Task<bool> RevokeRefreshTokenAsync(string refreshTokenHash)
     {
         return Task.FromResult(true);
     }
