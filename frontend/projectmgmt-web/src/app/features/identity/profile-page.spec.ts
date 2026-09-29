@@ -4,13 +4,36 @@ import { IdentityService } from '../../core/services/identity.service';
 import { FormBuilder } from '@angular/forms';
 import { EnvironmentInjector, runInInjectionContext } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { AccountApi } from '../../core/api/account.api';
+import { TOKEN_STORE } from '../../core/auth/token-store';
 
 describe('ProfilePageComponent (Unit Tests)', () => {
   let component: ProfilePageComponent;
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [IdentityService, FormBuilder]
+      providers: [
+        IdentityService,
+        FormBuilder,
+        { provide: AccountApi, useValue: {} },
+        {
+          provide: TOKEN_STORE,
+          useValue: {
+            getAccessToken: () => 'access-token',
+            getRefreshToken: () => 'refresh-token',
+            getSession: () => ({
+              accessToken: 'access-token',
+              refreshToken: 'refresh-token',
+              userId: 'user-1',
+              email: 'admin@scrumai.internal',
+              fullName: 'System Administrator',
+              roles: ['System Administrator']
+            }),
+            setSession: () => undefined,
+            clear: () => undefined
+          }
+        }
+      ]
     });
 
     const injector = TestBed.inject(EnvironmentInjector);

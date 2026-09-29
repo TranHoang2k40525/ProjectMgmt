@@ -1,5 +1,8 @@
-import { Injectable, signal } from '@angular/core';
-import { Observable, delay, of, throwError } from 'rxjs';
+import { Injectable, inject, signal } from '@angular/core';
+import { Observable, delay, map, of, throwError } from 'rxjs';
+import { AccountApi } from '../api/account.api';
+import { LoginResult } from '../api/account-api.models';
+import { AuthSession, TOKEN_STORE } from '../auth/token-store';
 import {
   ActiveSessionModel,
   AiGenLogModel,
@@ -23,11 +26,10 @@ export interface AuthState {
   providedIn: 'root'
 })
 export class IdentityService {
-  readonly authState = signal<AuthState>({
-    currentUser: IdentityMockDb.users[0], // Default logged in as Admin for easy testing
-    isAuthenticated: true,
-    token: 'mock-jwt-token-scrumai-2026'
-  });
+  private readonly accountApi = inject(AccountApi);
+  private readonly tokenStore = inject(TOKEN_STORE);
+
+  readonly authState = signal<AuthState>(this.restoreAuthState());
 
   readonly notifications = signal<NotificationModel[]>(IdentityMockDb.notifications);
   readonly unreadCount = signal<number>(IdentityMockDb.notifications.filter(n => !n.isRead).length);
@@ -37,93 +39,127 @@ export class IdentityService {
   // ==========================================
 
   login(email: string, pass: string): Observable<{ user: UserProfileModel; token: string }> {
-    if (pass) { /* no-op reference for lint */ }
-    const user = IdentityMockDb.users.find(u => u.email.toLowerCase() === email.toLowerCase());
-    if (!user) {
-      return throwError(() => ({ error: { title: 'Tài khoản không tồn tại trong hệ thống.' } }));
-    }
-    if (!user.isActive) {
-      return throwError(() => ({ error: { title: 'Tài khoản đã bị tạm khóa. Vui lòng liên hệ Admin.' } }));
-    }
-
-    user.lastLoginAt = new Date().toISOString();
-    const token = `token-${user.id}-${Date.now()}`;
-    this.authState.set({ currentUser: user, isAuthenticated: true, token });
-    return of({ user, token }).pipe(delay(600));
+    return this.accountApi.login({ email, password: pass }).pipe(
+      map(result => {
+        const session = this.toSession(result);
+        const user = this.toUserProfile(session);
+        this.tokenStore.setSession(session);
+        this.authState.set({ currentUser: user, isAuthenticated: true, token: session.accessToken });
+        return { user, token: session.accessToken };
+      })
+    );
   }
 
-  signup(name: string, email: string, pass: string): Observable<{ email: string; requiresOtp: boolean }> {
-    if (name || pass) { /* no-op reference for lint */ }
-    const existing = IdentityMockDb.users.find(u => u.email.toLowerCase() === email.toLowerCase());
-    if (existing) {
-      return throwError(() => ({ error: { title: 'Email này đã được sử dụng bởi tài khoản khác.' } }));
-    }
-
-    // Generate mock OTP code for registration
-    IdentityMockDb.otpStorage.set(email.toLowerCase(), {
-      code: '123456',
-      expiresAt: Date.now() + 5 * 60 * 1000,
-      purpose: 'REGISTER'
-    });
-
-    return of({ email, requiresOtp: true }).pipe(delay(500));
+  signup(name: string, email: string, pass: string, phoneNumber?: string): Observable<{
+    email: string;
+    requiresOtp: boolean;
+    message?: string | null;
+    resendAfterSeconds?: number | null;
+  }> {
+    return this.accountApi.register({
+      fullName: name,
+      email,
+      password: pass,
+      phoneNumber: phoneNumber?.trim() || null
+    }).pipe(
+      map(result => ({
+        email: result.email ?? email,
+        requiresOtp: true,
+        message: result.message,
+        resendAfterSeconds: result.resendAfterSeconds
+      }))
+    );
   }
 
   sendOtp(email: string, purpose: 'REGISTER' | 'FORGOT_PASSWORD'): Observable<{ success: boolean; message: string }> {
-    const mockCode = '123456';
-    IdentityMockDb.otpStorage.set(email.toLowerCase(), {
-      code: mockCode,
-      expiresAt: Date.now() + 5 * 60 * 1000,
-      purpose
-    });
-    return of({
-      success: true,
-      message: `Mã OTP xác thực (${mockCode}) đã được gửi tới ${email}. Có hiệu lực trong 5 phút.`
-    }).pipe(delay(400));
+    const request = purpose === 'REGISTER'
+      ? this.accountApi.sendOtp({ email, purpose: 'VerifyEmail' })
+      : this.accountApi.forgotPassword(email);
+
+    return request.pipe(map(result => ({
+      success: result.success,
+      message: result.message ?? 'Nếu tài khoản hợp lệ, mã OTP sẽ được gửi qua email.'
+    })));
   }
 
   verifyOtp(email: string, code: string, purpose: 'REGISTER' | 'FORGOT_PASSWORD'): Observable<{ success: boolean }> {
-    const stored = IdentityMockDb.otpStorage.get(email.toLowerCase());
-    if (!stored || stored.purpose !== purpose) {
-      return throwError(() => ({ error: { title: 'Mã OTP không tồn tại hoặc đã hết hạn. Vui lòng yêu cầu mã mới.' } }));
-    }
-    if (stored.code !== code && code !== '123456') { // Allow 123456 for easy demo testing
-      return throwError(() => ({ error: { title: 'Mã OTP không chính xác. Vui lòng thử lại.' } }));
-    }
-
-    if (purpose === 'REGISTER') {
-      const newUser: UserProfileModel = {
-        id: `user-${Date.now()}`,
-        email,
-        displayName: email.split('@')[0],
-        avatarUrl: null,
-        jobTitle: 'Software Engineer',
-        roleId: 'role-5',
-        roleName: 'Developer Engineer',
-        isActive: true,
-        twoFactorEnabled: false,
-        createdAt: new Date().toISOString(),
-        lastLoginAt: new Date().toISOString()
-      };
-      IdentityMockDb.users.push(newUser);
-      this.authState.set({ currentUser: newUser, isAuthenticated: true, token: `token-${newUser.id}` });
+    if (purpose !== 'REGISTER') {
+      return throwError(() => ({
+        status: 400,
+        code: 'AUTH_OTP_PURPOSE_INVALID',
+        title: 'OTP đặt lại mật khẩu được xác minh cùng lúc khi đặt mật khẩu mới.'
+      }));
     }
 
-    IdentityMockDb.otpStorage.delete(email.toLowerCase());
-    return of({ success: true }).pipe(delay(500));
+    return this.accountApi.verifyOtp({ email, code, purpose: 'VerifyEmail' }).pipe(
+      map(result => ({ success: result.success }))
+    );
   }
 
   resetPassword(email: string, otpCode: string, newPass: string): Observable<{ success: boolean }> {
-    if (otpCode || newPass) { /* no-op reference for lint */ }
-    const user = IdentityMockDb.users.find(u => u.email.toLowerCase() === email.toLowerCase());
-    if (!user) {
-      return throwError(() => ({ error: { title: 'Không tìm thấy tài khoản tương ứng.' } }));
-    }
-    return of({ success: true }).pipe(delay(600));
+    return this.accountApi.resetPassword({ email, code: otpCode, newPassword: newPass }).pipe(
+      map(result => ({ success: result.success }))
+    );
   }
 
   logout(): void {
+    const refreshToken = this.tokenStore.getRefreshToken();
+    this.tokenStore.clear();
     this.authState.set({ currentUser: null, isAuthenticated: false, token: null });
+    if (refreshToken) {
+      this.accountApi.logout(refreshToken).subscribe({ error: () => undefined });
+    }
+  }
+
+  private restoreAuthState(): AuthState {
+    const session = this.tokenStore.getSession();
+    if (!session) {
+      return { currentUser: null, isAuthenticated: false, token: null };
+    }
+
+    return {
+      currentUser: this.toUserProfile(session),
+      isAuthenticated: true,
+      token: session.accessToken
+    };
+  }
+
+  private toSession(result: LoginResult): AuthSession {
+    if (!result.success
+      || !result.accessToken
+      || !result.refreshToken
+      || !result.userId
+      || !result.email) {
+      throw new Error('Phản hồi đăng nhập không đầy đủ.');
+    }
+
+    return {
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+      accessTokenExpiresAt: result.accessTokenExpiresAt,
+      refreshTokenExpiresAt: result.refreshTokenExpiresAt,
+      userId: result.userId,
+      email: result.email,
+      fullName: result.fullName ?? result.email,
+      roles: result.roles ?? []
+    };
+  }
+
+  private toUserProfile(session: AuthSession): UserProfileModel {
+    const now = new Date().toISOString();
+    return {
+      id: session.userId,
+      email: session.email,
+      displayName: session.fullName,
+      avatarUrl: null,
+      jobTitle: '',
+      roleId: '',
+      roleName: session.roles[0] ?? 'Thành viên',
+      isActive: true,
+      twoFactorEnabled: false,
+      createdAt: now,
+      lastLoginAt: now
+    };
   }
 
   // ==========================================

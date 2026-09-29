@@ -16,9 +16,9 @@ function normalizeApiError(error: unknown): ApiError {
 
   return {
     status: error.status,
-    code: stringValue(body['code']) ?? 'http.error',
-    title: stringValue(body['title']) ?? error.statusText ?? 'Request failed',
-    detail: stringValue(body['detail']) ?? error.message,
+    code: stringValue(body['errorCode']) ?? stringValue(body['code']) ?? 'http.error',
+    title: stringValue(body['message']) ?? stringValue(body['title']) ?? error.statusText ?? 'Request failed',
+    detail: stringValue(body['detail']) ?? stringValue(body['message']) ?? error.message,
     traceId: stringValue(body['traceId']),
     errors: isErrorDictionary(body['errors']) ? body['errors'] : undefined
   };

@@ -35,7 +35,7 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
               <span class="px-3 py-1 rounded-md text-sm font-mono font-bold bg-primary/10 text-primary border border-primary/20">
                 {{ task.issueKey }}
               </span>
-              <span class="text-sm text-slate-500 font-medium">Dự án {{ task.sprintName || 'HUCE Scrum Platform' }}</span>
+              <span class="text-sm text-slate-500 font-medium">Dự án {{ task.sprintName || 'Hệ thống Quản lý Dự án Scrum tích hợp AI' }}</span>
             </div>
 
             <div class="flex items-center gap-2">

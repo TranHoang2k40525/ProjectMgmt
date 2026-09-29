@@ -232,7 +232,7 @@ export class AppShellComponent implements OnDestroy {
   logout(): void {
     this.confirmService.confirm({
       title: 'Xác Nhận Đăng Xuất',
-      message: 'Bạn có chắc chắn muốn đăng xuất khỏi hệ thống HUCE Scrum Platform?',
+      message: 'Bạn có chắc chắn muốn đăng xuất khỏi Hệ thống Quản lý Dự án Scrum tích hợp AI?',
       type: 'danger',
       confirmText: 'Đăng xuất ngay',
       cancelText: 'Hủy bỏ',
