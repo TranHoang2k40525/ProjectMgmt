@@ -14,4 +14,5 @@ public static class NotificationTypes
     public const string ProjectRoleChanged = "ProjectRoleChanged";
     public const string ProjectRoleRevoked = "ProjectRoleRevoked";
     public const string PasswordChanged = "PasswordChanged";
+    public const string AiBreakdownCompleted = "AiBreakdownCompleted";
 }
