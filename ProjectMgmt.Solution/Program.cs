@@ -301,8 +301,9 @@ app.UseAuthorization();
 app.UseRateLimiter();
 app.MapControllers();
 app.MapHub<NotificationHub>("/hubs/notifications");
-app.MapHealthChecks("/health");
-app.MapGet("/health/live", () => Results.Ok(new { status = "Healthy" }));
+app.MapHealthChecks("/health").AllowAnonymous();
+app.MapGet("/health/live", () => Results.Ok(new { status = "Healthy" }))
+    .AllowAnonymous();
 
 if (hasFrontendArtifact)
 {
