@@ -172,6 +172,23 @@ public class FakeRbacRepository : IRbacRepository
         });
     }
 
+    public Task<RbacWriteResult> GrantRoleForProvisioningAsync(
+        Guid userId,
+        string roleName,
+        string scopeType,
+        Guid scopeId,
+        Guid grantedBy,
+        DateTime createdAtUtc)
+    {
+        return GrantRoleAsync(
+            userId,
+            Guid.NewGuid(),
+            scopeType,
+            scopeId,
+            grantedBy,
+            createdAtUtc);
+    }
+
     public Task<RbacWriteResult> RemoveUserRoleAsync(Guid userId, Guid userRoleId)
     {
         return Task.FromResult(new RbacWriteResult { Status = RbacWriteStatus.Removed });

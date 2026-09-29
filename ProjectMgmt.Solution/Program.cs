@@ -27,6 +27,7 @@ using System.Globalization;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
+using MySqlConnector;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -174,9 +175,11 @@ builder.Services.AddRateLimiter(options =>
 });
 builder.Services.AddHealthChecks();
 
-builder.Services.AddDbContext<IdentityExperienceDbContext>(options =>
+builder.Services.AddScoped(_ => new MySqlConnection(connectionString));
+
+builder.Services.AddDbContext<IdentityExperienceDbContext>((services, options) =>
     options.UseMySql(
-        connectionString,
+        services.GetRequiredService<MySqlConnection>(),
         serverVersion,
         mysql =>
         {
@@ -184,9 +187,9 @@ builder.Services.AddDbContext<IdentityExperienceDbContext>(options =>
             mysql.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null);
         }));
 
-builder.Services.AddDbContext<PlanningDbContext>(options =>
+builder.Services.AddDbContext<PlanningDbContext>((services, options) =>
     options.UseMySql(
-        connectionString,
+        services.GetRequiredService<MySqlConnection>(),
         serverVersion,
         mysql =>
         {
@@ -194,9 +197,9 @@ builder.Services.AddDbContext<PlanningDbContext>(options =>
             mysql.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null);
         }));
 
-builder.Services.AddDbContext<DeliveryIntelligenceDbContext>(options =>
+builder.Services.AddDbContext<DeliveryIntelligenceDbContext>((services, options) =>
     options.UseMySql(
-        connectionString,
+        services.GetRequiredService<MySqlConnection>(),
         serverVersion,
         mysql =>
         {
@@ -218,6 +221,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserContext, CurrentUserContext>();
 builder.Services.AddScoped<IPermissionEvaluator, PermissionEvaluator>();
 builder.Services.AddScoped<IRoleAssignmentService, RoleAssignmentService>();
+builder.Services.AddScoped<IWorkspaceProvisioningService, WorkspaceProvisioningService>();
 builder.Services.AddScoped<IPasswordService, PasswordService>();
 builder.Services.AddScoped<IOtpCodeService, OtpCodeService>();
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));

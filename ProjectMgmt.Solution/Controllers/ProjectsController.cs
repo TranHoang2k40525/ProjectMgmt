@@ -1,21 +1,41 @@
 using Microsoft.AspNetCore.Mvc;
+using ProjectMgmt.IdentityAccess.Contracts;
 using ProjectMgmt.Modules.Planning.ProjectManagement.Application.IServices;
 using ProjectMgmt.ProjectManagement.Contracts;
+using ProjectMgmt.Solution.Services;
 
 namespace ProjectMgmt.Solution.Controllers;
 
-[Route("api/projects")]
+[Route("api/v1/projects")]
 public class ProjectsController : ApiControllerBase
 {
+    private static readonly Action<ILogger, Exception?> LogCreateFailure =
+        LoggerMessage.Define(
+            LogLevel.Error,
+            new EventId(2102, "ProjectCreateFailure"),
+            "Lỗi không xử lý khi tạo dự án.");
+
     private readonly IProjectLookupService _projects;
     private readonly IProjectManagementService _management;
+    private readonly IWorkspaceProvisioningService _provisioning;
+    private readonly IPermissionEvaluator _permissions;
+    private readonly ICurrentUserContext _currentUser;
+    private readonly ILogger<ProjectsController> _logger;
 
     public ProjectsController(
         IProjectLookupService projects,
-        IProjectManagementService management)
+        IProjectManagementService management,
+        IWorkspaceProvisioningService provisioning,
+        IPermissionEvaluator permissions,
+        ICurrentUserContext currentUser,
+        ILogger<ProjectsController> logger)
     {
         _projects = projects;
         _management = management;
+        _provisioning = provisioning;
+        _permissions = permissions;
+        _currentUser = currentUser;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -32,9 +52,58 @@ public class ProjectsController : ApiControllerBase
 
     [HttpPost]
     public async Task<ActionResult<ProjectDto>> Create(
-        [FromBody] CreateProjectRequestDto request,
-        CancellationToken cancellationToken) =>
-        FromResult(await _management.CreateProjectAsync(request, cancellationToken));
+        [FromBody] CreateProjectRequestDto request)
+    {
+        try
+        {
+            if (!_currentUser.UserId.HasValue)
+            {
+                return Unauthorized(new
+                {
+                    success = false,
+                    errorCode = "AUTH_UNAUTHENTICATED",
+                    message = "Phiên đăng nhập không hợp lệ."
+                });
+            }
+
+            var allowed = request.OrgId != Guid.Empty
+                && await _permissions.HasPermissionAsync(
+                    _currentUser.UserId.Value,
+                    "project.create",
+                    "Organization",
+                    request.OrgId);
+            if (!allowed)
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    new
+                    {
+                        success = false,
+                        errorCode = "PROJECT_CREATE_FORBIDDEN",
+                        message = "Bạn không có quyền tạo dự án trong tổ chức này."
+                    });
+            }
+
+            var result = await _provisioning.CreateProjectAsync(
+                request,
+                _currentUser.UserId.Value);
+            return result.IsSuccess
+                ? StatusCode(StatusCodes.Status201Created, result.Value)
+                : FromResult(result);
+        }
+        catch (Exception exception)
+        {
+            LogCreateFailure(_logger, exception);
+            return StatusCode(
+                StatusCodes.Status500InternalServerError,
+                new
+                {
+                    success = false,
+                    errorCode = "PROJECT_CREATE_FAILED",
+                    message = "Không thể tạo dự án. Vui lòng thử lại sau."
+                });
+        }
+    }
 
     [HttpPut("{projectId:guid}")]
     public async Task<ActionResult<ProjectDto>> Update(

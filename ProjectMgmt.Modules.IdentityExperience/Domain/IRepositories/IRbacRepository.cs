@@ -17,6 +17,13 @@ public interface IRbacRepository
         Guid? scopeId,
         Guid grantedBy,
         DateTime createdAtUtc);
+    Task<RbacWriteResult> GrantRoleForProvisioningAsync(
+        Guid userId,
+        string roleName,
+        string scopeType,
+        Guid scopeId,
+        Guid grantedBy,
+        DateTime createdAtUtc);
     Task<RbacWriteResult> RemoveUserRoleAsync(Guid userId, Guid userRoleId);
     Task<List<ProjectMemberDetails>> GetProjectMembersAsync(Guid projectId);
     Task<RbacWriteResult> AddProjectMemberAsync(

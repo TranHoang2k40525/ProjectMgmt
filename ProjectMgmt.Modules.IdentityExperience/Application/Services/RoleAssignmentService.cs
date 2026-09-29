@@ -21,18 +21,16 @@ public class RoleAssignmentService : IRoleAssignmentService
         Guid grantedBy,
         DateTime createdAtUtc)
     {
-        var roles = await _rbacRepository.GetRolesAsync(scopeType);
-        var role = roles.FirstOrDefault(item => item.Name == roleName);
-        if (role is null)
+        if (!scopeId.HasValue)
         {
             return false;
         }
 
-        var result = await _rbacRepository.GrantRoleAsync(
+        var result = await _rbacRepository.GrantRoleForProvisioningAsync(
             userId,
-            role.Id,
+            roleName,
             scopeType,
-            scopeId,
+            scopeId.Value,
             grantedBy,
             createdAtUtc);
         return result.Status is RbacWriteStatus.Created or RbacWriteStatus.DuplicateRole;

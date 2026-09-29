@@ -228,6 +228,54 @@ public class RbacRepository : IRbacRepository
         });
     }
 
+    public async Task<RbacWriteResult> GrantRoleForProvisioningAsync(
+        Guid userId,
+        string roleName,
+        string scopeType,
+        Guid scopeId,
+        Guid grantedBy,
+        DateTime createdAtUtc)
+    {
+        var userExists = await _context.Users.AnyAsync(user => user.Id == userId && user.IsActive);
+        if (!userExists)
+        {
+            return Result(RbacWriteStatus.UserNotFound);
+        }
+
+        var role = await _context.Roles.AsNoTracking().FirstOrDefaultAsync(item =>
+            item.Name == roleName && item.Scope == scopeType);
+        if (role is null)
+        {
+            return Result(RbacWriteStatus.RoleNotFound);
+        }
+
+        var exists = await _context.UserRoles.AnyAsync(item =>
+            item.UserId == userId
+            && item.RoleId == role.Id
+            && item.ScopeType == scopeType
+            && item.ScopeId == scopeId);
+        if (exists)
+        {
+            return Result(RbacWriteStatus.DuplicateRole);
+        }
+
+        var userRole = NewUserRole(
+            userId,
+            role.Id,
+            scopeType,
+            scopeId,
+            grantedBy,
+            createdAtUtc);
+        await _context.UserRoles.AddAsync(userRole);
+        await _context.SaveChangesAsync();
+        return new RbacWriteResult
+        {
+            Status = RbacWriteStatus.Created,
+            Role = role,
+            UserRole = userRole
+        };
+    }
+
     public async Task<RbacWriteResult> RemoveUserRoleAsync(Guid userId, Guid userRoleId)
     {
         var executionStrategy = _context.Database.CreateExecutionStrategy();
