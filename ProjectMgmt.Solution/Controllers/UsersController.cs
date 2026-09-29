@@ -19,19 +19,40 @@ public class UsersController : ControllerBase
 
     private readonly IProfileServices _profileServices;
     private readonly IAccountServices _accountServices;
+    private readonly IForYouServices _forYouServices;
     private readonly ICurrentUserContext _currentUser;
     private readonly ILogger<UsersController> _logger;
 
     public UsersController(
         IProfileServices profileServices,
         IAccountServices accountServices,
+        IForYouServices forYouServices,
         ICurrentUserContext currentUser,
         ILogger<UsersController> logger)
     {
         _profileServices = profileServices;
         _accountServices = accountServices;
+        _forYouServices = forYouServices;
         _currentUser = currentUser;
         _logger = logger;
+    }
+
+    [HttpGet("for-you")]
+    public async Task<IActionResult> GetForYou()
+    {
+        try
+        {
+            if (!TryGetUserId(out var userId))
+            {
+                return Unauthenticated();
+            }
+
+            return Ok(await _forYouServices.GetAsync(userId));
+        }
+        catch (Exception exception)
+        {
+            return InternalError("for-you", exception);
+        }
     }
 
     [HttpGet("me")]
