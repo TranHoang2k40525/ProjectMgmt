@@ -4,18 +4,29 @@ namespace IdentityExperience.Application.IServices;
 
 public interface IAccountServices
 {
-    Task<RegisterResult> RegisterAsync(AccountDto account, CancellationToken cancellationToken = default);
+    Task<RegisterResult> RegisterAsync(
+        string? email,
+        string? password,
+        string? fullName,
+        string? phoneNumber);
+
     Task<ResultLogin> LoginAsync(
-        AccountDto account,
+        string? email,
+        string? password,
         string? ipAddress,
-        string? userAgent,
-        CancellationToken cancellationToken = default);
-    Task<OtpResult> SendOtpAsync(AccountDto account, CancellationToken cancellationToken = default);
-    Task<OtpResult> VerifyOtpAsync(AccountDto account, CancellationToken cancellationToken = default);
+        string? userAgent);
+
+    Task<OtpResult> SendOtpAsync(string? email, string? purpose);
+
+    Task<OtpResult> VerifyOtpAsync(
+        string? email,
+        string? code,
+        string? purpose);
+
     Task<ResultLogin> RefreshTokenAsync(
-        string refreshToken,
+        string? refreshToken,
         string? ipAddress,
-        string? userAgent,
-        CancellationToken cancellationToken = default);
-    Task<Result> LogoutAsync(string refreshToken, CancellationToken cancellationToken = default);
+        string? userAgent);
+
+    Task<Result> LogoutAsync(string? refreshToken);
 }

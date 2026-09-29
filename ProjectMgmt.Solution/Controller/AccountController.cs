@@ -1,6 +1,5 @@
 using IdentityExperience.Application.Dto;
 using IdentityExperience.Application.IServices;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 
@@ -8,158 +7,194 @@ namespace ProjectMgmt.Solution.Controller;
 
 [Route("api/v1/auth")]
 [ApiController]
-[AllowAnonymous]
 public class AccountController : ControllerBase
 {
-    private readonly IAccountServices _accountServices;
+    private static readonly Action<ILogger, string, Exception?> LogEndpointFailure =
+        LoggerMessage.Define<string>(
+            LogLevel.Error,
+            new EventId(2001, "AuthEndpointFailure"),
+            "Lỗi không xử lý tại endpoint xác thực {Endpoint}.");
 
-    public AccountController(IAccountServices accountServices)
+    private readonly IAccountServices _accountServices;
+    private readonly ILogger<AccountController> _logger;
+
+    public AccountController(
+        IAccountServices accountServices,
+        ILogger<AccountController> logger)
     {
         _accountServices = accountServices;
+        _logger = logger;
     }
 
     [HttpPost("register")]
     [EnableRateLimiting("auth-otp")]
-    [ProducesResponseType(typeof(RegisterResult), StatusCodes.Status202Accepted)]
-    [ProducesResponseType(typeof(RegisterResult), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(RegisterResult), StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> Register(
-        [FromBody] AccountDto request,
-        CancellationToken cancellationToken)
+    public async Task<IActionResult> Register([FromBody] AccountDto request)
     {
-        var result = await _accountServices.RegisterAsync(request, cancellationToken);
-        if (result.Success)
+        try
         {
-            return Accepted(result);
-        }
+            var result = await _accountServices.RegisterAsync(
+                request.Email,
+                request.Password,
+                request.FullName,
+                request.PhoneNumber);
+            if (result.Success)
+            {
+                return Accepted(result);
+            }
 
-        return result.ErrorCode is "AUTH_EMAIL_ALREADY_EXISTS"
-            or "AUTH_EMAIL_VERIFICATION_PENDING"
-            or "AUTH_PHONE_ALREADY_EXISTS"
-            or "AUTH_REGISTRATION_CONFLICT"
-            ? Conflict(result)
-            : result.ErrorCode == "AUTH_EMAIL_DELIVERY_FAILED"
-                ? StatusCode(StatusCodes.Status503ServiceUnavailable, result)
-            : BadRequest(result);
+            return result.ErrorCode is "AUTH_EMAIL_ALREADY_EXISTS"
+                or "AUTH_EMAIL_VERIFICATION_PENDING"
+                or "AUTH_PHONE_ALREADY_EXISTS"
+                or "AUTH_REGISTRATION_CONFLICT"
+                ? Conflict(result)
+                : result.ErrorCode == "AUTH_EMAIL_DELIVERY_FAILED"
+                    ? StatusCode(StatusCodes.Status503ServiceUnavailable, result)
+                    : BadRequest(result);
+        }
+        catch (Exception exception)
+        {
+            return InternalError("register", exception);
+        }
     }
 
     [HttpPost("otp/send")]
     [EnableRateLimiting("auth-otp")]
-    [ProducesResponseType(typeof(OtpResult), StatusCodes.Status202Accepted)]
-    [ProducesResponseType(typeof(OtpResult), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(OtpResult), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(OtpResult), StatusCodes.Status409Conflict)]
-    [ProducesResponseType(typeof(OtpResult), StatusCodes.Status429TooManyRequests)]
-    [ProducesResponseType(typeof(OtpResult), StatusCodes.Status503ServiceUnavailable)]
-    public async Task<IActionResult> SendOtp(
-        [FromBody] AccountDto request,
-        CancellationToken cancellationToken)
+    public async Task<IActionResult> SendOtp([FromBody] AccountDto request)
     {
-        var result = await _accountServices.SendOtpAsync(request, cancellationToken);
-        if (result.Success)
+        try
         {
-            return Accepted(result);
-        }
+            var result = await _accountServices.SendOtpAsync(request.Email, request.Purpose);
+            if (result.Success)
+            {
+                return Accepted(result);
+            }
 
-        if (result.ErrorCode == "AUTH_OTP_RATE_LIMITED")
-        {
-            Response.Headers.RetryAfter = result.ResendAfterSeconds?.ToString(
-                System.Globalization.CultureInfo.InvariantCulture);
-            return StatusCode(StatusCodes.Status429TooManyRequests, result);
-        }
+            if (result.ErrorCode == "AUTH_OTP_RATE_LIMITED")
+            {
+                Response.Headers.RetryAfter = result.ResendAfterSeconds?.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture);
+                return StatusCode(StatusCodes.Status429TooManyRequests, result);
+            }
 
-        return result.ErrorCode switch
+            return result.ErrorCode switch
+            {
+                "AUTH_ACCOUNT_NOT_FOUND" => NotFound(result),
+                "AUTH_EMAIL_ALREADY_VERIFIED" => Conflict(result),
+                "AUTH_EMAIL_DELIVERY_FAILED" => StatusCode(StatusCodes.Status503ServiceUnavailable, result),
+                _ => BadRequest(result)
+            };
+        }
+        catch (Exception exception)
         {
-            "AUTH_ACCOUNT_NOT_FOUND" => NotFound(result),
-            "AUTH_EMAIL_ALREADY_VERIFIED" => Conflict(result),
-            "AUTH_EMAIL_DELIVERY_FAILED" => StatusCode(StatusCodes.Status503ServiceUnavailable, result),
-            _ => BadRequest(result)
-        };
+            return InternalError("otp/send", exception);
+        }
     }
 
     [HttpPost("otp/verify")]
     [EnableRateLimiting("auth-otp")]
-    [ProducesResponseType(typeof(OtpResult), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(OtpResult), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(OtpResult), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(OtpResult), StatusCodes.Status409Conflict)]
-    [ProducesResponseType(typeof(OtpResult), StatusCodes.Status410Gone)]
-    [ProducesResponseType(typeof(OtpResult), StatusCodes.Status429TooManyRequests)]
-    public async Task<IActionResult> VerifyOtp(
-        [FromBody] AccountDto request,
-        CancellationToken cancellationToken)
+    public async Task<IActionResult> VerifyOtp([FromBody] AccountDto request)
     {
-        var result = await _accountServices.VerifyOtpAsync(request, cancellationToken);
-        if (result.Success)
+        try
         {
-            return Ok(result);
-        }
+            var otpCode = request.Code ?? request.OtpCode;
+            var result = await _accountServices.VerifyOtpAsync(
+                request.Email,
+                otpCode,
+                request.Purpose);
+            if (result.Success)
+            {
+                return Ok(result);
+            }
 
-        return result.ErrorCode switch
+            return result.ErrorCode switch
+            {
+                "AUTH_ACCOUNT_NOT_FOUND" => NotFound(result),
+                "AUTH_ACCOUNT_DISABLED" => Conflict(result),
+                "AUTH_OTP_EXPIRED" => StatusCode(StatusCodes.Status410Gone, result),
+                "AUTH_OTP_ATTEMPTS_EXCEEDED" => StatusCode(StatusCodes.Status429TooManyRequests, result),
+                _ => BadRequest(result)
+            };
+        }
+        catch (Exception exception)
         {
-            "AUTH_ACCOUNT_NOT_FOUND" => NotFound(result),
-            "AUTH_ACCOUNT_DISABLED" => Conflict(result),
-            "AUTH_OTP_EXPIRED" => StatusCode(StatusCodes.Status410Gone, result),
-            "AUTH_OTP_ATTEMPTS_EXCEEDED" => StatusCode(StatusCodes.Status429TooManyRequests, result),
-            _ => BadRequest(result)
-        };
+            return InternalError("otp/verify", exception);
+        }
     }
 
     [HttpPost("login")]
     [EnableRateLimiting("auth-login")]
-    [ProducesResponseType(typeof(ResultLogin), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ResultLogin), StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> Login(
-        [FromBody] AccountDto request,
-        CancellationToken cancellationToken)
+    public async Task<IActionResult> Login([FromBody] AccountDto request)
     {
-        var result = await _accountServices.LoginAsync(
-            request,
-            HttpContext.Connection.RemoteIpAddress?.ToString(),
-            Request.Headers.UserAgent.ToString(),
-            cancellationToken);
-        if (result.Success)
+        try
         {
-            return Ok(result);
-        }
+            var result = await _accountServices.LoginAsync(
+                request.Email,
+                request.Password,
+                HttpContext.Connection.RemoteIpAddress?.ToString(),
+                Request.Headers.UserAgent.ToString());
+            if (result.Success)
+            {
+                return Ok(result);
+            }
 
-        return result.ErrorCode is "AUTH_ACCOUNT_DISABLED" or "AUTH_EMAIL_NOT_VERIFIED"
-            ? StatusCode(StatusCodes.Status403Forbidden, result)
-            : Unauthorized(result);
+            return result.ErrorCode is "AUTH_ACCOUNT_DISABLED" or "AUTH_EMAIL_NOT_VERIFIED"
+                ? StatusCode(StatusCodes.Status403Forbidden, result)
+                : Unauthorized(result);
+        }
+        catch (Exception exception)
+        {
+            return InternalError("login", exception);
+        }
     }
 
     [HttpPost("refresh-token")]
-    [ProducesResponseType(typeof(ResultLogin), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ResultLogin), StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(typeof(ResultLogin), StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> RefreshToken(
-        [FromBody] AccountDto request,
-        CancellationToken cancellationToken)
+    public async Task<IActionResult> RefreshToken([FromBody] AccountDto request)
     {
-        var result = await _accountServices.RefreshTokenAsync(
-            request.RefreshToken ?? string.Empty,
-            HttpContext.Connection.RemoteIpAddress?.ToString(),
-            Request.Headers.UserAgent.ToString(),
-            cancellationToken);
-        if (result.Success)
+        try
         {
-            return Ok(result);
-        }
+            var result = await _accountServices.RefreshTokenAsync(
+                request.RefreshToken,
+                HttpContext.Connection.RemoteIpAddress?.ToString(),
+                Request.Headers.UserAgent.ToString());
+            if (result.Success)
+            {
+                return Ok(result);
+            }
 
-        return result.ErrorCode is "AUTH_ACCOUNT_DISABLED" or "AUTH_EMAIL_NOT_VERIFIED"
-            ? StatusCode(StatusCodes.Status403Forbidden, result)
-            : Unauthorized(result);
+            return result.ErrorCode is "AUTH_ACCOUNT_DISABLED" or "AUTH_EMAIL_NOT_VERIFIED"
+                ? StatusCode(StatusCodes.Status403Forbidden, result)
+                : Unauthorized(result);
+        }
+        catch (Exception exception)
+        {
+            return InternalError("refresh-token", exception);
+        }
     }
 
     [HttpPost("logout")]
-    [ProducesResponseType(typeof(Result), StatusCodes.Status200OK)]
-    public async Task<IActionResult> Logout(
-        [FromBody] AccountDto request,
-        CancellationToken cancellationToken)
+    public async Task<IActionResult> Logout([FromBody] AccountDto request)
     {
-        var result = await _accountServices.LogoutAsync(
-            request.RefreshToken ?? string.Empty,
-            cancellationToken);
-        return Ok(result);
+        try
+        {
+            var result = await _accountServices.LogoutAsync(request.RefreshToken);
+            return Ok(result);
+        }
+        catch (Exception exception)
+        {
+            return InternalError("logout", exception);
+        }
+    }
+
+    private ObjectResult InternalError(string endpoint, Exception exception)
+    {
+        LogEndpointFailure(_logger, endpoint, exception);
+        return StatusCode(
+            StatusCodes.Status500InternalServerError,
+            new Result
+            {
+                Success = false,
+                ErrorCode = "AUTH_INTERNAL_ERROR",
+                Message = "Hệ thống xác thực đang gặp lỗi. Vui lòng thử lại sau."
+            });
     }
 }

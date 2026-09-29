@@ -43,20 +43,20 @@ public class AccountServices : IAccountServices
     }
 
     public async Task<RegisterResult> RegisterAsync(
-        AccountDto account,
-        CancellationToken cancellationToken = default)
+        string? email,
+        string? password,
+        string? fullName,
+        string? phoneNumber)
     {
-        var validationError = ValidateRegistration(account);
+        var validationError = ValidateRegistration(email, password, fullName, phoneNumber);
         if (validationError is not null)
         {
             return validationError;
         }
 
-        var email = account.Email!.Trim();
+        email = email!.Trim();
         var normalizedEmail = email.ToUpperInvariant();
-        var existingUser = await _identityRepository.GetUserByNormalizedEmailAsync(
-            normalizedEmail,
-            cancellationToken: cancellationToken);
+        var existingUser = await _identityRepository.GetUserByNormalizedEmailAsync(normalizedEmail);
 
         if (existingUser is not null)
         {
@@ -75,12 +75,12 @@ public class AccountServices : IAccountServices
             };
         }
 
-        if (!TryNormalizePhone(account.PhoneNumber!, out var phoneNumber))
+        if (!TryNormalizePhone(phoneNumber!, out var normalizedPhoneNumber))
         {
             return Failure("AUTH_PHONE_INVALID", "Số điện thoại không hợp lệ.");
         }
 
-        if (await _identityRepository.PhoneNumberExistsAsync(phoneNumber, cancellationToken))
+        if (await _identityRepository.PhoneNumberExistsAsync(normalizedPhoneNumber))
         {
             return Failure("AUTH_PHONE_ALREADY_EXISTS", "Số điện thoại đã được sử dụng.");
         }
@@ -95,7 +95,7 @@ public class AccountServices : IAccountServices
             Id = userId,
             Email = email,
             NormalizedEmail = normalizedEmail,
-            PasswordHash = _passwordService.Hash(account.Password!),
+            PasswordHash = _passwordService.Hash(password!),
             IsEmailVerified = false,
             IsActive = true,
             SecurityStamp = Guid.NewGuid(),
@@ -106,8 +106,8 @@ public class AccountServices : IAccountServices
         {
             Id = Guid.NewGuid(),
             UserId = userId,
-            DisplayName = account.FullName!.Trim(),
-            PhoneNumber = phoneNumber,
+            DisplayName = fullName!.Trim(),
+            PhoneNumber = normalizedPhoneNumber,
             Timezone = "Asia/Ho_Chi_Minh",
             CreatedAt = now
         };
@@ -127,8 +127,7 @@ public class AccountServices : IAccountServices
         var created = await _identityRepository.CreatePendingRegistrationAsync(
             user,
             profile,
-            otp,
-            cancellationToken);
+            otp);
 
         if (!created)
         {
@@ -141,8 +140,7 @@ public class AccountServices : IAccountServices
             email,
             profile.DisplayName,
             otpCode,
-            otpExpiresAt,
-            cancellationToken);
+            otpExpiresAt);
 
         if (!emailDelivered)
         {
@@ -172,23 +170,21 @@ public class AccountServices : IAccountServices
     }
 
     public async Task<ResultLogin> LoginAsync(
-        AccountDto account,
+        string? email,
+        string? password,
         string? ipAddress,
-        string? userAgent,
-        CancellationToken cancellationToken = default)
+        string? userAgent)
     {
-        if (!TryNormalizeEmail(account.Email, out _, out var normalizedEmail)
-            || string.IsNullOrEmpty(account.Password)
-            || account.Password.Length > 128)
+        if (!TryNormalizeEmail(email, out _, out var normalizedEmail)
+            || string.IsNullOrEmpty(password)
+            || password.Length > 128)
         {
             return LoginFailure("AUTH_INVALID_CREDENTIALS", "Email hoặc mật khẩu không đúng.");
         }
 
-        var user = await _identityRepository.GetUserByNormalizedEmailAsync(
-            normalizedEmail,
-            cancellationToken: cancellationToken);
+        var user = await _identityRepository.GetUserByNormalizedEmailAsync(normalizedEmail);
         if (user?.PasswordHash is null
-            || !_passwordService.Verify(account.Password, user.PasswordHash))
+            || !_passwordService.Verify(password, user.PasswordHash))
         {
             return LoginFailure("AUTH_INVALID_CREDENTIALS", "Email hoặc mật khẩu không đúng.");
         }
@@ -205,10 +201,8 @@ public class AccountServices : IAccountServices
                 "Email chưa được xác minh. Hãy xác minh OTP trước khi đăng nhập.");
         }
 
-        var profile = await _identityRepository.GetUserProfileAsync(
-            user.Id,
-            cancellationToken: cancellationToken);
-        var roles = await _identityRepository.GetSystemRoleNamesAsync(user.Id, cancellationToken);
+        var profile = await _identityRepository.GetUserProfileAsync(user.Id);
+        var roles = await _identityRepository.GetSystemRoleNamesAsync(user.Id);
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         var tokenSet = _tokenService.CreateTokenSet(user, profile, roles, now);
         var refreshToken = BuildRefreshToken(user.Id, tokenSet, ipAddress, userAgent, now);
@@ -216,8 +210,7 @@ public class AccountServices : IAccountServices
         var sessionStatus = await _identityRepository.CreateLoginSessionAsync(
             user.Id,
             refreshToken,
-            now,
-            cancellationToken);
+            now);
         if (sessionStatus != LoginSessionStatus.Created)
         {
             return sessionStatus switch
@@ -234,17 +227,17 @@ public class AccountServices : IAccountServices
     }
 
     public async Task<OtpResult> SendOtpAsync(
-        AccountDto account,
-        CancellationToken cancellationToken = default)
+        string? email,
+        string? purpose)
     {
-        if (!TryNormalizeEmail(account.Email, out var email, out var normalizedEmail))
+        if (!TryNormalizeEmail(email, out var normalizedInputEmail, out var normalizedEmail))
         {
             return OtpFailure("AUTH_EMAIL_INVALID", "Email không hợp lệ.");
         }
 
-        var purpose = string.IsNullOrWhiteSpace(account.Purpose)
+        purpose = string.IsNullOrWhiteSpace(purpose)
             ? VerifyEmailPurpose
-            : account.Purpose.Trim();
+            : purpose.Trim();
         if (!string.Equals(purpose, VerifyEmailPurpose, StringComparison.Ordinal))
         {
             return OtpFailure(
@@ -252,9 +245,7 @@ public class AccountServices : IAccountServices
                 "Endpoint này chỉ hỗ trợ mục đích VerifyEmail.");
         }
 
-        var user = await _identityRepository.GetUserByNormalizedEmailAsync(
-            normalizedEmail,
-            cancellationToken: cancellationToken);
+        var user = await _identityRepository.GetUserByNormalizedEmailAsync(normalizedEmail);
         if (user is null)
         {
             return OtpFailure("AUTH_ACCOUNT_NOT_FOUND", "Không tìm thấy tài khoản với email này.");
@@ -265,9 +256,7 @@ public class AccountServices : IAccountServices
             return OtpFailure("AUTH_EMAIL_ALREADY_VERIFIED", "Email đã được xác minh.");
         }
 
-        var profile = await _identityRepository.GetUserProfileAsync(
-            user.Id,
-            cancellationToken: cancellationToken);
+        var profile = await _identityRepository.GetUserProfileAsync(user.Id);
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         var otpCode = _otpCodeService.GenerateCode();
         var otp = new OtpCode
@@ -286,8 +275,7 @@ public class AccountServices : IAccountServices
             user.Id,
             otp,
             now,
-            TimeSpan.FromSeconds(OtpResendAfterSeconds),
-            cancellationToken);
+            TimeSpan.FromSeconds(OtpResendAfterSeconds));
 
         if (issueResult.Status == OtpIssueStatus.RateLimited)
         {
@@ -296,7 +284,7 @@ public class AccountServices : IAccountServices
                 Success = false,
                 ErrorCode = "AUTH_OTP_RATE_LIMITED",
                 Message = "OTP vừa được cấp. Vui lòng chờ trước khi yêu cầu mã mới.",
-                Email = email,
+                Email = normalizedInputEmail,
                 Status = "PendingVerification",
                 OtpExpiresAt = issueResult.ExpiresAt,
                 ResendAfterSeconds = issueResult.RetryAfterSeconds
@@ -314,11 +302,10 @@ public class AccountServices : IAccountServices
         }
 
         var emailDelivered = await _emailService.SendOtpAsync(
-            email,
-            profile?.DisplayName ?? email,
+            normalizedInputEmail,
+            profile?.DisplayName ?? normalizedInputEmail,
             otpCode,
-            otp.ExpiresAt,
-            cancellationToken);
+            otp.ExpiresAt);
         if (!emailDelivered)
         {
             return new OtpResult
@@ -326,7 +313,7 @@ public class AccountServices : IAccountServices
                 Success = false,
                 ErrorCode = "AUTH_EMAIL_DELIVERY_FAILED",
                 Message = "Đã tạo OTP mới nhưng chưa gửi được email. Hãy thử lại sau thời gian chờ.",
-                Email = email,
+                Email = normalizedInputEmail,
                 Status = "PendingVerification",
                 OtpExpiresAt = otp.ExpiresAt,
                 ResendAfterSeconds = OtpResendAfterSeconds
@@ -337,7 +324,7 @@ public class AccountServices : IAccountServices
         {
             Success = true,
             Message = "Đã gửi mã OTP mới.",
-            Email = email,
+            Email = normalizedInputEmail,
             Status = "PendingVerification",
             OtpExpiresAt = otp.ExpiresAt,
             ResendAfterSeconds = OtpResendAfterSeconds
@@ -345,17 +332,18 @@ public class AccountServices : IAccountServices
     }
 
     public async Task<OtpResult> VerifyOtpAsync(
-        AccountDto account,
-        CancellationToken cancellationToken = default)
+        string? email,
+        string? code,
+        string? purpose)
     {
-        if (!TryNormalizeEmail(account.Email, out var email, out var normalizedEmail))
+        if (!TryNormalizeEmail(email, out var normalizedInputEmail, out var normalizedEmail))
         {
             return OtpFailure("AUTH_EMAIL_INVALID", "Email không hợp lệ.");
         }
 
-        var purpose = string.IsNullOrWhiteSpace(account.Purpose)
+        purpose = string.IsNullOrWhiteSpace(purpose)
             ? VerifyEmailPurpose
-            : account.Purpose.Trim();
+            : purpose.Trim();
         if (!string.Equals(purpose, VerifyEmailPurpose, StringComparison.Ordinal))
         {
             return OtpFailure(
@@ -363,15 +351,13 @@ public class AccountServices : IAccountServices
                 "Endpoint này chỉ hỗ trợ mục đích VerifyEmail.");
         }
 
-        var otpCode = (account.Code ?? account.OtpCode)?.Trim() ?? string.Empty;
+        var otpCode = code?.Trim() ?? string.Empty;
         if (otpCode.Length != 6 || otpCode.Any(character => character is < '0' or > '9'))
         {
             return OtpFailure("AUTH_OTP_INVALID_FORMAT", "OTP phải gồm đúng 6 chữ số.");
         }
 
-        var user = await _identityRepository.GetUserByNormalizedEmailAsync(
-            normalizedEmail,
-            cancellationToken: cancellationToken);
+        var user = await _identityRepository.GetUserByNormalizedEmailAsync(normalizedEmail);
         if (user is null)
         {
             return OtpFailure("AUTH_ACCOUNT_NOT_FOUND", "Không tìm thấy tài khoản với email này.");
@@ -383,8 +369,7 @@ public class AccountServices : IAccountServices
             VerifyEmailPurpose,
             expectedHash,
             _timeProvider.GetUtcNow().UtcDateTime,
-            OtpMaximumAttempts,
-            cancellationToken);
+            OtpMaximumAttempts);
 
         return verification.Status switch
         {
@@ -392,7 +377,7 @@ public class AccountServices : IAccountServices
             {
                 Success = true,
                 Message = "Xác minh email thành công. Tài khoản đã sẵn sàng đăng nhập.",
-                Email = email,
+                Email = normalizedInputEmail,
                 Status = "Active",
                 AttemptsRemaining = verification.AttemptsRemaining
             },
@@ -400,7 +385,7 @@ public class AccountServices : IAccountServices
             {
                 Success = true,
                 Message = "Email đã được xác minh trước đó.",
-                Email = email,
+                Email = normalizedInputEmail,
                 Status = "Active"
             },
             OtpVerificationStatus.UserNotFound =>
@@ -416,7 +401,7 @@ public class AccountServices : IAccountServices
                 Success = false,
                 ErrorCode = "AUTH_OTP_ATTEMPTS_EXCEEDED",
                 Message = "OTP đã bị khóa sau quá nhiều lần nhập sai. Hãy yêu cầu mã mới.",
-                Email = email,
+                Email = normalizedInputEmail,
                 Status = "PendingVerification",
                 AttemptsRemaining = 0
             },
@@ -425,7 +410,7 @@ public class AccountServices : IAccountServices
                 Success = false,
                 ErrorCode = "AUTH_OTP_INVALID",
                 Message = "OTP không đúng.",
-                Email = email,
+                Email = normalizedInputEmail,
                 Status = "PendingVerification",
                 AttemptsRemaining = verification.AttemptsRemaining
             }
@@ -433,10 +418,9 @@ public class AccountServices : IAccountServices
     }
 
     public async Task<ResultLogin> RefreshTokenAsync(
-        string refreshToken,
+        string? refreshToken,
         string? ipAddress,
-        string? userAgent,
-        CancellationToken cancellationToken = default)
+        string? userAgent)
     {
         if (string.IsNullOrWhiteSpace(refreshToken) || refreshToken.Length > 512)
         {
@@ -444,9 +428,7 @@ public class AccountServices : IAccountServices
         }
 
         var currentTokenHash = _tokenService.HashRefreshToken(refreshToken.Trim());
-        var context = await _identityRepository.GetRefreshSessionContextAsync(
-            currentTokenHash,
-            cancellationToken);
+        var context = await _identityRepository.GetRefreshSessionContextAsync(currentTokenHash);
         if (context is null)
         {
             return LoginFailure("AUTH_REFRESH_TOKEN_INVALID", "Refresh token không hợp lệ.");
@@ -468,8 +450,7 @@ public class AccountServices : IAccountServices
         var rotationStatus = await _identityRepository.RotateRefreshTokenAsync(
             currentTokenHash,
             replacementToken,
-            now,
-            cancellationToken);
+            now);
         if (rotationStatus != TokenRotationStatus.Rotated)
         {
             return rotationStatus switch
@@ -496,14 +477,12 @@ public class AccountServices : IAccountServices
             now);
     }
 
-    public async Task<Result> LogoutAsync(
-        string refreshToken,
-        CancellationToken cancellationToken = default)
+    public async Task<Result> LogoutAsync(string? refreshToken)
     {
         if (!string.IsNullOrWhiteSpace(refreshToken) && refreshToken.Length <= 512)
         {
             var refreshTokenHash = _tokenService.HashRefreshToken(refreshToken.Trim());
-            await _identityRepository.RevokeRefreshTokenAsync(refreshTokenHash, cancellationToken);
+            await _identityRepository.RevokeRefreshTokenAsync(refreshTokenHash);
         }
 
         return new Result
@@ -513,31 +492,35 @@ public class AccountServices : IAccountServices
         };
     }
 
-    private static RegisterResult? ValidateRegistration(AccountDto account)
+    private static RegisterResult? ValidateRegistration(
+        string? email,
+        string? password,
+        string? fullName,
+        string? phoneNumber)
     {
-        if (string.IsNullOrWhiteSpace(account.Email)
-            || !new EmailAddressAttribute().IsValid(account.Email.Trim()))
+        if (string.IsNullOrWhiteSpace(email)
+            || !new EmailAddressAttribute().IsValid(email.Trim()))
         {
             return Failure("AUTH_EMAIL_INVALID", "Email không hợp lệ.");
         }
 
-        if (account.Email.Trim().Length > 256)
+        if (email.Trim().Length > 256)
         {
             return Failure("AUTH_EMAIL_TOO_LONG", "Email không được vượt quá 256 ký tự.");
         }
 
-        if (string.IsNullOrWhiteSpace(account.FullName)
-            || account.FullName.Trim().Length is < 2 or > 150)
+        if (string.IsNullOrWhiteSpace(fullName)
+            || fullName.Trim().Length is < 2 or > 150)
         {
             return Failure("AUTH_FULL_NAME_INVALID", "Họ tên phải có từ 2 đến 150 ký tự.");
         }
 
-        if (string.IsNullOrWhiteSpace(account.PhoneNumber))
+        if (string.IsNullOrWhiteSpace(phoneNumber))
         {
             return Failure("AUTH_PHONE_REQUIRED", "Số điện thoại là bắt buộc.");
         }
 
-        if (string.IsNullOrEmpty(account.Password) || !PasswordPattern.IsMatch(account.Password))
+        if (string.IsNullOrEmpty(password) || !PasswordPattern.IsMatch(password))
         {
             return Failure(
                 "AUTH_PASSWORD_WEAK",

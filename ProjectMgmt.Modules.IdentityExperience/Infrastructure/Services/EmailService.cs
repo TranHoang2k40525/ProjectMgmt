@@ -32,8 +32,7 @@ public class EmailService : IEmailService
         string recipientEmail,
         string recipientName,
         string otpCode,
-        DateTime expiresAtUtc,
-        CancellationToken cancellationToken = default)
+        DateTime expiresAtUtc)
     {
         try
         {
@@ -59,12 +58,8 @@ public class EmailService : IEmailService
                 DeliveryMethod = SmtpDeliveryMethod.Network
             };
 
-            await smtpClient.SendMailAsync(message, cancellationToken);
+            await smtpClient.SendMailAsync(message);
             return true;
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
         }
         catch (Exception exception)
             when (exception is SmtpException or InvalidOperationException or FormatException)

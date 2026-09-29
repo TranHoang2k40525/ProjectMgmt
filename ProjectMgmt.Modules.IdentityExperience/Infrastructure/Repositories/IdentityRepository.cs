@@ -18,8 +18,7 @@ public class IdentityRepository : IIdentityRepository
 
     public Task<User?> GetUserByNormalizedEmailAsync(
         string normalizedEmail,
-        bool tracking = false,
-        CancellationToken cancellationToken = default)
+        bool tracking = false)
     {
         IQueryable<User> query = _context.Users;
         if (!tracking)
@@ -27,15 +26,12 @@ public class IdentityRepository : IIdentityRepository
             query = query.AsNoTracking();
         }
 
-        return query.FirstOrDefaultAsync(
-            user => user.NormalizedEmail == normalizedEmail,
-            cancellationToken);
+        return query.FirstOrDefaultAsync(user => user.NormalizedEmail == normalizedEmail);
     }
 
     public Task<UserProfile?> GetUserProfileAsync(
         Guid userId,
-        bool tracking = false,
-        CancellationToken cancellationToken = default)
+        bool tracking = false)
     {
         IQueryable<UserProfile> query = _context.UserProfiles;
         if (!tracking)
@@ -43,45 +39,40 @@ public class IdentityRepository : IIdentityRepository
             query = query.AsNoTracking();
         }
 
-        return query.FirstOrDefaultAsync(
-            profile => profile.UserId == userId,
-            cancellationToken);
+        return query.FirstOrDefaultAsync(profile => profile.UserId == userId);
     }
 
-    public Task<bool> PhoneNumberExistsAsync(
-        string phoneNumber,
-        CancellationToken cancellationToken = default)
+    public Task<bool> PhoneNumberExistsAsync(string phoneNumber)
     {
         return _context.UserProfiles
             .AsNoTracking()
-            .AnyAsync(profile => profile.PhoneNumber == phoneNumber, cancellationToken);
+            .AnyAsync(profile => profile.PhoneNumber == phoneNumber);
     }
 
     public async Task<bool> CreatePendingRegistrationAsync(
         User user,
         UserProfile profile,
-        OtpCode otpCode,
-        CancellationToken cancellationToken = default)
+        OtpCode otpCode)
     {
         var executionStrategy = _context.Database.CreateExecutionStrategy();
         var created = false;
 
         await executionStrategy.ExecuteAsync(async () =>
         {
-            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+            await using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                await _context.Users.AddAsync(user, cancellationToken);
-                await _context.UserProfiles.AddAsync(profile, cancellationToken);
-                await _context.OtpCodes.AddAsync(otpCode, cancellationToken);
-                await _context.SaveChangesAsync(cancellationToken);
-                await transaction.CommitAsync(cancellationToken);
+                await _context.Users.AddAsync(user);
+                await _context.UserProfiles.AddAsync(profile);
+                await _context.OtpCodes.AddAsync(otpCode);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
                 created = true;
             }
             catch (DbUpdateException exception)
                 when (exception.InnerException is MySqlException { Number: 1062 })
             {
-                await transaction.RollbackAsync(cancellationToken);
+                await transaction.RollbackAsync();
                 _context.ChangeTracker.Clear();
                 created = false;
             }
@@ -94,36 +85,35 @@ public class IdentityRepository : IIdentityRepository
         Guid userId,
         OtpCode newOtpCode,
         DateTime nowUtc,
-        TimeSpan minimumInterval,
-        CancellationToken cancellationToken = default)
+        TimeSpan minimumInterval)
     {
         var executionStrategy = _context.Database.CreateExecutionStrategy();
 
         return await executionStrategy.ExecuteAsync(async () =>
         {
-            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+            await using var transaction = await _context.Database.BeginTransactionAsync();
 
             var lockedUsers = await _context.Users
                 .FromSqlInterpolated($"SELECT * FROM `User` WHERE `Id` = {userId} FOR UPDATE")
-                .ToListAsync(cancellationToken);
+                .ToListAsync();
             var user = lockedUsers.SingleOrDefault();
 
             if (user is null)
             {
-                await transaction.RollbackAsync(cancellationToken);
+                await transaction.RollbackAsync();
                 return new OtpIssueResult { Status = OtpIssueStatus.UserNotFound };
             }
 
             if (user.IsEmailVerified)
             {
-                await transaction.RollbackAsync(cancellationToken);
+                await transaction.RollbackAsync();
                 return new OtpIssueResult { Status = OtpIssueStatus.EmailAlreadyVerified };
             }
 
             var otpCodes = await _context.OtpCodes
                 .Where(otp => otp.UserId == userId && otp.Purpose == newOtpCode.Purpose)
                 .OrderByDescending(otp => otp.CreatedAt)
-                .ToListAsync(cancellationToken);
+                .ToListAsync();
 
             var latestOtp = otpCodes.FirstOrDefault();
             if (latestOtp is not null)
@@ -132,7 +122,7 @@ public class IdentityRepository : IIdentityRepository
                 if (elapsed < minimumInterval)
                 {
                     var retryAfter = (int)Math.Ceiling((minimumInterval - elapsed).TotalSeconds);
-                    await transaction.RollbackAsync(cancellationToken);
+                    await transaction.RollbackAsync();
                     return new OtpIssueResult
                     {
                         Status = OtpIssueStatus.RateLimited,
@@ -147,9 +137,9 @@ public class IdentityRepository : IIdentityRepository
                 otpCode.IsUsed = true;
             }
 
-            await _context.OtpCodes.AddAsync(newOtpCode, cancellationToken);
-            await _context.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
+            await _context.OtpCodes.AddAsync(newOtpCode);
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
 
             return new OtpIssueResult
             {
@@ -165,62 +155,61 @@ public class IdentityRepository : IIdentityRepository
         string purpose,
         string expectedCodeHash,
         DateTime nowUtc,
-        int maximumAttempts,
-        CancellationToken cancellationToken = default)
+        int maximumAttempts)
     {
         var executionStrategy = _context.Database.CreateExecutionStrategy();
 
         return await executionStrategy.ExecuteAsync(async () =>
         {
-            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+            await using var transaction = await _context.Database.BeginTransactionAsync();
 
             var lockedUsers = await _context.Users
                 .FromSqlInterpolated($"SELECT * FROM `User` WHERE `Id` = {userId} FOR UPDATE")
-                .ToListAsync(cancellationToken);
+                .ToListAsync();
             var user = lockedUsers.SingleOrDefault();
 
             if (user is null)
             {
-                await transaction.RollbackAsync(cancellationToken);
+                await transaction.RollbackAsync();
                 return VerificationResult(OtpVerificationStatus.UserNotFound);
             }
 
             if (!user.IsActive)
             {
-                await transaction.RollbackAsync(cancellationToken);
+                await transaction.RollbackAsync();
                 return VerificationResult(OtpVerificationStatus.AccountDisabled);
             }
 
             if (user.IsEmailVerified)
             {
-                await transaction.RollbackAsync(cancellationToken);
+                await transaction.RollbackAsync();
                 return VerificationResult(OtpVerificationStatus.AlreadyVerified);
             }
 
             var otpCode = await _context.OtpCodes
                 .Where(otp => otp.UserId == userId && otp.Purpose == purpose && !otp.IsUsed)
                 .OrderByDescending(otp => otp.CreatedAt)
-                .FirstOrDefaultAsync(cancellationToken);
+                .FirstOrDefaultAsync();
 
             if (otpCode is null)
             {
-                await transaction.RollbackAsync(cancellationToken);
+                await transaction.RollbackAsync();
                 return VerificationResult(OtpVerificationStatus.NoActiveCode);
             }
 
             if (otpCode.ExpiresAt <= nowUtc)
             {
                 otpCode.IsUsed = true;
-                await _context.SaveChangesAsync(cancellationToken);
-                await transaction.CommitAsync(cancellationToken);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
                 return VerificationResult(OtpVerificationStatus.Expired, 0);
             }
 
             if (otpCode.AttemptCount >= maximumAttempts)
             {
                 otpCode.IsUsed = true;
-                await _context.SaveChangesAsync(cancellationToken);
-                await transaction.CommitAsync(cancellationToken);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
                 return VerificationResult(OtpVerificationStatus.AttemptsExceeded, 0);
             }
 
@@ -233,8 +222,8 @@ public class IdentityRepository : IIdentityRepository
                     otpCode.IsUsed = true;
                 }
 
-                await _context.SaveChangesAsync(cancellationToken);
-                await transaction.CommitAsync(cancellationToken);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
                 return VerificationResult(
                     attemptsRemaining == 0
                         ? OtpVerificationStatus.AttemptsExceeded
@@ -247,15 +236,13 @@ public class IdentityRepository : IIdentityRepository
             user.SecurityStamp = Guid.NewGuid();
             user.UpdatedAt = nowUtc;
 
-            await _context.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
             return VerificationResult(OtpVerificationStatus.Verified, maximumAttempts - otpCode.AttemptCount);
         });
     }
 
-    public Task<List<string>> GetSystemRoleNamesAsync(
-        Guid userId,
-        CancellationToken cancellationToken = default)
+    public Task<List<string>> GetSystemRoleNamesAsync(Guid userId)
     {
         return (from userRole in _context.UserRoles.AsNoTracking()
                 join role in _context.Roles.AsNoTracking() on userRole.RoleId equals role.Id
@@ -264,60 +251,55 @@ public class IdentityRepository : IIdentityRepository
                       && userRole.ScopeId == null
                 select role.Name)
             .Distinct()
-            .ToListAsync(cancellationToken);
+            .ToListAsync();
     }
 
     public async Task<LoginSessionStatus> CreateLoginSessionAsync(
         Guid userId,
         RefreshToken refreshToken,
-        DateTime nowUtc,
-        CancellationToken cancellationToken = default)
+        DateTime nowUtc)
     {
         var executionStrategy = _context.Database.CreateExecutionStrategy();
 
         return await executionStrategy.ExecuteAsync(async () =>
         {
-            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+            await using var transaction = await _context.Database.BeginTransactionAsync();
             var lockedUsers = await _context.Users
                 .FromSqlInterpolated($"SELECT * FROM `User` WHERE `Id` = {userId} FOR UPDATE")
-                .ToListAsync(cancellationToken);
+                .ToListAsync();
             var user = lockedUsers.SingleOrDefault();
 
             if (user is null)
             {
-                await transaction.RollbackAsync(cancellationToken);
+                await transaction.RollbackAsync();
                 return LoginSessionStatus.UserNotFound;
             }
 
             if (!user.IsActive)
             {
-                await transaction.RollbackAsync(cancellationToken);
+                await transaction.RollbackAsync();
                 return LoginSessionStatus.AccountDisabled;
             }
 
             if (!user.IsEmailVerified)
             {
-                await transaction.RollbackAsync(cancellationToken);
+                await transaction.RollbackAsync();
                 return LoginSessionStatus.EmailNotVerified;
             }
 
             user.LastLoginAt = nowUtc;
-            await _context.RefreshTokens.AddAsync(refreshToken, cancellationToken);
-            await _context.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
+            await _context.RefreshTokens.AddAsync(refreshToken);
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
             return LoginSessionStatus.Created;
         });
     }
 
-    public async Task<AuthSessionContext?> GetRefreshSessionContextAsync(
-        string refreshTokenHash,
-        CancellationToken cancellationToken = default)
+    public async Task<AuthSessionContext?> GetRefreshSessionContextAsync(string refreshTokenHash)
     {
         var token = await _context.RefreshTokens
             .AsNoTracking()
-            .FirstOrDefaultAsync(
-                refreshToken => refreshToken.TokenHash == refreshTokenHash,
-                cancellationToken);
+            .FirstOrDefaultAsync(refreshToken => refreshToken.TokenHash == refreshTokenHash);
         if (token is null)
         {
             return null;
@@ -325,7 +307,7 @@ public class IdentityRepository : IIdentityRepository
 
         var user = await _context.Users
             .AsNoTracking()
-            .FirstOrDefaultAsync(candidate => candidate.Id == token.UserId, cancellationToken);
+            .FirstOrDefaultAsync(candidate => candidate.Id == token.UserId);
         if (user is null)
         {
             return null;
@@ -336,30 +318,29 @@ public class IdentityRepository : IIdentityRepository
             User = user,
             Profile = await _context.UserProfiles
                 .AsNoTracking()
-                .FirstOrDefaultAsync(profile => profile.UserId == user.Id, cancellationToken),
-            SystemRoles = await GetSystemRoleNamesAsync(user.Id, cancellationToken)
+                .FirstOrDefaultAsync(profile => profile.UserId == user.Id),
+            SystemRoles = await GetSystemRoleNamesAsync(user.Id)
         };
     }
 
     public async Task<TokenRotationStatus> RotateRefreshTokenAsync(
         string currentTokenHash,
         RefreshToken replacementToken,
-        DateTime nowUtc,
-        CancellationToken cancellationToken = default)
+        DateTime nowUtc)
     {
         var executionStrategy = _context.Database.CreateExecutionStrategy();
 
         return await executionStrategy.ExecuteAsync(async () =>
         {
-            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+            await using var transaction = await _context.Database.BeginTransactionAsync();
             var lockedTokens = await _context.RefreshTokens
                 .FromSqlInterpolated($"SELECT * FROM `RefreshToken` WHERE `TokenHash` = {currentTokenHash} FOR UPDATE")
-                .ToListAsync(cancellationToken);
+                .ToListAsync();
             var currentToken = lockedTokens.SingleOrDefault();
 
             if (currentToken is null)
             {
-                await transaction.RollbackAsync(cancellationToken);
+                await transaction.RollbackAsync();
                 return TokenRotationStatus.TokenNotFound;
             }
 
@@ -369,86 +350,84 @@ public class IdentityRepository : IIdentityRepository
                 {
                     var activeTokens = await _context.RefreshTokens
                         .Where(token => token.UserId == currentToken.UserId && !token.IsRevoked)
-                        .ToListAsync(cancellationToken);
+                        .ToListAsync();
                     foreach (var activeToken in activeTokens)
                     {
                         activeToken.IsRevoked = true;
                     }
 
-                    await _context.SaveChangesAsync(cancellationToken);
-                    await transaction.CommitAsync(cancellationToken);
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
                     return TokenRotationStatus.ReuseDetected;
                 }
 
-                await transaction.RollbackAsync(cancellationToken);
+                await transaction.RollbackAsync();
                 return TokenRotationStatus.TokenRevoked;
             }
 
             if (currentToken.ExpiresAt <= nowUtc)
             {
                 currentToken.IsRevoked = true;
-                await _context.SaveChangesAsync(cancellationToken);
-                await transaction.CommitAsync(cancellationToken);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
                 return TokenRotationStatus.TokenExpired;
             }
 
             var lockedUsers = await _context.Users
                 .FromSqlInterpolated($"SELECT * FROM `User` WHERE `Id` = {currentToken.UserId} FOR UPDATE")
-                .ToListAsync(cancellationToken);
+                .ToListAsync();
             var user = lockedUsers.SingleOrDefault();
             if (user is null || !user.IsActive)
             {
                 currentToken.IsRevoked = true;
-                await _context.SaveChangesAsync(cancellationToken);
-                await transaction.CommitAsync(cancellationToken);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
                 return TokenRotationStatus.AccountDisabled;
             }
 
             if (!user.IsEmailVerified)
             {
                 currentToken.IsRevoked = true;
-                await _context.SaveChangesAsync(cancellationToken);
-                await transaction.CommitAsync(cancellationToken);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
                 return TokenRotationStatus.EmailNotVerified;
             }
 
             replacementToken.UserId = currentToken.UserId;
-            await _context.RefreshTokens.AddAsync(replacementToken, cancellationToken);
+            await _context.RefreshTokens.AddAsync(replacementToken);
             currentToken.IsRevoked = true;
             currentToken.ReplacedByTokenId = replacementToken.Id;
 
-            await _context.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
             return TokenRotationStatus.Rotated;
         });
     }
 
-    public async Task<bool> RevokeRefreshTokenAsync(
-        string refreshTokenHash,
-        CancellationToken cancellationToken = default)
+    public async Task<bool> RevokeRefreshTokenAsync(string refreshTokenHash)
     {
         var executionStrategy = _context.Database.CreateExecutionStrategy();
 
         return await executionStrategy.ExecuteAsync(async () =>
         {
-            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+            await using var transaction = await _context.Database.BeginTransactionAsync();
             var lockedTokens = await _context.RefreshTokens
                 .FromSqlInterpolated($"SELECT * FROM `RefreshToken` WHERE `TokenHash` = {refreshTokenHash} FOR UPDATE")
-                .ToListAsync(cancellationToken);
+                .ToListAsync();
             var refreshToken = lockedTokens.SingleOrDefault();
             if (refreshToken is null)
             {
-                await transaction.RollbackAsync(cancellationToken);
+                await transaction.RollbackAsync();
                 return false;
             }
 
             if (!refreshToken.IsRevoked)
             {
                 refreshToken.IsRevoked = true;
-                await _context.SaveChangesAsync(cancellationToken);
+                await _context.SaveChangesAsync();
             }
 
-            await transaction.CommitAsync(cancellationToken);
+            await transaction.CommitAsync();
             return true;
         });
     }

@@ -7,17 +7,13 @@ public interface IIdentityRepository
 {
     Task<User?> GetUserByNormalizedEmailAsync(
         string normalizedEmail,
-        bool tracking = false,
-        CancellationToken cancellationToken = default);
+        bool tracking = false);
 
     Task<UserProfile?> GetUserProfileAsync(
         Guid userId,
-        bool tracking = false,
-        CancellationToken cancellationToken = default);
+        bool tracking = false);
 
-    Task<bool> PhoneNumberExistsAsync(
-        string phoneNumber,
-        CancellationToken cancellationToken = default);
+    Task<bool> PhoneNumberExistsAsync(string phoneNumber);
 
     /// <summary>
     /// Lưu User, UserProfile và OtpCode trong cùng một transaction cơ sở dữ liệu.
@@ -26,8 +22,7 @@ public interface IIdentityRepository
     Task<bool> CreatePendingRegistrationAsync(
         User user,
         UserProfile profile,
-        OtpCode otpCode,
-        CancellationToken cancellationToken = default);
+        OtpCode otpCode);
 
     /// <summary>
     /// Khóa tài khoản, kiểm tra cooldown, vô hiệu OTP cũ và lưu OTP mới trong một transaction.
@@ -36,8 +31,7 @@ public interface IIdentityRepository
         Guid userId,
         OtpCode newOtpCode,
         DateTime nowUtc,
-        TimeSpan minimumInterval,
-        CancellationToken cancellationToken = default);
+        TimeSpan minimumInterval);
 
     /// <summary>
     /// Khóa tài khoản và xác minh OTP; trạng thái OTP và User được cập nhật nguyên tử.
@@ -47,30 +41,21 @@ public interface IIdentityRepository
         string purpose,
         string expectedCodeHash,
         DateTime nowUtc,
-        int maximumAttempts,
-        CancellationToken cancellationToken = default);
+        int maximumAttempts);
 
-    Task<List<string>> GetSystemRoleNamesAsync(
-        Guid userId,
-        CancellationToken cancellationToken = default);
+    Task<List<string>> GetSystemRoleNamesAsync(Guid userId);
 
     Task<LoginSessionStatus> CreateLoginSessionAsync(
         Guid userId,
         RefreshToken refreshToken,
-        DateTime nowUtc,
-        CancellationToken cancellationToken = default);
+        DateTime nowUtc);
 
-    Task<AuthSessionContext?> GetRefreshSessionContextAsync(
-        string refreshTokenHash,
-        CancellationToken cancellationToken = default);
+    Task<AuthSessionContext?> GetRefreshSessionContextAsync(string refreshTokenHash);
 
     Task<TokenRotationStatus> RotateRefreshTokenAsync(
         string currentTokenHash,
         RefreshToken replacementToken,
-        DateTime nowUtc,
-        CancellationToken cancellationToken = default);
+        DateTime nowUtc);
 
-    Task<bool> RevokeRefreshTokenAsync(
-        string refreshTokenHash,
-        CancellationToken cancellationToken = default);
+    Task<bool> RevokeRefreshTokenAsync(string refreshTokenHash);
 }

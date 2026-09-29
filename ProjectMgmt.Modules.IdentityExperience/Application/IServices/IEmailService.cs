@@ -6,6 +6,5 @@ public interface IEmailService
         string recipientEmail,
         string recipientName,
         string otpCode,
-        DateTime expiresAtUtc,
-        CancellationToken cancellationToken = default);
+        DateTime expiresAtUtc);
 }
