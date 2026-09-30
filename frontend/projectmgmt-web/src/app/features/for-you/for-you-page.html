@@ -12,17 +12,36 @@
     </a>
   </header>
 
+  @if (forYouError()) {
+    <div class="resume-strip" role="alert">
+      <span class="resume-icon material-symbols-outlined" aria-hidden="true">error</span>
+      <div><small>DỮ LIỆU BACKEND</small><strong>{{ forYouError() }}</strong></div>
+    </div>
+  }
+
+  @if (attentionFocus().length > 0) {
+    <section class="resume-strip" aria-label="Những việc cần chú ý">
+      <span class="resume-icon material-symbols-outlined" aria-hidden="true">priority_high</span>
+      <div>
+        <small>TỔNG HỢP TỪ CÔNG VIỆC THẬT</small>
+        @for (item of attentionFocus(); track item) {
+          <strong>{{ item }}</strong>
+        }
+      </div>
+    </section>
+  }
+
   <section #focusStage class="focus-stage" aria-labelledby="focus-heading">
     <div class="focus-main">
       <div class="focus-glow" aria-hidden="true"></div>
       <div class="focus-content">
         <span class="focus-kicker"><span class="focus-pulse" aria-hidden="true"></span> GỢI Ý CHO BẠN LÚC NÀY</span>
-        <div #focusSymbol class="focus-symbol" aria-hidden="true"><span class="material-symbols-outlined">{{ focus.primary().icon }}</span></div>
-        <span class="focus-eyebrow">{{ focus.primary().eyebrow }}</span>
-        <h2 id="focus-heading">{{ focus.primary().title }}</h2>
-        <p>{{ focus.primary().reason }}</p>
-        <button #focusCta type="button" class="focus-cta" (click)="activate(focus.primary())">
-          {{ focus.primary().kind === 'task' ? 'Mở công việc' : 'Đi tới ngay' }}
+        <div #focusSymbol class="focus-symbol" aria-hidden="true"><span class="material-symbols-outlined">{{ myWork()[0] ? 'task_alt' : focus.primary().icon }}</span></div>
+        <span class="focus-eyebrow">{{ myWork()[0] ? 'CÔNG VIỆC ĐƯỢC GIAO' : focus.primary().eyebrow }}</span>
+        <h2 id="focus-heading">{{ myWork()[0]?.title || focus.primary().title }}</h2>
+        <p>{{ attentionFocus()[0] || focus.primary().reason }}</p>
+        <button #focusCta type="button" class="focus-cta" (click)="myWork()[0] ? openDrawer(myWork()[0]) : activate(focus.primary())">
+          {{ myWork()[0] || focus.primary().kind === 'task' ? 'Mở công việc' : 'Đi tới ngay' }}
           <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
         </button>
       </div>

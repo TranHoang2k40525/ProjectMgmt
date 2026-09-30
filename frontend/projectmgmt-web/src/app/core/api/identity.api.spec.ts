@@ -57,4 +57,13 @@ describe('IdentityApi', () => {
     request.flush({ success: true, updatedCount: 1 });
     http.verify();
   });
+
+  it('đọc trang Dành cho bạn từ users/for-you', () => {
+    api.getForYou().subscribe();
+
+    const request = http.expectOne(`${baseUrl}/users/for-you`);
+    expect(request.request.method).toBe('GET');
+    request.flush({ success: true, assignedIssues: [], recentIssues: [], attentionFocus: [] });
+    http.verify();
+  });
 });
