@@ -7,6 +7,8 @@ import { IdentityApi } from '../api/identity.api';
 import { ProfileDto, SkillDto } from '../api/identity-api.models';
 import { NotificationApi } from '../api/notification.api';
 import { NotificationDto } from '../api/notification-api.models';
+import { RbacApi } from '../api/rbac.api';
+import { RoleDto } from '../api/rbac-api.models';
 import { RealtimeService } from '../realtime/realtime.service';
 import { AuthSession, TOKEN_STORE } from '../auth/token-store';
 import {
@@ -35,6 +37,7 @@ export class IdentityService {
   private readonly accountApi = inject(AccountApi);
   private readonly identityApi = inject(IdentityApi);
   private readonly notificationApi = inject(NotificationApi);
+  private readonly rbacApi = inject(RbacApi);
   private readonly realtime = inject(RealtimeService, { optional: true });
   private readonly tokenStore = inject(TOKEN_STORE);
   private readonly skillCatalog = new Map<string, SkillModel>();
@@ -364,12 +367,38 @@ export class IdentityService {
     return of([...IdentityMockDb.users]).pipe(delay(300));
   }
 
-  getRoles(): Observable<RoleModel[]> {
-    return of([...IdentityMockDb.roles]).pipe(delay(200));
+  getRoles(scope?: string): Observable<RoleModel[]> {
+    return this.rbacApi.getRoles(scope).pipe(
+      map(res => {
+        const roles = (res.items ?? []).map(r => ({
+          id: r.roleId ?? '',
+          name: r.name ?? '',
+          code: r.name ? r.name.toUpperCase().replace(/\s+/g, '_') : '',
+          description: r.description ?? '',
+          isSystem: r.isSystem ?? false,
+          permissionCodes: []
+        }));
+        if (roles.length > 0) return roles;
+        return [...IdentityMockDb.roles];
+      })
+    );
   }
 
   getPermissions(): Observable<PermissionModel[]> {
-    return of([...IdentityMockDb.permissions]).pipe(delay(200));
+    return this.rbacApi.getPermissions().pipe(
+      map(res => {
+        const perms = (res.items ?? []).map(p => ({
+          id: p.permissionId ?? '',
+          code: p.code ?? '',
+          name: p.code ?? '',
+          category: (p.grouping ?? 'System') as PermissionModel['category'],
+          module: p.grouping ?? 'System',
+          description: p.description ?? ''
+        }));
+        if (perms.length > 0) return perms;
+        return [...IdentityMockDb.permissions];
+      })
+    );
   }
 
   updateUserRole(userId: string, roleId: string): Observable<UserProfileModel> {
@@ -394,25 +423,59 @@ export class IdentityService {
   }
 
   updateRolePermissions(roleId: string, permissionCodes: string[]): Observable<RoleModel> {
-    const role = IdentityMockDb.roles.find(r => r.id === roleId);
-    if (!role) {
-      return throwError(() => ({ error: { title: 'Role not found' } }));
-    }
-    role.permissionCodes = [...permissionCodes];
-    return of(role).pipe(delay(400));
+    return this.rbacApi.updateRolePermissions(roleId, permissionCodes).pipe(
+      map(() => {
+        const role = IdentityMockDb.roles.find(r => r.id === roleId);
+        if (role) {
+          role.permissionCodes = [...permissionCodes];
+        }
+        return role ?? {
+          id: roleId,
+          name: 'Role',
+          code: 'ROLE',
+          description: '',
+          isSystem: false,
+          permissionCodes
+        };
+      })
+    );
   }
 
   createRole(name: string, description: string, permissionCodes: string[]): Observable<RoleModel> {
-    const newRole: RoleModel = {
-      id: `role-${Date.now()}`,
+    return this.rbacApi.createRole({
       name,
-      code: name.toUpperCase().replace(/\s+/g, '_'),
-      description,
-      isSystem: false,
-      permissionCodes
-    };
-    IdentityMockDb.roles.push(newRole);
-    return of(newRole).pipe(delay(400));
+      scope: 'Project',
+      description
+    }).pipe(
+      map(res => {
+        const newRole: RoleModel = {
+          id: res.roleId ?? `role-${Date.now()}`,
+          name: res.name ?? name,
+          code: (res.name ?? name).toUpperCase().replace(/\s+/g, '_'),
+          description: res.description ?? description,
+          isSystem: false,
+          permissionCodes
+        };
+        IdentityMockDb.roles.push(newRole);
+        return newRole;
+      })
+    );
+  }
+
+  getProjectMembers(projectId: string): Observable<RoleDto[]> {
+    return this.rbacApi.getProjectMembers(projectId).pipe(map(res => res.members ?? []));
+  }
+
+  addProjectMember(projectId: string, userId: string, roleId: string): Observable<RoleDto> {
+    return this.rbacApi.addProjectMember(projectId, userId, roleId);
+  }
+
+  changeProjectMemberRole(projectId: string, userId: string, roleId: string): Observable<RoleDto> {
+    return this.rbacApi.changeProjectMemberRole(projectId, userId, roleId);
+  }
+
+  removeProjectMember(projectId: string, userId: string): Observable<RoleDto> {
+    return this.rbacApi.removeProjectMember(projectId, userId);
   }
 
   // ==========================================

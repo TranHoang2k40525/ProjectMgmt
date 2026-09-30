@@ -5,6 +5,7 @@ import { AccountApi } from '../api/account.api';
 import { LoginResult } from '../api/account-api.models';
 import { IdentityApi } from '../api/identity.api';
 import { NotificationApi } from '../api/notification.api';
+import { RbacApi } from '../api/rbac.api';
 import { AuthSession, TOKEN_STORE, TokenStore } from '../auth/token-store';
 import { IdentityService } from './identity.service';
 
@@ -93,17 +94,44 @@ describe('IdentityService', () => {
     markReadAll: vi.fn(() => of({ success: true }))
   };
 
+  const rbacApi = {
+    getRoles: vi.fn(() => of({
+      success: true,
+      items: [{ roleId: 'role-dev', name: 'Developer', isSystem: true, description: 'Dev' }]
+    })),
+    getPermissions: vi.fn(() => of({
+      success: true,
+      items: [{ permissionId: 'p-1', code: 'member.read', grouping: 'Identity' }]
+    })),
+    createRole: vi.fn((req: { name?: string; description?: string }) => of({
+      success: true,
+      roleId: 'role-new',
+      name: req.name,
+      description: req.description
+    })),
+    updateRolePermissions: vi.fn(() => of({ success: true })),
+    getProjectMembers: vi.fn(() => of({
+      success: true,
+      members: [{ userId: 'u-1', fullName: 'Trần Văn Hoàng', roleName: 'ProjectManager' }]
+    })),
+    addProjectMember: vi.fn(() => of({ success: true })),
+    changeProjectMemberRole: vi.fn(() => of({ success: true })),
+    removeProjectMember: vi.fn(() => of({ success: true }))
+  };
+
   beforeEach(() => {
     tokenStore = new MemoryTokenStore();
     Object.values(accountApi).forEach(mock => mock.mockClear());
     Object.values(identityApi).forEach(mock => mock.mockClear());
     Object.values(notificationApi).forEach(mock => mock.mockClear());
+    Object.values(rbacApi).forEach(mock => mock.mockClear());
     TestBed.configureTestingModule({
       providers: [
         IdentityService,
         { provide: AccountApi, useValue: accountApi },
         { provide: IdentityApi, useValue: identityApi },
         { provide: NotificationApi, useValue: notificationApi },
+        { provide: RbacApi, useValue: rbacApi },
         { provide: TOKEN_STORE, useValue: tokenStore }
       ]
     });
@@ -199,5 +227,32 @@ describe('IdentityService', () => {
 
     await firstValueFrom(service.markAllNotificationsAsRead());
     expect(notificationApi.markReadAll).toHaveBeenCalled();
+  });
+
+  it('lấy danh sách roles và permissions qua RbacApi', async () => {
+    const roles = await firstValueFrom(service.getRoles('Project'));
+    expect(rbacApi.getRoles).toHaveBeenCalledWith('Project');
+    expect(roles.length).toBe(1);
+    expect(roles[0].name).toBe('Developer');
+
+    const perms = await firstValueFrom(service.getPermissions());
+    expect(rbacApi.getPermissions).toHaveBeenCalled();
+    expect(perms.length).toBe(1);
+    expect(perms[0].code).toBe('member.read');
+  });
+
+  it('quản lý thành viên dự án qua RbacApi', async () => {
+    const members = await firstValueFrom(service.getProjectMembers('proj-1'));
+    expect(rbacApi.getProjectMembers).toHaveBeenCalledWith('proj-1');
+    expect(members.length).toBe(1);
+
+    await firstValueFrom(service.addProjectMember('proj-1', 'user-2', 'role-dev'));
+    expect(rbacApi.addProjectMember).toHaveBeenCalledWith('proj-1', 'user-2', 'role-dev');
+
+    await firstValueFrom(service.changeProjectMemberRole('proj-1', 'user-2', 'role-lead'));
+    expect(rbacApi.changeProjectMemberRole).toHaveBeenCalledWith('proj-1', 'user-2', 'role-lead');
+
+    await firstValueFrom(service.removeProjectMember('proj-1', 'user-2'));
+    expect(rbacApi.removeProjectMember).toHaveBeenCalledWith('proj-1', 'user-2');
   });
 });
