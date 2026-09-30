@@ -5,6 +5,9 @@ import { AccountApi } from '../api/account.api';
 import { LoginResult } from '../api/account-api.models';
 import { IdentityApi } from '../api/identity.api';
 import { ProfileDto, SkillDto } from '../api/identity-api.models';
+import { NotificationApi } from '../api/notification.api';
+import { NotificationDto } from '../api/notification-api.models';
+import { RealtimeService } from '../realtime/realtime.service';
 import { AuthSession, TOKEN_STORE } from '../auth/token-store';
 import {
   ActiveSessionModel,
@@ -31,14 +34,22 @@ export interface AuthState {
 export class IdentityService {
   private readonly accountApi = inject(AccountApi);
   private readonly identityApi = inject(IdentityApi);
+  private readonly notificationApi = inject(NotificationApi);
+  private readonly realtime = inject(RealtimeService, { optional: true });
   private readonly tokenStore = inject(TOKEN_STORE);
   private readonly skillCatalog = new Map<string, SkillModel>();
   private readonly userSkills = new Map<string, UserSkillModel[]>();
 
   readonly authState = signal<AuthState>(this.restoreAuthState());
 
-  readonly notifications = signal<NotificationModel[]>(IdentityMockDb.notifications);
-  readonly unreadCount = signal<number>(IdentityMockDb.notifications.filter(n => !n.isRead).length);
+  readonly notifications = signal<NotificationModel[]>([]);
+  readonly unreadCount = signal<number>(0);
+
+  constructor() {
+    if (this.authState().isAuthenticated) {
+      this.initRealtimeNotifications();
+    }
+  }
 
   // ==========================================
   // AUTHENTICATION & OTP
@@ -51,6 +62,7 @@ export class IdentityService {
         const user = this.toUserProfile(session);
         this.tokenStore.setSession(session);
         this.authState.set({ currentUser: user, isAuthenticated: true, token: session.accessToken });
+        this.initRealtimeNotifications();
         return { user, token: session.accessToken };
       })
     );
@@ -112,6 +124,7 @@ export class IdentityService {
     const refreshToken = this.tokenStore.getRefreshToken();
     this.tokenStore.clear();
     this.authState.set({ currentUser: null, isAuthenticated: false, token: null });
+    this.realtime?.disconnect().catch(() => undefined);
     if (refreshToken) {
       this.accountApi.logout(refreshToken).subscribe({ error: () => undefined });
     }
@@ -407,24 +420,83 @@ export class IdentityService {
   // ==========================================
 
   getNotifications(): Observable<NotificationModel[]> {
-    return of([...IdentityMockDb.notifications]).pipe(delay(200));
+    return this.notificationApi.getInbox(undefined, 1, 50).pipe(
+      map(res => {
+        const items = (res.items ?? []).map(dto => this.toNotificationModel(dto));
+        this.notifications.set(items);
+        this.unreadCount.set(res.unreadCount ?? items.filter(n => !n.isRead).length);
+        return items;
+      })
+    );
   }
 
   markNotificationAsRead(id: string): Observable<{ success: boolean }> {
-    const notif = IdentityMockDb.notifications.find(n => n.id === id);
-    if (notif) {
-      notif.isRead = true;
-      this.notifications.set([...IdentityMockDb.notifications]);
-      this.unreadCount.set(IdentityMockDb.notifications.filter(n => !n.isRead).length);
-    }
-    return of({ success: true }).pipe(delay(150));
+    return this.notificationApi.markRead(id).pipe(
+      map(res => {
+        this.notifications.update(list => list.map(item => item.id === id ? { ...item, isRead: true } : item));
+        this.unreadCount.update(count => Math.max(0, count - 1));
+        return { success: res.success };
+      })
+    );
   }
 
   markAllNotificationsAsRead(): Observable<{ success: boolean }> {
-    IdentityMockDb.notifications.forEach(n => n.isRead = true);
-    this.notifications.set([...IdentityMockDb.notifications]);
-    this.unreadCount.set(0);
-    return of({ success: true }).pipe(delay(200));
+    return this.notificationApi.markReadAll().pipe(
+      map(res => {
+        this.notifications.update(list => list.map(item => ({ ...item, isRead: true })));
+        this.unreadCount.set(0);
+        return { success: res.success };
+      })
+    );
+  }
+
+  initRealtimeNotifications(): void {
+    if (typeof window === 'undefined' || (globalThis as unknown as { __vitest__?: unknown }).__vitest__) {
+      return;
+    }
+    const token = this.tokenStore.getAccessToken();
+    if (!token || !this.realtime) return;
+    this.realtime.connect('notifications', token).then(() => {
+      this.realtime?.on<NotificationDto>('notificationReceived', dto => {
+        this.pushRealtimeNotification(dto);
+      });
+    }).catch(() => undefined);
+  }
+
+  pushRealtimeNotification(dto: NotificationDto): void {
+    const model = this.toNotificationModel(dto);
+    this.notifications.update(list => [model, ...list.filter(n => n.id !== model.id)]);
+    if (!model.isRead) {
+      this.unreadCount.update(c => c + 1);
+    }
+  }
+
+  private toNotificationModel(dto: NotificationDto): NotificationModel {
+    const rawType = (dto.type ?? 'SYSTEM').toUpperCase();
+    let type: NotificationModel['type'] = 'SYSTEM';
+    let category: NotificationModel['category'] = 'System';
+
+    if (rawType.includes('SECURITY') || rawType.includes('PASSWORD') || rawType.includes('AUTH')) {
+      type = 'SECURITY';
+      category = 'Security';
+    } else if (rawType.includes('AI') || rawType.includes('SUGGESTION')) {
+      type = 'AI_SUGGESTION';
+      category = 'System';
+    } else if (rawType.includes('ASSIGN') || rawType.includes('TASK') || rawType.includes('PROJECT') || rawType.includes('MEMBER')) {
+      type = 'TASK';
+      category = 'Assignment';
+    }
+
+    return {
+      id: dto.notificationId ?? '',
+      userId: dto.userId ?? '',
+      title: dto.title ?? 'Thông báo',
+      message: dto.content ?? '',
+      type,
+      category,
+      isRead: dto.isRead ?? false,
+      createdAt: dto.createdAt ?? new Date().toISOString()
+    };
   }
 
   // ==========================================

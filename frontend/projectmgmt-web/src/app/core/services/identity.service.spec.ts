@@ -4,6 +4,7 @@ import { firstValueFrom, of } from 'rxjs';
 import { AccountApi } from '../api/account.api';
 import { LoginResult } from '../api/account-api.models';
 import { IdentityApi } from '../api/identity.api';
+import { NotificationApi } from '../api/notification.api';
 import { AuthSession, TOKEN_STORE, TokenStore } from '../auth/token-store';
 import { IdentityService } from './identity.service';
 
@@ -72,15 +73,37 @@ describe('IdentityService', () => {
     updateMySkills: vi.fn(() => of({ success: true, updatedCount: 1 }))
   };
 
+  const notificationApi = {
+    getInbox: vi.fn(() => of({
+      success: true,
+      unreadCount: 1,
+      totalCount: 1,
+      items: [{
+        notificationId: 'notif-1',
+        userId: '8ea9699e-2cf2-45b2-956e-90e2cdfdb221',
+        title: 'Chào mừng bạn',
+        content: 'Tài khoản đã sẵn sàng',
+        type: 'SYSTEM',
+        isRead: false,
+        createdAt: '2026-09-30T00:00:00Z'
+      }]
+    })),
+    getUnreadCount: vi.fn(() => of({ success: true, unreadCount: 1 })),
+    markRead: vi.fn(() => of({ success: true })),
+    markReadAll: vi.fn(() => of({ success: true }))
+  };
+
   beforeEach(() => {
     tokenStore = new MemoryTokenStore();
     Object.values(accountApi).forEach(mock => mock.mockClear());
     Object.values(identityApi).forEach(mock => mock.mockClear());
+    Object.values(notificationApi).forEach(mock => mock.mockClear());
     TestBed.configureTestingModule({
       providers: [
         IdentityService,
         { provide: AccountApi, useValue: accountApi },
         { provide: IdentityApi, useValue: identityApi },
+        { provide: NotificationApi, useValue: notificationApi },
         { provide: TOKEN_STORE, useValue: tokenStore }
       ]
     });
@@ -159,5 +182,22 @@ describe('IdentityService', () => {
     expect(identityApi.updateMySkills).toHaveBeenCalledWith([
       expect.objectContaining({ skillId: 'sk-1', proficiencyLevel: 5 })
     ]);
+  });
+
+  it('tải danh sách thông báo và cập nhật unreadCount', async () => {
+    const items = await firstValueFrom(service.getNotifications());
+    expect(notificationApi.getInbox).toHaveBeenCalledWith(undefined, 1, 50);
+    expect(items.length).toBe(1);
+    expect(service.unreadCount()).toBe(1);
+  });
+
+  it('đánh dấu đọc một thông báo và tất cả thông báo qua API', async () => {
+    await firstValueFrom(service.getNotifications());
+    await firstValueFrom(service.markNotificationAsRead('notif-1'));
+    expect(notificationApi.markRead).toHaveBeenCalledWith('notif-1');
+    expect(service.unreadCount()).toBe(0);
+
+    await firstValueFrom(service.markAllNotificationsAsRead());
+    expect(notificationApi.markReadAll).toHaveBeenCalled();
   });
 });
