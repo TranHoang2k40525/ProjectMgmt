@@ -1,6 +1,7 @@
 import { Component, EventEmitter, Input, Output, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { AiBreakdownApi } from '../../../core/api/ai-breakdown.api';
 import { ProjectManagementService, WorkItem } from '../../../core/services/project-management.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { ConfirmDialogService } from '../../../core/services/confirm-dialog.service';
@@ -425,6 +426,7 @@ export class TaskDetailDrawerComponent {
   private readonly projectService = inject(ProjectManagementService);
   private readonly toastService = inject(ToastService);
   private readonly confirmDialog = inject(ConfirmDialogService);
+  private readonly aiApi = inject(AiBreakdownApi, { optional: true });
 
   readonly drawerWidth = signal<number>(640);
   private isResizing = false;
@@ -437,6 +439,7 @@ export class TaskDetailDrawerComponent {
   // AI 1 & AI 2 State Signals
   readonly showAiBreakdownPanel = signal(false);
   readonly showAiAssignmentPanel = signal(false);
+  readonly currentGenerationId = signal<string | null>(null);
 
   readonly aiSubtaskSuggestions = signal([
     { title: 'Xây dựng Controller & DTO Validation Endpoint', points: 2, selected: true },
@@ -452,7 +455,27 @@ export class TaskDetailDrawerComponent {
 
   toggleAiBreakdownPanel(): void {
     this.showAiAssignmentPanel.set(false);
-    this.showAiBreakdownPanel.update(v => !v);
+    const opening = !this.showAiBreakdownPanel();
+    this.showAiBreakdownPanel.set(opening);
+    if (opening && this.task?.id && this.aiApi) {
+      this.aiApi.generate(this.task.id, this.task.description).subscribe({
+        next: res => {
+          if (res.generationId) {
+            this.currentGenerationId.set(res.generationId);
+          }
+          if (res.suggestedSubTasks && res.suggestedSubTasks.length > 0) {
+            this.aiSubtaskSuggestions.set(
+              res.suggestedSubTasks.map(t => ({
+                title: t.title ?? 'Sub-task',
+                points: Number(t.estimatePoints ?? 2),
+                selected: true
+              }))
+            );
+          }
+        },
+        error: () => undefined
+      });
+    }
   }
 
   toggleAiAssignmentPanel(): void {
@@ -463,6 +486,15 @@ export class TaskDetailDrawerComponent {
   applyAiBreakdown(): void {
     if (!this.task) return;
     const selectedSubs = this.aiSubtaskSuggestions().filter(s => s.selected);
+    const genId = this.currentGenerationId();
+    if (genId && this.aiApi) {
+      this.aiApi.apply(
+        genId,
+        selectedSubs.map(s => ({ title: s.title, estimatePoints: s.points }))
+      ).subscribe({
+        error: () => undefined
+      });
+    }
     selectedSubs.forEach(s => {
       this.projectService.createSubTask(this.task!.id, s.title);
     });
