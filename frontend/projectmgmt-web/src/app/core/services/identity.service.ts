@@ -514,7 +514,17 @@ export class IdentityService {
   }
 
   initRealtimeNotifications(): void {
-    if (typeof window === 'undefined' || (globalThis as unknown as { __vitest__?: unknown }).__vitest__) {
+    const glob = globalThis as unknown as {
+      __vitest__?: unknown;
+      vi?: unknown;
+      process?: { env?: Record<string, string | undefined> };
+    };
+    if (
+      typeof window === 'undefined'
+      || glob.__vitest__
+      || typeof glob.vi !== 'undefined'
+      || Boolean(glob.process?.env?.['VITEST'])
+    ) {
       return;
     }
     const token = this.tokenStore.getAccessToken();
