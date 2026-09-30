@@ -5,6 +5,7 @@ import { FormBuilder } from '@angular/forms';
 import { EnvironmentInjector, runInInjectionContext } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { AccountApi } from '../../core/api/account.api';
+import { IdentityApi } from '../../core/api/identity.api';
 import { TOKEN_STORE } from '../../core/auth/token-store';
 
 describe('RbacAdminPageComponent (Unit Tests)', () => {
@@ -16,6 +17,7 @@ describe('RbacAdminPageComponent (Unit Tests)', () => {
         IdentityService,
         FormBuilder,
         { provide: AccountApi, useValue: {} },
+        { provide: IdentityApi, useValue: {} },
         {
           provide: TOKEN_STORE,
           useValue: {

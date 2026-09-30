@@ -5,7 +5,10 @@ import { FormBuilder } from '@angular/forms';
 import { EnvironmentInjector, runInInjectionContext } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { AccountApi } from '../../core/api/account.api';
+import { IdentityApi } from '../../core/api/identity.api';
 import { TOKEN_STORE } from '../../core/auth/token-store';
+import { of } from 'rxjs';
+import { Router } from '@angular/router';
 
 describe('ProfilePageComponent (Unit Tests)', () => {
   let component: ProfilePageComponent;
@@ -16,6 +19,22 @@ describe('ProfilePageComponent (Unit Tests)', () => {
         IdentityService,
         FormBuilder,
         { provide: AccountApi, useValue: {} },
+        {
+          provide: IdentityApi,
+          useValue: {
+            getMyProfile: () => of({
+              success: true,
+              userId: 'user-1',
+              email: 'admin@scrumai.internal',
+              fullName: 'System Administrator',
+              jobTitle: 'System Administrator',
+              timezone: 'Asia/Ho_Chi_Minh'
+            }),
+            getSkillCatalog: () => of({ success: true, items: [] }),
+            getUserSkills: () => of({ success: true, skills: [] })
+          }
+        },
+        { provide: Router, useValue: { navigate: () => Promise.resolve(true) } },
         {
           provide: TOKEN_STORE,
           useValue: {

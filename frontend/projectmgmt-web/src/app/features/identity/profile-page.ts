@@ -1,6 +1,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { Router } from '@angular/router';
 import { IdentityService } from '../../core/services/identity.service';
 import { UserProfileModel, SkillModel, UserSkillModel, ActiveSessionModel } from '../../core/mocks/identity-mock-db';
 
@@ -14,8 +15,10 @@ export type ProfileTab = 'GENERAL' | 'SECURITY' | 'SKILLS' | 'SESSIONS';
   styleUrls: ['./profile-page.scss']
 })
 export class ProfilePageComponent implements OnInit {
+  private static readonly strongPasswordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,128}$/;
   private identityService = inject(IdentityService);
   private fb = inject(FormBuilder);
+  private router = inject(Router);
 
   readonly activeTab = signal<ProfileTab>('GENERAL');
   readonly loading = signal<boolean>(false);
@@ -36,25 +39,36 @@ export class ProfilePageComponent implements OnInit {
   selectedSkillLevel: number = 80;
 
   ngOnInit(): void {
-    const curr = this.identityService.authState().currentUser;
-    if (curr) {
-      this.user.set(curr);
-      this.initForms(curr);
-      this.loadData(curr.id);
-    }
+    this.loading.set(true);
+    this.identityService.getMyProfile().subscribe({
+      next: profile => {
+        this.loading.set(false);
+        this.user.set(profile);
+        this.initForms(profile);
+        this.loadData(profile.id);
+      },
+      error: error => {
+        this.loading.set(false);
+        this.errorMsg.set(this.readError(error, 'Không thể tải hồ sơ cá nhân.'));
+      }
+    });
   }
 
   private initForms(u: UserProfileModel): void {
     this.profileForm = this.fb.group({
       displayName: [u.displayName, [Validators.required, Validators.minLength(2)]],
-      jobTitle: [u.jobTitle, [Validators.required]],
+      jobTitle: [u.jobTitle],
       email: [{ value: u.email, disabled: true }],
-      avatarUrl: [u.avatarUrl || '']
+      phoneNumber: [u.phoneNumber ?? ''],
+      timezone: [u.timezone ?? 'Asia/Ho_Chi_Minh', [Validators.required]],
+      seniorityLevel: [u.seniorityLevel ?? ''],
+      yearsOfExperience: [u.yearsOfExperience ?? null, [Validators.min(0), Validators.max(80)]],
+      bio: [u.bio ?? '', [Validators.maxLength(5000)]]
     });
 
     this.passwordForm = this.fb.group({
       currentPassword: ['', [Validators.required]],
-      newPassword: ['', [Validators.required, Validators.minLength(6)]],
+      newPassword: ['', [Validators.required, Validators.pattern(ProfilePageComponent.strongPasswordPattern)]],
       confirmPassword: ['', [Validators.required]]
     });
   }
@@ -85,7 +99,7 @@ export class ProfilePageComponent implements OnInit {
       },
       error: (err) => {
         this.loading.set(false);
-        this.errorMsg.set(err?.error?.title || 'Cập nhật thất bại.');
+        this.errorMsg.set(this.readError(err, 'Cập nhật thất bại.'));
       }
     });
   }
@@ -106,11 +120,39 @@ export class ProfilePageComponent implements OnInit {
       next: () => {
         this.loading.set(false);
         this.passwordForm.reset();
-        this.successMsg.set('Đổi mật khẩu thành công! Vui lòng bảo mật mật khẩu mới của bạn.');
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem(
+            'projectmgmt.auth.notice',
+            'Đổi mật khẩu thành công. Tất cả phiên cũ đã bị thu hồi, vui lòng đăng nhập lại.'
+          );
+        }
+        void this.router.navigate(['/auth']);
       },
       error: (err) => {
         this.loading.set(false);
-        this.errorMsg.set(err?.error?.title || 'Đổi mật khẩu không thành công.');
+        this.errorMsg.set(this.readError(err, 'Đổi mật khẩu không thành công.'));
+      }
+    });
+  }
+
+  onAvatarSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    this.loading.set(true);
+    this.errorMsg.set(null);
+    this.identityService.uploadAvatar(file).subscribe({
+      next: avatarUrl => {
+        this.loading.set(false);
+        this.user.update(user => user ? { ...user, avatarUrl } : user);
+        this.successMsg.set('Cập nhật ảnh đại diện thành công.');
+        input.value = '';
+      },
+      error: error => {
+        this.loading.set(false);
+        this.errorMsg.set(this.readError(error, 'Không thể cập nhật ảnh đại diện.'));
+        input.value = '';
       }
     });
   }
@@ -149,5 +191,18 @@ export class ProfilePageComponent implements OnInit {
     if (level < 70) return { label: 'Khá', colorClass: 'badge-blue' };
     if (level < 90) return { label: 'Thành thạo', colorClass: 'badge-indigo' };
     return { label: 'Chuyên gia', colorClass: 'badge-purple' };
+  }
+
+  private readError(error: unknown, fallback: string): string {
+    if (typeof error !== 'object' || error === null) return fallback;
+    const value = error as { title?: unknown; detail?: unknown; message?: unknown; error?: unknown };
+    if (typeof value.title === 'string') return value.title;
+    if (typeof value.detail === 'string') return value.detail;
+    if (typeof value.error === 'object' && value.error !== null) {
+      const nested = value.error as { message?: unknown; title?: unknown };
+      if (typeof nested.message === 'string') return nested.message;
+      if (typeof nested.title === 'string') return nested.title;
+    }
+    return typeof value.message === 'string' ? value.message : fallback;
   }
 }

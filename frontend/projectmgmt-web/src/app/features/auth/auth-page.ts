@@ -58,6 +58,12 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
         this.panelOpen.set(false);
         this.sceneVisible.set(true);
       }
+
+      const notice = sessionStorage.getItem('projectmgmt.auth.notice');
+      if (notice) {
+        this.successMessage.set(notice);
+        sessionStorage.removeItem('projectmgmt.auth.notice');
+      }
     }
 
     this.loginForm = this.fb.group({

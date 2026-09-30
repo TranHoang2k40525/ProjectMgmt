@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { firstValueFrom, of } from 'rxjs';
 import { AccountApi } from '../api/account.api';
 import { LoginResult } from '../api/account-api.models';
+import { IdentityApi } from '../api/identity.api';
 import { AuthSession, TOKEN_STORE, TokenStore } from '../auth/token-store';
-import { IdentityMockDb } from '../mocks/identity-mock-db';
 import { IdentityService } from './identity.service';
 
 class MemoryTokenStore implements TokenStore {
@@ -45,13 +45,42 @@ describe('IdentityService', () => {
     logout: vi.fn(() => of({ success: true }))
   };
 
+  const identityApi = {
+    getMyProfile: vi.fn(() => of({
+      success: true,
+      userId: '8ea9699e-2cf2-45b2-956e-90e2cdfdb221',
+      email: 'hoang@huce.edu.vn',
+      fullName: 'Trần Văn Hoàng',
+      jobTitle: 'Backend Developer',
+      timezone: 'Asia/Ho_Chi_Minh'
+    })),
+    updateMyProfile: vi.fn((request: { jobTitle?: string }) => of({
+      success: true,
+      userId: '8ea9699e-2cf2-45b2-956e-90e2cdfdb221',
+      email: 'hoang@huce.edu.vn',
+      fullName: 'Trần Văn Hoàng',
+      jobTitle: request.jobTitle,
+      timezone: 'Asia/Ho_Chi_Minh'
+    })),
+    uploadAvatar: vi.fn(() => of({ success: true, avatarUrl: '/assets/avatars/avatar.png' })),
+    changePassword: vi.fn(() => of({ success: true })),
+    getSkillCatalog: vi.fn(() => of({
+      success: true,
+      items: [{ skillId: 'sk-1', name: 'ASP.NET Core', category: 'Backend' }]
+    })),
+    getUserSkills: vi.fn(() => of({ success: true, skills: [] })),
+    updateMySkills: vi.fn(() => of({ success: true, updatedCount: 1 }))
+  };
+
   beforeEach(() => {
     tokenStore = new MemoryTokenStore();
     Object.values(accountApi).forEach(mock => mock.mockClear());
+    Object.values(identityApi).forEach(mock => mock.mockClear());
     TestBed.configureTestingModule({
       providers: [
         IdentityService,
         { provide: AccountApi, useValue: accountApi },
+        { provide: IdentityApi, useValue: identityApi },
         { provide: TOKEN_STORE, useValue: tokenStore }
       ]
     });
@@ -115,16 +144,20 @@ describe('IdentityService', () => {
     expect(service.authState().isAuthenticated).toBe(false);
   });
 
-  it('vẫn hỗ trợ cập nhật hồ sơ mock trong lát cắt chưa tích hợp', async () => {
-    const userId = IdentityMockDb.users[0].id;
+  it('cập nhật hồ sơ qua API và đồng bộ auth state', async () => {
+    const userId = '8ea9699e-2cf2-45b2-956e-90e2cdfdb221';
     const updated = await firstValueFrom(service.updateProfile(userId, { jobTitle: 'Principal Lead Architect' }));
     expect(updated.jobTitle).toBe('Principal Lead Architect');
+    expect(identityApi.updateMyProfile).toHaveBeenCalled();
   });
 
-  it('vẫn hỗ trợ kỹ năng mock trong lát cắt chưa tích hợp', async () => {
-    const userId = IdentityMockDb.users[0].id;
+  it('thay danh sách kỹ năng qua API với thang mức 1-5', async () => {
+    const userId = '8ea9699e-2cf2-45b2-956e-90e2cdfdb221';
+    await firstValueFrom(service.getSkillCatalog());
     const added = await firstValueFrom(service.addUserSkill(userId, 'sk-1', 95));
-    expect(added.proficiencyLevel).toBe(95);
-    expect((await firstValueFrom(service.removeUserSkill(added.id))).success).toBe(true);
+    expect(added.proficiencyLevel).toBe(100);
+    expect(identityApi.updateMySkills).toHaveBeenCalledWith([
+      expect.objectContaining({ skillId: 'sk-1', proficiencyLevel: 5 })
+    ]);
   });
 });

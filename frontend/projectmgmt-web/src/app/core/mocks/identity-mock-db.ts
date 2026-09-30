@@ -10,6 +10,11 @@ export interface UserProfileModel {
   twoFactorEnabled: boolean;
   createdAt: string;
   lastLoginAt: string;
+  phoneNumber?: string | null;
+  bio?: string | null;
+  timezone?: string | null;
+  seniorityLevel?: string | null;
+  yearsOfExperience?: number | null;
 }
 
 export interface RoleModel {

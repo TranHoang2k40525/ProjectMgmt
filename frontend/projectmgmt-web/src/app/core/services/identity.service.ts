@@ -1,7 +1,10 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { Observable, delay, map, of, throwError } from 'rxjs';
+import { Observable, delay, map, of, switchMap, throwError } from 'rxjs';
+import { environment } from '../../../environments/environment';
 import { AccountApi } from '../api/account.api';
 import { LoginResult } from '../api/account-api.models';
+import { IdentityApi } from '../api/identity.api';
+import { ProfileDto, SkillDto } from '../api/identity-api.models';
 import { AuthSession, TOKEN_STORE } from '../auth/token-store';
 import {
   ActiveSessionModel,
@@ -27,7 +30,10 @@ export interface AuthState {
 })
 export class IdentityService {
   private readonly accountApi = inject(AccountApi);
+  private readonly identityApi = inject(IdentityApi);
   private readonly tokenStore = inject(TOKEN_STORE);
+  private readonly skillCatalog = new Map<string, SkillModel>();
+  private readonly userSkills = new Map<string, UserSkillModel[]>();
 
   readonly authState = signal<AuthState>(this.restoreAuthState());
 
@@ -166,24 +172,41 @@ export class IdentityService {
   // PROFILE & CHANGE PASSWORD
   // ==========================================
 
-  changePassword(userId: string, currentPass: string, newPass: string): Observable<{ success: boolean }> {
-    if (currentPass.length < 6) {
-      return throwError(() => ({ error: { title: 'Mật khẩu hiện tại không chính xác.' } }));
-    }
-    if (newPass.length < 6) {
-      return throwError(() => ({ error: { title: 'Mật khẩu mới phải có ít nhất 6 ký tự.' } }));
-    }
-    return of({ success: true }).pipe(delay(500));
+  getMyProfile(): Observable<UserProfileModel> {
+    return this.identityApi.getMyProfile().pipe(map(profile => this.applyProfile(profile)));
   }
 
-  updateProfile(userId: string, data: Partial<UserProfileModel>): Observable<UserProfileModel> {
-    const user = IdentityMockDb.users.find(u => u.id === userId);
-    if (!user) {
-      return throwError(() => ({ error: { title: 'User not found' } }));
-    }
-    Object.assign(user, data);
-    this.authState.update(state => ({ ...state, currentUser: { ...user } }));
-    return of(user).pipe(delay(400));
+  changePassword(_userId: string, currentPass: string, newPass: string): Observable<{ success: boolean }> {
+    return this.identityApi.changePassword({
+      currentPassword: currentPass,
+      newPassword: newPass
+    }).pipe(map(result => {
+      this.tokenStore.clear();
+      this.authState.set({ currentUser: null, isAuthenticated: false, token: null });
+      return { success: result.success };
+    }));
+  }
+
+  updateProfile(_userId: string, data: Partial<UserProfileModel>): Observable<UserProfileModel> {
+    return this.identityApi.updateMyProfile({
+      fullName: data.displayName,
+      phoneNumber: data.phoneNumber,
+      timezone: data.timezone,
+      jobTitle: data.jobTitle,
+      seniorityLevel: data.seniorityLevel,
+      yearsOfExperience: data.yearsOfExperience,
+      bio: data.bio
+    }).pipe(map(profile => this.applyProfile(profile)));
+  }
+
+  uploadAvatar(file: File): Observable<string> {
+    return this.identityApi.uploadAvatar(file).pipe(map(result => {
+      const avatarUrl = this.resolveAssetUrl(result.avatarUrl);
+      this.authState.update(state => state.currentUser
+        ? { ...state, currentUser: { ...state.currentUser, avatarUrl } }
+        : state);
+      return avatarUrl ?? '';
+    }));
   }
 
   // ==========================================
@@ -191,43 +214,133 @@ export class IdentityService {
   // ==========================================
 
   getSkillCatalog(): Observable<SkillModel[]> {
-    return of([...IdentityMockDb.skills]).pipe(delay(200));
+    return this.identityApi.getSkillCatalog().pipe(map(result => {
+      const skills = (result.items ?? [])
+        .filter(skill => Boolean(skill.skillId && skill.name))
+        .map(skill => ({
+          id: skill.skillId!,
+          name: skill.name!,
+          category: skill.category ?? 'Khác',
+          description: skill.code ?? ''
+        }));
+      this.skillCatalog.clear();
+      skills.forEach(skill => this.skillCatalog.set(skill.id, skill));
+      return skills;
+    }));
   }
 
   getUserSkills(userId: string): Observable<UserSkillModel[]> {
-    const list = IdentityMockDb.userSkills.filter(s => s.userId === userId);
-    return of(list).pipe(delay(200));
+    return this.identityApi.getUserSkills(userId).pipe(map(result => {
+      const skills = (result.skills ?? [])
+        .filter(skill => Boolean(skill.skillId && skill.name))
+        .map(skill => this.toUserSkill(userId, skill));
+      this.userSkills.set(userId, skills);
+      return skills;
+    }));
   }
 
   addUserSkill(userId: string, skillId: string, level: number): Observable<UserSkillModel> {
-    const skill = IdentityMockDb.skills.find(s => s.id === skillId);
-    if (!skill) {
-      return throwError(() => ({ error: { title: 'Kỹ năng không tồn tại trong Catalog.' } }));
-    }
+    const current = this.userSkills.get(userId);
+    const source = current ? of(current) : this.getUserSkills(userId);
+    return source.pipe(switchMap(existingSkills => {
+      const normalizedLevel = this.toBackendSkillLevel(level);
+      const updatedSkills = existingSkills.filter(skill => skill.skillId !== skillId);
+      const catalogSkill = this.skillCatalog.get(skillId);
+      const savedSkill: UserSkillModel = {
+        id: skillId,
+        userId,
+        skillId,
+        skillName: catalogSkill?.name ?? 'Kỹ năng',
+        proficiencyLevel: normalizedLevel * 20
+      };
+      updatedSkills.push(savedSkill);
 
-    const existing = IdentityMockDb.userSkills.find(s => s.userId === userId && s.skillId === skillId);
-    if (existing) {
-      existing.proficiencyLevel = level;
-      return of(existing).pipe(delay(300));
-    }
-
-    const newSkill: UserSkillModel = {
-      id: `usk-${Date.now()}`,
-      userId,
-      skillId,
-      skillName: skill.name,
-      proficiencyLevel: level
-    };
-    IdentityMockDb.userSkills.push(newSkill);
-    return of(newSkill).pipe(delay(300));
+      return this.identityApi.updateMySkills(this.toSkillDtos(updatedSkills)).pipe(map(() => {
+        this.userSkills.set(userId, updatedSkills);
+        return savedSkill;
+      }));
+    }));
   }
 
   removeUserSkill(id: string): Observable<{ success: boolean }> {
-    const idx = IdentityMockDb.userSkills.findIndex(s => s.id === id);
-    if (idx !== -1) {
-      IdentityMockDb.userSkills.splice(idx, 1);
+    const userId = this.authState().currentUser?.id;
+    if (!userId) {
+      return throwError(() => ({ status: 401, code: 'AUTH_UNAUTHENTICATED', title: 'Phiên đăng nhập không hợp lệ.' }));
     }
-    return of({ success: true }).pipe(delay(200));
+
+    const current = this.userSkills.get(userId);
+    const source = current ? of(current) : this.getUserSkills(userId);
+    return source.pipe(switchMap(existingSkills => {
+      const updatedSkills = existingSkills.filter(skill => skill.skillId !== id);
+      return this.identityApi.updateMySkills(this.toSkillDtos(updatedSkills)).pipe(map(result => {
+        this.userSkills.set(userId, updatedSkills);
+        return { success: result.success };
+      }));
+    }));
+  }
+
+  private applyProfile(profile: ProfileDto): UserProfileModel {
+    if (!profile.success || !profile.userId || !profile.email) {
+      throw new Error('Phản hồi hồ sơ không đầy đủ.');
+    }
+
+    const current = this.authState().currentUser;
+    const user: UserProfileModel = {
+      id: profile.userId,
+      email: profile.email,
+      displayName: profile.fullName ?? profile.email,
+      avatarUrl: this.resolveAssetUrl(profile.avatarUrl),
+      jobTitle: profile.jobTitle ?? '',
+      roleId: current?.roleId ?? '',
+      roleName: current?.roleName ?? 'Thành viên',
+      isActive: current?.isActive ?? true,
+      twoFactorEnabled: current?.twoFactorEnabled ?? false,
+      createdAt: current?.createdAt ?? new Date().toISOString(),
+      lastLoginAt: current?.lastLoginAt ?? new Date().toISOString(),
+      phoneNumber: profile.phoneNumber,
+      bio: profile.bio,
+      timezone: profile.timezone,
+      seniorityLevel: profile.seniorityLevel,
+      yearsOfExperience: profile.yearsOfExperience
+    };
+
+    const session = this.tokenStore.getSession();
+    if (session) {
+      this.tokenStore.setSession({
+        ...session,
+        email: user.email,
+        fullName: user.displayName
+      });
+    }
+    this.authState.update(state => ({ ...state, currentUser: user }));
+    return user;
+  }
+
+  private toUserSkill(userId: string, skill: SkillDto): UserSkillModel {
+    return {
+      id: skill.skillId!,
+      userId,
+      skillId: skill.skillId!,
+      skillName: skill.name!,
+      proficiencyLevel: (skill.proficiencyLevel ?? skill.level ?? 1) * 20
+    };
+  }
+
+  private toSkillDtos(skills: UserSkillModel[]): Array<Partial<SkillDto>> {
+    return skills.map(skill => ({
+      skillId: skill.skillId,
+      proficiencyLevel: this.toBackendSkillLevel(skill.proficiencyLevel)
+    }));
+  }
+
+  private toBackendSkillLevel(level: number): number {
+    return Math.min(5, Math.max(1, Math.ceil(level / 20)));
+  }
+
+  private resolveAssetUrl(url?: string | null): string | null {
+    if (!url || /^https?:\/\//i.test(url)) return url ?? null;
+    const backendHost = environment.apiBaseUrl.replace(/\/api\/?$/, '');
+    return `${backendHost}${url.startsWith('/') ? '' : '/'}${url}`;
   }
 
   // ==========================================
@@ -327,14 +440,15 @@ export class IdentityService {
   }
 
   getActiveSessions(): Observable<ActiveSessionModel[]> {
-    return of([...IdentityMockDb.activeSessions]).pipe(delay(200));
+    return of([]);
   }
 
   revokeSession(sessionId: string): Observable<{ success: boolean }> {
-    const idx = IdentityMockDb.activeSessions.findIndex(s => s.id === sessionId);
-    if (idx !== -1) {
-      IdentityMockDb.activeSessions.splice(idx, 1);
-    }
-    return of({ success: true }).pipe(delay(250));
+    void sessionId;
+    return throwError(() => ({
+      status: 501,
+      code: 'AUTH_SESSION_MANAGEMENT_NOT_IMPLEMENTED',
+      title: 'Backend chưa cung cấp API liệt kê và thu hồi từng phiên.'
+    }));
   }
 }
