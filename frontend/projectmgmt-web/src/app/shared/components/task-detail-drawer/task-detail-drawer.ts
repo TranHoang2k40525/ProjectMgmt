@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output, inject, signal } from '@angular/core';
+import { Component, EventEmitter, Input, Output, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AiBreakdownApi } from '../../../core/api/ai-breakdown.api';
@@ -136,10 +136,10 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
                   (ngModelChange)="onFieldChange()"
                   class="h-9 px-3 rounded-lg text-sm font-semibold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none"
                 >
-                  <option value="Trần Văn Hoàng">Trần Văn Hoàng</option>
-                  <option value="Nguyễn Thanh Hà">Nguyễn Thanh Hà</option>
-                  <option value="Phạm Đức Anh">Phạm Đức Anh</option>
-                  <option value="Lê Minh Khiêm">Lê Minh Khiêm</option>
+                  <option [value]="undefined">Chưa chỉ định</option>
+                  @for (m of projectMembers(); track m.id) {
+                    <option [value]="m.displayName">{{ m.displayName }}</option>
+                  }
                 </select>
               </div>
 
@@ -202,6 +202,8 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
                         <input type="text" [(ngModel)]="sub.title" class="flex-1 bg-transparent text-slate-800 dark:text-slate-200 font-medium focus:outline-none" />
                         <span class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-[10px] font-mono">{{ sub.points }} SP</span>
                       </div>
+                    } @empty {
+                      <p class="text-slate-500 py-3 text-center text-xs">Chưa có đề xuất phân rã Sub-task từ AI Model.</p>
                     }
                   </div>
 
@@ -215,10 +217,12 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
 
                   <div class="flex justify-end gap-2 pt-2 border-t border-purple-100 dark:border-purple-900/50">
                     <button (click)="showAiBreakdownPanel.set(false)" class="px-3 py-1.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium">Hủy</button>
-                    <button (click)="applyAiBreakdown()" class="px-3 py-1.5 rounded bg-purple-600 text-white font-bold hover:bg-purple-700 shadow-sm flex items-center gap-1">
-                      <span class="material-symbols-outlined text-[16px]">check</span>
-                      <span>Áp dụng vào Issue (Idempotent)</span>
-                    </button>
+                    @if (aiSubtaskSuggestions().length > 0) {
+                      <button (click)="applyAiBreakdown()" class="px-3 py-1.5 rounded bg-purple-600 text-white font-bold hover:bg-purple-700 shadow-sm flex items-center gap-1">
+                        <span class="material-symbols-outlined text-[16px]">check</span>
+                        <span>Áp dụng vào Issue (Idempotent)</span>
+                      </button>
+                    }
                   </div>
                 </div>
               }
@@ -260,6 +264,8 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
                           </button>
                         </div>
                       </div>
+                    } @empty {
+                      <p class="text-slate-500 py-4 text-center text-xs">Chưa có dữ liệu xếp hạng ứng viên từ AI Model.</p>
                     }
                   </div>
                 </div>
@@ -441,17 +447,11 @@ export class TaskDetailDrawerComponent {
   readonly showAiAssignmentPanel = signal(false);
   readonly currentGenerationId = signal<string | null>(null);
 
-  readonly aiSubtaskSuggestions = signal([
-    { title: 'Xây dựng Controller & DTO Validation Endpoint', points: 2, selected: true },
-    { title: 'Cấu hình Middleware kiểm tra JWT & Identity Scope', points: 3, selected: true },
-    { title: 'Viết Unit Test & Integration Test cho Workflow Status', points: 2, selected: true }
-  ]);
+  readonly aiSubtaskSuggestions = signal<Array<{ title: string; points: number; selected: boolean }>>([]);
 
-  readonly candidateScores = signal([
-    { name: 'Trần Văn Hoàng', totalScore: 92, workloadScore: 95, skillScore: 90, historyScore: 88, capacityScore: 94, reason: 'Kỹ năng .NET/Angular cao, capacity Sprint 2 còn trống 18h' },
-    { name: 'Nguyễn Thanh Hà', totalScore: 85, workloadScore: 80, skillScore: 92, historyScore: 85, capacityScore: 82, reason: 'Kỹ năng Database MySQL phù hợp, tải công việc vừa phải' },
-    { name: 'Phạm Đức Anh', totalScore: 78, workloadScore: 75, skillScore: 80, historyScore: 78, capacityScore: 80, reason: 'Có kinh nghiệm với Auth & Security module' }
-  ]);
+  readonly candidateScores = signal<Array<{ name: string; totalScore: number; workloadScore: number; skillScore: number; historyScore: number; capacityScore: number; reason: string }>>([]);
+
+  readonly projectMembers = computed(() => this.projectService.currentProject()?.members ?? []);
 
   toggleAiBreakdownPanel(): void {
     this.showAiAssignmentPanel.set(false);

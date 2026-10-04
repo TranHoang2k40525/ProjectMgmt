@@ -43,21 +43,29 @@ export class ForYouPageComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly dateLabel = new Intl.DateTimeFormat('vi-VN', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
   readonly greeting = new Date().getHours() < 11 ? 'Chào buổi sáng' : new Date().getHours() < 18 ? 'Chào buổi chiều' : 'Chào buổi tối';
 
-  readonly currentWork = computed(() => this.workItems()
-    .filter(item => item.projectId === this.currentProject().id && item.statusName !== 'Done' && !item.parentId)
-    .sort((a, b) => {
-      const score = (item: WorkItem) => (item.statusName === 'In Progress' ? 10 : 0) +
-        (item.priority === 'Urgent' ? 8 : item.priority === 'High' ? 5 : 0);
-      return score(b) - score(a) || a.issueKey.localeCompare(b.issueKey);
-    }));
+  readonly currentWork = computed(() => {
+    const proj = this.currentProject();
+    if (!proj) return [];
+    return this.workItems()
+      .filter(item => item.projectId === proj.id && item.statusName !== 'Done' && !item.parentId)
+      .sort((a, b) => {
+        const score = (item: WorkItem) => (item.statusName === 'In Progress' ? 10 : 0) +
+          (item.priority === 'Urgent' ? 8 : item.priority === 'High' ? 5 : 0);
+        return score(b) - score(a) || a.issueKey.localeCompare(b.issueKey);
+      });
+  });
 
   readonly myWork = computed(() => this.assignedWork());
 
   readonly visibleWork = computed(() => (this.activeTab() === 'mine' ? this.myWork() : this.currentWork()).slice(0, 5));
 
-  readonly recentTask = computed(() => this.recentWork()[0] ?? this.workItems().find(item =>
-    item.id === this.recent.lastTaskId() && item.statusName !== 'Done' && item.projectId === this.currentProject().id
-  ) ?? null);
+  readonly recentTask = computed(() => {
+    const proj = this.currentProject();
+    if (!proj) return null;
+    return this.recentWork()[0] ?? this.workItems().find(item =>
+      item.id === this.recent.lastTaskId() && item.statusName !== 'Done' && item.projectId === proj.id
+    ) ?? null;
+  });
 
   ngOnInit(): void {
     this.identityApi.getForYou().subscribe({

@@ -187,8 +187,8 @@ export class ExcelImportModalComponent {
         issueType: row.type || 'Task',
         priority: this.isPriority(row.priority) ? row.priority : 'Medium',
         storyPoints: row.storyPoints || 3,
-        sprintName: row.sprintName || 'SCRUMAI Sprint 2',
-        assigneeName: row.assigneeName || 'Trần Văn Hoàng'
+        sprintName: row.sprintName || 'Backlog Pool',
+        assigneeName: row.assigneeName || ''
       });
     }
     this.toastService.success('Import Hoàn Tất', `Đã thêm ${this.parsedRows.length} công việc vào dự án`);

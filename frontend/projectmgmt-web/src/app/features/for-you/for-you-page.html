@@ -124,11 +124,13 @@
       </div>
       <div class="project-list">
         @for (project of projects(); track project.id) {
-          <button type="button" class="project-row" (click)="selectProject(project)" [class.project-row--active]="project.id === currentProject().id">
+          <button type="button" class="project-row" (click)="selectProject(project)" [class.project-row--active]="project.id === currentProject()?.id">
             <span class="project-monogram">{{ project.projectKey.slice(0, 2) }}</span>
             <span><strong>{{ project.name }}</strong><small>{{ project.type || 'Dự án nhóm' }}</small></span>
             <span class="material-symbols-outlined" aria-hidden="true">north_east</span>
           </button>
+        } @empty {
+          <p class="text-xs text-slate-400 py-3">Chưa có dự án nào.</p>
         }
       </div>
     </section>
