@@ -87,6 +87,10 @@
           </div>
         </div>
       </div>
+    } @empty {
+      <div class="empty-state p-8 col-span-full text-center text-slate-400 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+        <p class="text-sm font-medium">Chưa có cấu hình mô hình AI nào</p>
+      </div>
     }
   </div>
 
@@ -119,6 +123,12 @@
               <td><strong>{{ log.tokensUsed | number }}</strong></td>
               <td>{{ log.latencyMs }} ms</td>
               <td class="cost-cell">${{ log.costEstimate | number:'1.4-4' }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="7" class="p-8 text-center text-slate-400">
+                <p class="text-sm font-medium">Chưa có nhật ký gọi AI Generation</p>
+              </td>
             </tr>
           }
         </tbody>
