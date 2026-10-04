@@ -21,7 +21,34 @@ TestResults/
 *.py[cod]
 .tmp/
 **plane (1).txt
+~$*
+**/~$*
 .playwright-mcp
 **/scripts
 **/Logs/
 **/local.settings.json
+.playwright-cli
+.playwright-mcp
+
+# Screenshots, Playwright test captures & media recordings
+tests/screenshots/
+**/screenshots/
+**/__screenshots__/
+**/test-results/
+**/playwright-report/
+**/blob-report/
+**/.playwright/
+**/.tempmediaStorage/
+tests/**/*.png
+tests/**/*.jpg
+tests/**/*.jpeg
+tests/**/*.webp
+*screenshot*
+*Screenshot*
+*.png
+*.jpg
+*.jpeg
+*.webp
+!docs/**
+!frontend/projectmgmt-web/public/**
+!frontend/projectmgmt-web/src/assets/**
