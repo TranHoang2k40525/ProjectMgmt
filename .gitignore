@@ -20,7 +20,7 @@ TestResults/
 **/.pytest_cache/
 *.py[cod]
 .tmp/
-**plane (1).txt
+**/plane (1).txt
 ~$*
 **/~$*
 .playwright-mcp
@@ -49,6 +49,10 @@ tests/**/*.webp
 *.jpg
 *.jpeg
 *.webp
-!docs/**
+!docs/**/*.png
+!docs/**/*.jpg
+!docs/**/*.jpeg
+!docs/**/*.webp
+!docs/**/*.svg
 !frontend/projectmgmt-web/public/**
 !frontend/projectmgmt-web/src/assets/**
