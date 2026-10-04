@@ -52,9 +52,9 @@ export class ExcelDataService {
   downloadTemplate(): void {
     const headers = ['Tên công việc (Bắt buộc)', 'Mô tả', 'Loại (Task/Bug/Story/Epic)', 'Độ ưu tiên (Low/Medium/High/Urgent)', 'Story Points', 'Tên Sprint', 'Người thực hiện'];
     const sampleRows = [
-      ['Thiết kế DB Schema cho Auth Module', 'Tạo các bảng User, Role, Permission', 'Task', 'High', 5, 'Sprint 1', 'Trần Văn Hoàng'],
-      ['Lỗi không load được ảnh avatar', 'Kiểm tra đường dẫn assets trong angular.json', 'Bug', 'Urgent', 2, 'Sprint 2', 'Nguyễn Văn A'],
-      ['Tích hợp Claude AI Auto Breakdown', 'Tự động bóc tách Epic thành subtask', 'Story', 'Medium', 8, 'Sprint 2', 'Trần Văn Hoàng']
+      ['Thiết kế DB Schema cho Auth Module', 'Tạo các bảng User, Role, Permission', 'Task', 'High', 5, 'Sprint 1', 'Nguyễn Văn A'],
+      ['Kiểm thử giao diện người dùng', 'Kiểm tra độ tương thích trên các kích thước màn hình', 'Bug', 'Urgent', 2, 'Sprint 1', 'Trần Thị B'],
+      ['Tích hợp API bóc tách công việc', 'Kết nối dịch vụ xử lý công việc tự động', 'Story', 'Medium', 8, 'Sprint 2', 'Lê Văn C']
     ];
 
     const csvContent = '\uFEFF' + [headers.join(','), ...sampleRows.map(r => r.map(c => `"${c}"`).join(','))].join('\r\n');

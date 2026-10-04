@@ -1,5 +1,5 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { Observable, delay, map, of, switchMap, throwError } from 'rxjs';
+import { Observable, map, of, switchMap, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AccountApi } from '../api/account.api';
 import { LoginResult } from '../api/account-api.models';
@@ -364,7 +364,7 @@ export class IdentityService {
   // ==========================================
 
   getUsers(): Observable<UserProfileModel[]> {
-    return of([...IdentityMockDb.users]).pipe(delay(300));
+    return of([]);
   }
 
   getRoles(scope?: string): Observable<RoleModel[]> {
@@ -402,34 +402,20 @@ export class IdentityService {
   }
 
   updateUserRole(userId: string, roleId: string): Observable<UserProfileModel> {
-    const user = IdentityMockDb.users.find(u => u.id === userId);
-    const role = IdentityMockDb.roles.find(r => r.id === roleId);
-    if (!user || !role) {
-      return throwError(() => ({ error: { title: 'User or Role not found' } }));
-    }
-
-    user.roleId = role.id;
-    user.roleName = role.name;
-    return of(user).pipe(delay(400));
+    void userId;
+    void roleId;
+    return throwError(() => ({ error: { title: 'Chưa có endpoint cập nhật vai trò người dùng' } }));
   }
 
   toggleUserActive(userId: string): Observable<UserProfileModel> {
-    const user = IdentityMockDb.users.find(u => u.id === userId);
-    if (!user) {
-      return throwError(() => ({ error: { title: 'User not found' } }));
-    }
-    user.isActive = !user.isActive;
-    return of(user).pipe(delay(300));
+    void userId;
+    return throwError(() => ({ error: { title: 'Chưa có endpoint khóa/mở tài khoản' } }));
   }
 
   updateRolePermissions(roleId: string, permissionCodes: string[]): Observable<RoleModel> {
     return this.rbacApi.updateRolePermissions(roleId, permissionCodes).pipe(
       map(() => {
-        const role = IdentityMockDb.roles.find(r => r.id === roleId);
-        if (role) {
-          role.permissionCodes = [...permissionCodes];
-        }
-        return role ?? {
+        return {
           id: roleId,
           name: 'Role',
           code: 'ROLE',
@@ -456,7 +442,6 @@ export class IdentityService {
           isSystem: false,
           permissionCodes
         };
-        IdentityMockDb.roles.push(newRole);
         return newRole;
       })
     );
@@ -577,11 +562,11 @@ export class IdentityService {
   // ==========================================
 
   getAiModels(): Observable<AiModelConfig[]> {
-    return of([...IdentityMockDb.aiModels]).pipe(delay(200));
+    return of([]);
   }
 
   getAiLogs(): Observable<AiGenLogModel[]> {
-    return of([...IdentityMockDb.aiLogs]).pipe(delay(200));
+    return of([]);
   }
 
   getActiveSessions(): Observable<ActiveSessionModel[]> {
