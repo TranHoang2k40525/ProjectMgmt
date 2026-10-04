@@ -41,22 +41,6 @@ public class HostSecurityTests : IClassFixture<ProjectMgmtWebFactory>
 
 public class ProjectMgmtWebFactory : WebApplicationFactory<Program>
 {
-    private readonly Dictionary<string, string?> _originalEnvironment = new();
-
-    public ProjectMgmtWebFactory()
-    {
-        SetTestEnvironment("ASPNETCORE_ENVIRONMENT", "Testing");
-        SetTestEnvironment(
-            "ConnectionStrings__ProjectMgmt",
-            "Server=127.0.0.1;Port=3306;Database=ProjectMgmtTests;User Id=test;Password=test;");
-        SetTestEnvironment("Database__ServerVersion", "8.0.46");
-        SetTestEnvironment("Jwt__Issuer", "ProjectMgmt.Tests");
-        SetTestEnvironment("Jwt__Audience", "ProjectMgmt.Tests.Client");
-        SetTestEnvironment(
-            "Jwt__SigningKey",
-            "unit-test-signing-key-with-more-than-32-bytes");
-    }
-
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
@@ -64,20 +48,5 @@ public class ProjectMgmtWebFactory : WebApplicationFactory<Program>
         {
             services.AddDataProtection().UseEphemeralDataProtectionProvider();
         });
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        base.Dispose(disposing);
-        foreach (var setting in _originalEnvironment)
-        {
-            Environment.SetEnvironmentVariable(setting.Key, setting.Value);
-        }
-    }
-
-    private void SetTestEnvironment(string key, string value)
-    {
-        _originalEnvironment[key] = Environment.GetEnvironmentVariable(key);
-        Environment.SetEnvironmentVariable(key, value);
     }
 }
