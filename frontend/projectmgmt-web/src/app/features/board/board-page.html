@@ -22,9 +22,15 @@
         <span class="material-symbols-outlined text-primary text-[24px]">view_kanban</span>
         Bảng Scrum (Kanban Board)
       </h1>
-      <span class="px-3 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-sm font-normal border border-emerald-500/20">
-        SCRUMAI Sprint 2 (Đang chạy)
-      </span>
+      @if (activeSprint(); as sp) {
+        <span class="px-3 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-sm font-normal border border-emerald-500/20">
+          {{ sp.name }} ({{ sp.status === 'active' ? 'Đang chạy' : sp.status }})
+        </span>
+      } @else {
+        <span class="px-3 py-0.5 rounded-full bg-slate-500/10 text-slate-700 dark:text-slate-400 text-sm font-normal border border-slate-500/20">
+          Chưa có Sprint đang chạy
+        </span>
+      }
       <span class="px-3 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-sm font-normal">
         {{ filteredItems().length }} thẻ việc
       </span>
@@ -53,10 +59,9 @@
         class="h-9 px-3 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-normal text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer"
       >
         <option [ngValue]="null">Tất cả người xử lý</option>
-        <option value="Trần Văn Hoàng">Trần Văn Hoàng (Lead)</option>
-        <option value="Nguyễn Thanh Hà">Nguyễn Thanh Hà</option>
-        <option value="Phạm Đức Anh">Phạm Đức Anh</option>
-        <option value="Lê Minh Khiêm">Lê Minh Khiêm</option>
+        @for (m of projectMembers(); track m.id) {
+          <option [value]="m.displayName">{{ m.displayName }} ({{ m.role }})</option>
+        }
       </select>
 
       <!-- Issue Type Filter -->
@@ -244,6 +249,11 @@
               </div>
             </div>
           </div>
+        } @empty {
+          <div class="h-32 flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-300 dark:border-slate-700/60 rounded-lg text-slate-400">
+            <span class="material-symbols-outlined text-[24px] mb-1 opacity-60">inbox</span>
+            <p class="text-xs font-normal">Chưa có công việc</p>
+          </div>
         }
       </div>
     </div>
@@ -320,6 +330,11 @@
                 <span class="text-slate-500 font-normal text-xs">{{ item.assigneeName }}</span>
               </div>
             </div>
+          </div>
+        } @empty {
+          <div class="h-32 flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-300 dark:border-slate-700/60 rounded-lg text-slate-400">
+            <span class="material-symbols-outlined text-[24px] mb-1 opacity-60">pending_actions</span>
+            <p class="text-xs font-normal">Chưa có công việc đang làm</p>
           </div>
         }
       </div>
@@ -398,6 +413,11 @@
               </div>
             </div>
           </div>
+        } @empty {
+          <div class="h-32 flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-300 dark:border-slate-700/60 rounded-lg text-slate-400">
+            <span class="material-symbols-outlined text-[24px] mb-1 opacity-60">rate_review</span>
+            <p class="text-xs font-normal">Chưa có công việc chờ duyệt</p>
+          </div>
         }
       </div>
     </div>
@@ -468,6 +488,11 @@
                 <span class="text-slate-500 font-normal text-xs">{{ item.assigneeName }}</span>
               </div>
             </div>
+          </div>
+        } @empty {
+          <div class="h-32 flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-300 dark:border-slate-700/60 rounded-lg text-slate-400">
+            <span class="material-symbols-outlined text-[24px] mb-1 opacity-60">task_alt</span>
+            <p class="text-xs font-normal">Chưa có công việc hoàn thành</p>
           </div>
         }
       </div>

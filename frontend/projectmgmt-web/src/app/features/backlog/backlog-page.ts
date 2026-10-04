@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ConnectedPosition, OverlayModule } from '@angular/cdk/overlay';
 import { DragDropModule, CdkDragDrop } from '@angular/cdk/drag-drop';
 import { ProjectManagementService, WorkItem, Sprint } from '../../core/services/project-management.service';
+import { IdentityService } from '../../core/services/identity.service';
 import { ExcelDataService } from '../../core/services/excel-data.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ContextMenuComponent, ContextMenuItemAction } from '../../shared/components/context-menu.component';
@@ -17,9 +18,12 @@ import { ContextMenuComponent, ContextMenuItemAction } from '../../shared/compon
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class BacklogPage {
+  private readonly identityService = inject(IdentityService);
   readonly projectService = inject(ProjectManagementService);
   readonly excelService = inject(ExcelDataService);
   readonly toastService = inject(ToastService);
+
+  readonly projectMembers = computed(() => this.projectService.currentProject()?.members ?? []);
 
   // Search & Filter State
   searchQuery = signal<string>('');
@@ -139,7 +143,10 @@ export class BacklogPage {
     }
 
     if (onlyMine) {
-      items = items.filter(i => i.assigneeName === 'Trần Văn Hoàng');
+      const myName = this.identityService.authState().currentUser?.displayName;
+      if (myName) {
+        items = items.filter(i => i.assigneeName === myName);
+      }
     }
 
     if (assigneeFilter) {
@@ -200,10 +207,12 @@ export class BacklogPage {
         }
         break;
 
-      case 'assign':
-        this.projectService.updateWorkItemAssignee(item.id, 'Trần Văn Hoàng');
+      case 'assign': {
+        const myName = this.identityService.authState().currentUser?.displayName || 'Tôi';
+        this.projectService.updateWorkItemAssignee(item.id, myName);
         this.toastService.success('Đã Gán Cho Bạn', `[${item.issueKey}] đã giao cho bạn`);
         break;
+      }
 
       case 'ai-breakdown':
         this.projectService.activeDrawerTask.set(item);
@@ -484,6 +493,7 @@ export class BacklogPage {
     const title = this.inlineTaskTitleMap[sprintId];
     if (!title || !title.trim()) return;
 
+    const currentUserName = this.identityService.authState().currentUser?.displayName || '';
     const created = this.projectService.addWorkItem({
       title: title.trim(),
       sprintId,
@@ -492,7 +502,7 @@ export class BacklogPage {
       issueType: 'Task',
       priority: 'Medium',
       storyPoints: 3,
-      assigneeName: 'Trần Văn Hoàng'
+      assigneeName: currentUserName
     });
 
     this.toastService.success('Tạo Công Việc', `Đã thêm [${created.issueKey}] vào ${sprintName}`);
@@ -573,7 +583,8 @@ export class BacklogPage {
 
   assignToMe(taskId: string, event?: Event): void {
     if (event) event.stopPropagation();
-    this.projectService.updateWorkItemAssignee(taskId, 'Trần Văn Hoàng');
+    const myName = this.identityService.authState().currentUser?.displayName || 'Tôi';
+    this.projectService.updateWorkItemAssignee(taskId, myName);
     this.toastService.success('Đã Gán Cho Tôi', 'Đã nhận công việc.');
     this.activeMenuTaskId.set(null);
   }

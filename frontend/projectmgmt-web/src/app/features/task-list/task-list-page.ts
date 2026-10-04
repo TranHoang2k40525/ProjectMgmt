@@ -2,6 +2,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ProjectManagementService, WorkItem } from '../../core/services/project-management.service';
+import { IdentityService } from '../../core/services/identity.service';
 import { ExcelDataService } from '../../core/services/excel-data.service';
 
 @Component({
@@ -152,6 +153,13 @@ import { ExcelDataService } from '../../core/services/excel-data.service';
                       {{ item.sprintName }}
                     </td>
                   </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="6" class="py-12 text-center text-slate-400">
+                      <span class="material-symbols-outlined text-[36px] block mb-2 opacity-60">task</span>
+                      <p class="text-sm font-medium">Không tìm thấy công việc nào phù hợp</p>
+                    </td>
+                  </tr>
                 }
               </tbody>
             </table>
@@ -197,6 +205,7 @@ import { ExcelDataService } from '../../core/services/excel-data.service';
 })
 export class TaskListPageComponent {
   private readonly projectService = inject(ProjectManagementService);
+  private readonly identityService = inject(IdentityService);
   private readonly excelService = inject(ExcelDataService);
 
   readonly allWorkItems = this.projectService.workItems;
@@ -206,7 +215,10 @@ export class TaskListPageComponent {
   filteredItems = computed(() => {
     let list = this.allWorkItems();
     if (this.selectedGroup() === 'my') {
-      list = list.filter(i => i.assigneeName === 'Trần Văn Hoàng');
+      const myName = this.identityService.authState().currentUser?.displayName;
+      if (myName) {
+        list = list.filter(i => i.assigneeName === myName);
+      }
     }
     if (this.searchTerm.trim()) {
       const term = this.searchTerm.toLowerCase();
