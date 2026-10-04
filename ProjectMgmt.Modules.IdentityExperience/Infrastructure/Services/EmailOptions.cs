@@ -10,4 +10,5 @@ public class EmailOptions
     public string FromName { get; set; } = "Hệ thống Quản lý Dự án Scrum tích hợp AI";
     public bool EnableSsl { get; set; } = true;
     public int TimeoutMilliseconds { get; set; } = 15_000;
+    public bool FallbackToLogOnFailure { get; set; } = false;
 }

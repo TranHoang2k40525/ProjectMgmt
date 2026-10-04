@@ -34,6 +34,7 @@ public class EmailService : IEmailService
         string otpCode,
         DateTime expiresAtUtc)
     {
+        _logger.LogInformation(">>> [MÃ OTP XÁC MINH EMAIL] Người nhận: {Email}, Mã OTP: {OtpCode}, Hết hạn: {ExpiresAtUtc} <<<", recipientEmail, otpCode, expiresAtUtc);
         return await SendMessageAsync(
             recipientEmail,
             "Mã xác minh tài khoản",
@@ -46,6 +47,7 @@ public class EmailService : IEmailService
         string otpCode,
         DateTime expiresAtUtc)
     {
+        _logger.LogInformation(">>> [MÃ OTP ĐẶT LẠI MẬT KHẨU] Người nhận: {Email}, Mã OTP: {OtpCode}, Hết hạn: {ExpiresAtUtc} <<<", recipientEmail, otpCode, expiresAtUtc);
         return await SendMessageAsync(
             recipientEmail,
             "Mã đặt lại mật khẩu",
@@ -162,6 +164,11 @@ public class EmailService : IEmailService
             when (exception is SmtpException or InvalidOperationException or FormatException)
         {
             LogSecurityEmailDeliveryFailure(_logger, GetEmailDomain(recipientEmail), exception);
+            if (_options.FallbackToLogOnFailure)
+            {
+                _logger.LogWarning("Email delivery failed to {Recipient}. FallbackToLogOnFailure is enabled: treating as delivered for development. Subject: {Subject}", recipientEmail, subject);
+                return true;
+            }
             return false;
         }
     }

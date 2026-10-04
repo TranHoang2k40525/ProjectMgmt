@@ -11,6 +11,7 @@ public class RoleDto : Result
     public string? Code { get; set; }
     public string? Grouping { get; set; }
     public List<Guid>? PermissionIds { get; set; }
+    public List<string>? PermissionCodes { get; set; }
     public List<RoleDto>? Items { get; set; }
     public List<RoleDto>? Roles { get; set; }
     public List<RoleDto>? Permissions { get; set; }
