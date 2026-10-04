@@ -7,6 +7,7 @@ public class Project
     public string ProjectKey { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
+    public Guid CreatedByUserId { get; set; }
     public Guid LeadUserId { get; set; }
     public int IssueCounter { get; set; }
     public bool IsArchived { get; set; }

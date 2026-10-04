@@ -10,6 +10,11 @@ export interface UserProfileModel {
   twoFactorEnabled: boolean;
   createdAt: string;
   lastLoginAt: string;
+  phoneNumber?: string | null;
+  bio?: string | null;
+  timezone?: string | null;
+  seniorityLevel?: string | null;
+  yearsOfExperience?: number | null;
 }
 
 export interface RoleModel {
@@ -177,111 +182,14 @@ export class IdentityMockDb {
     }
   ];
 
-  static users: UserProfileModel[] = [
-    {
-      id: '11111111-0000-0000-0000-000000000001',
-      email: 'admin@scrumai.internal',
-      displayName: 'Trần Hoàng Admin',
-      avatarUrl: 'https://lh3.googleusercontent.com/aida/AEtjO1XtHjbcVDz-UBjctM0LfVUGmqUeR39WQIoExjpXXhoH4Wu_I9_Qpk42NbzSi5dIoyYQuxC6PmMSr__bvB8G1iRv51zwwYHyLI9epDcSeaSJ_23pgMSoDqCavTtJMnh_VUr1XiaX_dfIJVrOpVNtqTGgwFT5FuXj3i9tQVUICLqvROYKaCksEl97aHgdr2n-KIVSDs0bZzIZ5hDOpx0AeyayjF5Y_iybOHjJnpBXyyQz40C4Rx5A_y32U-v-DZxAw_gb18RoyaUMMA',
-      jobTitle: 'Principal Lead Architect',
-      roleId: 'role-1',
-      roleName: 'System Administrator',
-      isActive: true,
-      twoFactorEnabled: true,
-      createdAt: '2026-01-15T08:00:00Z',
-      lastLoginAt: '2026-09-19T20:45:00Z'
-    },
-    {
-      id: '11111111-0000-0000-0000-000000000002',
-      email: 'dev.nguyen@scrumai.io',
-      displayName: 'Nguyễn Văn Dev',
-      avatarUrl: null,
-      jobTitle: 'Senior Fullstack Engineer',
-      roleId: 'role-5',
-      roleName: 'Developer Engineer',
-      isActive: true,
-      twoFactorEnabled: false,
-      createdAt: '2026-02-10T09:30:00Z',
-      lastLoginAt: '2026-09-19T18:12:00Z'
-    },
-    {
-      id: '11111111-0000-0000-0000-000000000003',
-      email: 'scrum.tran@scrumai.io',
-      displayName: 'Trần Thị Scrum',
-      avatarUrl: null,
-      jobTitle: 'Agile Coach & Scrum Master',
-      roleId: 'role-4',
-      roleName: 'Scrum Master',
-      isActive: true,
-      twoFactorEnabled: true,
-      createdAt: '2026-03-01T10:15:00Z',
-      lastLoginAt: '2026-09-18T14:20:00Z'
-    }
-  ];
-
-  static skills: SkillModel[] = [
-    { id: 'sk-1', name: 'Angular 21', category: 'Frontend Framework', description: 'Angular Standalone, Signals, RxJS & Performance Optimization' },
-    { id: 'sk-2', name: '.NET 10 & C#', category: 'Backend Framework', description: 'Modular Monolith, ASP.NET Core Web API, EF Core' },
-    { id: 'sk-3', name: 'TypeScript', category: 'Language', description: 'Strict typing, Generics, Type Guard & ESLint' },
-    { id: 'sk-4', name: 'GSAP Animation', category: 'UI / UX', description: 'Physics timeline, Canvas interactive particles, ScrollTrigger' },
-    { id: 'sk-5', name: 'MySQL & Database Optimization', category: 'Database', description: 'InnoDB indexing, Partitioning, Execution Plan analysis' }
-  ];
-
-  static userSkills: UserSkillModel[] = [
-    { id: 'usk-1', userId: '11111111-0000-0000-0000-000000000001', skillId: 'sk-1', skillName: 'Angular 21', proficiencyLevel: 95 },
-    { id: 'usk-2', userId: '11111111-0000-0000-0000-000000000001', skillId: 'sk-2', skillName: '.NET 10 & C#', proficiencyLevel: 90 },
-    { id: 'usk-3', userId: '11111111-0000-0000-0000-000000000001', skillId: 'sk-4', skillName: 'GSAP Animation', proficiencyLevel: 85 }
-  ];
-
-  static notifications: NotificationModel[] = [
-    {
-      id: 'notif-1',
-      userId: '11111111-0000-0000-0000-000000000001',
-      title: 'Hệ thống đã cập nhật thành công!',
-      message: 'Phiên bản Module IdentityExperience v2.4 đã sẵn sàng với mã hóa 2FA & ma trận RBAC.',
-      type: 'SYSTEM',
-      category: 'System',
-      isRead: false,
-      createdAt: '2026-09-19T22:30:00Z'
-    },
-    {
-      id: 'notif-2',
-      userId: '11111111-0000-0000-0000-000000000001',
-      title: 'Phân công Nhiệm vụ Mới',
-      message: 'Bạn được gán làm Lead cho Sprint 42: "Xây dựng GSAP dynamic background & OTP flow".',
-      type: 'TASK',
-      category: 'Assignment',
-      isRead: false,
-      createdAt: '2026-09-19T21:15:00Z',
-      actionUrl: '/projects'
-    },
-    {
-      id: 'notif-3',
-      userId: '11111111-0000-0000-0000-000000000001',
-      title: 'Cảnh báo Bảo mật Tài khoản',
-      message: 'Tài khoản của bạn vừa đăng nhập thành công từ vị trí Windows Desktop (IP: 127.0.0.1).',
-      type: 'SECURITY',
-      category: 'Security',
-      isRead: true,
-      createdAt: '2026-09-19T18:00:00Z'
-    }
-  ];
-
-  static aiModels: AiModelConfig[] = [
-    { id: 'aim-1', name: 'GPT-4o Omnimodal', modelName: 'GPT-4o Omnimodal', provider: 'OpenAI', maxTokens: 8192, temperature: 0.3, isActive: true, isEnabled: true, isDefault: true, monthlyTokenQuota: 500000 },
-    { id: 'aim-2', name: 'Claude 3.5 Sonnet', modelName: 'Claude 3.5 Sonnet', provider: 'Anthropic', maxTokens: 4096, temperature: 0.2, isActive: true, isEnabled: true, isDefault: false, monthlyTokenQuota: 300000 },
-    { id: 'aim-3', name: 'DeepSeek R1 Reasoning', modelName: 'DeepSeek R1 Reasoning', provider: 'DeepSeek', maxTokens: 8192, temperature: 0.1, isActive: true, isEnabled: true, isDefault: false, monthlyTokenQuota: 1000000 }
-  ];
-
-  static aiLogs: AiGenLogModel[] = [
-    { id: 'log-1', userDisplayName: 'Trần Hoàng Admin', modelName: 'GPT-4o Omnimodal', promptSnippet: 'Tự động phân tích điểm nghẽn Sprint 41 và gợi ý phân bổ thành viên', tokensUsed: 1420, latencyMs: 840, costEstimate: 0.0142, timestamp: '2026-09-19T22:10:00Z', status: 'Success' },
-    { id: 'log-2', userDisplayName: 'Nguyễn Văn Dev', modelName: 'Claude 3.5 Sonnet', promptSnippet: 'Tạo tự động Acceptance Criteria cho Story #PROJ-104', tokensUsed: 890, latencyMs: 620, costEstimate: 0.0089, timestamp: '2026-09-19T21:40:00Z', status: 'Success' }
-  ];
-
-  static activeSessions: ActiveSessionModel[] = [
-    { id: 'sess-1', device: 'Windows PC Desktop', deviceName: 'Windows PC Desktop', browser: 'Chrome 128.0 (Windows 11)', ipAddress: '127.0.0.1', location: 'Hà Nội, Việt Nam', lastActive: 'Hiện tại', isCurrent: true },
-    { id: 'sess-2', device: 'MacBook Pro 16"', deviceName: 'MacBook Pro 16"', browser: 'Safari 17.4 (macOS)', ipAddress: '118.69.182.10', location: 'Hồ Chí Minh, Việt Nam', lastActive: '2 giờ trước', isCurrent: false }
-  ];
+  // Data Stores (Default to empty, to be populated from backend APIs)
+  static users: UserProfileModel[] = [];
+  static skills: SkillModel[] = [];
+  static userSkills: UserSkillModel[] = [];
+  static notifications: NotificationModel[] = [];
+  static aiModels: AiModelConfig[] = [];
+  static aiLogs: AiGenLogModel[] = [];
+  static activeSessions: ActiveSessionModel[] = [];
 
   static otpStorage = new Map<string, { code: string; expiresAt: number; purpose: string }>();
 }

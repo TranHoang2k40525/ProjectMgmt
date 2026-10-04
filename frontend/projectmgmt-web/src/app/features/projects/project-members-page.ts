@@ -28,7 +28,7 @@ import { ProjectManagementService, ProjectMember } from '../../core/services/pro
 
       <!-- Members Grid List -->
       <div class="members-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        @for (member of currentProject().members; track member.id) {
+        @for (member of currentProject()?.members ?? []; track member.id) {
           <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between gap-4 hover:shadow-md transition-shadow">
             <div class="flex items-center gap-3">
               <div class="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-bold text-sm">
@@ -44,8 +44,14 @@ import { ProjectManagementService, ProjectMember } from '../../core/services/pro
               <span class="px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-900">
                 {{ member.role }}
               </span>
-              <span class="text-[10px] text-slate-400">Tham gia: {{ member.joinedAt }}</span>
+              <span class="text-[11px] text-slate-400">Tham gia: {{ member.joinedAt }}</span>
             </div>
+          </div>
+        } @empty {
+          <div class="col-span-full py-12 flex flex-col items-center justify-center text-center text-slate-500">
+            <span class="material-symbols-outlined text-4xl text-slate-400 mb-2">group_off</span>
+            <p class="font-medium">Chưa có thành viên nào trong dự án này.</p>
+            <p class="text-xs text-slate-400 mt-1">Bấm nút "Thêm thành viên mới" ở trên để mời cộng sự vào dự án.</p>
           </div>
         }
       </div>

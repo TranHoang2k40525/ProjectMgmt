@@ -12,7 +12,7 @@
         Ma Trận Phân Quyền
       </button>
       <button class="switch-btn" [class.active]="activeView() === 'USERS'" (click)="activeView.set('USERS')">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
         Danh Sách Người Dùng ({{ users().length }})
       </button>
     </div>
@@ -159,6 +159,12 @@
                   <button class="btn-toggle-status" (click)="onToggleUserStatus(u.id)">
                     {{ u.isActive ? 'Khóa Tài Khoản' : 'Mở Khóa' }}
                   </button>
+                </td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="6" class="p-8 text-center text-slate-400">
+                  <p class="text-sm font-medium">Chưa có người dùng nào trong danh sách</p>
                 </td>
               </tr>
             }

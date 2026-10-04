@@ -201,7 +201,7 @@
                 <div class="flex flex-col gap-1.5">
                   <label for="profJobTitle" class="font-label-md text-label-md text-on-surface font-semibold flex items-center justify-between">
                     <span>Chức danh / Vị trí Scrum</span>
-                    <span class="text-outline font-body-sm text-body-sm">Bắt buộc</span>
+                    <span class="text-outline font-body-sm text-body-sm">Không bắt buộc</span>
                   </label>
                   <div class="relative">
                     <span class="material-symbols-outlined absolute left-3.5 top-2.5 text-outline text-[18px]">engineering</span>
@@ -224,12 +224,49 @@
                   </div>
                 </div>
 
-                <div class="flex flex-col gap-1.5 md:col-span-2">
-                  <label for="profAvatar" class="font-label-md text-label-md text-on-surface font-semibold">URL Ảnh đại diện</label>
+                <div class="flex flex-col gap-1.5">
+                  <label for="profPhone" class="font-label-md text-label-md text-on-surface font-semibold">Số điện thoại</label>
                   <div class="relative">
-                    <span class="material-symbols-outlined absolute left-3.5 top-2.5 text-outline text-[18px]">image</span>
-                    <input id="profAvatar" type="text" formControlName="avatarUrl" placeholder="https://lh3.googleusercontent.com/..." class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary-container transition-all" />
+                    <span class="material-symbols-outlined absolute left-3.5 top-2.5 text-outline text-[18px]">phone</span>
+                    <input id="profPhone" type="tel" formControlName="phoneNumber" placeholder="+84 901 234 567" class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary-container transition-all" />
                   </div>
+                </div>
+
+                <div class="flex flex-col gap-1.5">
+                  <label for="profTimezone" class="font-label-md text-label-md text-on-surface font-semibold">Múi giờ</label>
+                  <div class="relative">
+                    <span class="material-symbols-outlined absolute left-3.5 top-2.5 text-outline text-[18px]">schedule</span>
+                    <input id="profTimezone" type="text" formControlName="timezone" placeholder="Asia/Ho_Chi_Minh" class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary-container transition-all" />
+                  </div>
+                </div>
+
+                <div class="flex flex-col gap-1.5">
+                  <label for="profSeniority" class="font-label-md text-label-md text-on-surface font-semibold">Cấp độ chuyên môn</label>
+                  <select id="profSeniority" formControlName="seniorityLevel" class="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-primary-container">
+                    <option value="">Chưa chọn</option>
+                    <option value="Intern">Intern</option>
+                    <option value="Junior">Junior</option>
+                    <option value="Middle">Middle</option>
+                    <option value="Senior">Senior</option>
+                    <option value="Lead">Lead</option>
+                    <option value="Principal">Principal</option>
+                  </select>
+                </div>
+
+                <div class="flex flex-col gap-1.5">
+                  <label for="profExperience" class="font-label-md text-label-md text-on-surface font-semibold">Số năm kinh nghiệm</label>
+                  <input id="profExperience" type="number" min="0" max="80" step="0.5" formControlName="yearsOfExperience" class="w-full px-4 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-primary-container" />
+                </div>
+
+                <div class="flex flex-col gap-1.5 md:col-span-2">
+                  <label for="profBio" class="font-label-md text-label-md text-on-surface font-semibold">Giới thiệu ngắn</label>
+                  <textarea id="profBio" rows="3" maxlength="5000" formControlName="bio" placeholder="Vai trò, kinh nghiệm và định hướng chuyên môn..." class="w-full px-4 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-primary-container"></textarea>
+                </div>
+
+                <div class="flex flex-col gap-1.5 md:col-span-2">
+                  <label for="profAvatar" class="font-label-md text-label-md text-on-surface font-semibold">Ảnh đại diện</label>
+                  <input id="profAvatar" type="file" accept="image/jpeg,image/png,image/webp" (change)="onAvatarSelected($event)" class="w-full px-4 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md file:mr-4 file:rounded-lg file:border-0 file:bg-primary-container file:px-3 file:py-1.5 file:text-white" />
+                  <small class="text-outline">JPEG, PNG hoặc WebP; dung lượng tối đa 5 MB. Backend kiểm tra chữ ký tệp thật.</small>
                 </div>
 
                 <div class="md:col-span-2 pt-4 flex items-center justify-between border-t border-surface-container mt-2">
@@ -464,6 +501,11 @@
                       </button>
                     }
                   </div>
+                } @empty {
+                  <div class="p-5 rounded-xl bg-surface-container-low border border-outline-variant/20 text-on-surface-variant">
+                    <strong class="block text-on-surface mb-1">Chưa có API quản lý từng phiên</strong>
+                    <p class="font-body-sm text-body-sm">Hệ thống vẫn xoay vòng refresh token và thu hồi toàn bộ phiên khi đổi/đặt lại mật khẩu. Danh sách thiết bị sẽ được bật khi backend có endpoint tương ứng.</p>
+                  </div>
                 }
               </div>
             </div>
@@ -482,7 +524,7 @@
               </div>
               <div>
                 <h3 class="font-headline-sm text-headline-sm text-on-surface font-bold">Tài khoản liên kết</h3>
-                <p class="font-body-sm text-body-sm text-on-surface-variant">Schema ExternalLogin: OAuth2 & SSO</p>
+                <p class="font-body-sm text-body-sm text-on-surface-variant">OAuth2/SSO chỉ hoạt động sau khi cấu hình ClientId và ClientSecret thật.</p>
               </div>
             </div>
 
@@ -502,9 +544,9 @@
                     <span class="font-body-sm text-body-sm text-outline truncate">{{ u.email }}</span>
                   </div>
                 </div>
-                <span class="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-label-sm text-label-sm font-bold flex items-center gap-1 shrink-0">
-                  <span class="material-symbols-outlined text-[13px]">check_circle</span>
-                  Đã kết nối
+                <span class="px-2.5 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm font-bold flex items-center gap-1 shrink-0">
+                  <span class="material-symbols-outlined text-[13px]">link_off</span>
+                  Chưa cấu hình
                 </span>
               </div>
 
@@ -518,8 +560,8 @@
                     <span class="font-body-sm text-body-sm text-outline truncate">huce-scrum-master</span>
                   </div>
                 </div>
-                <button type="button" class="px-2.5 py-1 rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm font-semibold hover:bg-surface-container-high transition-colors shrink-0">
-                  Đồng bộ
+                <button type="button" disabled class="px-2.5 py-1 rounded-lg bg-surface-container text-outline font-label-sm text-label-sm font-semibold shrink-0 opacity-60 cursor-not-allowed">
+                  Chưa hỗ trợ
                 </button>
               </div>
             </div>

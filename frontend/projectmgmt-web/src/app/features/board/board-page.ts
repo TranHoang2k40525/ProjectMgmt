@@ -5,6 +5,7 @@ import { DragDropModule, CdkDragDrop } from '@angular/cdk/drag-drop';
 import { gsap } from 'gsap';
 import { Flip } from 'gsap/Flip';
 import { ProjectManagementService, WorkItem } from '../../core/services/project-management.service';
+import { IdentityService } from '../../core/services/identity.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ContextMenuComponent, ContextMenuItemAction } from '../../shared/components/context-menu.component';
 
@@ -21,8 +22,12 @@ gsap.registerPlugin(Flip);
 export class BoardPage implements OnDestroy {
   private el = inject<ElementRef<HTMLElement>>(ElementRef);
   private flipAnimation: gsap.core.Timeline | null = null;
+  private readonly identityService = inject(IdentityService);
   readonly projectService = inject(ProjectManagementService);
   readonly toastService = inject(ToastService);
+
+  readonly projectMembers = computed(() => this.projectService.currentProject()?.members ?? []);
+  readonly activeSprint = computed(() => this.projectService.sprints().find(s => s.status === 'active') ?? this.projectService.sprints()[0] ?? null);
 
   searchQuery = signal<string>('');
   selectedAssigneeFilter = signal<string | null>(null);
@@ -121,10 +126,12 @@ export class BoardPage implements OnDestroy {
         }
         break;
 
-      case 'assign':
-        this.projectService.updateWorkItemAssignee(item.id, 'Trần Văn Hoàng');
+      case 'assign': {
+        const myName = this.identityService.authState().currentUser?.displayName || 'Tôi';
+        this.projectService.updateWorkItemAssignee(item.id, myName);
         this.toastService.success('Đã Gán Việc', `Công việc [${item.issueKey}] đã gán cho bạn`);
         break;
+      }
 
       case 'ai-breakdown':
         this.projectService.activeDrawerTask.set(item);
@@ -151,6 +158,7 @@ export class BoardPage implements OnDestroy {
   // Double Click for Quick Inline Editing
   startInlineEdit(item: WorkItem, event?: Event): void {
     if (event) event.stopPropagation();
+    this.projectService.activeDrawerTask.set(null);
     this.inlineEditingTaskId.set(item.id);
     this.inlineTitleValue.set(item.title);
   }
@@ -173,6 +181,9 @@ export class BoardPage implements OnDestroy {
   }
 
   openTaskDrawer(task: WorkItem, event?: Event): void {
+    if (this.inlineEditingTaskId() !== null) {
+      return;
+    }
     if (event) {
       const target = event.target as HTMLElement;
       if (target.closest('select') || target.closest('button') || target.closest('input') || target.closest('.no-drawer')) {
@@ -234,7 +245,8 @@ export class BoardPage implements OnDestroy {
 
   assignToMe(taskId: string, event?: Event): void {
     if (event) event.stopPropagation();
-    this.projectService.updateWorkItemAssignee(taskId, 'Trần Văn Hoàng');
+    const myName = this.identityService.authState().currentUser?.displayName || 'Tôi';
+    this.projectService.updateWorkItemAssignee(taskId, myName);
     this.toastService.success('Đã Gán Cho Tôi', 'Công việc đã được đưa vào danh sách của bạn.');
     this.activeMenuTaskId.set(null);
   }

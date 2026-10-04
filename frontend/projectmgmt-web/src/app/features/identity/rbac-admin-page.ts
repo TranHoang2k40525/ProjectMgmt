@@ -2,7 +2,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { IdentityService } from '../../core/services/identity.service';
-import { UserProfileModel, RoleModel, PermissionModel, IdentityMockDb } from '../../core/mocks/identity-mock-db';
+import { UserProfileModel, RoleModel, PermissionModel } from '../../core/mocks/identity-mock-db';
 
 @Component({
   selector: 'app-rbac-admin-page',
@@ -15,9 +15,9 @@ export class RbacAdminPageComponent implements OnInit {
   private identityService = inject(IdentityService);
   private fb = inject(FormBuilder);
 
-  readonly users = signal<UserProfileModel[]>(IdentityMockDb.users);
-  readonly roles = signal<RoleModel[]>(IdentityMockDb.roles);
-  readonly permissions = signal<PermissionModel[]>(IdentityMockDb.permissions);
+  readonly users = signal<UserProfileModel[]>([]);
+  readonly roles = signal<RoleModel[]>([]);
+  readonly permissions = signal<PermissionModel[]>([]);
   readonly activeView = signal<'MATRIX' | 'USERS'>('MATRIX');
   readonly loading = signal<boolean>(false);
   readonly successMsg = signal<string | null>(null);

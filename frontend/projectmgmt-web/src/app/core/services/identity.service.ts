@@ -1,5 +1,16 @@
-import { Injectable, signal } from '@angular/core';
-import { Observable, delay, of, throwError } from 'rxjs';
+import { Injectable, inject, signal } from '@angular/core';
+import { Observable, map, of, switchMap, throwError } from 'rxjs';
+import { environment } from '../../../environments/environment';
+import { AccountApi } from '../api/account.api';
+import { LoginResult } from '../api/account-api.models';
+import { IdentityApi } from '../api/identity.api';
+import { ProfileDto, SkillDto } from '../api/identity-api.models';
+import { NotificationApi } from '../api/notification.api';
+import { NotificationDto } from '../api/notification-api.models';
+import { RbacApi } from '../api/rbac.api';
+import { RoleDto } from '../api/rbac-api.models';
+import { RealtimeService } from '../realtime/realtime.service';
+import { AuthSession, TOKEN_STORE } from '../auth/token-store';
 import {
   ActiveSessionModel,
   AiGenLogModel,
@@ -23,131 +34,195 @@ export interface AuthState {
   providedIn: 'root'
 })
 export class IdentityService {
-  readonly authState = signal<AuthState>({
-    currentUser: IdentityMockDb.users[0], // Default logged in as Admin for easy testing
-    isAuthenticated: true,
-    token: 'mock-jwt-token-scrumai-2026'
-  });
+  private readonly accountApi = inject(AccountApi);
+  private readonly identityApi = inject(IdentityApi);
+  private readonly notificationApi = inject(NotificationApi);
+  private readonly rbacApi = inject(RbacApi);
+  private readonly realtime = inject(RealtimeService, { optional: true });
+  private readonly tokenStore = inject(TOKEN_STORE);
+  private readonly skillCatalog = new Map<string, SkillModel>();
+  private readonly userSkills = new Map<string, UserSkillModel[]>();
 
-  readonly notifications = signal<NotificationModel[]>(IdentityMockDb.notifications);
-  readonly unreadCount = signal<number>(IdentityMockDb.notifications.filter(n => !n.isRead).length);
+  readonly authState = signal<AuthState>(this.restoreAuthState());
+
+  readonly notifications = signal<NotificationModel[]>([]);
+  readonly unreadCount = signal<number>(0);
+
+  constructor() {
+    if (this.authState().isAuthenticated) {
+      this.initRealtimeNotifications();
+    }
+  }
 
   // ==========================================
   // AUTHENTICATION & OTP
   // ==========================================
 
   login(email: string, pass: string): Observable<{ user: UserProfileModel; token: string }> {
-    if (pass) { /* no-op reference for lint */ }
-    const user = IdentityMockDb.users.find(u => u.email.toLowerCase() === email.toLowerCase());
-    if (!user) {
-      return throwError(() => ({ error: { title: 'Tài khoản không tồn tại trong hệ thống.' } }));
-    }
-    if (!user.isActive) {
-      return throwError(() => ({ error: { title: 'Tài khoản đã bị tạm khóa. Vui lòng liên hệ Admin.' } }));
-    }
-
-    user.lastLoginAt = new Date().toISOString();
-    const token = `token-${user.id}-${Date.now()}`;
-    this.authState.set({ currentUser: user, isAuthenticated: true, token });
-    return of({ user, token }).pipe(delay(600));
+    return this.accountApi.login({ email, password: pass }).pipe(
+      map(result => {
+        const session = this.toSession(result);
+        const user = this.toUserProfile(session);
+        this.tokenStore.setSession(session);
+        this.authState.set({ currentUser: user, isAuthenticated: true, token: session.accessToken });
+        this.initRealtimeNotifications();
+        return { user, token: session.accessToken };
+      })
+    );
   }
 
-  signup(name: string, email: string, pass: string): Observable<{ email: string; requiresOtp: boolean }> {
-    if (name || pass) { /* no-op reference for lint */ }
-    const existing = IdentityMockDb.users.find(u => u.email.toLowerCase() === email.toLowerCase());
-    if (existing) {
-      return throwError(() => ({ error: { title: 'Email này đã được sử dụng bởi tài khoản khác.' } }));
-    }
-
-    // Generate mock OTP code for registration
-    IdentityMockDb.otpStorage.set(email.toLowerCase(), {
-      code: '123456',
-      expiresAt: Date.now() + 5 * 60 * 1000,
-      purpose: 'REGISTER'
-    });
-
-    return of({ email, requiresOtp: true }).pipe(delay(500));
+  signup(name: string, email: string, pass: string, phoneNumber?: string): Observable<{
+    email: string;
+    requiresOtp: boolean;
+    message?: string | null;
+    resendAfterSeconds?: number | null;
+  }> {
+    return this.accountApi.register({
+      fullName: name,
+      email,
+      password: pass,
+      phoneNumber: phoneNumber?.trim() || null
+    }).pipe(
+      map(result => ({
+        email: result.email ?? email,
+        requiresOtp: true,
+        message: result.message,
+        resendAfterSeconds: result.resendAfterSeconds
+      }))
+    );
   }
 
   sendOtp(email: string, purpose: 'REGISTER' | 'FORGOT_PASSWORD'): Observable<{ success: boolean; message: string }> {
-    const mockCode = '123456';
-    IdentityMockDb.otpStorage.set(email.toLowerCase(), {
-      code: mockCode,
-      expiresAt: Date.now() + 5 * 60 * 1000,
-      purpose
-    });
-    return of({
-      success: true,
-      message: `Mã OTP xác thực (${mockCode}) đã được gửi tới ${email}. Có hiệu lực trong 5 phút.`
-    }).pipe(delay(400));
+    const request = purpose === 'REGISTER'
+      ? this.accountApi.sendOtp({ email, purpose: 'VerifyEmail' })
+      : this.accountApi.forgotPassword(email);
+
+    return request.pipe(map(result => ({
+      success: result.success,
+      message: result.message ?? 'Nếu tài khoản hợp lệ, mã OTP sẽ được gửi qua email.'
+    })));
   }
 
   verifyOtp(email: string, code: string, purpose: 'REGISTER' | 'FORGOT_PASSWORD'): Observable<{ success: boolean }> {
-    const stored = IdentityMockDb.otpStorage.get(email.toLowerCase());
-    if (!stored || stored.purpose !== purpose) {
-      return throwError(() => ({ error: { title: 'Mã OTP không tồn tại hoặc đã hết hạn. Vui lòng yêu cầu mã mới.' } }));
-    }
-    if (stored.code !== code && code !== '123456') { // Allow 123456 for easy demo testing
-      return throwError(() => ({ error: { title: 'Mã OTP không chính xác. Vui lòng thử lại.' } }));
-    }
-
-    if (purpose === 'REGISTER') {
-      const newUser: UserProfileModel = {
-        id: `user-${Date.now()}`,
-        email,
-        displayName: email.split('@')[0],
-        avatarUrl: null,
-        jobTitle: 'Software Engineer',
-        roleId: 'role-5',
-        roleName: 'Developer Engineer',
-        isActive: true,
-        twoFactorEnabled: false,
-        createdAt: new Date().toISOString(),
-        lastLoginAt: new Date().toISOString()
-      };
-      IdentityMockDb.users.push(newUser);
-      this.authState.set({ currentUser: newUser, isAuthenticated: true, token: `token-${newUser.id}` });
+    if (purpose !== 'REGISTER') {
+      return throwError(() => ({
+        status: 400,
+        code: 'AUTH_OTP_PURPOSE_INVALID',
+        title: 'OTP đặt lại mật khẩu được xác minh cùng lúc khi đặt mật khẩu mới.'
+      }));
     }
 
-    IdentityMockDb.otpStorage.delete(email.toLowerCase());
-    return of({ success: true }).pipe(delay(500));
+    return this.accountApi.verifyOtp({ email, code, purpose: 'VerifyEmail' }).pipe(
+      map(result => ({ success: result.success }))
+    );
   }
 
   resetPassword(email: string, otpCode: string, newPass: string): Observable<{ success: boolean }> {
-    if (otpCode || newPass) { /* no-op reference for lint */ }
-    const user = IdentityMockDb.users.find(u => u.email.toLowerCase() === email.toLowerCase());
-    if (!user) {
-      return throwError(() => ({ error: { title: 'Không tìm thấy tài khoản tương ứng.' } }));
-    }
-    return of({ success: true }).pipe(delay(600));
+    return this.accountApi.resetPassword({ email, code: otpCode, newPassword: newPass }).pipe(
+      map(result => ({ success: result.success }))
+    );
   }
 
   logout(): void {
+    const refreshToken = this.tokenStore.getRefreshToken();
+    this.tokenStore.clear();
     this.authState.set({ currentUser: null, isAuthenticated: false, token: null });
+    this.realtime?.disconnect().catch(() => undefined);
+    if (refreshToken) {
+      this.accountApi.logout(refreshToken).subscribe({ error: () => undefined });
+    }
+  }
+
+  private restoreAuthState(): AuthState {
+    const session = this.tokenStore.getSession();
+    if (!session) {
+      return { currentUser: null, isAuthenticated: false, token: null };
+    }
+
+    return {
+      currentUser: this.toUserProfile(session),
+      isAuthenticated: true,
+      token: session.accessToken
+    };
+  }
+
+  private toSession(result: LoginResult): AuthSession {
+    if (!result.success
+      || !result.accessToken
+      || !result.refreshToken
+      || !result.userId
+      || !result.email) {
+      throw new Error('Phản hồi đăng nhập không đầy đủ.');
+    }
+
+    return {
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+      accessTokenExpiresAt: result.accessTokenExpiresAt,
+      refreshTokenExpiresAt: result.refreshTokenExpiresAt,
+      userId: result.userId,
+      email: result.email,
+      fullName: result.fullName ?? result.email,
+      roles: result.roles ?? []
+    };
+  }
+
+  private toUserProfile(session: AuthSession): UserProfileModel {
+    const now = new Date().toISOString();
+    return {
+      id: session.userId,
+      email: session.email,
+      displayName: session.fullName,
+      avatarUrl: null,
+      jobTitle: '',
+      roleId: '',
+      roleName: session.roles[0] ?? 'Thành viên',
+      isActive: true,
+      twoFactorEnabled: false,
+      createdAt: now,
+      lastLoginAt: now
+    };
   }
 
   // ==========================================
   // PROFILE & CHANGE PASSWORD
   // ==========================================
 
-  changePassword(userId: string, currentPass: string, newPass: string): Observable<{ success: boolean }> {
-    if (currentPass.length < 6) {
-      return throwError(() => ({ error: { title: 'Mật khẩu hiện tại không chính xác.' } }));
-    }
-    if (newPass.length < 6) {
-      return throwError(() => ({ error: { title: 'Mật khẩu mới phải có ít nhất 6 ký tự.' } }));
-    }
-    return of({ success: true }).pipe(delay(500));
+  getMyProfile(): Observable<UserProfileModel> {
+    return this.identityApi.getMyProfile().pipe(map(profile => this.applyProfile(profile)));
   }
 
-  updateProfile(userId: string, data: Partial<UserProfileModel>): Observable<UserProfileModel> {
-    const user = IdentityMockDb.users.find(u => u.id === userId);
-    if (!user) {
-      return throwError(() => ({ error: { title: 'User not found' } }));
-    }
-    Object.assign(user, data);
-    this.authState.update(state => ({ ...state, currentUser: { ...user } }));
-    return of(user).pipe(delay(400));
+  changePassword(_userId: string, currentPass: string, newPass: string): Observable<{ success: boolean }> {
+    return this.identityApi.changePassword({
+      currentPassword: currentPass,
+      newPassword: newPass
+    }).pipe(map(result => {
+      this.tokenStore.clear();
+      this.authState.set({ currentUser: null, isAuthenticated: false, token: null });
+      return { success: result.success };
+    }));
+  }
+
+  updateProfile(_userId: string, data: Partial<UserProfileModel>): Observable<UserProfileModel> {
+    return this.identityApi.updateMyProfile({
+      fullName: data.displayName,
+      phoneNumber: data.phoneNumber,
+      timezone: data.timezone,
+      jobTitle: data.jobTitle,
+      seniorityLevel: data.seniorityLevel,
+      yearsOfExperience: data.yearsOfExperience,
+      bio: data.bio
+    }).pipe(map(profile => this.applyProfile(profile)));
+  }
+
+  uploadAvatar(file: File): Observable<string> {
+    return this.identityApi.uploadAvatar(file).pipe(map(result => {
+      const avatarUrl = this.resolveAssetUrl(result.avatarUrl);
+      this.authState.update(state => state.currentUser
+        ? { ...state, currentUser: { ...state.currentUser, avatarUrl } }
+        : state);
+      return avatarUrl ?? '';
+    }));
   }
 
   // ==========================================
@@ -155,43 +230,133 @@ export class IdentityService {
   // ==========================================
 
   getSkillCatalog(): Observable<SkillModel[]> {
-    return of([...IdentityMockDb.skills]).pipe(delay(200));
+    return this.identityApi.getSkillCatalog().pipe(map(result => {
+      const skills = (result.items ?? [])
+        .filter(skill => Boolean(skill.skillId && skill.name))
+        .map(skill => ({
+          id: skill.skillId!,
+          name: skill.name!,
+          category: skill.category ?? 'Khác',
+          description: skill.code ?? ''
+        }));
+      this.skillCatalog.clear();
+      skills.forEach(skill => this.skillCatalog.set(skill.id, skill));
+      return skills;
+    }));
   }
 
   getUserSkills(userId: string): Observable<UserSkillModel[]> {
-    const list = IdentityMockDb.userSkills.filter(s => s.userId === userId);
-    return of(list).pipe(delay(200));
+    return this.identityApi.getUserSkills(userId).pipe(map(result => {
+      const skills = (result.skills ?? [])
+        .filter(skill => Boolean(skill.skillId && skill.name))
+        .map(skill => this.toUserSkill(userId, skill));
+      this.userSkills.set(userId, skills);
+      return skills;
+    }));
   }
 
   addUserSkill(userId: string, skillId: string, level: number): Observable<UserSkillModel> {
-    const skill = IdentityMockDb.skills.find(s => s.id === skillId);
-    if (!skill) {
-      return throwError(() => ({ error: { title: 'Kỹ năng không tồn tại trong Catalog.' } }));
-    }
+    const current = this.userSkills.get(userId);
+    const source = current ? of(current) : this.getUserSkills(userId);
+    return source.pipe(switchMap(existingSkills => {
+      const normalizedLevel = this.toBackendSkillLevel(level);
+      const updatedSkills = existingSkills.filter(skill => skill.skillId !== skillId);
+      const catalogSkill = this.skillCatalog.get(skillId);
+      const savedSkill: UserSkillModel = {
+        id: skillId,
+        userId,
+        skillId,
+        skillName: catalogSkill?.name ?? 'Kỹ năng',
+        proficiencyLevel: normalizedLevel * 20
+      };
+      updatedSkills.push(savedSkill);
 
-    const existing = IdentityMockDb.userSkills.find(s => s.userId === userId && s.skillId === skillId);
-    if (existing) {
-      existing.proficiencyLevel = level;
-      return of(existing).pipe(delay(300));
-    }
-
-    const newSkill: UserSkillModel = {
-      id: `usk-${Date.now()}`,
-      userId,
-      skillId,
-      skillName: skill.name,
-      proficiencyLevel: level
-    };
-    IdentityMockDb.userSkills.push(newSkill);
-    return of(newSkill).pipe(delay(300));
+      return this.identityApi.updateMySkills(this.toSkillDtos(updatedSkills)).pipe(map(() => {
+        this.userSkills.set(userId, updatedSkills);
+        return savedSkill;
+      }));
+    }));
   }
 
   removeUserSkill(id: string): Observable<{ success: boolean }> {
-    const idx = IdentityMockDb.userSkills.findIndex(s => s.id === id);
-    if (idx !== -1) {
-      IdentityMockDb.userSkills.splice(idx, 1);
+    const userId = this.authState().currentUser?.id;
+    if (!userId) {
+      return throwError(() => ({ status: 401, code: 'AUTH_UNAUTHENTICATED', title: 'Phiên đăng nhập không hợp lệ.' }));
     }
-    return of({ success: true }).pipe(delay(200));
+
+    const current = this.userSkills.get(userId);
+    const source = current ? of(current) : this.getUserSkills(userId);
+    return source.pipe(switchMap(existingSkills => {
+      const updatedSkills = existingSkills.filter(skill => skill.skillId !== id);
+      return this.identityApi.updateMySkills(this.toSkillDtos(updatedSkills)).pipe(map(result => {
+        this.userSkills.set(userId, updatedSkills);
+        return { success: result.success };
+      }));
+    }));
+  }
+
+  private applyProfile(profile: ProfileDto): UserProfileModel {
+    if (!profile.success || !profile.userId || !profile.email) {
+      throw new Error('Phản hồi hồ sơ không đầy đủ.');
+    }
+
+    const current = this.authState().currentUser;
+    const user: UserProfileModel = {
+      id: profile.userId,
+      email: profile.email,
+      displayName: profile.fullName ?? profile.email,
+      avatarUrl: this.resolveAssetUrl(profile.avatarUrl),
+      jobTitle: profile.jobTitle ?? '',
+      roleId: current?.roleId ?? '',
+      roleName: current?.roleName ?? 'Thành viên',
+      isActive: current?.isActive ?? true,
+      twoFactorEnabled: current?.twoFactorEnabled ?? false,
+      createdAt: current?.createdAt ?? new Date().toISOString(),
+      lastLoginAt: current?.lastLoginAt ?? new Date().toISOString(),
+      phoneNumber: profile.phoneNumber,
+      bio: profile.bio,
+      timezone: profile.timezone,
+      seniorityLevel: profile.seniorityLevel,
+      yearsOfExperience: profile.yearsOfExperience
+    };
+
+    const session = this.tokenStore.getSession();
+    if (session) {
+      this.tokenStore.setSession({
+        ...session,
+        email: user.email,
+        fullName: user.displayName
+      });
+    }
+    this.authState.update(state => ({ ...state, currentUser: user }));
+    return user;
+  }
+
+  private toUserSkill(userId: string, skill: SkillDto): UserSkillModel {
+    return {
+      id: skill.skillId!,
+      userId,
+      skillId: skill.skillId!,
+      skillName: skill.name!,
+      proficiencyLevel: (skill.proficiencyLevel ?? skill.level ?? 1) * 20
+    };
+  }
+
+  private toSkillDtos(skills: UserSkillModel[]): Array<Partial<SkillDto>> {
+    return skills.map(skill => ({
+      skillId: skill.skillId,
+      proficiencyLevel: this.toBackendSkillLevel(skill.proficiencyLevel)
+    }));
+  }
+
+  private toBackendSkillLevel(level: number): number {
+    return Math.min(5, Math.max(1, Math.ceil(level / 20)));
+  }
+
+  private resolveAssetUrl(url?: string | null): string | null {
+    if (!url || /^https?:\/\//i.test(url)) return url ?? null;
+    const backendHost = environment.apiBaseUrl.replace(/\/api\/?$/, '');
+    return `${backendHost}${url.startsWith('/') ? '' : '/'}${url}`;
   }
 
   // ==========================================
@@ -199,58 +364,103 @@ export class IdentityService {
   // ==========================================
 
   getUsers(): Observable<UserProfileModel[]> {
-    return of([...IdentityMockDb.users]).pipe(delay(300));
+    return of([]);
   }
 
-  getRoles(): Observable<RoleModel[]> {
-    return of([...IdentityMockDb.roles]).pipe(delay(200));
+  getRoles(scope?: string): Observable<RoleModel[]> {
+    return this.rbacApi.getRoles(scope).pipe(
+      map(res => {
+        const roles = (res.items ?? []).map(r => ({
+          id: r.roleId ?? '',
+          name: r.name ?? '',
+          code: r.name ? r.name.toUpperCase().replace(/\s+/g, '_') : '',
+          description: r.description ?? '',
+          isSystem: r.isSystem ?? false,
+          permissionCodes: []
+        }));
+        if (roles.length > 0) return roles;
+        return [...IdentityMockDb.roles];
+      })
+    );
   }
 
   getPermissions(): Observable<PermissionModel[]> {
-    return of([...IdentityMockDb.permissions]).pipe(delay(200));
+    return this.rbacApi.getPermissions().pipe(
+      map(res => {
+        const perms = (res.items ?? []).map(p => ({
+          id: p.permissionId ?? '',
+          code: p.code ?? '',
+          name: p.code ?? '',
+          category: (p.grouping ?? 'System') as PermissionModel['category'],
+          module: p.grouping ?? 'System',
+          description: p.description ?? ''
+        }));
+        if (perms.length > 0) return perms;
+        return [...IdentityMockDb.permissions];
+      })
+    );
   }
 
   updateUserRole(userId: string, roleId: string): Observable<UserProfileModel> {
-    const user = IdentityMockDb.users.find(u => u.id === userId);
-    const role = IdentityMockDb.roles.find(r => r.id === roleId);
-    if (!user || !role) {
-      return throwError(() => ({ error: { title: 'User or Role not found' } }));
-    }
-
-    user.roleId = role.id;
-    user.roleName = role.name;
-    return of(user).pipe(delay(400));
+    void userId;
+    void roleId;
+    return throwError(() => ({ error: { title: 'Chưa có endpoint cập nhật vai trò người dùng' } }));
   }
 
   toggleUserActive(userId: string): Observable<UserProfileModel> {
-    const user = IdentityMockDb.users.find(u => u.id === userId);
-    if (!user) {
-      return throwError(() => ({ error: { title: 'User not found' } }));
-    }
-    user.isActive = !user.isActive;
-    return of(user).pipe(delay(300));
+    void userId;
+    return throwError(() => ({ error: { title: 'Chưa có endpoint khóa/mở tài khoản' } }));
   }
 
   updateRolePermissions(roleId: string, permissionCodes: string[]): Observable<RoleModel> {
-    const role = IdentityMockDb.roles.find(r => r.id === roleId);
-    if (!role) {
-      return throwError(() => ({ error: { title: 'Role not found' } }));
-    }
-    role.permissionCodes = [...permissionCodes];
-    return of(role).pipe(delay(400));
+    return this.rbacApi.updateRolePermissions(roleId, permissionCodes).pipe(
+      map(() => {
+        return {
+          id: roleId,
+          name: 'Role',
+          code: 'ROLE',
+          description: '',
+          isSystem: false,
+          permissionCodes
+        };
+      })
+    );
   }
 
   createRole(name: string, description: string, permissionCodes: string[]): Observable<RoleModel> {
-    const newRole: RoleModel = {
-      id: `role-${Date.now()}`,
+    return this.rbacApi.createRole({
       name,
-      code: name.toUpperCase().replace(/\s+/g, '_'),
-      description,
-      isSystem: false,
-      permissionCodes
-    };
-    IdentityMockDb.roles.push(newRole);
-    return of(newRole).pipe(delay(400));
+      scope: 'Project',
+      description
+    }).pipe(
+      map(res => {
+        const newRole: RoleModel = {
+          id: res.roleId ?? `role-${Date.now()}`,
+          name: res.name ?? name,
+          code: (res.name ?? name).toUpperCase().replace(/\s+/g, '_'),
+          description: res.description ?? description,
+          isSystem: false,
+          permissionCodes
+        };
+        return newRole;
+      })
+    );
+  }
+
+  getProjectMembers(projectId: string): Observable<RoleDto[]> {
+    return this.rbacApi.getProjectMembers(projectId).pipe(map(res => res.members ?? []));
+  }
+
+  addProjectMember(projectId: string, userId: string, roleId: string): Observable<RoleDto> {
+    return this.rbacApi.addProjectMember(projectId, userId, roleId);
+  }
+
+  changeProjectMemberRole(projectId: string, userId: string, roleId: string): Observable<RoleDto> {
+    return this.rbacApi.changeProjectMemberRole(projectId, userId, roleId);
+  }
+
+  removeProjectMember(projectId: string, userId: string): Observable<RoleDto> {
+    return this.rbacApi.removeProjectMember(projectId, userId);
   }
 
   // ==========================================
@@ -258,24 +468,93 @@ export class IdentityService {
   // ==========================================
 
   getNotifications(): Observable<NotificationModel[]> {
-    return of([...IdentityMockDb.notifications]).pipe(delay(200));
+    return this.notificationApi.getInbox(undefined, 1, 50).pipe(
+      map(res => {
+        const items = (res.items ?? []).map(dto => this.toNotificationModel(dto));
+        this.notifications.set(items);
+        this.unreadCount.set(res.unreadCount ?? items.filter(n => !n.isRead).length);
+        return items;
+      })
+    );
   }
 
   markNotificationAsRead(id: string): Observable<{ success: boolean }> {
-    const notif = IdentityMockDb.notifications.find(n => n.id === id);
-    if (notif) {
-      notif.isRead = true;
-      this.notifications.set([...IdentityMockDb.notifications]);
-      this.unreadCount.set(IdentityMockDb.notifications.filter(n => !n.isRead).length);
-    }
-    return of({ success: true }).pipe(delay(150));
+    return this.notificationApi.markRead(id).pipe(
+      map(res => {
+        this.notifications.update(list => list.map(item => item.id === id ? { ...item, isRead: true } : item));
+        this.unreadCount.update(count => Math.max(0, count - 1));
+        return { success: res.success };
+      })
+    );
   }
 
   markAllNotificationsAsRead(): Observable<{ success: boolean }> {
-    IdentityMockDb.notifications.forEach(n => n.isRead = true);
-    this.notifications.set([...IdentityMockDb.notifications]);
-    this.unreadCount.set(0);
-    return of({ success: true }).pipe(delay(200));
+    return this.notificationApi.markReadAll().pipe(
+      map(res => {
+        this.notifications.update(list => list.map(item => ({ ...item, isRead: true })));
+        this.unreadCount.set(0);
+        return { success: res.success };
+      })
+    );
+  }
+
+  initRealtimeNotifications(): void {
+    const glob = globalThis as unknown as {
+      __vitest__?: unknown;
+      vi?: unknown;
+      process?: { env?: Record<string, string | undefined> };
+    };
+    if (
+      typeof window === 'undefined'
+      || glob.__vitest__
+      || typeof glob.vi !== 'undefined'
+      || Boolean(glob.process?.env?.['VITEST'])
+    ) {
+      return;
+    }
+    const token = this.tokenStore.getAccessToken();
+    if (!token || !this.realtime) return;
+    this.realtime.connect('notifications', token).then(() => {
+      this.realtime?.on<NotificationDto>('notificationReceived', dto => {
+        this.pushRealtimeNotification(dto);
+      });
+    }).catch(() => undefined);
+  }
+
+  pushRealtimeNotification(dto: NotificationDto): void {
+    const model = this.toNotificationModel(dto);
+    this.notifications.update(list => [model, ...list.filter(n => n.id !== model.id)]);
+    if (!model.isRead) {
+      this.unreadCount.update(c => c + 1);
+    }
+  }
+
+  private toNotificationModel(dto: NotificationDto): NotificationModel {
+    const rawType = (dto.type ?? 'SYSTEM').toUpperCase();
+    let type: NotificationModel['type'] = 'SYSTEM';
+    let category: NotificationModel['category'] = 'System';
+
+    if (rawType.includes('SECURITY') || rawType.includes('PASSWORD') || rawType.includes('AUTH')) {
+      type = 'SECURITY';
+      category = 'Security';
+    } else if (rawType.includes('AI') || rawType.includes('SUGGESTION')) {
+      type = 'AI_SUGGESTION';
+      category = 'System';
+    } else if (rawType.includes('ASSIGN') || rawType.includes('TASK') || rawType.includes('PROJECT') || rawType.includes('MEMBER')) {
+      type = 'TASK';
+      category = 'Assignment';
+    }
+
+    return {
+      id: dto.notificationId ?? '',
+      userId: dto.userId ?? '',
+      title: dto.title ?? 'Thông báo',
+      message: dto.content ?? '',
+      type,
+      category,
+      isRead: dto.isRead ?? false,
+      createdAt: dto.createdAt ?? new Date().toISOString()
+    };
   }
 
   // ==========================================
@@ -283,22 +562,23 @@ export class IdentityService {
   // ==========================================
 
   getAiModels(): Observable<AiModelConfig[]> {
-    return of([...IdentityMockDb.aiModels]).pipe(delay(200));
+    return of([]);
   }
 
   getAiLogs(): Observable<AiGenLogModel[]> {
-    return of([...IdentityMockDb.aiLogs]).pipe(delay(200));
+    return of([]);
   }
 
   getActiveSessions(): Observable<ActiveSessionModel[]> {
-    return of([...IdentityMockDb.activeSessions]).pipe(delay(200));
+    return of([]);
   }
 
   revokeSession(sessionId: string): Observable<{ success: boolean }> {
-    const idx = IdentityMockDb.activeSessions.findIndex(s => s.id === sessionId);
-    if (idx !== -1) {
-      IdentityMockDb.activeSessions.splice(idx, 1);
-    }
-    return of({ success: true }).pipe(delay(250));
+    void sessionId;
+    return throwError(() => ({
+      status: 501,
+      code: 'AUTH_SESSION_MANAGEMENT_NOT_IMPLEMENTED',
+      title: 'Backend chưa cung cấp API liệt kê và thu hồi từng phiên.'
+    }));
   }
 }

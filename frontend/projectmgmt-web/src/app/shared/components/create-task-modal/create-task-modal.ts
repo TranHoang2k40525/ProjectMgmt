@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Output, inject, signal } from '@angular/core';
+import { Component, EventEmitter, Output, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ProjectManagementService } from '../../../core/services/project-management.service';
@@ -99,10 +99,10 @@ import { ToastService } from '../../../core/services/toast.service';
                 [(ngModel)]="sprintName"
                 class="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-primary"
               >
-                <option value="SCRUMAI Sprint 2">SCRUMAI Sprint 2 (Đang chạy)</option>
-                <option value="SCRUMAI Sprint 3">SCRUMAI Sprint 3 (Kế hoạch)</option>
-                <option value="SCRUMAI Sprint 4">SCRUMAI Sprint 4 (Tương lai)</option>
                 <option value="Backlog Pool">Backlog Pool (Chưa gán)</option>
+                @for (sp of sprints(); track sp.id) {
+                  <option [value]="sp.name">{{ sp.name }} ({{ sp.status === 'active' ? 'Đang chạy' : sp.status }})</option>
+                }
               </select>
             </div>
 
@@ -142,10 +142,10 @@ import { ToastService } from '../../../core/services/toast.service';
                 [(ngModel)]="assigneeName"
                 class="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-primary"
               >
-                <option value="Trần Văn Hoàng">Trần Văn Hoàng (Lead)</option>
-                <option value="Nguyễn Thanh Hà">Nguyễn Thanh Hà (Scrum Master)</option>
-                <option value="Phạm Đức Anh">Phạm Đức Anh (Developer)</option>
-                <option value="Lê Minh Khiêm">Lê Minh Khiêm (QA)</option>
+                <option value="">Chưa phân công</option>
+                @for (m of projectMembers(); track m.id) {
+                  <option [value]="m.displayName">{{ m.displayName }} ({{ m.role }})</option>
+                }
               </select>
             </div>
           </div>
@@ -214,7 +214,9 @@ export class CreateTaskModalComponent {
   private readonly toastService = inject(ToastService);
 
   readonly epics = this.projectService.epics;
+  readonly sprints = this.projectService.sprints;
   readonly customIssueTypes = this.projectService.customIssueTypes;
+  readonly projectMembers = computed(() => this.projectService.currentProject()?.members ?? []);
 
   showNewTypeForm = signal<boolean>(false);
   customTypeName = '';
@@ -223,10 +225,10 @@ export class CreateTaskModalComponent {
   title = '';
   issueType = 'Task';
   priority: 'Low' | 'Medium' | 'High' | 'Urgent' = 'Medium';
-  sprintName = 'SCRUMAI Sprint 2';
+  sprintName = 'Backlog Pool';
   epicName = '';
   storyPoints = 3;
-  assigneeName = 'Trần Văn Hoàng';
+  assigneeName = '';
   description = '';
 
   toggleNewTypeForm(): void {

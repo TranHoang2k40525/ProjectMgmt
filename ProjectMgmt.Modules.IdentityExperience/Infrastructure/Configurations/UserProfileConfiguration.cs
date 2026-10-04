@@ -81,6 +81,8 @@ public class UserProfileConfiguration : IEntityTypeConfiguration<UserProfile>
 
         builder.HasIndex(entity => entity.UserId, "UQ_UserProfile_UserId").IsUnique();
 
+        builder.HasIndex(entity => entity.PhoneNumber, "UQ_UserProfile_PhoneNumber").IsUnique();
+
         builder.HasIndex(entity => entity.DisplayName, "IX_UserProfile_DisplayName");
 
         builder.HasIndex(entity => entity.JobTitle, "IX_UserProfile_JobTitle");

@@ -30,7 +30,7 @@
       <label class="search-field">
         <span class="sr-only">Tìm kiếm công việc</span>
         <span class="material-symbols-outlined" aria-hidden="true">search</span>
-        <input type="search" [ngModel]="searchQuery()" (ngModelChange)="searchQuery.set($event)" placeholder="Tìm tên công việc, mã SCRUMAI hoặc Epic" />
+        <input type="search" [ngModel]="searchQuery()" (ngModelChange)="searchQuery.set($event)" placeholder="Tìm tên công việc, mã việc hoặc Epic" />
       </label>
 
       <button #filterOrigin="cdkOverlayOrigin" cdkOverlayOrigin type="button" class="button button-secondary" [class.is-active]="hasActiveFilters()" [attr.aria-expanded]="isFilterMenuOpen()" aria-haspopup="dialog" (click)="toggleFilterMenu($event)">
@@ -41,7 +41,7 @@
       <ng-template cdkConnectedOverlay [cdkConnectedOverlayOrigin]="filterOrigin" [cdkConnectedOverlayOpen]="isFilterMenuOpen()" [cdkConnectedOverlayPositions]="startAlignedOverlayPositions" [cdkConnectedOverlayHasBackdrop]="true" cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop" [cdkConnectedOverlayPush]="true" [cdkConnectedOverlayViewportMargin]="12" (backdropClick)="isFilterMenuOpen.set(false)" (detach)="isFilterMenuOpen.set(false)">
         <div class="overlay-panel filter-panel" role="dialog" aria-label="Bộ lọc công việc">
           <div class="overlay-title"><strong>Bộ lọc công việc</strong><button type="button" class="text-button" (click)="resetFilters()">Xóa bộ lọc</button></div>
-          <label><span>Người xử lý</span><select [ngModel]="selectedAssigneeFilter()" (ngModelChange)="selectedAssigneeFilter.set($event)"><option [ngValue]="null">Tất cả người xử lý</option><option value="Trần Văn Hoàng">Trần Văn Hoàng (Lead)</option><option value="Nguyễn Thanh Hà">Nguyễn Thanh Hà</option><option value="Phạm Đức Anh">Phạm Đức Anh</option><option value="Lê Minh Khiêm">Lê Minh Khiêm</option></select></label>
+          <label><span>Người xử lý</span><select [ngModel]="selectedAssigneeFilter()" (ngModelChange)="selectedAssigneeFilter.set($event)"><option [ngValue]="null">Tất cả người xử lý</option>@for (m of projectMembers(); track m.id) { <option [value]="m.displayName">{{ m.displayName }} ({{ m.role }})</option> }</select></label>
           <label><span>Loại công việc</span><select [ngModel]="selectedTypeFilter()" (ngModelChange)="selectedTypeFilter.set($event)"><option [ngValue]="null">Tất cả loại công việc</option><option value="Story">Story</option><option value="Task">Task</option><option value="Bug">Bug</option><option value="Use-Case">Use-Case</option><option value="Epic">Epic</option><option value="Sub-task">Sub-task</option></select></label>
           <label><span>Mức độ ưu tiên</span><select [ngModel]="selectedPriorityFilter()" (ngModelChange)="selectedPriorityFilter.set($event)"><option [ngValue]="null">Tất cả mức độ</option><option value="Urgent">Khẩn cấp</option><option value="High">Cao</option><option value="Medium">Trung bình</option><option value="Low">Thấp</option></select></label>
           <label><span>Epic</span><select [ngModel]="selectedEpicFilter()" (ngModelChange)="selectedEpicFilter.set($event)"><option [ngValue]="null">Tất cả Epic</option>@for (epic of epics(); track epic.id) { <option [value]="epic.name">{{ epic.name }}</option> }</select></label>
@@ -69,6 +69,8 @@
             <button type="button" class="epic-card epic-card-detail" [class.is-selected]="selectedEpicFilter() === epic.name" (click)="filterByEpic(epic.name)">
               <span class="epic-card-top"><strong>{{ epic.key }}</strong><span>{{ stats.points }} SP</span></span><span class="epic-name">{{ epic.name }}</span><span class="epic-progress-label"><span>{{ stats.done }}/{{ stats.total }} hoàn thành</span><strong>{{ stats.percent }}%</strong></span><span class="progress-track"><span [style.width.%]="stats.percent"></span></span>
             </button>
+          } @empty {
+            <p class="text-xs text-slate-400 text-center py-4">Chưa có Epic nào</p>
           }
         </div>
       </aside>
@@ -104,6 +106,12 @@
           @if (activeInlineSprintId() === sprint.id) { <div class="inline-create"><input type="text" [(ngModel)]="inlineTaskTitleMap[sprint.id]" (keyup.enter)="createInlineSprintTask(sprint.id, sprint.name)" placeholder="Nhập tên công việc rồi nhấn Enter" /><button type="button" class="button button-primary" (click)="createInlineSprintTask(sprint.id, sprint.name)">Thêm</button><button type="button" class="button button-secondary" (click)="activeInlineSprintId.set(null)">Hủy</button></div> }
           @if (sprintTasks.length > 0) { <ng-container *ngTemplateOutlet="workItemList; context: { $implicit: sprintTasks }"></ng-container> } @else { <div class="empty-state"><span class="material-symbols-outlined" aria-hidden="true">inventory_2</span><p>Sprint chưa có công việc.</p></div> }
         </article>
+      } @empty {
+        <div class="empty-state p-6 border border-dashed border-slate-300 dark:border-slate-700/60 rounded-xl text-center">
+          <span class="material-symbols-outlined text-[32px] text-slate-400 mb-2">sprint</span>
+          <p class="text-sm font-semibold text-slate-600 dark:text-slate-300">Chưa có Sprint nào trong dự án</p>
+          <p class="text-xs text-slate-400 mt-1">Bấm nút "Tạo Sprint" ở trên để khởi tạo chu kỳ phát triển mới.</p>
+        </div>
       }
 
       @let backlogPoolItems = getBacklogItems();

@@ -23,22 +23,6 @@ public class ProjectManagementService : IProjectManagementService
     public async Task<Result<IReadOnlyList<OrganizationDto>>> GetOrganizationsAsync(CancellationToken cancellationToken = default)
     {
         var orgs = await _repository.GetOrganizationsAsync(cancellationToken);
-        if (orgs.Count == 0)
-        {
-            // Tự động tạo một Default Organization nếu hệ thống chưa có org nào để người dùng trải nghiệm ngay
-            var defaultOrg = new Organization
-            {
-                Id = Guid.NewGuid(),
-                Name = "Default Organization",
-                Slug = "default-org",
-                OwnerId = Guid.Parse("11111111-0000-0000-0000-000000000001"),
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow
-            };
-            await _repository.AddOrganizationAsync(defaultOrg, cancellationToken);
-            await _repository.SaveChangesAsync(cancellationToken);
-            orgs = new List<Organization> { defaultOrg };
-        }
 
         IReadOnlyList<OrganizationDto> dtos = orgs.Select(x => new OrganizationDto(
             x.Id,
@@ -51,8 +35,16 @@ public class ProjectManagementService : IProjectManagementService
         return Result<IReadOnlyList<OrganizationDto>>.Success(dtos);
     }
 
-    public async Task<Result<OrganizationDto>> CreateOrganizationAsync(CreateOrganizationDto request, CancellationToken cancellationToken = default)
+    public async Task<Result<OrganizationDto>> CreateOrganizationAsync(
+        CreateOrganizationDto request,
+        Guid ownerUserId)
     {
+        if (ownerUserId == Guid.Empty)
+        {
+            return Result<OrganizationDto>.Failure(
+                Error.Unauthorized("AUTH_UNAUTHENTICATED", "Authenticated owner is required."));
+        }
+
         if (string.IsNullOrWhiteSpace(request.Name))
         {
             return Result<OrganizationDto>.Failure(Error.Validation("ORG_NAME_REQUIRED", "Organization name is required."));
@@ -67,13 +59,13 @@ public class ProjectManagementService : IProjectManagementService
             Id = Guid.NewGuid(),
             Name = request.Name.Trim(),
             Slug = slug,
-            OwnerId = request.OwnerId == Guid.Empty ? Guid.Parse("11111111-0000-0000-0000-000000000001") : request.OwnerId,
+            OwnerId = ownerUserId,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
         };
 
-        await _repository.AddOrganizationAsync(org, cancellationToken);
-        await _repository.SaveChangesAsync(cancellationToken);
+        await _repository.AddOrganizationAsync(org);
+        await _repository.SaveChangesAsync();
 
         var dto = new OrganizationDto(org.Id, org.Name, org.Slug, org.OwnerId, org.IsActive, org.CreatedAt);
         return Result<OrganizationDto>.Success(dto);
@@ -92,6 +84,7 @@ public class ProjectManagementService : IProjectManagementService
             x.ProjectKey,
             x.Name,
             x.Description,
+            x.CreatedByUserId,
             x.LeadUserId,
             x.IssueCounter,
             x.IsArchived,
@@ -116,6 +109,7 @@ public class ProjectManagementService : IProjectManagementService
             project.ProjectKey,
             project.Name,
             project.Description,
+            project.CreatedByUserId,
             project.LeadUserId,
             project.IssueCounter,
             project.IsArchived,
@@ -126,8 +120,16 @@ public class ProjectManagementService : IProjectManagementService
         return Result<ProjectDto>.Success(dto);
     }
 
-    public async Task<Result<ProjectDto>> CreateProjectAsync(CreateProjectRequestDto request, CancellationToken cancellationToken = default)
+    public async Task<Result<ProjectDto>> CreateProjectAsync(
+        CreateProjectRequestDto request,
+        Guid creatorUserId)
     {
+        if (creatorUserId == Guid.Empty)
+        {
+            return Result<ProjectDto>.Failure(
+                Error.Unauthorized("AUTH_UNAUTHENTICATED", "Authenticated creator is required."));
+        }
+
         if (string.IsNullOrWhiteSpace(request.Name))
         {
             return Result<ProjectDto>.Failure(Error.Validation("PROJECT_NAME_REQUIRED", "Project name is required."));
@@ -141,7 +143,14 @@ public class ProjectManagementService : IProjectManagementService
                 "Project key must start with an uppercase letter and contain 2-10 alphanumeric characters (e.g. PROJ, SCRUM1)."));
         }
 
-        var existingKey = await _repository.GetByKeyAsync(request.OrgId, projectKey, cancellationToken);
+        var organization = await _repository.GetOrganizationByIdAsync(request.OrgId);
+        if (organization is null || !organization.IsActive)
+        {
+            return Result<ProjectDto>.Failure(
+                Error.NotFound("ORGANIZATION_NOT_FOUND", "Organization was not found or is inactive."));
+        }
+
+        var existingKey = await _repository.GetByKeyAsync(request.OrgId, projectKey);
         if (existingKey is not null)
         {
             return Result<ProjectDto>.Failure(Error.Conflict(
@@ -156,14 +165,15 @@ public class ProjectManagementService : IProjectManagementService
             ProjectKey = projectKey,
             Name = request.Name.Trim(),
             Description = request.Description,
-            LeadUserId = request.LeadUserId == Guid.Empty ? Guid.Parse("11111111-0000-0000-0000-000000000001") : request.LeadUserId,
+            CreatedByUserId = creatorUserId,
+            LeadUserId = creatorUserId,
             IssueCounter = 0,
             IsArchived = false,
             IsDeleted = false,
             CreatedAt = DateTime.UtcNow
         };
 
-        await _repository.AddAsync(project, cancellationToken);
+        await _repository.AddAsync(project);
 
         // ====================================================
         // SEED CẤU HÌNH MẶC ĐỊNH CHO PROJECT MỚI
@@ -181,7 +191,7 @@ public class ProjectManagementService : IProjectManagementService
             new IssueType { Id = Guid.NewGuid(), ProjectId = project.Id, Name = "Bug", ColorHex = "#E5493A", HierarchyLevel = 2, IsSubtask = false, OrderIndex = 4 },
             new IssueType { Id = Guid.NewGuid(), ProjectId = project.Id, Name = "Subtask", ColorHex = "#4BADE8", HierarchyLevel = 1, IsSubtask = true, OrderIndex = 5 }
         };
-        await _repository.AddIssueTypesAsync(issueTypes, cancellationToken);
+        await _repository.AddIssueTypesAsync(issueTypes);
 
         var statusBacklog = new WorkflowStatus { Id = Guid.NewGuid(), ProjectId = project.Id, Name = "Backlog", Category = "ToDo", ColorHex = "#5E6C84", OrderIndex = 1, IsInitial = true };
         var statusToDo = new WorkflowStatus { Id = Guid.NewGuid(), ProjectId = project.Id, Name = "To Do", Category = "ToDo", ColorHex = "#42526E", OrderIndex = 2, IsInitial = false };
@@ -190,7 +200,7 @@ public class ProjectManagementService : IProjectManagementService
         var statusDone = new WorkflowStatus { Id = Guid.NewGuid(), ProjectId = project.Id, Name = "Done", Category = "Done", ColorHex = "#36B37E", OrderIndex = 5, IsInitial = false };
 
         var statuses = new List<WorkflowStatus> { statusBacklog, statusToDo, statusInProgress, statusInReview, statusDone };
-        await _repository.AddWorkflowStatusesAsync(statuses, cancellationToken);
+        await _repository.AddWorkflowStatusesAsync(statuses);
 
         var transitions = new List<WorkflowTransition>
         {
@@ -202,7 +212,7 @@ public class ProjectManagementService : IProjectManagementService
             new WorkflowTransition { Id = Guid.NewGuid(), ProjectId = project.Id, FromStatusId = statusInProgress.Id, ToStatusId = statusToDo.Id, Name = "Stop Work" },
             new WorkflowTransition { Id = Guid.NewGuid(), ProjectId = project.Id, FromStatusId = statusDone.Id, ToStatusId = statusInProgress.Id, Name = "Reopen" }
         };
-        await _repository.AddWorkflowTransitionsAsync(transitions, cancellationToken);
+        await _repository.AddWorkflowTransitionsAsync(transitions);
 
         var defaultBoard = new Board
         {
@@ -213,7 +223,7 @@ public class ProjectManagementService : IProjectManagementService
             IsDefault = true,
             CreatedAt = DateTime.UtcNow
         };
-        await _repository.AddBoardAsync(defaultBoard, cancellationToken);
+        await _repository.AddBoardAsync(defaultBoard);
 
         var boardColumns = new List<BoardColumn>
         {
@@ -222,9 +232,9 @@ public class ProjectManagementService : IProjectManagementService
             new BoardColumn { Id = Guid.NewGuid(), BoardId = defaultBoard.Id, StatusId = statusInReview.Id, Name = "In Review", OrderIndex = 3, WipLimit = 3 },
             new BoardColumn { Id = Guid.NewGuid(), BoardId = defaultBoard.Id, StatusId = statusDone.Id, Name = "Done", OrderIndex = 4, WipLimit = null }
         };
-        await _repository.AddBoardColumnsAsync(boardColumns, cancellationToken);
+        await _repository.AddBoardColumnsAsync(boardColumns);
 
-        await _repository.SaveChangesAsync(cancellationToken);
+        await _repository.SaveChangesAsync();
 
         var dto = new ProjectDto(
             project.Id,
@@ -232,6 +242,7 @@ public class ProjectManagementService : IProjectManagementService
             project.ProjectKey,
             project.Name,
             project.Description,
+            project.CreatedByUserId,
             project.LeadUserId,
             project.IssueCounter,
             project.IsArchived,
@@ -272,6 +283,7 @@ public class ProjectManagementService : IProjectManagementService
             project.ProjectKey,
             project.Name,
             project.Description,
+            project.CreatedByUserId,
             project.LeadUserId,
             project.IssueCounter,
             project.IsArchived,

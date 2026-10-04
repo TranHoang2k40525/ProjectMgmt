@@ -6,12 +6,12 @@ public interface IProjectManagementService
 {
     // Organizations
     Task<Result<IReadOnlyList<OrganizationDto>>> GetOrganizationsAsync(CancellationToken cancellationToken = default);
-    Task<Result<OrganizationDto>> CreateOrganizationAsync(CreateOrganizationDto request, CancellationToken cancellationToken = default);
+    Task<Result<OrganizationDto>> CreateOrganizationAsync(CreateOrganizationDto request, Guid ownerUserId);
 
     // Projects
     Task<Result<IReadOnlyList<ProjectDto>>> GetProjectsAsync(Guid? orgId = null, CancellationToken cancellationToken = default);
     Task<Result<ProjectDto>> GetProjectByIdAsync(Guid projectId, CancellationToken cancellationToken = default);
-    Task<Result<ProjectDto>> CreateProjectAsync(CreateProjectRequestDto request, CancellationToken cancellationToken = default);
+    Task<Result<ProjectDto>> CreateProjectAsync(CreateProjectRequestDto request, Guid creatorUserId);
     Task<Result<ProjectDto>> UpdateProjectAsync(Guid projectId, UpdateProjectRequestDto request, CancellationToken cancellationToken = default);
     Task<Result> DeleteProjectAsync(Guid projectId, CancellationToken cancellationToken = default);
 

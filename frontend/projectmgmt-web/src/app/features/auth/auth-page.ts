@@ -17,6 +17,7 @@ export type AuthMode = 'LOGIN' | 'SIGNUP' | 'OTP_REGISTER' | 'FORGOT' | 'OTP_FOR
   styleUrls: ['./auth-page.scss']
 })
 export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
+  private static readonly strongPasswordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,128}$/;
   private fb = inject(FormBuilder);
   private identityService = inject(IdentityService);
   private router = inject(Router);
@@ -57,17 +58,24 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
         this.panelOpen.set(false);
         this.sceneVisible.set(true);
       }
+
+      const notice = sessionStorage.getItem('projectmgmt.auth.notice');
+      if (notice) {
+        this.successMessage.set(notice);
+        sessionStorage.removeItem('projectmgmt.auth.notice');
+      }
     }
 
     this.loginForm = this.fb.group({
-      email: ['admin@scrumai.internal', [Validators.required, Validators.email]],
-      password: ['password123', [Validators.required, Validators.minLength(6)]]
+      email: ['', [Validators.required, Validators.email]],
+      password: ['', [Validators.required, Validators.maxLength(128)]]
     });
 
     this.signupForm = this.fb.group({
       displayName: ['', [Validators.required, Validators.minLength(2)]],
       email: ['', [Validators.required, Validators.email]],
-      password: ['', [Validators.required, Validators.minLength(6)]]
+      phoneNumber: ['', [Validators.pattern(/^\+?[0-9\s()-]{8,20}$/)]],
+      password: ['', [Validators.required, Validators.pattern(AuthPageComponent.strongPasswordPattern)]]
     });
 
     this.forgotForm = this.fb.group({
@@ -76,7 +84,7 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.otpForm = this.fb.group({
       code: ['', [Validators.required, Validators.pattern(/^\d{6}$/)]],
-      newPassword: ['']
+      newPassword: ['', [Validators.pattern(AuthPageComponent.strongPasswordPattern)]]
     });
   }
 
@@ -151,10 +159,11 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
   calculatePasswordStrength(password: string): { score: number; label: string; color: string } {
     if (!password) return { score: 0, label: 'Chưa nhập', color: '#64748b' };
     let score = 0;
-    if (password.length >= 6) score += 25;
-    if (password.length >= 10) score += 25;
-    if (/[A-Z]/.test(password)) score += 25;
-    if (/[0-9!@#$%^&*]/.test(password)) score += 25;
+    if (password.length >= 8) score += 20;
+    if (/[a-z]/.test(password)) score += 20;
+    if (/[A-Z]/.test(password)) score += 20;
+    if (/\d/.test(password)) score += 20;
+    if (/[^A-Za-z0-9]/.test(password)) score += 20;
 
     if (score <= 25) return { score, label: 'Yếu', color: '#ef4444' };
     if (score <= 50) return { score, label: 'Trung bình', color: '#f59e0b' };
@@ -176,7 +185,7 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
       },
       error: (err) => {
         this.loading.set(false);
-        this.errorMessage.set(err?.error?.title || 'Đăng nhập không thành công.');
+        this.errorMessage.set(this.readError(err, 'Đăng nhập không thành công.'));
       }
     });
   }
@@ -187,15 +196,20 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
     this.errorMessage.set(null);
 
     const { email } = this.signupForm.value;
-    this.identityService.signup(this.signupForm.value.displayName, email, this.signupForm.value.password).subscribe({
-      next: () => {
+    this.identityService.signup(
+      this.signupForm.value.displayName,
+      email,
+      this.signupForm.value.password,
+      this.signupForm.value.phoneNumber
+    ).subscribe({
+      next: (result) => {
         this.loading.set(false);
-        this.successMessage.set(`Mã OTP đã được gửi đến ${email}. Mã mẫu test nhanh: 123456`);
         this.setMode('OTP_REGISTER');
+        this.successMessage.set(result.message ?? `Mã OTP đã được gửi đến ${email}.`);
       },
       error: (err) => {
         this.loading.set(false);
-        this.errorMessage.set(err?.error?.title || 'Đăng ký không thành công.');
+        this.errorMessage.set(this.readError(err, 'Đăng ký không thành công.'));
       }
     });
   }
@@ -209,12 +223,12 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
     this.identityService.sendOtp(email, 'FORGOT_PASSWORD').subscribe({
       next: (res) => {
         this.loading.set(false);
-        this.successMessage.set(res.message);
         this.setMode('OTP_FORGOT');
+        this.successMessage.set(res.message);
       },
       error: (err) => {
         this.loading.set(false);
-        this.errorMessage.set(err?.error?.title || 'Không thể gửi mã OTP.');
+        this.errorMessage.set(this.readError(err, 'Không thể gửi mã OTP.'));
       }
     });
   }
@@ -261,14 +275,16 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
       next: () => {
         this.loading.set(false);
         if (purpose === 'REGISTER') {
-          this.router.navigate(['/for-you']);
+          this.clearOtpPins();
+          this.setMode('LOGIN');
+          this.successMessage.set('Xác minh email thành công. Bạn có thể đăng nhập ngay.');
         } else {
           this.successMessage.set('Xác thực thành công! Vui lòng thiết lập mật khẩu mới.');
         }
       },
       error: (err) => {
         this.loading.set(false);
-        this.errorMessage.set(err?.error?.title || 'Xác thực OTP thất bại.');
+        this.errorMessage.set(this.readError(err, 'Xác thực OTP thất bại.'));
       }
     });
   }
@@ -278,8 +294,8 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
     const fullCode = this.otpPins.join('');
     const email = this.forgotForm.value.email;
 
-    if (!newPass || newPass.length < 6) {
-      this.errorMessage.set('Mật khẩu mới phải có ít nhất 6 ký tự.');
+    if (!newPass || !AuthPageComponent.strongPasswordPattern.test(newPass)) {
+      this.errorMessage.set('Mật khẩu phải dài 8-128 ký tự và có chữ hoa, chữ thường, số, ký tự đặc biệt.');
       return;
     }
 
@@ -287,12 +303,13 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
     this.identityService.resetPassword(email, fullCode, newPass).subscribe({
       next: () => {
         this.loading.set(false);
-        this.successMessage.set('Đổi mật khẩu thành công! Vui lòng đăng nhập lại.');
+        this.clearOtpPins();
         this.setMode('LOGIN');
+        this.successMessage.set('Đổi mật khẩu thành công! Vui lòng đăng nhập lại.');
       },
       error: (err) => {
         this.loading.set(false);
-        this.errorMessage.set(err?.error?.title || 'Đổi mật khẩu thất bại.');
+        this.errorMessage.set(this.readError(err, 'Đổi mật khẩu thất bại.'));
       }
     });
   }
@@ -305,8 +322,29 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
       next: (res) => {
         this.successMessage.set(res.message);
         this.startOtpTimer(300);
+      },
+      error: (err) => {
+        this.errorMessage.set(this.readError(err, 'Chưa thể gửi lại mã OTP.'));
       }
     });
+  }
+
+  private clearOtpPins(): void {
+    this.otpPins = ['', '', '', '', '', ''];
+    this.otpForm.patchValue({ code: '', newPassword: '' });
+  }
+
+  private readError(error: unknown, fallback: string): string {
+    if (typeof error !== 'object' || error === null) return fallback;
+    const direct = error as { title?: unknown; detail?: unknown; message?: unknown; error?: unknown };
+    if (typeof direct.title === 'string') return direct.title;
+    if (typeof direct.detail === 'string') return direct.detail;
+    if (typeof direct.error === 'object' && direct.error !== null) {
+      const nested = direct.error as { title?: unknown; message?: unknown };
+      if (typeof nested.message === 'string') return nested.message;
+      if (typeof nested.title === 'string') return nested.title;
+    }
+    return typeof direct.message === 'string' ? direct.message : fallback;
   }
 
   private startOtpTimer(seconds: number): void {

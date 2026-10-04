@@ -2,4 +2,7 @@
   <ItemGroup>
     <Compile Include="..\ProjectManagement\Domain\**\*.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="libphonenumber-csharp" />
+  </ItemGroup>
 </Project>

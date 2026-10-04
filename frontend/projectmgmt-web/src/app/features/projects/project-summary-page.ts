@@ -21,10 +21,10 @@ import { ProjectManagementService } from '../../core/services/project-management
           <div class="flex flex-col">
             <div class="flex items-center gap-2">
               <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-white/20 text-white">Scrum Agile</span>
-              <span class="text-xs text-indigo-300">Mã dự án: SCRUMAI</span>
+              <span class="text-xs text-indigo-300">Mã dự án: {{ currentProject()?.projectKey ?? '--' }}</span>
             </div>
-            <h1 class="text-xl font-extrabold tracking-tight mt-0.5">HUCE AI Lab Project Management</h1>
-            <p class="text-xs text-slate-300">Nền tảng Quản lý Dự án Agile tích hợp AI dành cho Giảng viên & Sinh viên HUCE</p>
+            <h1 class="text-xl font-extrabold tracking-tight mt-0.5">{{ currentProject()?.name ?? 'Chưa chọn dự án' }}</h1>
+            <p class="text-xs text-slate-300">{{ currentProject()?.description || 'Nền tảng Quản lý Dự án Agile' }}</p>
           </div>
         </div>
 
@@ -76,22 +76,29 @@ import { ProjectManagementService } from '../../core/services/project-management
             </div>
           </div>
           <div class="mt-4 flex flex-col">
-            <span class="text-base font-bold text-slate-900 dark:text-white">SCRUMAI Sprint 2</span>
-            <span class="text-[11px] text-slate-400">25 Aug - 08 Sep (28 Story Pts)</span>
+            @if (activeSprint(); as sp) {
+              <span class="text-base font-bold text-slate-900 dark:text-white">{{ sp.name }}</span>
+              <span class="text-[11px] text-slate-400">{{ sp.startDate || 'N/A' }} - {{ sp.endDate || 'N/A' }} ({{ sp.totalStoryPoints }} Story Pts)</span>
+            } @else {
+              <span class="text-base font-bold text-slate-900 dark:text-white">Chưa có Sprint</span>
+              <span class="text-[11px] text-slate-400">Chưa có chu kỳ chạy</span>
+            }
           </div>
         </div>
 
         <!-- KPI Tile 4: AI Health Score -->
         <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
           <div class="flex items-center justify-between text-purple-600 dark:text-purple-400">
-            <span class="text-xs font-bold uppercase tracking-wider">AI Sprint Health</span>
+            <span class="text-xs font-bold uppercase tracking-wider">Tiến Độ Dự Án</span>
             <div class="w-8 h-8 rounded-xl bg-purple-50 dark:bg-purple-950/60 flex items-center justify-center">
               <span class="material-symbols-outlined text-[20px]">psychology</span>
             </div>
           </div>
           <div class="mt-4 flex items-baseline gap-2">
-            <span class="text-3xl font-extrabold text-emerald-500">96%</span>
-            <span class="text-xs text-slate-400">Tiến độ On-track</span>
+            <span class="text-3xl font-extrabold text-emerald-500">
+              {{ totalCount() > 0 ? ((completedCount() / totalCount()) * 100 | number:'1.0-0') + '%' : '100%' }}
+            </span>
+            <span class="text-xs text-slate-400">{{ completedCount() }}/{{ totalCount() }} hoàn thành</span>
           </div>
         </div>
 
@@ -148,37 +155,28 @@ import { ProjectManagementService } from '../../core/services/project-management
           </div>
         </div>
 
-        <!-- Tile Right: Activity Stream (Bkav eTask style) -->
+        <!-- Tile Right: Activity Stream -->
         <div class="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col gap-4">
           <h3 class="text-base font-bold text-slate-900 dark:text-white">Dòng Hoạt Động Mới</h3>
 
           <div class="flex flex-col gap-3">
-            <div class="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40">
-              <div class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold shrink-0">TH</div>
-              <div class="flex flex-col text-xs">
-                <span class="font-bold text-slate-900 dark:text-white">Trần Văn Hoàng</span>
-                <span class="text-slate-600 dark:text-slate-300">Đã đổi trạng thái <span class="font-semibold text-blue-600">SCRUMAI-201</span> sang In Progress</span>
-                <span class="text-[10px] text-slate-400 mt-1">10 phút trước</span>
+            @for (act of recentActivities(); track act.id) {
+              <div class="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40">
+                <div class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold shrink-0">
+                  {{ act.actorName.charAt(0) }}
+                </div>
+                <div class="flex flex-col text-xs">
+                  <span class="font-bold text-slate-900 dark:text-white">{{ act.actorName }}</span>
+                  <span class="text-slate-600 dark:text-slate-300">{{ act.action }} <span class="font-semibold text-primary">[{{ act.issueKey }}]</span></span>
+                  <span class="text-[10px] text-slate-400 mt-1">{{ act.timestamp }}</span>
+                </div>
               </div>
-            </div>
-
-            <div class="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40">
-              <div class="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-bold shrink-0">TH</div>
-              <div class="flex flex-col text-xs">
-                <span class="font-bold text-slate-900 dark:text-white">Nguyễn Thanh Hà</span>
-                <span class="text-slate-600 dark:text-slate-300">Đã thêm bình luận vào <span class="font-semibold text-indigo-600">SCRUMAI-204</span></span>
-                <span class="text-[10px] text-slate-400 mt-1">1 giờ trước</span>
+            } @empty {
+              <div class="py-8 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-1">
+                <span class="material-symbols-outlined text-2xl text-slate-300">history_toggle_off</span>
+                <span>Chưa có hoạt động nào được ghi nhận trong dự án</span>
               </div>
-            </div>
-
-            <div class="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40">
-              <div class="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shrink-0">PĐ</div>
-              <div class="flex flex-col text-xs">
-                <span class="font-bold text-slate-900 dark:text-white">Phạm Đức Anh</span>
-                <span class="text-slate-600 dark:text-slate-300">Đã xuất báo cáo Excel cho Sprint 2</span>
-                <span class="text-[10px] text-slate-400 mt-1">Hôm qua</span>
-              </div>
-            </div>
+            }
           </div>
         </div>
 
@@ -209,11 +207,23 @@ import { ProjectManagementService } from '../../core/services/project-management
 export class ProjectSummaryPageComponent {
   private readonly projectService = inject(ProjectManagementService);
 
+  readonly currentProject = this.projectService.currentProject;
   readonly items = this.projectService.workItems;
+  readonly activeSprint = computed(() => this.projectService.sprints().find(s => s.status === 'active') ?? this.projectService.sprints()[0] ?? null);
 
   readonly totalCount = computed(() => this.items().length);
   readonly completedCount = computed(() => this.items().filter(i => i.statusName === 'Done').length);
   readonly inProgressCount = computed(() => this.items().filter(i => i.statusName === 'In Progress').length);
   readonly codeReviewCount = computed(() => this.items().filter(i => i.statusName === 'Code Review').length);
   readonly toDoCount = computed(() => this.items().filter(i => i.statusName === 'To Do').length);
+
+  readonly recentActivities = computed(() => {
+    const list: { id: string; actorName: string; action: string; timestamp: string; issueKey: string }[] = [];
+    for (const item of this.items()) {
+      for (const act of item.activities ?? []) {
+        list.push({ ...act, issueKey: item.issueKey });
+      }
+    }
+    return list.slice(0, 5);
+  });
 }
