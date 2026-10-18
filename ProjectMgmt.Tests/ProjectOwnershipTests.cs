@@ -62,26 +62,41 @@ public class ProjectOwnershipTests
         var service = new ProjectManagementService(repository);
         var authenticatedUserId = Guid.NewGuid();
 
+        var specifiedLeadId = Guid.NewGuid();
         var result = await service.CreateProjectAsync(
             new CreateProjectRequestDto
             {
                 OrgId = organizationId,
                 ProjectKey = "SCRUM7",
                 Name = "Hệ thống Quản lý Dự án Scrum tích hợp AI",
-                LeadUserId = Guid.NewGuid()
+                LeadUserId = specifiedLeadId
             },
             authenticatedUserId);
 
         Assert.True(result.IsSuccess);
         Assert.NotNull(repository.AddedProject);
         Assert.Equal(authenticatedUserId, repository.AddedProject.CreatedByUserId);
-        Assert.Equal(authenticatedUserId, repository.AddedProject.LeadUserId);
+        Assert.Equal(specifiedLeadId, repository.AddedProject.LeadUserId);
         Assert.Equal(authenticatedUserId, result.Value.CreatedByUserId);
         Assert.Equal(5, repository.AddedIssueTypes.Count);
         Assert.Equal(5, repository.AddedStatuses.Count);
         Assert.Equal(7, repository.AddedTransitions.Count);
         Assert.Single(repository.AddedBoards);
         Assert.Equal(4, repository.AddedBoardColumns.Count);
+
+        // Fallback test when LeadUserId is empty
+        var fallbackResult = await service.CreateProjectAsync(
+            new CreateProjectRequestDto
+            {
+                OrgId = organizationId,
+                ProjectKey = "SCRUM8",
+                Name = "Dự án Scrum Mặc Định",
+                LeadUserId = Guid.Empty
+            },
+            authenticatedUserId);
+
+        Assert.True(fallbackResult.IsSuccess);
+        Assert.Equal(authenticatedUserId, repository.AddedProject.LeadUserId);
     }
 }
 

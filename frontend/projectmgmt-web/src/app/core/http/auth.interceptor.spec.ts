@@ -11,7 +11,7 @@ class InterceptorTokenStore implements TokenStore {
     accessToken: 'access-old',
     refreshToken: 'refresh-old',
     userId: 'user-1',
-    email: 'member@huce.edu.vn',
+    email: 'member@example.com',
     fullName: 'Nguyễn Văn A',
     roles: ['Member']
   };
@@ -64,7 +64,7 @@ describe('authInterceptor', () => {
       accessToken: 'access-new',
       refreshToken: 'refresh-new',
       userId: 'user-1',
-      email: 'member@huce.edu.vn',
+      email: 'member@example.com',
       fullName: 'Nguyễn Văn A',
       roles: ['Member']
     });

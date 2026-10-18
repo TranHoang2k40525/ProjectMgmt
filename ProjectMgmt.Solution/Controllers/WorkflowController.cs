@@ -4,6 +4,7 @@ using ProjectMgmt.Modules.Planning.ProjectManagement.Application.IServices;
 namespace ProjectMgmt.Solution.Controllers;
 
 [Route("api/workflow")]
+[Route("api/v1/workflow")]
 public class WorkflowController : ApiControllerBase
 {
     private readonly IProjectManagementService _service;

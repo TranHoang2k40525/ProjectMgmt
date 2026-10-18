@@ -17,7 +17,7 @@ export class ExcelDataService {
   /**
    * Export Work Items list to formatted CSV / Excel file
    */
-  exportToExcel(items: WorkItem[], filename: string = 'HUCE_Scrum_WorkItems.csv'): void {
+  exportToExcel(items: WorkItem[], filename: string = 'Scrum_WorkItems.csv'): void {
     const headers = ['Mã Task', 'Tiêu đề', 'Loại', 'Trạng thái', 'Mức độ ưu tiên', 'Story Points', 'Sprint', 'Người thực hiện', 'Người tạo', 'Ngày cập nhật'];
     
     const rows = items.map(item => [
@@ -63,7 +63,7 @@ export class ExcelDataService {
     
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', 'HUCE_Task_Import_Template.csv');
+    link.setAttribute('download', 'Task_Import_Template.csv');
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

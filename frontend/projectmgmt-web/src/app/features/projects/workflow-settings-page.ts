@@ -37,9 +37,18 @@ import { ToastService } from '../../core/services/toast.service';
 
       <!-- Navigation Tabs -->
       <div class="settings-tabs">
-        <a [routerLink]="['/projects', projectId, 'settings']" class="tab-item">⚙️ Thông tin chung</a>
-        <span class="tab-item active">🔄 Cấu hình Workflow</span>
-        <a [routerLink]="['/projects', projectId, 'settings', 'board']" class="tab-item">📋 Cấu hình Board</a>
+        <a [routerLink]="['/projects', projectId, 'settings']" class="tab-item flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[18px]">tune</span>
+          <span>Thông tin chung</span>
+        </a>
+        <span class="tab-item active flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[18px]">sync_alt</span>
+          <span>Cấu hình Workflow</span>
+        </span>
+        <a [routerLink]="['/projects', projectId, 'settings', 'board']" class="tab-item flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[18px]">view_kanban</span>
+          <span>Cấu hình Board</span>
+        </a>
       </div>
 
 
@@ -176,7 +185,7 @@ import { ToastService } from '../../core/services/toast.service';
                 <thead>
                   <tr>
                     <th>Nguồn (From)</th>
-                    <th>➔</th>
+                    <th class="w-10 text-center"><span class="material-symbols-outlined text-[16px] text-slate-400">arrow_forward</span></th>
                     <th>Đích (To)</th>
                     <th>Tên hành động</th>
                     <th>Quyền yêu cầu</th>
@@ -189,7 +198,9 @@ import { ToastService } from '../../core/services/toast.service';
                       <td>
                         <span class="status-pill pill-from">{{ t.fromStatusName }}</span>
                       </td>
-                      <td class="arrow-cell">➔</td>
+                      <td class="arrow-cell">
+                        <span class="material-symbols-outlined text-[16px] text-slate-400">arrow_forward</span>
+                      </td>
                       <td>
                         <span class="status-pill pill-to">{{ t.toStatusName }}</span>
                       </td>
@@ -206,10 +217,10 @@ import { ToastService } from '../../core/services/toast.service';
                       <td>
                         <button
                           (click)="onDeleteTransition(t)"
-                          class="btn-icon-delete"
+                          class="btn-icon-delete flex items-center justify-center"
                           title="Xóa luật này"
                         >
-                          ✕
+                          <span class="material-symbols-outlined text-[16px]">delete</span>
                         </button>
                       </td>
                     </tr>
@@ -668,8 +679,8 @@ export class WorkflowSettingsPage implements OnInit {
       next: (created) => {
         this.submitting.set(false);
         this.alertType.set('success');
-        this.alertMessage.set(`Đã thêm thành công luật chuyển "${created.fromStatusName}" ➔ "${created.toStatusName}"!`);
-        this.toastService.success('Thêm Rule Workflow', `Đã tạo luật chuyển "${created.fromStatusName}" ➔ "${created.toStatusName}"`);
+        this.alertMessage.set(`Đã thêm thành công luật chuyển "${created.fromStatusName}" -> "${created.toStatusName}"!`);
+        this.toastService.success('Thêm Rule Workflow', `Đã tạo luật chuyển "${created.fromStatusName}" -> "${created.toStatusName}"`);
         this.newTransition = { fromStatusId: '', toStatusId: '', name: '', requiredPermissionCode: '' };
         this.loadWorkflowData();
       },
@@ -695,7 +706,7 @@ export class WorkflowSettingsPage implements OnInit {
           next: () => {
             this.alertType.set('success');
             this.alertMessage.set('Đã xóa luật chuyển trạng thái thành công.');
-            this.toastService.warning('Đã Xóa Rule', `Đã xóa luật chuyển "${t.fromStatusName}" ➔ "${t.toStatusName}"`);
+            this.toastService.warning('Đã Xóa Rule', `Đã xóa luật chuyển "${t.fromStatusName}" -> "${t.toStatusName}"`);
             this.loadWorkflowData();
           },
           error: (err) => {

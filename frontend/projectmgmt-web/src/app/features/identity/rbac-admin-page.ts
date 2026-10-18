@@ -2,7 +2,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { IdentityService } from '../../core/services/identity.service';
-import { UserProfileModel, RoleModel, PermissionModel } from '../../core/mocks/identity-mock-db';
+import { UserProfileModel, RoleModel, PermissionModel } from '../../core/models/identity.models';
 
 @Component({
   selector: 'app-rbac-admin-page',

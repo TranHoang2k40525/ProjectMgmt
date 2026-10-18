@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, inject, signal, computed } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, OnInit, AfterViewInit, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DragDropModule, CdkDragDrop } from '@angular/cdk/drag-drop';
@@ -11,17 +11,20 @@ import { ContextMenuComponent, ContextMenuItemAction } from '../../shared/compon
 
 gsap.registerPlugin(Flip);
 
+import { NoProjectStateComponent } from '../../shared/components/no-project-state/no-project-state.component';
+
 @Component({
   selector: 'app-board-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, DragDropModule, ContextMenuComponent],
+  imports: [CommonModule, FormsModule, DragDropModule, ContextMenuComponent, NoProjectStateComponent],
   templateUrl: './board-page.html',
   styleUrl: './board-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class BoardPage implements OnDestroy {
+export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
   private el = inject<ElementRef<HTMLElement>>(ElementRef);
   private flipAnimation: gsap.core.Timeline | null = null;
+  private entranceTween: gsap.core.Tween | null = null;
   private readonly identityService = inject(IdentityService);
   readonly projectService = inject(ProjectManagementService);
   readonly toastService = inject(ToastService);
@@ -83,8 +86,36 @@ export class BoardPage implements OnDestroy {
   readonly codeReviewItems = computed(() => this.filteredItems().filter(i => i.statusName === 'Code Review'));
   readonly doneItems = computed(() => this.filteredItems().filter(i => i.statusName === 'Done'));
 
+  ngOnInit(): void {
+    const currentProj = this.projectService.currentProject();
+    if (currentProj?.id && (!currentProj.members || currentProj.members.length === 0)) {
+      this.projectService.loadProjectMembers(currentProj.id).subscribe();
+    }
+  }
+
+  ngAfterViewInit(): void {
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      const columns = this.el.nativeElement.querySelectorAll<HTMLElement>('.board-column');
+      if (columns.length) {
+        this.entranceTween = gsap.fromTo(
+          columns,
+          { opacity: 0, y: 18 },
+          {
+            opacity: 1,
+            y: 0,
+            duration: 0.45,
+            stagger: 0.08,
+            ease: 'power2.out',
+            clearProps: 'transform,opacity'
+          }
+        );
+      }
+    }
+  }
+
   ngOnDestroy(): void {
     this.flipAnimation?.kill();
+    this.entranceTween?.kill();
   }
 
   // CDK Drag & Drop Handler

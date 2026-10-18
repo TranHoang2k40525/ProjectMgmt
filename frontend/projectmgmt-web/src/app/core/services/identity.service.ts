@@ -15,14 +15,13 @@ import {
   ActiveSessionModel,
   AiGenLogModel,
   AiModelConfig,
-  IdentityMockDb,
   NotificationModel,
   PermissionModel,
   RoleModel,
   SkillModel,
   UserProfileModel,
   UserSkillModel
-} from '../mocks/identity-mock-db';
+} from '../models/identity.models';
 
 export interface AuthState {
   currentUser: UserProfileModel | null;
@@ -364,13 +363,27 @@ export class IdentityService {
   // ==========================================
 
   getUsers(): Observable<UserProfileModel[]> {
-    return of([]);
+    return this.identityApi.getUsers().pipe(
+      map(items => (items ?? []).map(u => ({
+        id: u.userId,
+        email: '',
+        displayName: u.displayName || 'Người dùng',
+        avatarUrl: this.resolveAssetUrl(u.avatarUrl),
+        jobTitle: '',
+        roleId: '',
+        roleName: 'Thành viên',
+        isActive: true,
+        twoFactorEnabled: false,
+        createdAt: new Date().toISOString(),
+        lastLoginAt: new Date().toISOString()
+      })))
+    );
   }
 
   getRoles(scope?: string): Observable<RoleModel[]> {
     return this.rbacApi.getRoles(scope).pipe(
       map(res => {
-        const roles = (res.items ?? []).map(r => ({
+        return (res.items ?? []).map(r => ({
           id: r.roleId ?? '',
           name: r.name ?? '',
           code: r.name ? r.name.toUpperCase().replace(/\s+/g, '_') : '',
@@ -378,8 +391,6 @@ export class IdentityService {
           isSystem: r.isSystem ?? false,
           permissionCodes: []
         }));
-        if (roles.length > 0) return roles;
-        return [...IdentityMockDb.roles];
       })
     );
   }
@@ -387,7 +398,7 @@ export class IdentityService {
   getPermissions(): Observable<PermissionModel[]> {
     return this.rbacApi.getPermissions().pipe(
       map(res => {
-        const perms = (res.items ?? []).map(p => ({
+        return (res.items ?? []).map(p => ({
           id: p.permissionId ?? '',
           code: p.code ?? '',
           name: p.code ?? '',
@@ -395,8 +406,6 @@ export class IdentityService {
           module: p.grouping ?? 'System',
           description: p.description ?? ''
         }));
-        if (perms.length > 0) return perms;
-        return [...IdentityMockDb.permissions];
       })
     );
   }

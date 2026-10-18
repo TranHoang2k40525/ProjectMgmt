@@ -183,6 +183,7 @@ public class ProjectManagementService : IProjectManagementService
                 $"Project key '{projectKey}' already exists in this organization."));
         }
 
+        var leadUserId = request.LeadUserId != Guid.Empty ? request.LeadUserId : creatorUserId;
         var project = new Project
         {
             Id = Guid.NewGuid(),
@@ -191,7 +192,7 @@ public class ProjectManagementService : IProjectManagementService
             Name = request.Name.Trim(),
             Description = request.Description,
             CreatedByUserId = creatorUserId,
-            LeadUserId = creatorUserId,
+            LeadUserId = leadUserId,
             IssueCounter = 0,
             IsArchived = false,
             IsDeleted = false,

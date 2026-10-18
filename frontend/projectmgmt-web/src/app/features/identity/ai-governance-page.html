@@ -82,7 +82,7 @@
               <span>Hạn mức tháng: {{ m.monthlyTokenQuota | number }} tokens</span>
             </div>
             <div class="bar">
-              <div class="fill" style="width: 42%;"></div>
+              <div class="fill" [style.width.%]="getQuotaPercent(m)"></div>
             </div>
           </div>
         </div>

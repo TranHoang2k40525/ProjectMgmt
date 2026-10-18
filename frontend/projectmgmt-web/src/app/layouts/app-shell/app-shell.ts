@@ -61,7 +61,7 @@ export class AppShellComponent implements OnDestroy {
   // Check if current route is inside a Project Context (Show Sub-Header)
   readonly isProjectRoute = computed(() => {
     const url = this.currentUrl();
-    return url.includes('/project/') || url.includes('/board') || url.includes('/backlog') || url.includes('/task-list') || url.includes('/roadmap') || url.includes('/reports');
+    return url.includes('/project/') || url.includes('/board') || url.includes('/backlog') || url.includes('/task-list') || url.includes('/roadmap') || url.includes('/reports') || (url.includes('/projects/') && url.includes('/settings'));
   });
 
   // Header Live Search Signal
@@ -128,8 +128,7 @@ export class AppShellComponent implements OnDestroy {
 
   useAvatarFallback(event: Event): void {
     const image = event.target as HTMLImageElement;
-    const fallback = 'assets/images/huce-branding/huce-official-logo.png';
-    if (image.getAttribute('src') !== fallback) image.src = fallback;
+    image.style.display = 'none';
   }
 
   toggleSidebar(): void {
@@ -176,7 +175,7 @@ export class AppShellComponent implements OnDestroy {
   }
 
   selectProjectSpace(proj: Project): void {
-    this.projectService.currentProject.set(proj);
+    this.projectService.selectProject(proj);
     this.closeFlyouts();
     this.toastService.info('Chuyển Không Gian Dự Án', `Đã mở không gian làm việc ${proj.name} (${proj.projectKey})`);
     this.router.navigate(['/project/summary']);
@@ -195,6 +194,11 @@ export class AppShellComponent implements OnDestroy {
   }
 
   openCreateTaskModal(): void {
+    if (!this.projectService.hasActiveProject()) {
+      this.toastService.info('Chưa Chọn Dự Án', 'Vui lòng chọn hoặc khởi tạo một dự án trước khi tạo công việc mới.');
+      this.router.navigate(['/projects/new']);
+      return;
+    }
     this.isCreateTaskModalOpen.set(true);
   }
 
@@ -224,7 +228,7 @@ export class AppShellComponent implements OnDestroy {
   }
 
   exportExcel(): void {
-    this.excelService.exportToExcel(this.projectService.workItems(), 'HUCE_Project_WorkItems_Export.csv');
+    this.excelService.exportToExcel(this.projectService.workItems(), 'Project_WorkItems_Export.csv');
     this.toastService.success('Xuất Dữ Liệu Excel', 'Đã tải xuống file CSV/Excel danh sách công việc thành công.');
   }
 

@@ -1,9 +1,10 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { IdentityService } from '../../core/services/identity.service';
-import { UserProfileModel, SkillModel, UserSkillModel, ActiveSessionModel } from '../../core/mocks/identity-mock-db';
+import { ProjectManagementService } from '../../core/services/project-management.service';
+import { UserProfileModel, SkillModel, UserSkillModel, ActiveSessionModel } from '../../core/models/identity.models';
 
 export type ProfileTab = 'GENERAL' | 'SECURITY' | 'SKILLS' | 'SESSIONS';
 
@@ -17,6 +18,7 @@ export type ProfileTab = 'GENERAL' | 'SECURITY' | 'SKILLS' | 'SESSIONS';
 export class ProfilePageComponent implements OnInit {
   private static readonly strongPasswordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,128}$/;
   private identityService = inject(IdentityService);
+  readonly projectService = inject(ProjectManagementService);
   private fb = inject(FormBuilder);
   private router = inject(Router);
 
@@ -29,6 +31,18 @@ export class ProfilePageComponent implements OnInit {
   skillsCatalog = signal<SkillModel[]>([]);
   userSkills = signal<UserSkillModel[]>([]);
   activeSessions = signal<ActiveSessionModel[]>([]);
+
+  readonly assignedTasks = computed(() => {
+    const u = this.user();
+    if (!u) return [];
+    return this.projectService.workItems().filter(item =>
+      item.assigneeId === u.id || (item.assigneeName && u.displayName && item.assigneeName.trim().toLowerCase() === u.displayName.trim().toLowerCase())
+    );
+  });
+
+  readonly completedAssignedTasks = computed(() => this.assignedTasks().filter(t => t.statusName === 'Done'));
+  readonly completedStoryPoints = computed(() => this.completedAssignedTasks().reduce((sum, t) => sum + (t.storyPoints || 0), 0));
+  readonly activeSprint = computed(() => this.projectService.sprints().find(s => s.status === 'active') ?? null);
 
   // Forms
   profileForm!: FormGroup;

@@ -1,12 +1,16 @@
 import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ProjectManagementService } from '../../core/services/project-management.service';
+import { ProjectManagementService, Sprint } from '../../core/services/project-management.service';
+import { NoProjectStateComponent } from '../../shared/components/no-project-state/no-project-state.component';
 
 @Component({
   selector: 'app-roadmap-page',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, NoProjectStateComponent],
   template: `
+    @if (!projectService.hasActiveProject()) {
+      <app-no-project-state featureName="Lộ Trình Dự Án (Roadmap)"></app-no-project-state>
+    } @else {
     <div class="roadmap-page flex flex-col gap-6 animate-fade-in font-body text-slate-900 dark:text-slate-100">
       
       <!-- Top Action Bar -->
@@ -55,15 +59,16 @@ import { ProjectManagementService } from '../../core/services/project-management
                 <span class="text-sm font-mono font-bold text-primary">{{ sprint.totalStoryPoints }} Points</span>
               </div>
 
+              @let prog = getSprintProgress(sprint);
               <!-- Gantt Progress Bar Track -->
               <div class="w-full h-6 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden flex relative mt-1">
-                @if (sprint.status === 'completed') {
-                  <div class="h-full bg-emerald-500 rounded-full w-full flex items-center justify-center text-xs font-bold text-white">100% Hoàn thành</div>
-                } @else if (sprint.status === 'active') {
-                  <div class="h-full bg-blue-500 rounded-full w-3/5 flex items-center justify-center text-xs font-bold text-white">60% Đang thực hiện</div>
-                } @else {
-                  <div class="h-full bg-slate-400 rounded-full w-1/5 flex items-center justify-center text-xs font-bold text-white">Kế hoạch</div>
-                }
+                <div
+                  [class]="prog.bgClass"
+                  [style.width.%]="prog.percent"
+                  class="h-full rounded-full flex items-center justify-center text-xs font-bold text-white transition-all duration-300 px-2 truncate min-w-[2.5rem]"
+                >
+                  {{ prog.label }}
+                </div>
               </div>
             </div>
           } @empty {
@@ -78,6 +83,7 @@ import { ProjectManagementService } from '../../core/services/project-management
       </div>
 
     </div>
+    }
   `,
   styles: [`
     .roadmap-scroll-hint { display: none; }
@@ -104,6 +110,26 @@ import { ProjectManagementService } from '../../core/services/project-management
   `]
 })
 export class RoadmapPageComponent {
-  private readonly projectService = inject(ProjectManagementService);
+  readonly projectService = inject(ProjectManagementService);
   readonly sprints = this.projectService.sprints;
+
+  getSprintProgress(sprint: Sprint): { percent: number; label: string; bgClass: string } {
+    if (sprint.status === 'completed') {
+      return { percent: 100, label: '100% Hoàn thành', bgClass: 'bg-emerald-500' };
+    }
+    const sprintItems = this.projectService.workItems().filter(w => w.sprintId === sprint.id);
+    if (sprintItems.length === 0) {
+      if (sprint.status === 'active') {
+        return { percent: 0, label: 'Đang chạy (chưa có công việc)', bgClass: 'bg-blue-500' };
+      }
+      return { percent: 0, label: 'Kế hoạch', bgClass: 'bg-slate-400' };
+    }
+    const doneCount = sprintItems.filter(w => w.statusName === 'Done').length;
+    const pct = Math.round((doneCount / sprintItems.length) * 100);
+    return {
+      percent: Math.max(pct, 10),
+      label: `${pct}% Hoàn thành (${doneCount}/${sprintItems.length} việc)`,
+      bgClass: sprint.status === 'active' ? 'bg-blue-500' : 'bg-slate-400'
+    };
+  }
 }

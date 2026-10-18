@@ -68,4 +68,9 @@ export class IdentityApi {
   getForYou(): Observable<ForYouDto> {
     return this.http.get<ForYouDto>(`${this.baseUrl}/users/for-you`);
   }
+
+  getUsers(): Observable<Array<{ userId: string; displayName: string; avatarUrl?: string }>> {
+    return this.http.get<Array<{ userId: string; displayName: string; avatarUrl?: string }>>(`${this.baseUrl}/users`);
+  }
 }
+

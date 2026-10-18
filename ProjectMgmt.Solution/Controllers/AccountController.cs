@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.RateLimiting;
 namespace ProjectMgmt.Solution.Controllers;
 
 [Route("api/v1/auth")]
+[Route("api/auth")]
 [ApiController]
 [AllowAnonymous]
 public class AccountController : ControllerBase

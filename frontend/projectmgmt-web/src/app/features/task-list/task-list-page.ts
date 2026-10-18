@@ -4,12 +4,16 @@ import { FormsModule } from '@angular/forms';
 import { ProjectManagementService, WorkItem } from '../../core/services/project-management.service';
 import { IdentityService } from '../../core/services/identity.service';
 import { ExcelDataService } from '../../core/services/excel-data.service';
+import { NoProjectStateComponent } from '../../shared/components/no-project-state/no-project-state.component';
 
 @Component({
   selector: 'app-task-list-page',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, NoProjectStateComponent],
   template: `
+    @if (!projectService.hasActiveProject()) {
+      <app-no-project-state featureName="Danh Sách Công Việc"></app-no-project-state>
+    } @else {
     <div class="task-list-page flex flex-col gap-6 animate-fade-in font-body text-slate-900 dark:text-slate-100">
       
       <!-- Top Action Bar -->
@@ -68,20 +72,24 @@ import { ExcelDataService } from '../../core/services/excel-data.service';
           </div>
 
           <div class="flex flex-col gap-1.5 border-t border-slate-200/60 dark:border-slate-800 pt-3">
-            <span class="text-xs font-bold uppercase tracking-wider text-slate-400 px-2">Phân nhóm hệ thống</span>
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-400 px-2">Phân loại theo Epic</span>
             <nav class="flex flex-col gap-1">
-              <button class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                <span class="w-3 h-3 rounded-full bg-blue-500"></span>
-                <span>Scrum AI Engine</span>
-              </button>
-              <button class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                <span class="w-3 h-3 rounded-full bg-indigo-500"></span>
-                <span>Delivery Intelligence</span>
-              </button>
-              <button class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                <span class="w-3 h-3 rounded-full bg-purple-500"></span>
-                <span>Identity & RBAC</span>
-              </button>
+              @for (epic of epics(); track epic.id) {
+                <button
+                  type="button"
+                  (click)="toggleEpicFilter(epic.name)"
+                  [class.bg-purple-100]="selectedEpic() === epic.name"
+                  [class.dark:bg-purple-950]="selectedEpic() === epic.name"
+                  [class.text-purple-700]="selectedEpic() === epic.name"
+                  [class.dark:text-purple-300]="selectedEpic() === epic.name"
+                  class="flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <span class="w-2.5 h-2.5 rounded-full bg-purple-500 shrink-0"></span>
+                  <span class="truncate">{{ epic.name }}</span>
+                </button>
+              } @empty {
+                <p class="text-[11px] text-slate-400 px-3 py-1">Chưa có Epic nào trong dự án</p>
+              }
             </nav>
           </div>
         </div>
@@ -170,6 +178,7 @@ import { ExcelDataService } from '../../core/services/excel-data.service';
       </div>
 
     </div>
+    }
   `,
   styles: [`
     @media (max-width: 1279px) {
@@ -204,12 +213,14 @@ import { ExcelDataService } from '../../core/services/excel-data.service';
   `]
 })
 export class TaskListPageComponent {
-  private readonly projectService = inject(ProjectManagementService);
+  readonly projectService = inject(ProjectManagementService);
   private readonly identityService = inject(IdentityService);
   private readonly excelService = inject(ExcelDataService);
 
   readonly allWorkItems = this.projectService.workItems;
-  selectedGroup = signal<'all' | 'my'>('all');
+  readonly epics = this.projectService.epics;
+  readonly selectedGroup = signal<'all' | 'my'>('all');
+  readonly selectedEpic = signal<string | null>(null);
   searchTerm = '';
 
   filteredItems = computed(() => {
@@ -220,6 +231,10 @@ export class TaskListPageComponent {
         list = list.filter(i => i.assigneeName === myName);
       }
     }
+    const epic = this.selectedEpic();
+    if (epic) {
+      list = list.filter(i => i.epicName === epic);
+    }
     if (this.searchTerm.trim()) {
       const term = this.searchTerm.toLowerCase();
       list = list.filter(i => i.title.toLowerCase().includes(term) || i.issueKey.toLowerCase().includes(term));
@@ -227,11 +242,19 @@ export class TaskListPageComponent {
     return list;
   });
 
+  toggleEpicFilter(epicName: string): void {
+    if (this.selectedEpic() === epicName) {
+      this.selectedEpic.set(null);
+    } else {
+      this.selectedEpic.set(epicName);
+    }
+  }
+
   openDrawer(task: WorkItem): void {
     this.projectService.activeDrawerTask.set(task);
   }
 
   exportExcel(): void {
-    this.excelService.exportToExcel(this.filteredItems(), 'HUCE_Task_List_Export.csv');
+    this.excelService.exportToExcel(this.filteredItems(), 'Project_Task_List_Export.csv');
   }
 }

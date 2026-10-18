@@ -63,6 +63,24 @@ public class WorkspaceProvisioningService : IWorkspaceProvisioningService
                     result.Value.Id,
                     ownerUserId,
                     _timeProvider.GetUtcNow().UtcDateTime);
+
+                if (request.MemberUserIds is { Count: > 0 })
+                {
+                    foreach (var memberId in request.MemberUserIds.Distinct())
+                    {
+                        if (memberId != ownerUserId && memberId != Guid.Empty)
+                        {
+                            await _roleAssignment.GrantRoleForProvisioningAsync(
+                                memberId,
+                                "OrgOwner",
+                                "Organization",
+                                result.Value.Id,
+                                ownerUserId,
+                                _timeProvider.GetUtcNow().UtcDateTime);
+                        }
+                    }
+                }
+
                 return granted
                     ? result
                     : Result<OrganizationDto>.Failure(Error.Failure(
@@ -93,18 +111,55 @@ public class WorkspaceProvisioningService : IWorkspaceProvisioningService
                     return result;
                 }
 
-                var granted = await _roleAssignment.GrantRoleForProvisioningAsync(
-                    creatorUserId,
+                var leadUserId = request.LeadUserId != Guid.Empty ? request.LeadUserId : creatorUserId;
+
+                // Cấp quyền ProjectManager cho Lead dự án
+                var grantedLead = await _roleAssignment.GrantRoleForProvisioningAsync(
+                    leadUserId,
                     "ProjectManager",
                     "Project",
                     result.Value.Id,
                     creatorUserId,
                     _timeProvider.GetUtcNow().UtcDateTime);
-                return granted
-                    ? result
-                    : Result<ProjectDto>.Failure(Error.Failure(
+
+                if (!grantedLead)
+                {
+                    return Result<ProjectDto>.Failure(Error.Failure(
                         "PROJECT_MANAGER_ASSIGNMENT_FAILED",
-                        "Không thể cấp vai trò Project Manager cho người tạo dự án."));
+                        "Không thể cấp vai trò Project Manager cho người phụ trách dự án."));
+                }
+
+                // Nếu người tạo khác Lead, cấp ProjectManager cho người tạo để tiếp tục quản lý
+                if (creatorUserId != leadUserId)
+                {
+                    await _roleAssignment.GrantRoleForProvisioningAsync(
+                        creatorUserId,
+                        "ProjectManager",
+                        "Project",
+                        result.Value.Id,
+                        creatorUserId,
+                        _timeProvider.GetUtcNow().UtcDateTime);
+                }
+
+                // Cấp quyền Developer cho các thành viên ban đầu được chọn
+                if (request.MemberUserIds is { Count: > 0 })
+                {
+                    foreach (var memberId in request.MemberUserIds.Distinct())
+                    {
+                        if (memberId != leadUserId && memberId != creatorUserId && memberId != Guid.Empty)
+                        {
+                            await _roleAssignment.GrantRoleForProvisioningAsync(
+                                memberId,
+                                "Developer",
+                                "Project",
+                                result.Value.Id,
+                                creatorUserId,
+                                _timeProvider.GetUtcNow().UtcDateTime);
+                        }
+                    }
+                }
+
+                return result;
             });
         }
         catch (DbUpdateException exception)

@@ -20,7 +20,7 @@ describe('AccountApi', () => {
 
   it('gửi đăng ký đúng endpoint và DTO dùng chung', () => {
     api.register({
-      email: 'member@huce.edu.vn',
+      email: 'member@example.com',
       password: 'StrongPassword@123',
       fullName: 'Nguyễn Văn A'
     }).subscribe();
@@ -28,7 +28,7 @@ describe('AccountApi', () => {
     const request = http.expectOne(`${baseUrl}/register`);
     expect(request.request.method).toBe('POST');
     expect(request.request.body).toEqual({
-      email: 'member@huce.edu.vn',
+      email: 'member@example.com',
       password: 'StrongPassword@123',
       fullName: 'Nguyễn Văn A'
     });
@@ -37,9 +37,9 @@ describe('AccountApi', () => {
   });
 
   it('gửi đăng nhập và refresh token đúng contract', () => {
-    api.login({ email: 'member@huce.edu.vn', password: 'Password@123' }).subscribe();
+    api.login({ email: 'member@example.com', password: 'Password@123' }).subscribe();
     const login = http.expectOne(`${baseUrl}/login`);
-    expect(login.request.body).toEqual({ email: 'member@huce.edu.vn', password: 'Password@123' });
+    expect(login.request.body).toEqual({ email: 'member@example.com', password: 'Password@123' });
     login.flush({ success: true, accessToken: 'a', refreshToken: 'r' });
 
     api.refreshToken('r').subscribe();
@@ -51,7 +51,7 @@ describe('AccountApi', () => {
 
   it('gửi reset password với OTP trong cùng transaction nghiệp vụ', () => {
     api.resetPassword({
-      email: 'member@huce.edu.vn',
+      email: 'member@example.com',
       code: '123456',
       newPassword: 'NewPassword@123'
     }).subscribe();

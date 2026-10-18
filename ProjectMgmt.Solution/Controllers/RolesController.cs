@@ -10,6 +10,7 @@ namespace ProjectMgmt.Solution.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/v1")]
+[Route("api")]
 public class RolesController : ControllerBase
 {
     private static readonly Action<ILogger, string, Exception?> LogEndpointFailure =

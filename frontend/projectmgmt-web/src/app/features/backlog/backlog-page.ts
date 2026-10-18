@@ -1,23 +1,28 @@
-import { ChangeDetectionStrategy, Component, HostListener, inject, signal, computed } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, inject, signal, computed, OnInit, AfterViewInit, OnDestroy, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ConnectedPosition, OverlayModule } from '@angular/cdk/overlay';
 import { DragDropModule, CdkDragDrop } from '@angular/cdk/drag-drop';
+import { gsap } from 'gsap';
 import { ProjectManagementService, WorkItem, Sprint } from '../../core/services/project-management.service';
 import { IdentityService } from '../../core/services/identity.service';
 import { ExcelDataService } from '../../core/services/excel-data.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ContextMenuComponent, ContextMenuItemAction } from '../../shared/components/context-menu.component';
 
+import { NoProjectStateComponent } from '../../shared/components/no-project-state/no-project-state.component';
+
 @Component({
   selector: 'app-backlog-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, OverlayModule, DragDropModule, ContextMenuComponent],
+  imports: [CommonModule, FormsModule, OverlayModule, DragDropModule, ContextMenuComponent, NoProjectStateComponent],
   templateUrl: './backlog-page.html',
   styleUrl: './backlog-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class BacklogPage {
+export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
+  private el = inject<ElementRef<HTMLElement>>(ElementRef);
+  private entranceTween: gsap.core.Tween | null = null;
   private readonly identityService = inject(IdentityService);
   readonly projectService = inject(ProjectManagementService);
   readonly excelService = inject(ExcelDataService);
@@ -112,6 +117,37 @@ export class BacklogPage {
   readonly sprints = this.projectService.sprints;
   readonly workItems = this.projectService.workItems;
   readonly epics = this.projectService.epics;
+
+  ngOnInit(): void {
+    const currentProj = this.projectService.currentProject();
+    if (currentProj?.id && (!currentProj.members || currentProj.members.length === 0)) {
+      this.projectService.loadProjectMembers(currentProj.id).subscribe();
+    }
+  }
+
+  ngAfterViewInit(): void {
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      const sections = this.el.nativeElement.querySelectorAll<HTMLElement>('.sprint-section');
+      if (sections.length) {
+        this.entranceTween = gsap.fromTo(
+          sections,
+          { opacity: 0, y: 16 },
+          {
+            opacity: 1,
+            y: 0,
+            duration: 0.4,
+            stagger: 0.08,
+            ease: 'power2.out',
+            clearProps: 'transform,opacity'
+          }
+        );
+      }
+    }
+  }
+
+  ngOnDestroy(): void {
+    this.entranceTween?.kill();
+  }
 
   // Has active filter applied
   readonly hasActiveFilters = computed(() => {
@@ -647,7 +683,7 @@ export class BacklogPage {
 
   // --- Quick Exports & AI ---
   exportExcel(): void {
-    this.excelService.exportToExcel(this.workItems(), 'HUCE_Backlog_Export.csv');
+    this.excelService.exportToExcel(this.workItems(), 'Project_Backlog_Export.csv');
     this.toastService.success('Xuất Dữ Liệu Excel', 'Đã tải xuống file CSV/Excel thành công.');
   }
 

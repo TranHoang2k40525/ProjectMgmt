@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AiBreakdownApi } from '../../../core/api/ai-breakdown.api';
 import { ProjectManagementService, WorkItem } from '../../../core/services/project-management.service';
+import { IdentityService } from '../../../core/services/identity.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { ConfirmDialogService } from '../../../core/services/confirm-dialog.service';
 
@@ -36,7 +37,7 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
               <span class="px-3 py-1 rounded-md text-sm font-mono font-bold bg-primary/10 text-primary border border-primary/20">
                 {{ task.issueKey }}
               </span>
-              <span class="text-sm text-slate-500 font-medium">Dự án {{ task.sprintName || 'Hệ thống Quản lý Dự án Scrum tích hợp AI' }}</span>
+              <span class="text-sm text-slate-500 font-medium">{{ task.sprintName ? ('Sprint: ' + task.sprintName) : (projectService.currentProject().name || 'Dự án') }}</span>
             </div>
 
             <div class="flex items-center gap-2">
@@ -207,13 +208,16 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
                     }
                   </div>
 
-                  <div class="space-y-1 pt-1">
-                    <span class="font-bold text-slate-700 dark:text-slate-300">Acceptance Criteria (AC):</span>
-                    <ul class="list-disc list-inside space-y-1 text-slate-600 dark:text-slate-300 pl-1">
-                      <li>AC-1: Đảm bảo kiểm tra Token JWT có chữ ký hợp lệ trước khi cấp quyền API.</li>
-                      <li>AC-2: Phản hồi JSON trả về đúng HTTP 200 OK cùng dữ liệu payload chuẩn hóa.</li>
-                    </ul>
-                  </div>
+                  @if (aiAcceptanceCriteria().length > 0) {
+                    <div class="space-y-1 pt-1">
+                      <span class="font-bold text-slate-700 dark:text-slate-300">Acceptance Criteria (AC):</span>
+                      <ul class="list-disc list-inside space-y-1 text-slate-600 dark:text-slate-300 pl-1">
+                        @for (ac of aiAcceptanceCriteria(); track ac) {
+                          <li>{{ ac }}</li>
+                        }
+                      </ul>
+                    </div>
+                  }
 
                   <div class="flex justify-end gap-2 pt-2 border-t border-purple-100 dark:border-purple-900/50">
                     <button (click)="showAiBreakdownPanel.set(false)" class="px-3 py-1.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium">Hủy</button>
@@ -344,7 +348,7 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
               <!-- Comment Input Box -->
               <div class="flex gap-3">
                 <div class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold shrink-0">
-                  TH
+                  {{ currentUserInitial() }}
                 </div>
                 <div class="flex-1 flex flex-col gap-2">
                   <input
@@ -429,13 +433,19 @@ export class TaskDetailDrawerComponent {
   @Input() task: WorkItem | null = null;
   @Output() dismissed = new EventEmitter<void>();
 
-  private readonly projectService = inject(ProjectManagementService);
+  readonly projectService = inject(ProjectManagementService);
+  private readonly identityService = inject(IdentityService);
   private readonly toastService = inject(ToastService);
   private readonly confirmDialog = inject(ConfirmDialogService);
   private readonly aiApi = inject(AiBreakdownApi, { optional: true });
 
   readonly drawerWidth = signal<number>(640);
   private isResizing = false;
+
+  readonly currentUserInitial = computed(() => {
+    const name = this.identityService.authState().currentUser?.displayName;
+    return name ? name.charAt(0).toUpperCase() : 'U';
+  });
 
   readonly epics = this.projectService.epics;
   newCommentText = '';
@@ -448,6 +458,7 @@ export class TaskDetailDrawerComponent {
   readonly currentGenerationId = signal<string | null>(null);
 
   readonly aiSubtaskSuggestions = signal<Array<{ title: string; points: number; selected: boolean }>>([]);
+  readonly aiAcceptanceCriteria = signal<string[]>([]);
 
   readonly candidateScores = signal<Array<{ name: string; totalScore: number; workloadScore: number; skillScore: number; historyScore: number; capacityScore: number; reason: string }>>([]);
 
@@ -472,6 +483,11 @@ export class TaskDetailDrawerComponent {
               }))
             );
           }
+          if (res.acceptanceCriteria && res.acceptanceCriteria.length > 0) {
+            this.aiAcceptanceCriteria.set(res.acceptanceCriteria);
+          } else {
+            this.aiAcceptanceCriteria.set([]);
+          }
         },
         error: () => undefined
       });
@@ -480,7 +496,30 @@ export class TaskDetailDrawerComponent {
 
   toggleAiAssignmentPanel(): void {
     this.showAiBreakdownPanel.set(false);
-    this.showAiAssignmentPanel.update(v => !v);
+    const opening = !this.showAiAssignmentPanel();
+    this.showAiAssignmentPanel.set(opening);
+    if (opening) {
+      const members = this.projectMembers();
+      const allWorkItems = this.projectService.workItems();
+      const scores = members.map(m => {
+        const activeTasks = allWorkItems.filter(w => (w.assigneeName === m.displayName || w.assigneeId === m.userId) && w.statusName !== 'Done').length;
+        const workloadScore = Math.max(30, Math.min(100, 100 - activeTasks * 15));
+        const skillScore = m.role === 'Developer' ? 90 : m.role === 'QA Engineer' ? 85 : 80;
+        const historyScore = 85;
+        const capacityScore = Math.max(40, 100 - activeTasks * 10);
+        const totalScore = Math.round(workloadScore * 0.4 + skillScore * 0.3 + historyScore * 0.2 + capacityScore * 0.1);
+        return {
+          name: m.displayName,
+          totalScore,
+          workloadScore,
+          skillScore,
+          historyScore,
+          capacityScore,
+          reason: `Đang phụ trách ${activeTasks} công việc còn mở. Vai trò ${m.role}.`
+        };
+      }).sort((a, b) => b.totalScore - a.totalScore);
+      this.candidateScores.set(scores);
+    }
   }
 
   applyAiBreakdown(): void {

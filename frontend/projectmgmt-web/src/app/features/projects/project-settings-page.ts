@@ -39,23 +39,26 @@ import { ToastService } from '../../core/services/toast.service';
           [routerLink]="['/projects', projectId, 'settings']"
           routerLinkActive="active"
           [routerLinkActiveOptions]="{ exact: true }"
-          class="tab-item"
+          class="tab-item flex items-center gap-1.5"
         >
-          ⚙️ Thông tin chung
+          <span class="material-symbols-outlined text-[18px]">tune</span>
+          <span>Thông tin chung</span>
         </a>
         <a
           [routerLink]="['/projects', projectId, 'settings', 'workflow']"
           routerLinkActive="active"
-          class="tab-item"
+          class="tab-item flex items-center gap-1.5"
         >
-          🔄 Cấu hình Workflow (Nhiệm vụ 2)
+          <span class="material-symbols-outlined text-[18px]">sync_alt</span>
+          <span>Cấu hình Workflow</span>
         </a>
         <a
           [routerLink]="['/projects', projectId, 'settings', 'board']"
           routerLinkActive="active"
-          class="tab-item"
+          class="tab-item flex items-center gap-1.5"
         >
-          📋 Cấu hình Board (Nhiệm vụ 3)
+          <span class="material-symbols-outlined text-[18px]">view_kanban</span>
+          <span>Cấu hình Board</span>
         </a>
       </div>
 
@@ -155,7 +158,7 @@ import { ToastService } from '../../core/services/toast.service';
       margin-bottom: 1rem;
     }
     .breadcrumb a {
-      color: #2563eb;
+      color: #1b4332;
       text-decoration: none;
     }
     .settings-header {
@@ -189,11 +192,11 @@ import { ToastService } from '../../core/services/toast.service';
       transition: all 0.2s;
     }
     .tab-item:hover {
-      color: #2563eb;
+      color: #1b4332;
     }
     .tab-item.active {
-      color: #2563eb;
-      border-bottom-color: #2563eb;
+      color: #1b4332;
+      border-bottom-color: #2d6a4f;
     }
     .card {
       background: #ffffff;
@@ -232,8 +235,8 @@ import { ToastService } from '../../core/services/toast.service';
     }
     .form-control:focus {
       outline: none;
-      border-color: #2563eb;
-      box-shadow: 0 0 0 3px rgba(37,99,235,0.15);
+      border-color: #2d6a4f;
+      box-shadow: 0 0 0 3px rgba(45, 106, 79, 0.15);
     }
     .readonly-input {
       background: #f8fafc;
@@ -263,11 +266,11 @@ import { ToastService } from '../../core/services/toast.service';
       transition: all 0.2s;
     }
     .btn-primary {
-      background: #2563eb;
+      background: #1b4332;
       color: #ffffff;
     }
     .btn-primary:hover:not(:disabled) {
-      background: #1d4ed8;
+      background: #2d6a4f;
     }
     .btn-danger {
       background: #dc2626;

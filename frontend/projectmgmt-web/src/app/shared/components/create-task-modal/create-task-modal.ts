@@ -52,13 +52,13 @@ import { ToastService } from '../../../core/services/toast.service';
               @if (showNewTypeForm()) {
                 <div class="flex items-center gap-2 p-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
                   <input type="text" [(ngModel)]="customTypeName" placeholder="Tên loại mới..." class="h-8 px-2 text-xs rounded border border-slate-300 w-full" />
-                  <select [(ngModel)]="customTypeIcon" class="h-8 text-xs rounded border border-slate-300">
-                    <option value="⚡">⚡ Epic</option>
-                    <option value="🛡️">🛡️ Security</option>
-                    <option value="🎨">🎨 Design</option>
-                    <option value="📈">📈 Telemetry</option>
-                    <option value="📋">📋 Research</option>
-                    <option value="🧪">🧪 Test</option>
+                  <select [(ngModel)]="customTypeIcon" class="h-8 text-xs rounded border border-slate-300 font-medium">
+                    <option value="bolt">Bolt (Epic / Hạng mục lớn)</option>
+                    <option value="shield">Shield (Bảo mật / Security)</option>
+                    <option value="palette">Palette (Thiết kế UI/UX)</option>
+                    <option value="monitoring">Monitoring (Giám sát)</option>
+                    <option value="science">Science (Nghiên cứu)</option>
+                    <option value="bug_report">Bug (Kiểm thử / QA)</option>
                   </select>
                   <button (click)="saveCustomIssueType()" class="px-2 py-1 text-xs bg-primary text-white rounded font-bold shrink-0">Tạo</button>
                 </div>
@@ -69,7 +69,7 @@ import { ToastService } from '../../../core/services/toast.service';
                   class="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-primary"
                 >
                   @for (t of customIssueTypes(); track t.id) {
-                    <option [value]="t.name">{{ t.icon }} {{ t.name }}</option>
+                    <option [value]="t.name">{{ t.name }}</option>
                   }
                 </select>
               }
@@ -220,7 +220,7 @@ export class CreateTaskModalComponent {
 
   showNewTypeForm = signal<boolean>(false);
   customTypeName = '';
-  customTypeIcon = '🛡️';
+  customTypeIcon = 'shield';
 
   title = '';
   issueType = 'Task';
@@ -238,7 +238,7 @@ export class CreateTaskModalComponent {
   saveCustomIssueType(): void {
     if (!this.customTypeName.trim()) return;
     const newType = this.projectService.addCustomIssueType(this.customTypeName.trim(), this.customTypeIcon, 'indigo');
-    this.toastService.success('Tạo Loại Issue Mới', `Đã tạo loại [${newType.icon} ${newType.name}] thành công!`);
+    this.toastService.success('Tạo Loại Issue Mới', `Đã tạo loại [${newType.name}] thành công!`);
     this.issueType = newType.name;
     this.showNewTypeForm.set(false);
     this.customTypeName = '';

@@ -7,6 +7,7 @@ using ProjectMgmt.Solution.Services;
 namespace ProjectMgmt.Solution.Controllers;
 
 [Route("api/v1/projects")]
+[Route("api/projects")]
 public class ProjectsController : ApiControllerBase
 {
     private static readonly Action<ILogger, Exception?> LogCreateFailure =
@@ -52,7 +53,8 @@ public class ProjectsController : ApiControllerBase
 
     [HttpPost]
     public async Task<ActionResult<ProjectDto>> Create(
-        [FromBody] CreateProjectRequestDto request)
+        [FromBody] CreateProjectRequestDto request,
+        CancellationToken cancellationToken = default)
     {
         try
         {
@@ -66,12 +68,28 @@ public class ProjectsController : ApiControllerBase
                 });
             }
 
-            var allowed = request.OrgId != Guid.Empty
-                && await _permissions.HasPermissionAsync(
+            var isOrgOwner = false;
+            var orgsResult = await _management.GetOrganizationsAsync(cancellationToken);
+            if (orgsResult.IsSuccess)
+            {
+                var targetOrg = orgsResult.Value.FirstOrDefault(o => o.Id == request.OrgId);
+                if (targetOrg is not null && targetOrg.OwnerId == _currentUser.UserId.Value)
+                {
+                    isOrgOwner = true;
+                }
+            }
+
+            var allowed = isOrgOwner || (request.OrgId != Guid.Empty
+                && (await _permissions.HasPermissionAsync(
                     _currentUser.UserId.Value,
                     "project.create",
                     "Organization",
-                    request.OrgId);
+                    request.OrgId)
+                    || await _permissions.HasPermissionAsync(
+                    _currentUser.UserId.Value,
+                    "project.create",
+                    "System",
+                    null)));
             if (!allowed)
             {
                 return StatusCode(

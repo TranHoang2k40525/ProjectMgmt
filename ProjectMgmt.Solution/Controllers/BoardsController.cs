@@ -4,6 +4,7 @@ using ProjectMgmt.Modules.Planning.ProjectManagement.Application.IServices;
 namespace ProjectMgmt.Solution.Controllers;
 
 [Route("api/boards")]
+[Route("api/v1/boards")]
 public class BoardsController : ApiControllerBase
 {
     private readonly IProjectManagementService _service;

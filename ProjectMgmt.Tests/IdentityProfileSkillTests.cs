@@ -201,6 +201,22 @@ public class FakeProfileRepository : IProfileRepository
     {
         return Task.FromResult(AvatarResult);
     }
+
+    public Task<IReadOnlyList<ActiveUserProfile>> GetAllActiveProfilesAsync(CancellationToken cancellationToken = default)
+    {
+        var list = new List<ActiveUserProfile>();
+        if (Details != null)
+        {
+            list.Add(new ActiveUserProfile
+            {
+                UserId = Details.User.Id,
+                DisplayName = Details.Profile.DisplayName,
+                AvatarUrl = Details.Profile.AvatarUrl,
+                Email = Details.User.Email
+            });
+        }
+        return Task.FromResult<IReadOnlyList<ActiveUserProfile>>(list);
+    }
 }
 
 public class FakeAvatarStorage : IAvatarStorage

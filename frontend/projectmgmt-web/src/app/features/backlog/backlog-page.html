@@ -8,6 +8,9 @@
   (menuClose)="closeAllPopups()"
 ></app-context-menu>
 
+@if (!projectService.hasActiveProject()) {
+  <app-no-project-state featureName="Kế hoạch Sprint & Backlog"></app-no-project-state>
+} @else {
 <section class="backlog-page" aria-labelledby="backlog-title">
   <header class="backlog-toolbar">
     <div class="backlog-heading-row">
@@ -136,6 +139,7 @@
     <div class="modal-backdrop" role="presentation"><button type="button" class="modal-dismiss" aria-label="Đóng hộp thoại tạo Epic" (click)="showNewEpicModal.set(false)"></button><section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="new-epic-title"><div class="modal-title"><h2 id="new-epic-title">Tạo Epic mới</h2><button type="button" class="icon-button" title="Đóng" (click)="showNewEpicModal.set(false)"><span class="material-symbols-outlined" aria-hidden="true">close</span></button></div><label class="modal-field"><span>Tên Epic</span><input type="text" [(ngModel)]="newEpicName" placeholder="Ví dụ: Mobile App Integration" /></label><div class="modal-actions"><button type="button" class="button button-secondary" (click)="showNewEpicModal.set(false)">Hủy</button><button type="button" class="button button-ai-solid" [disabled]="!newEpicName.trim()" (click)="createEpic()">Tạo Epic</button></div></section></div>
   }
 </section>
+}
 
 <ng-template #workItemList let-items>
   <div class="work-item-table">

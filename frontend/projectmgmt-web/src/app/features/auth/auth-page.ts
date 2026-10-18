@@ -3,7 +3,6 @@ import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { IdentityService } from '../../core/services/identity.service';
-import { SylvaArrivalComponent } from './sylva-arrival/sylva-arrival';
 
 import { gsap } from 'gsap';
 
@@ -12,7 +11,7 @@ export type AuthMode = 'LOGIN' | 'SIGNUP' | 'OTP_REGISTER' | 'FORGOT' | 'OTP_FOR
 @Component({
   selector: 'app-auth-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, SylvaArrivalComponent],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule],
   templateUrl: './auth-page.html',
   styleUrls: ['./auth-page.scss']
 })
@@ -25,13 +24,8 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('authPage', { static: true }) private authPage!: ElementRef<HTMLElement>;
   private entryTween: gsap.core.Tween | null = null;
   private modeTween: gsap.core.Tween | null = null;
-  private teardownTimer: ReturnType<typeof setTimeout> | null = null;
-  private focusTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly mode = signal<AuthMode>('LOGIN');
-  readonly panelOpen = signal(true);
-  readonly sceneVisible = signal(false);
-  readonly canReplayArrival = signal(false);
   readonly passwordVisible = signal(false);
   readonly loading = signal<boolean>(false);
   readonly errorMessage = signal<string | null>(null);
@@ -50,15 +44,6 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnInit(): void {
     if (typeof window !== 'undefined') {
-      const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
-      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      const canPlay = !reducedMotion && !connection?.saveData && (navigator.hardwareConcurrency ?? 4) >= 4;
-      this.canReplayArrival.set(canPlay);
-      if (canPlay && sessionStorage.getItem('projectmgmt-sylva-seen') !== '1') {
-        this.panelOpen.set(false);
-        this.sceneVisible.set(true);
-      }
-
       const notice = sessionStorage.getItem('projectmgmt.auth.notice');
       if (notice) {
         this.successMessage.set(notice);
@@ -89,35 +74,13 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit(): void {
-    if (this.panelOpen()) this.animatePanel();
+    this.animatePanel();
   }
 
   ngOnDestroy(): void {
     this.stopTimer();
-    if (this.teardownTimer) clearTimeout(this.teardownTimer);
-    if (this.focusTimer) clearTimeout(this.focusTimer);
     this.modeTween?.kill();
     this.entryTween?.kill();
-  }
-
-  openAuth(): void {
-    this.panelOpen.set(true);
-    if (typeof window !== 'undefined') sessionStorage.setItem('projectmgmt-sylva-seen', '1');
-    if (this.teardownTimer) clearTimeout(this.teardownTimer);
-    this.teardownTimer = setTimeout(() => this.sceneVisible.set(false), 450);
-    if (this.focusTimer) clearTimeout(this.focusTimer);
-    this.focusTimer = setTimeout(() => {
-      this.animatePanel();
-      this.authPage.nativeElement.querySelector<HTMLInputElement>('#loginEmail')?.focus();
-    }, 0);
-  }
-
-  reopenArrival(): void {
-    if (!this.canReplayArrival()) return;
-    if (this.teardownTimer) clearTimeout(this.teardownTimer);
-    this.entryTween?.kill();
-    this.panelOpen.set(false);
-    this.sceneVisible.set(true);
   }
 
   private animatePanel(): void {
@@ -209,6 +172,13 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
       },
       error: (err) => {
         this.loading.set(false);
+        const errObj = (typeof err === 'object' && err !== null && 'error' in err) ? (err as { error: any }).error : null;
+        const errorCode = errObj?.errorCode;
+        if (errorCode === 'AUTH_EMAIL_VERIFICATION_PENDING') {
+          this.setMode('OTP_REGISTER');
+          this.successMessage.set('Email này đã được đăng ký nhưng chưa kích hoạt. Vui lòng kiểm tra mã OTP trong hộp thư hoặc bấm "Gửi lại OTP".');
+          return;
+        }
         this.errorMessage.set(this.readError(err, 'Đăng ký không thành công.'));
       }
     });

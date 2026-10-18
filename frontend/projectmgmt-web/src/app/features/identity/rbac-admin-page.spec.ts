@@ -9,8 +9,17 @@ import { AccountApi } from '../../core/api/account.api';
 import { IdentityApi } from '../../core/api/identity.api';
 import { NotificationApi } from '../../core/api/notification.api';
 import { RbacApi } from '../../core/api/rbac.api';
-import { IdentityMockDb } from '../../core/mocks/identity-mock-db';
 import { TOKEN_STORE } from '../../core/auth/token-store';
+
+const TEST_ROLES = [
+  { id: 'role-1', name: 'System Administrator', isSystem: true, description: 'Quản trị viên toàn quyền' },
+  { id: 'role-2', name: 'Developer', isSystem: false, description: 'Lập trình viên' }
+];
+
+const TEST_PERMISSIONS = [
+  { id: 'perm-1', code: 'USER_READ', category: 'Identity', description: 'Xem thông tin người dùng' },
+  { id: 'perm-2', code: 'WORK_ITEM_CREATE', category: 'Delivery', description: 'Tạo công việc mới' }
+];
 
 describe('RbacAdminPageComponent (Unit Tests)', () => {
   let component: RbacAdminPageComponent;
@@ -21,14 +30,14 @@ describe('RbacAdminPageComponent (Unit Tests)', () => {
         IdentityService,
         FormBuilder,
         { provide: AccountApi, useValue: {} },
-        { provide: IdentityApi, useValue: {} },
+        { provide: IdentityApi, useValue: { getUsers: () => of([]) } },
         { provide: NotificationApi, useValue: { getInbox: () => of({ items: [] }) } },
         {
           provide: RbacApi,
           useValue: {
             getRoles: () => of({
               success: true,
-              items: IdentityMockDb.roles.map(r => ({
+              items: TEST_ROLES.map(r => ({
                 roleId: r.id,
                 name: r.name,
                 isSystem: r.isSystem,
@@ -37,7 +46,7 @@ describe('RbacAdminPageComponent (Unit Tests)', () => {
             }),
             getPermissions: () => of({
               success: true,
-              items: IdentityMockDb.permissions.map(p => ({
+              items: TEST_PERMISSIONS.map(p => ({
                 permissionId: p.id,
                 code: p.code,
                 grouping: p.category,
@@ -93,7 +102,7 @@ describe('RbacAdminPageComponent (Unit Tests)', () => {
 
   it('should filter users based on query', () => {
     component.users.set([
-      { id: 'u-test', displayName: 'Admin Test', email: 'admin@huce.edu.vn', roleId: 'role-1', roleName: 'Admin', jobTitle: 'Lead', isActive: true, avatarUrl: '', twoFactorEnabled: false, createdAt: '2026-01-01', lastLoginAt: '2026-01-01' }
+      { id: 'u-test', displayName: 'Admin Test', email: 'admin@example.com', roleId: 'role-1', roleName: 'Admin', jobTitle: 'Lead', isActive: true, avatarUrl: '', twoFactorEnabled: false, createdAt: '2026-01-01', lastLoginAt: '2026-01-01' }
     ]);
     component.searchQuery = 'admin';
     expect(component.filteredUsers.length).toBeGreaterThan(0);

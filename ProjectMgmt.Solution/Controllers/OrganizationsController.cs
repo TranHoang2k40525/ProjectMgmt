@@ -6,6 +6,7 @@ using ProjectMgmt.Solution.Services;
 namespace ProjectMgmt.Solution.Controllers;
 
 [Route("api/v1/organizations")]
+[Route("api/organizations")]
 public class OrganizationsController : ApiControllerBase
 {
     private static readonly Action<ILogger, Exception?> LogCreateFailure =
