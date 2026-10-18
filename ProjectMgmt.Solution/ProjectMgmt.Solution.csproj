@@ -23,9 +23,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Update="local.settings.json"
-             CopyToOutputDirectory="Never"
-             CopyToPublishDirectory="Never" />
+    <None Update="appsettings.Development.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
   </ItemGroup>
 
   <ItemGroup>

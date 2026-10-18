@@ -19,6 +19,12 @@ public class EmailService : IEmailService
             new EventId(1001, "SecurityEmailDeliveryFailed"),
             "Không thể gửi email bảo mật tới tên miền {EmailDomain}.");
 
+    private static readonly Action<ILogger, string, int, string, SmtpStatusCode?, Exception?> LogSmtpFailure =
+        LoggerMessage.Define<string, int, string, SmtpStatusCode?>(
+            LogLevel.Error,
+            new EventId(1002, "SmtpDeliveryFailed"),
+            "SMTP gửi email thất bại. Host: {SmtpHost}, Port: {SmtpPort}, User: {SmtpUser}, StatusCode: {SmtpStatusCode}.");
+
     private readonly EmailOptions _options;
     private readonly ILogger<EmailService> _logger;
 
@@ -34,7 +40,6 @@ public class EmailService : IEmailService
         string otpCode,
         DateTime expiresAtUtc)
     {
-        _logger.LogInformation(">>> [MÃ OTP XÁC MINH EMAIL] Người nhận: {Email}, Mã OTP: {OtpCode}, Hết hạn: {ExpiresAtUtc} <<<", recipientEmail, otpCode, expiresAtUtc);
         return await SendMessageAsync(
             recipientEmail,
             "Mã xác minh tài khoản",
@@ -47,7 +52,6 @@ public class EmailService : IEmailService
         string otpCode,
         DateTime expiresAtUtc)
     {
-        _logger.LogInformation(">>> [MÃ OTP ĐẶT LẠI MẬT KHẨU] Người nhận: {Email}, Mã OTP: {OtpCode}, Hết hạn: {ExpiresAtUtc} <<<", recipientEmail, otpCode, expiresAtUtc);
         return await SendMessageAsync(
             recipientEmail,
             "Mã đặt lại mật khẩu",
@@ -164,6 +168,14 @@ public class EmailService : IEmailService
             when (exception is SmtpException or InvalidOperationException or FormatException)
         {
             LogSecurityEmailDeliveryFailure(_logger, GetEmailDomain(recipientEmail), exception);
+            var smtpException = exception as SmtpException;
+            LogSmtpFailure(
+                _logger,
+                _options.SmtpHost,
+                _options.Port,
+                MaskEmail(_options.User),
+                smtpException?.StatusCode,
+                exception);
             if (_options.FallbackToLogOnFailure)
             {
                 _logger.LogWarning("Email delivery failed to {Recipient}. FallbackToLogOnFailure is enabled: treating as delivered for development. Subject: {Subject}", recipientEmail, subject);
@@ -183,6 +195,14 @@ public class EmailService : IEmailService
         {
             throw new InvalidOperationException(
                 "Email SMTP is not configured. Set Email:SmtpHost, Port, User, Pass and From.");
+        }
+
+        private static string MaskEmail(string email)
+        {
+            var atIndex = email.IndexOf('@');
+            return atIndex > 1
+                ? $"{email[0]}***{email[(atIndex - 1)..]}"
+                : "***";
         }
     }
 
