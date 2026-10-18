@@ -16,8 +16,9 @@ public class UserSkillInfo
 
 public interface IUserLookupService
 {
-    Task<IReadOnlyList<UserDisplayInfo>> GetDisplayInfoAsync(IEnumerable<Guid> userIds);
-    Task<UserDisplayInfo?> GetDisplayInfoAsync(Guid userId);
+    Task<IReadOnlyList<UserDisplayInfo>> GetAllActiveDisplayInfoAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<UserDisplayInfo>> GetDisplayInfoAsync(IEnumerable<Guid> userIds, CancellationToken cancellationToken = default);
+    Task<UserDisplayInfo?> GetDisplayInfoAsync(Guid userId, CancellationToken cancellationToken = default);
 }
 
 public interface IUserSkillService

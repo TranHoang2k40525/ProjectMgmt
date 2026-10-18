@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
-import { Observable, of, catchError, tap } from 'rxjs';
+import { Observable, map, of, tap, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 
 export interface Organization {
@@ -116,6 +116,11 @@ export interface CreateBoardColumnRequest {
   wipLimit?: number | null;
 }
 
+export interface UpdateBoardColumnRequest {
+  name: string | null;
+  wipLimit: number | null;
+}
+
 export interface UserDisplayInfo {
   userId: string;
   displayName: string;
@@ -206,11 +211,14 @@ export class ProjectManagementService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = environment.apiBaseUrl;
 
-  // Active Projects Signal List (empty by default, loaded from Backend API)
+  // Active Projects Signal List
   readonly allProjectsList = signal<Project[]>([]);
-
-  // Currently Selected Active Project
-  readonly currentProject = signal<Project | null>(null);
+  // An empty selection keeps existing feature consumers safe until real projects load.
+  private readonly emptyProject: Project = {
+    id: '', orgId: '', projectKey: '', name: 'Chưa chọn dự án', leadUserId: '',
+    issueCounter: 0, isArchived: false, isDeleted: false, createdAt: ''
+  };
+  readonly currentProject = signal<Project>(this.emptyProject);
 
   // Issue Types Signal (Standard Scrum Types)
   readonly customIssueTypes = signal<CustomIssueType[]>([
@@ -586,86 +594,57 @@ export class ProjectManagementService {
 
   // HTTP API Operations
   getOrganizations(): Observable<Organization[]> {
-    return this.http.get<Organization[]>(`${this.baseUrl}/organizations`).pipe(
-      catchError(() => of([]))
-    );
+    return this.http.get<Organization[]>(`${this.baseUrl}/organizations`);
+  }
+
+  createOrganization(req: CreateOrganizationRequest): Observable<Organization> {
+    return this.http.post<Organization>(`${this.baseUrl}/organizations`, req);
   }
 
   getProjects(): Observable<Project[]> {
-    return this.http.get<Project[]>(`${this.baseUrl}/projects`).pipe(
-      tap(projects => {
-        this.allProjectsList.set(projects);
-        if (!this.currentProject() && projects.length > 0) {
-          this.currentProject.set(projects[0]);
-        }
-      }),
-      catchError(() => of(this.allProjectsList()))
-    );
+    return this.http.get<Project[]>(`${this.baseUrl}/projects`).pipe(tap(projects => {
+      this.allProjectsList.set(projects);
+      this.currentProject.set(projects.find(p => p.id === this.currentProject().id) ?? projects[0] ?? this.emptyProject);
+    }));
   }
 
   createProject(req: CreateProjectRequest): Observable<Project> {
-    return this.http.post<Project>(`${this.baseUrl}/projects`, req).pipe(
-      tap(created => {
-        this.allProjectsList.update(list => [created, ...list]);
-        this.currentProject.set(created);
-      }),
-      catchError(() => {
-        const proj = this.addNewProject({ name: req.name || 'Dự án mới', projectKey: req.projectKey || 'PROJ', description: req.description ?? undefined });
-        return of(proj);
-      })
-    );
+    return this.http.post<Project>(`${this.baseUrl}/projects`, req).pipe(tap(project => {
+      this.cacheProject(project);
+      this.currentProject.set(project);
+    }));
   }
 
   addProjectMember(memberReq: Pick<ProjectMember, 'displayName' | 'email' | 'role'>): Observable<boolean> {
-    const curProj = this.currentProject();
-    if (!curProj) return of(false);
-    return this.http.post<boolean>(`${this.baseUrl}/projects/${curProj.id}/members`, memberReq).pipe(
-      catchError(() => of(true))
-    );
+    void memberReq;
+    return throwError(() => ({ title: 'Chức năng thêm thành viên chưa được tích hợp.' }));
   }
 
   getUsers(): Observable<UserDisplayInfo[]> {
-    return of([]);
+    return this.http.get<UserDisplayInfo[]>(`${this.baseUrl}/users`);
   }
 
   getProjectById(id: string): Observable<Project> {
-    return this.http.get<Project>(`${this.baseUrl}/projects/${id}`).pipe(
-      catchError(() => of(this.allProjectsList().find(x => x.id === id) || this.currentProject()!))
-    );
+    return this.http.get<Project>(`${this.baseUrl}/projects/${id}`).pipe(tap(project => this.cacheProject(project)));
   }
 
   updateProject(id: string, req: UpdateProjectRequest): Observable<Project> {
-    return this.http.put<Project>(`${this.baseUrl}/projects/${id}`, req).pipe(
-      tap(updated => {
-        this.currentProject.set(updated);
-        this.allProjectsList.update(list => list.map(x => x.id === id ? updated : x));
-      }),
-      catchError(() => {
-        const current = this.currentProject();
-        const updated: Project = current
-          ? { ...current, name: req.name, description: req.description, leadUserId: req.leadUserId }
-          : { id, orgId: '', projectKey: 'PROJ', name: req.name, description: req.description, leadUserId: req.leadUserId, issueCounter: 0, isArchived: false, isDeleted: false, createdAt: new Date().toISOString() };
-        this.currentProject.set(updated);
-        this.allProjectsList.update(list => list.map(x => x.id === id ? updated : x));
-        return of(updated);
-      })
-    );
+    return this.http.put<Project>(`${this.baseUrl}/projects/${id}`, req).pipe(tap(project => this.cacheProject(project)));
   }
 
   deleteProject(id: string): Observable<boolean> {
-    return this.http.delete<boolean>(`${this.baseUrl}/projects/${id}`).pipe(
-      tap(() => {
-        this.allProjectsList.update(list => list.filter(x => x.id !== id));
-        if (this.currentProject()?.id === id) {
-          const remaining = this.allProjectsList();
-          this.currentProject.set(remaining.length > 0 ? remaining[0] : null);
-        }
-      }),
-      catchError(() => {
-        this.allProjectsList.update(list => list.filter(x => x.id !== id));
-        return of(true);
-      })
-    );
+    return this.http.delete<void>(`${this.baseUrl}/projects/${id}`).pipe(tap(() => {
+      this.allProjectsList.update(projects => projects.filter(p => p.id !== id));
+      if (this.currentProject().id === id) this.currentProject.set(this.allProjectsList()[0] ?? this.emptyProject);
+    }), map(() => true));
+  }
+
+  private cacheProject(project: Project): void {
+    this.allProjectsList.update(projects => {
+      const exists = projects.some(p => p.id === project.id);
+      return exists ? projects.map(p => p.id === project.id ? project : p) : [...projects, project];
+    });
+    if (this.currentProject().id === project.id) this.currentProject.set(project);
   }
 
   // Custom Issue Type Creation
@@ -684,8 +663,7 @@ export class ProjectManagementService {
 
   // Workflow Status Management
   getProjectStatuses(projectId: string): Observable<ProjectStatus[]> {
-    if (projectId) { /* no-op */ }
-    return of(this.projectStatuses());
+    return this.http.get<ProjectStatus[]>(`${this.baseUrl}/projects/${projectId}/statuses`);
   }
 
   addProjectStatus(name: string, category = 'In Progress'): ProjectStatus {
@@ -745,71 +723,42 @@ export class ProjectManagementService {
   }
 
   getWorkflowTransitions(projectId: string): Observable<WorkflowTransition[]> {
-    if (projectId) { /* no-op */ }
-    return of([]);
+    return this.http.get<WorkflowTransition[]>(`${this.baseUrl}/projects/${projectId}/workflow/transitions`);
   }
 
   createWorkflowTransition(projectId: string, req: CreateWorkflowTransitionRequest): Observable<WorkflowTransition> {
-    const created: WorkflowTransition = {
-      id: `tr-${Date.now()}`,
-      projectId,
-      fromStatusId: req.fromStatusId,
-      fromStatusName: req.fromStatusId === 'st-1' ? 'To Do' : req.fromStatusId === 'st-2' ? 'In Progress' : 'Code Review',
-      toStatusId: req.toStatusId,
-      toStatusName: req.toStatusId === 'st-4' ? 'Done' : req.toStatusId === 'st-3' ? 'Code Review' : 'In Progress',
-      name: req.name || 'Transition',
-      requiredPermissionCode: req.requiredPermissionCode
-    };
-    return of(created);
+    return this.http.post<WorkflowTransition>(`${this.baseUrl}/projects/${projectId}/workflow/transitions`, req);
   }
 
   deleteWorkflowTransition(id: string): Observable<boolean> {
-    if (id) { /* no-op */ }
-    return of(true);
+    return this.http.delete<void>(`${this.baseUrl}/workflow/transitions/${id}`).pipe(map(() => true));
   }
 
   getBoards(projectId: string): Observable<Board[]> {
-    if (projectId) { /* no-op */ }
-    return of([]);
+    return this.http.get<Board[]>(`${this.baseUrl}/projects/${projectId}/boards`);
   }
 
   createBoard(projectId: string, req: CreateBoardRequest): Observable<Board> {
-    const created: Board = {
-      id: `b-${Date.now()}`,
-      projectId,
-      name: req.name,
-      type: req.type,
-      isDefault: req.isDefault,
-      createdAt: new Date().toISOString()
-    };
-    return of(created);
+    return this.http.post<Board>(`${this.baseUrl}/projects/${projectId}/boards`, req);
   }
 
   getBoardColumns(boardId: string): Observable<BoardColumn[]> {
-    if (boardId) { /* no-op */ }
-    return of([]);
+    return this.http.get<BoardColumn[]>(`${this.baseUrl}/boards/${boardId}/columns`);
   }
 
   createBoardColumn(boardId: string, req: CreateBoardColumnRequest): Observable<BoardColumn> {
-    const created: BoardColumn = {
-      id: `col-${Date.now()}`,
-      boardId,
-      statusId: req.statusId,
-      statusName: req.statusId === 'st-1' ? 'To Do' : req.statusId === 'st-2' ? 'In Progress' : req.statusId === 'st-3' ? 'Code Review' : 'Done',
-      name: req.name || 'Cột mới',
-      orderIndex: 5,
-      wipLimit: req.wipLimit
-    };
-    return of(created);
+    return this.http.post<BoardColumn>(`${this.baseUrl}/boards/${boardId}/columns`, req);
   }
 
   reorderBoardColumns(boardId: string, orderedIds: string[]): Observable<boolean> {
-    if (boardId || orderedIds) { /* no-op */ }
-    return of(true);
+    return this.http.put<void>(`${this.baseUrl}/boards/${boardId}/columns/reorder`, { orderedColumnIds: orderedIds }).pipe(map(() => true));
   }
 
   deleteBoardColumn(id: string): Observable<boolean> {
-    if (id) { /* no-op */ }
-    return of(true);
+    return this.http.delete<void>(`${this.baseUrl}/boards/columns/${id}`).pipe(map(() => true));
+  }
+
+  updateBoardColumn(id: string, req: UpdateBoardColumnRequest): Observable<BoardColumn> {
+    return this.http.put<BoardColumn>(`${this.baseUrl}/boards/columns/${id}`, req);
   }
 }

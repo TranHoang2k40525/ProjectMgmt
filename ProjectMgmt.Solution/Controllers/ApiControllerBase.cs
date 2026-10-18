@@ -5,6 +5,7 @@ using ProjectMgmt.BuildingBlocks.Results;
 namespace ProjectMgmt.Solution.Controllers;
 
 [ApiController]
+[TypeFilter(typeof(PersistenceExceptionFilter))]
 public abstract class ApiControllerBase : ControllerBase
 {
     protected ActionResult FromResult(Result result)

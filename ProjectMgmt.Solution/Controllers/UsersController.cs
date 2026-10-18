@@ -20,6 +20,8 @@ public class UsersController : ControllerBase
     private readonly IProfileServices _profileServices;
     private readonly IAccountServices _accountServices;
     private readonly IForYouServices _forYouServices;
+    private readonly IUserLookupService _userLookup;
+    private readonly IUserSkillService _userSkills;
     private readonly ICurrentUserContext _currentUser;
     private readonly ILogger<UsersController> _logger;
 
@@ -27,14 +29,68 @@ public class UsersController : ControllerBase
         IProfileServices profileServices,
         IAccountServices accountServices,
         IForYouServices forYouServices,
+        IUserLookupService userLookup,
+        IUserSkillService userSkills,
         ICurrentUserContext currentUser,
         ILogger<UsersController> logger)
     {
         _profileServices = profileServices;
         _accountServices = accountServices;
         _forYouServices = forYouServices;
+        _userLookup = userLookup;
+        _userSkills = userSkills;
         _currentUser = currentUser;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Danh sách người dùng đang hoạt động (dùng cho chọn Lead/thành viên dự án).
+    /// Hỗ trợ cả /api/users (cũ) và /api/v1/users (mới).
+    /// </summary>
+    [HttpGet]
+    [HttpGet("~/api/users")]
+    public async Task<IActionResult> GetAllUsers(CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _userLookup.GetAllActiveDisplayInfoAsync(cancellationToken));
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return InternalError("users", exception);
+        }
+    }
+
+    [HttpGet("{userId:guid}/display")]
+    [HttpGet("~/api/users/{userId:guid}/display")]
+    public async Task<IActionResult> GetDisplay(
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var user = await _userLookup.GetDisplayInfoAsync(userId, cancellationToken);
+            return user is null ? NotFound() : Ok(user);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return InternalError("users/display", exception);
+        }
+    }
+
+    [HttpPost("skills/query")]
+    [HttpPost("~/api/users/skills/query")]
+    public async Task<IActionResult> GetSkills(
+        [FromBody] IReadOnlyCollection<Guid> userIds)
+    {
+        try
+        {
+            return Ok(await _userSkills.GetUserSkillsAsync(userIds));
+        }
+        catch (Exception exception)
+        {
+            return InternalError("users/skills/query", exception);
+        }
     }
 
     [HttpGet("for-you")]

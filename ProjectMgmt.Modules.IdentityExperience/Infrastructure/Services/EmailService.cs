@@ -196,14 +196,14 @@ public class EmailService : IEmailService
             throw new InvalidOperationException(
                 "Email SMTP is not configured. Set Email:SmtpHost, Port, User, Pass and From.");
         }
+    }
 
-        private static string MaskEmail(string email)
-        {
-            var atIndex = email.IndexOf('@');
-            return atIndex > 1
-                ? $"{email[0]}***{email[(atIndex - 1)..]}"
-                : "***";
-        }
+    private static string MaskEmail(string email)
+    {
+        var atIndex = email.IndexOf('@');
+        return atIndex > 1
+            ? $"{email[0]}***{email[(atIndex - 1)..]}"
+            : "***";
     }
 
     private static string BuildOtpBody(

@@ -7,11 +7,13 @@ public interface IProjectManagementService
     // Organizations
     Task<Result<IReadOnlyList<OrganizationDto>>> GetOrganizationsAsync(CancellationToken cancellationToken = default);
     Task<Result<OrganizationDto>> CreateOrganizationAsync(CreateOrganizationDto request, Guid ownerUserId);
+    Task<Result<OrganizationDto>> CreateOrganizationAsync(CreateOrganizationDto request, CancellationToken cancellationToken = default);
 
     // Projects
     Task<Result<IReadOnlyList<ProjectDto>>> GetProjectsAsync(Guid? orgId = null, CancellationToken cancellationToken = default);
     Task<Result<ProjectDto>> GetProjectByIdAsync(Guid projectId, CancellationToken cancellationToken = default);
     Task<Result<ProjectDto>> CreateProjectAsync(CreateProjectRequestDto request, Guid creatorUserId);
+    Task<Result<ProjectDto>> CreateProjectAsync(CreateProjectRequestDto request, CancellationToken cancellationToken = default);
     Task<Result<ProjectDto>> UpdateProjectAsync(Guid projectId, UpdateProjectRequestDto request, CancellationToken cancellationToken = default);
     Task<Result> DeleteProjectAsync(Guid projectId, CancellationToken cancellationToken = default);
 
@@ -28,4 +30,5 @@ public interface IProjectManagementService
     Task<Result<BoardColumnDto>> CreateBoardColumnAsync(Guid boardId, CreateBoardColumnRequestDto request, CancellationToken cancellationToken = default);
     Task<Result> ReorderBoardColumnsAsync(Guid boardId, ReorderBoardColumnsRequestDto request, CancellationToken cancellationToken = default);
     Task<Result> DeleteBoardColumnAsync(Guid columnId, CancellationToken cancellationToken = default);
+    Task<Result<BoardColumnDto>> UpdateBoardColumnAsync(Guid columnId, UpdateBoardColumnRequestDto request, CancellationToken cancellationToken = default);
 }

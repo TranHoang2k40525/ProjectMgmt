@@ -1,3 +1,4 @@
+import { apiErrorMessage } from '../../core/http/api-error-message';
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
@@ -61,8 +62,8 @@ import { Project, ProjectManagementService } from '../../core/services/project-m
               </div>
 
               <div class="card-actions">
-                <a [routerLink]="['/board']" class="btn btn-sm btn-outline">Bảng Board</a>
-                <a [routerLink]="['/backlog']" class="btn btn-sm btn-outline">Backlog</a>
+                <a [routerLink]="['/board']" (click)="selectProject(project)" class="btn btn-sm btn-outline">Bảng Board</a>
+                <a [routerLink]="['/backlog']" (click)="selectProject(project)" class="btn btn-sm btn-outline">Backlog</a>
                 <a [routerLink]="['/projects', project.id, 'settings']" class="btn btn-sm btn-secondary">Cài đặt</a>
               </div>
             </div>
@@ -293,6 +294,10 @@ export class ProjectsPage implements OnInit {
     this.loadProjects();
   }
 
+  selectProject(project: Project): void {
+    this.projectService.currentProject.set(project);
+  }
+
   loadProjects(): void {
     this.loading.set(true);
     this.error.set(null);
@@ -302,7 +307,7 @@ export class ProjectsPage implements OnInit {
         this.loading.set(false);
       },
       error: (err) => {
-        this.error.set(err?.error?.title || 'Không thể tải danh sách dự án.');
+        this.error.set(apiErrorMessage(err, 'Không thể tải danh sách dự án.'));
         this.loading.set(false);
       }
     });
