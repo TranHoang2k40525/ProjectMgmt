@@ -40,6 +40,12 @@ builder.Services.AddSwaggerGen(options =>
 });
 builder.Services.AddAuthorization();
 builder.Services.AddHealthChecks();
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+builder.Services.AddCors(options => options.AddPolicy("Frontend", policy =>
+{
+    if (allowedOrigins.Length > 0)
+        policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod();
+}));
 
 builder.Services.AddDbContext<IdentityExperienceDbContext>(options =>
     options.UseMySql(
@@ -106,6 +112,7 @@ if (hasFrontendArtifact)
     app.UseStaticFiles();
 }
 
+app.UseCors("Frontend");
 app.UseAuthorization();
 app.MapControllers();
 app.MapHealthChecks("/health");

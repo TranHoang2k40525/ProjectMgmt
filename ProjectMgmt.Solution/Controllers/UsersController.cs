@@ -18,23 +18,7 @@ public class UsersController : ApiControllerBase
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<UserDisplayInfo>>> GetAllUsers(CancellationToken cancellationToken)
     {
-        var sampleIds = new[]
-        {
-            Guid.Parse("11111111-0000-0000-0000-000000000001"),
-            Guid.Parse("11111111-0000-0000-0000-000000000002"),
-            Guid.Parse("11111111-0000-0000-0000-000000000003")
-        };
-        var users = await _users.GetDisplayInfoAsync(sampleIds, cancellationToken);
-        if (users.Count == 0)
-        {
-            users = new List<UserDisplayInfo>
-            {
-                new UserDisplayInfo(sampleIds[0], "Hoàng Admin (System Lead)", null),
-                new UserDisplayInfo(sampleIds[1], "Nguyễn Văn Dev (Technical Lead)", null),
-                new UserDisplayInfo(sampleIds[2], "Trần Thị Scrum (Scrum Master)", null)
-            };
-        }
-        return Ok(users);
+        return Ok(await _users.GetAllActiveDisplayInfoAsync(cancellationToken));
     }
 
     [HttpGet("{userId:guid}/display")]

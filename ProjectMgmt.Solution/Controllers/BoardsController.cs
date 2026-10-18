@@ -38,4 +38,11 @@ public class BoardsController : ApiControllerBase
         Guid columnId,
         CancellationToken cancellationToken) =>
         FromResult(await _service.DeleteBoardColumnAsync(columnId, cancellationToken));
+
+    [HttpPut("columns/{columnId:guid}")]
+    public async Task<ActionResult<BoardColumnDto>> UpdateColumn(
+        Guid columnId,
+        [FromBody] UpdateBoardColumnRequestDto request,
+        CancellationToken cancellationToken) =>
+        FromResult(await _service.UpdateBoardColumnAsync(columnId, request, cancellationToken));
 }

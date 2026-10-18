@@ -318,6 +318,12 @@ public class CreateBoardColumnRequestDto
     public int? WipLimit { get; set; }
 }
 
+public class UpdateBoardColumnRequestDto
+{
+    public string? Name { get; set; }
+    public int? WipLimit { get; set; }
+}
+
 public class ReorderBoardColumnsRequestDto
 {
     public ReorderBoardColumnsRequestDto()

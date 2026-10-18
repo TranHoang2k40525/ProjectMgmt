@@ -6,6 +6,7 @@ public record UserSkillInfo(Guid UserId, string SkillName, int ProficiencyLevel)
 
 public interface IUserLookupService
 {
+    Task<IReadOnlyList<UserDisplayInfo>> GetAllActiveDisplayInfoAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<UserDisplayInfo>> GetDisplayInfoAsync(IEnumerable<Guid> userIds, CancellationToken cancellationToken = default);
     Task<UserDisplayInfo?> GetDisplayInfoAsync(Guid userId, CancellationToken cancellationToken = default);
 }
