@@ -95,6 +95,9 @@ export class AppShellComponent implements OnDestroy {
   readonly workItems = this.projectService.workItems;
 
   constructor() {
+    this.projectService.getProjects().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      error: () => this.toastService.error('Dự án', 'Không thể tải dự án. Mở danh sách dự án để thử lại.')
+    });
     afterNextRender(() => this.revealActiveProjectTab());
 
     this.router.events.pipe(
@@ -200,7 +203,7 @@ export class AppShellComponent implements OnDestroy {
   }
 
   openCreateProjectModal(): void {
-    this.isCreateProjectModalOpen.set(true);
+    void this.router.navigate(['/projects/new']);
     this.closeFlyouts();
   }
 

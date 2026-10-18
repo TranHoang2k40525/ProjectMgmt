@@ -1,3 +1,4 @@
+import { apiErrorMessage } from '../../core/http/api-error-message';
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -94,6 +95,7 @@ import { ToastService } from '../../core/services/toast.service';
                   name="name"
                   [(ngModel)]="editForm.name"
                   required
+                  maxlength="200"
                   class="form-control"
                 />
               </div>
@@ -134,7 +136,7 @@ import { ToastService } from '../../core/services/toast.service';
           <!-- Danger Zone -->
           <div class="card danger-card">
             <h3>Khu vực nguy hiểm</h3>
-            <p>Xóa dự án này sẽ đánh dấu lưu trữ và ẩn khỏi danh sách làm việc.</p>
+            <p>Xóa mềm dự án sẽ ẩn dự án khỏi danh sách làm việc và giữ lại dữ liệu trong cơ sở dữ liệu.</p>
             <button (click)="onDeleteProject()" class="btn btn-danger">Xóa Dự Án Này</button>
           </div>
         </div>
@@ -375,7 +377,10 @@ export class ProjectSettingsPage implements OnInit {
   }
 
   loadUsers(): void {
-    this.projectService.getUsers().subscribe(u => this.users.set(u));
+    this.projectService.getUsers().subscribe({
+      next: users => this.users.set(users),
+      error: err => this.error.set(apiErrorMessage(err, 'Không thể tải người phụ trách dự án.'))
+    });
   }
 
   loadProject(): void {
@@ -392,13 +397,14 @@ export class ProjectSettingsPage implements OnInit {
         this.loading.set(false);
       },
       error: (err) => {
-        this.error.set(err?.error?.title || 'Không tìm thấy dự án.');
+        this.error.set(apiErrorMessage(err, 'Không tìm thấy dự án.'));
         this.loading.set(false);
       }
     });
   }
 
   onSaveGeneral(): void {
+    if (this.saving() || this.loading() || !this.project()) return;
     this.saving.set(true);
     this.feedbackMsg.set(null);
 
@@ -413,8 +419,8 @@ export class ProjectSettingsPage implements OnInit {
       error: (err) => {
         this.saving.set(false);
         this.feedbackType.set('error');
-        this.feedbackMsg.set(err?.error?.title || 'Không thể lưu thay đổi.');
-        this.toastService.error('Lỗi Cập Nhật', err?.error?.title || 'Không thể lưu thay đổi.');
+        this.feedbackMsg.set(apiErrorMessage(err, 'Không thể lưu thay đổi.'));
+        this.toastService.error('Lỗi Cập Nhật', apiErrorMessage(err, 'Không thể lưu thay đổi.'));
       }
     });
   }
@@ -434,7 +440,7 @@ export class ProjectSettingsPage implements OnInit {
             this.router.navigate(['/projects']);
           },
           error: (err) => {
-            this.toastService.error('Lỗi Xóa Dự Án', err?.error?.title || 'Không thể xóa dự án.');
+            this.toastService.error('Lỗi Xóa Dự Án', apiErrorMessage(err, 'Không thể xóa dự án.'));
           }
         });
       }

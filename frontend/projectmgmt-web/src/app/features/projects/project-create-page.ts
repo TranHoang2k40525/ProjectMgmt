@@ -1,3 +1,5 @@
+import { forkJoin } from 'rxjs';
+import { apiErrorMessage } from '../../core/http/api-error-message';
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -38,6 +40,21 @@ import {
         }
 
         <form (ngSubmit)="onSubmit()" #projectForm="ngForm">
+          @if (!loadingInitial() && organizations().length === 0) {
+            <p role="status">Chưa có tổ chức. Tạo tổ chức trước khi tạo dự án.</p>
+          }
+          <details>
+            <summary>Tạo tổ chức mới</summary>
+            <div class="form-group">
+              <label for="organizationName">Tên tổ chức</label>
+              <input id="organizationName" name="organizationName" [(ngModel)]="organizationName" maxlength="200" class="form-control" />
+              <label for="organizationSlug">Mã tổ chức (chữ thường, số, dấu gạch ngang)</label>
+              <input id="organizationSlug" name="organizationSlug" [(ngModel)]="organizationSlug" maxlength="80" class="form-control" />
+              <p>Người phụ trách được chọn bên dưới sẽ là chủ sở hữu tổ chức mới.</p>
+              <button type="button" class="btn btn-secondary" (click)="onCreateOrganization()"
+                [disabled]="loadingInitial() || creatingOrganization() || !organizationName.trim() || !organizationSlug.trim() || !formData.leadUserId">Tạo tổ chức</button>
+            </div>
+          </details>
           <div class="form-group">
             <label for="orgId">Organization / Tổ chức <span class="required">*</span></label>
             <select
@@ -64,6 +81,7 @@ import {
               (ngModelChange)="onNameChange($event)"
               placeholder="VD: E-Commerce Mobile App"
               required
+              maxlength="200"
               class="form-control"
             />
           </div>
@@ -117,7 +135,7 @@ import {
             <a routerLink="/projects" class="btn btn-secondary">Hủy bỏ</a>
             <button
               type="submit"
-              [disabled]="submitting() || !formData.name || !formData.projectKey"
+              [disabled]="loadingInitial() || creatingOrganization() || submitting() || !formData.name.trim() || !formData.projectKey || !formData.orgId || !formData.leadUserId"
               class="btn btn-primary"
             >
               @if (submitting()) {
@@ -305,6 +323,10 @@ export class ProjectCreatePage implements OnInit {
   readonly submitting = signal<boolean>(false);
   readonly errorMessage = signal<string | null>(null);
   readonly successMessage = signal<string | null>(null);
+  readonly loadingInitial = signal(true);
+  readonly creatingOrganization = signal(false);
+  organizationName = '';
+  organizationSlug = '';
 
   formData: CreateProjectRequest = {
     orgId: '',
@@ -319,21 +341,40 @@ export class ProjectCreatePage implements OnInit {
   }
 
   loadInitialData(): void {
-    this.projectService.getOrganizations().subscribe({
-      next: (orgs) => {
-        this.organizations.set(orgs);
-        if (orgs.length > 0 && !this.formData.orgId) {
-          this.formData.orgId = orgs[0].id;
-        }
+    this.loadingInitial.set(true);
+    forkJoin({ organizations: this.projectService.getOrganizations(), users: this.projectService.getUsers() }).subscribe({
+      next: data => {
+        this.organizations.set(data.organizations);
+        this.users.set(data.users);
+        this.formData.orgId = data.organizations[0]?.id ?? '';
+        this.formData.leadUserId = data.users[0]?.userId ?? '';
+        this.loadingInitial.set(false);
+        if (!data.users.length) this.errorMessage.set('Chưa có người dùng đang hoạt động. Cần bổ sung tài khoản từ chức năng quản lý người dùng.');
+      },
+      error: err => {
+        this.loadingInitial.set(false);
+        this.errorMessage.set(apiErrorMessage(err, 'Không thể tải tổ chức và người phụ trách.'));
       }
     });
+  }
 
-    this.projectService.getUsers().subscribe({
-      next: (userList) => {
-        this.users.set(userList);
-        if (userList.length > 0 && !this.formData.leadUserId) {
-          this.formData.leadUserId = userList[0].userId;
-        }
+  onCreateOrganization(): void {
+    if (this.creatingOrganization() || !this.formData.leadUserId) return;
+    this.creatingOrganization.set(true);
+    this.errorMessage.set(null);
+    this.projectService.createOrganization({
+      name: this.organizationName.trim(), slug: this.organizationSlug.trim(), ownerId: this.formData.leadUserId
+    }).subscribe({
+      next: org => {
+        this.organizations.update(orgs => [...orgs, org]);
+        this.formData.orgId = org.id;
+        this.organizationName = '';
+        this.organizationSlug = '';
+        this.creatingOrganization.set(false);
+      },
+      error: err => {
+        this.creatingOrganization.set(false);
+        this.errorMessage.set(apiErrorMessage(err, 'Không thể tạo tổ chức.'));
       }
     });
   }
@@ -360,8 +401,13 @@ export class ProjectCreatePage implements OnInit {
   }
 
   onSubmit(): void {
+    if (this.submitting() || this.loadingInitial() || this.creatingOrganization()) return;
     this.errorMessage.set(null);
     this.successMessage.set(null);
+    if (!this.formData.orgId || !this.formData.leadUserId || !this.formData.name.trim()) {
+      this.errorMessage.set('Vui lòng chọn tổ chức, người phụ trách và nhập tên dự án.');
+      return;
+    }
 
     // Client-side regex check
     const keyRegex = /^[A-Z][A-Z0-9]{1,9}$/;
@@ -382,8 +428,8 @@ export class ProjectCreatePage implements OnInit {
       },
       error: (err) => {
         this.submitting.set(false);
-        const problem = err?.error;
-        const msg = problem?.title || problem?.message || 'Không thể tạo dự án. Vui lòng kiểm tra lại.';
+        const problem = { title: apiErrorMessage(err, 'Yêu cầu không thành công.') };
+        const msg = problem.title || 'Không thể tạo dự án. Vui lòng kiểm tra lại.';
         this.errorMessage.set(msg);
       }
     });

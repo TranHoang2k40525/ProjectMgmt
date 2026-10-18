@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
-import { Observable, of } from 'rxjs';
+import { Observable, map, tap, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 
 export interface Organization {
@@ -116,6 +116,11 @@ export interface CreateBoardColumnRequest {
   wipLimit?: number | null;
 }
 
+export interface UpdateBoardColumnRequest {
+  name: string | null;
+  wipLimit: number | null;
+}
+
 export interface UserDisplayInfo {
   userId: string;
   displayName: string;
@@ -207,59 +212,14 @@ export class ProjectManagementService {
   private readonly baseUrl = environment.apiBaseUrl;
 
   // Active Projects Signal List
-  readonly allProjectsList = signal<Project[]>([
-    {
-      id: 'proj-huce-01',
-      orgId: 'org-huce',
-      projectKey: 'SCRUMAI',
-      name: 'HUCE AI Lab Project Management',
-      type: 'Software space',
-      description: 'Hệ thống Quản lý Scrum AI dành cho Trường Đại học Xây dựng Hà Nội',
-      leadUserId: 'user-01',
-      leadName: 'Trần Văn Hoàng',
-      issueCounter: 32,
-      isArchived: false,
-      isDeleted: false,
-      createdAt: '2026-08-01T08:00:00Z',
-      members: [
-        { id: 'm-1', userId: 'user-01', displayName: 'Trần Văn Hoàng', email: 'hoangtv@huce.edu.vn', role: 'Project Lead', joinedAt: '2026-08-01', avatarUrl: 'https://lh3.googleusercontent.com/aida/AEtjO1XtHjbcVDz-UBjctM0LfVUGmqUeR39WQIoExjpXXhoH4Wu_I9_Qpk42NbzSi5dIoyYQuxC6PmMSr__bvB8G1iRv51zwwYHyLI9epDcSeaSJ_23pgMSoDqCavTtJMnh_VUr1XiaX_dfIJVrOpVNtqTGgwFT5FuXj3i9tQVUICLqvROYKaCksEl97aHgdr2n-KIVSDs0bZzIZ5hDOpx0AeyayjF5Y_iybOHjJnpBXyyQz40C4Rx5A_y32U-v-DZxAw_gb18RoyaUMMA' },
-        { id: 'm-2', userId: 'user-02', displayName: 'Nguyễn Thanh Hà', email: 'hant@huce.edu.vn', role: 'Scrum Master', joinedAt: '2026-08-02' },
-        { id: 'm-3', userId: 'user-03', displayName: 'Phạm Đức Anh', email: 'anhpd@huce.edu.vn', role: 'Developer', joinedAt: '2026-08-05' },
-        { id: 'm-4', userId: 'user-04', displayName: 'Lê Minh Khiêm', email: 'khiemlm@huce.edu.vn', role: 'QA Engineer', joinedAt: '2026-08-10' }
-      ]
-    },
-    {
-      id: 'proj-eform',
-      orgId: 'org-huce',
-      projectKey: 'EFORM',
-      name: 'BTP - Hệ thống báo cáo (eForm)',
-      type: 'Business space',
-      description: 'Quy trình phê duyệt báo cáo eform cấp dưới',
-      leadUserId: 'user-02',
-      leadName: 'Nguyễn Thanh Hà',
-      issueCounter: 18,
-      isArchived: false,
-      isDeleted: false,
-      createdAt: '2026-08-15T08:00:00Z'
-    },
-    {
-      id: 'proj-okr',
-      orgId: 'org-huce',
-      projectKey: 'BEDX',
-      name: 'OKR Native BEDX System',
-      type: 'Software space',
-      description: 'Thử nghiệm dữ liệu và đo lường OKRs',
-      leadUserId: 'user-01',
-      leadName: 'Trần Văn Hoàng',
-      issueCounter: 12,
-      isArchived: false,
-      isDeleted: false,
-      createdAt: '2026-08-20T08:00:00Z'
-    }
-  ]);
+  readonly allProjectsList = signal<Project[]>([]);
+  // An empty selection keeps existing feature consumers safe until real projects load.
+  private readonly emptyProject: Project = {
+    id: '', orgId: '', projectKey: '', name: 'Chưa chọn dự án', leadUserId: '',
+    issueCounter: 0, isArchived: false, isDeleted: false, createdAt: ''
+  };
+  readonly currentProject = signal<Project>(this.emptyProject);
 
-  // Currently Selected Active Project
-  readonly currentProject = signal<Project>(this.allProjectsList()[0]);
 
   // Issue Types Signal (Defaults + Custom Issue Types)
   readonly customIssueTypes = signal<CustomIssueType[]>([
@@ -587,27 +547,6 @@ export class ProjectManagementService {
   }
 
   // --- Project Management Methods ---
-  addNewProject(newProj: { name: string; projectKey: string; type?: string; description?: string }): Project {
-    const created: Project = {
-      id: `proj-${Date.now()}`,
-      orgId: 'org-huce',
-      projectKey: newProj.projectKey.toUpperCase(),
-      name: newProj.name,
-      type: newProj.type || 'Software space',
-      description: newProj.description || '',
-      leadUserId: 'user-01',
-      leadName: 'Trần Văn Hoàng',
-      issueCounter: 0,
-      isArchived: false,
-      isDeleted: false,
-      createdAt: new Date().toISOString()
-    };
-
-    this.allProjectsList.update(list => [created, ...list]);
-    this.currentProject.set(created);
-    return created;
-  }
-
   // --- WorkItem CRUD Methods ---
   addWorkItem(newItem: Partial<WorkItem>): WorkItem {
     const counter = this.currentProject().issueCounter + 1;
@@ -665,52 +604,59 @@ export class ProjectManagementService {
     );
   }
 
-  // HTTP Mocks for Settings Pages
+  // Project settings use the persisted API; Issue/Sprint demo state is separate.
   getOrganizations(): Observable<Organization[]> {
-    return of([
-      { id: 'org-huce', name: 'Trường ĐH Xây dựng Hà Nội', slug: 'huce', ownerId: 'user-01', isActive: true, createdAt: '2026-08-01' }
-    ]);
+    return this.http.get<Organization[]>(`${this.baseUrl}/organizations`);
+  }
+
+  createOrganization(req: CreateOrganizationRequest): Observable<Organization> {
+    return this.http.post<Organization>(`${this.baseUrl}/organizations`, req);
   }
 
   getProjects(): Observable<Project[]> {
-    return of(this.allProjectsList());
+    return this.http.get<Project[]>(`${this.baseUrl}/projects`).pipe(tap(projects => {
+      this.allProjectsList.set(projects);
+      this.currentProject.set(projects.find(p => p.id === this.currentProject().id) ?? projects[0] ?? this.emptyProject);
+    }));
   }
 
   createProject(req: CreateProjectRequest): Observable<Project> {
-    const proj = this.addNewProject({ name: req.name || 'Dự án mới', projectKey: req.projectKey || 'PROJ', description: req.description ?? undefined });
-    return of(proj);
+    return this.http.post<Project>(`${this.baseUrl}/projects`, req).pipe(tap(project => {
+      this.cacheProject(project);
+      this.currentProject.set(project);
+    }));
   }
 
   addProjectMember(memberReq: Pick<ProjectMember, 'displayName' | 'email' | 'role'>): Observable<boolean> {
     void memberReq;
-    return of(true);
+    return throwError(() => ({ title: 'Chức năng thêm thành viên chưa được tích hợp.' }));
   }
 
   getUsers(): Observable<UserDisplayInfo[]> {
-    return of([
-      { userId: 'user-01', displayName: 'Trần Văn Hoàng (Lead)' },
-      { userId: 'user-02', displayName: 'Nguyễn Thanh Hà (Scrum Master)' },
-      { userId: 'user-03', displayName: 'Phạm Đức Anh (Developer)' },
-      { userId: 'user-04', displayName: 'Lê Minh Khiêm (QA Engineer)' }
-    ]);
+    return this.http.get<UserDisplayInfo[]>(`${this.baseUrl}/users`);
   }
 
   getProjectById(id: string): Observable<Project> {
-    const p = this.allProjectsList().find(x => x.id === id) || this.currentProject();
-    return of(p);
+    return this.http.get<Project>(`${this.baseUrl}/projects/${id}`).pipe(tap(project => this.cacheProject(project)));
   }
 
   updateProject(id: string, req: UpdateProjectRequest): Observable<Project> {
-    const current = this.currentProject();
-    const updated = { ...current, name: req.name, description: req.description, leadUserId: req.leadUserId };
-    this.currentProject.set(updated);
-    this.allProjectsList.update(list => list.map(x => x.id === id ? updated : x));
-    return of(updated);
+    return this.http.put<Project>(`${this.baseUrl}/projects/${id}`, req).pipe(tap(project => this.cacheProject(project)));
   }
 
   deleteProject(id: string): Observable<boolean> {
-    this.allProjectsList.update(list => list.filter(x => x.id !== id));
-    return of(true);
+    return this.http.delete<void>(`${this.baseUrl}/projects/${id}`).pipe(tap(() => {
+      this.allProjectsList.update(projects => projects.filter(p => p.id !== id));
+      if (this.currentProject().id === id) this.currentProject.set(this.allProjectsList()[0] ?? this.emptyProject);
+    }), map(() => true));
+  }
+
+  private cacheProject(project: Project): void {
+    this.allProjectsList.update(projects => {
+      const exists = projects.some(p => p.id === project.id);
+      return exists ? projects.map(p => p.id === project.id ? project : p) : [...projects, project];
+    });
+    if (this.currentProject().id === project.id) this.currentProject.set(project);
   }
 
   // Custom Issue Type Creation
@@ -729,8 +675,7 @@ export class ProjectManagementService {
 
   // Workflow Status Management
   getProjectStatuses(projectId: string): Observable<ProjectStatus[]> {
-    if (projectId) { /* no-op */ }
-    return of(this.projectStatuses());
+    return this.http.get<ProjectStatus[]>(`${this.baseUrl}/projects/${projectId}/statuses`);
   }
 
   addProjectStatus(name: string, category = 'In Progress'): ProjectStatus {
@@ -790,81 +735,42 @@ export class ProjectManagementService {
   }
 
   getWorkflowTransitions(projectId: string): Observable<WorkflowTransition[]> {
-    if (projectId) { /* no-op */ }
-    return of([
-      { id: 'tr-1', projectId, fromStatusId: 'st-1', fromStatusName: 'To Do', toStatusId: 'st-2', toStatusName: 'In Progress', name: 'Start Work' },
-      { id: 'tr-2', projectId, fromStatusId: 'st-2', fromStatusName: 'In Progress', toStatusId: 'st-3', toStatusName: 'Code Review', name: 'Submit PR' },
-      { id: 'tr-3', projectId, fromStatusId: 'st-3', fromStatusName: 'Code Review', toStatusId: 'st-4', toStatusName: 'Done', name: 'Approve & Merge' }
-    ]);
+    return this.http.get<WorkflowTransition[]>(`${this.baseUrl}/projects/${projectId}/workflow/transitions`);
   }
 
   createWorkflowTransition(projectId: string, req: CreateWorkflowTransitionRequest): Observable<WorkflowTransition> {
-    const created: WorkflowTransition = {
-      id: `tr-${Date.now()}`,
-      projectId,
-      fromStatusId: req.fromStatusId,
-      fromStatusName: req.fromStatusId === 'st-1' ? 'To Do' : req.fromStatusId === 'st-2' ? 'In Progress' : 'Code Review',
-      toStatusId: req.toStatusId,
-      toStatusName: req.toStatusId === 'st-4' ? 'Done' : req.toStatusId === 'st-3' ? 'Code Review' : 'In Progress',
-      name: req.name || 'Transition',
-      requiredPermissionCode: req.requiredPermissionCode
-    };
-    return of(created);
+    return this.http.post<WorkflowTransition>(`${this.baseUrl}/projects/${projectId}/workflow/transitions`, req);
   }
 
   deleteWorkflowTransition(id: string): Observable<boolean> {
-    if (id) { /* no-op */ }
-    return of(true);
+    return this.http.delete<void>(`${this.baseUrl}/workflow/transitions/${id}`).pipe(map(() => true));
   }
 
   getBoards(projectId: string): Observable<Board[]> {
-    return of([
-      { id: 'b-1', projectId, name: 'Default Scrum Board', type: 'Scrum', isDefault: true, createdAt: '2026-08-01' }
-    ]);
+    return this.http.get<Board[]>(`${this.baseUrl}/projects/${projectId}/boards`);
   }
 
   createBoard(projectId: string, req: CreateBoardRequest): Observable<Board> {
-    const created: Board = {
-      id: `b-${Date.now()}`,
-      projectId,
-      name: req.name,
-      type: req.type,
-      isDefault: req.isDefault,
-      createdAt: new Date().toISOString()
-    };
-    return of(created);
+    return this.http.post<Board>(`${this.baseUrl}/projects/${projectId}/boards`, req);
   }
 
   getBoardColumns(boardId: string): Observable<BoardColumn[]> {
-    if (boardId) { /* no-op */ }
-    return of([
-      { id: 'col-1', boardId, statusId: 'st-1', statusName: 'To Do', name: 'Cần Làm (To Do)', orderIndex: 1, wipLimit: null },
-      { id: 'col-2', boardId, statusId: 'st-2', statusName: 'In Progress', name: 'Đang Thực Hiện', orderIndex: 2, wipLimit: 5 },
-      { id: 'col-3', boardId, statusId: 'st-3', statusName: 'Code Review', name: 'Code Review', orderIndex: 3, wipLimit: 3 },
-      { id: 'col-4', boardId, statusId: 'st-4', statusName: 'Done', name: 'Hoàn Thành (Done)', orderIndex: 4, wipLimit: null }
-    ]);
+    return this.http.get<BoardColumn[]>(`${this.baseUrl}/boards/${boardId}/columns`);
   }
 
   createBoardColumn(boardId: string, req: CreateBoardColumnRequest): Observable<BoardColumn> {
-    const created: BoardColumn = {
-      id: `col-${Date.now()}`,
-      boardId,
-      statusId: req.statusId,
-      statusName: req.statusId === 'st-1' ? 'To Do' : req.statusId === 'st-2' ? 'In Progress' : req.statusId === 'st-3' ? 'Code Review' : 'Done',
-      name: req.name || 'Cột mới',
-      orderIndex: 5,
-      wipLimit: req.wipLimit
-    };
-    return of(created);
+    return this.http.post<BoardColumn>(`${this.baseUrl}/boards/${boardId}/columns`, req);
   }
 
   reorderBoardColumns(boardId: string, orderedIds: string[]): Observable<boolean> {
-    if (boardId || orderedIds) { /* no-op */ }
-    return of(true);
+    return this.http.put<void>(`${this.baseUrl}/boards/${boardId}/columns/reorder`, { orderedColumnIds: orderedIds }).pipe(map(() => true));
   }
 
   deleteBoardColumn(id: string): Observable<boolean> {
-    if (id) { /* no-op */ }
-    return of(true);
+    return this.http.delete<void>(`${this.baseUrl}/boards/columns/${id}`).pipe(map(() => true));
+  }
+
+  updateBoardColumn(id: string, req: UpdateBoardColumnRequest): Observable<BoardColumn> {
+    return this.http.put<BoardColumn>(`${this.baseUrl}/boards/columns/${id}`, req);
   }
 }
