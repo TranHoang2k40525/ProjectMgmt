@@ -1,0 +1,1943 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hệ Thống Quản Lý Dự Án Scrum + AI — Đại Học Xây Dựng Hà Nội (HUCE)</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Critical Material Symbols Outlined link requirement -->
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            primary: "#ec5b13",
+            "primary-hover": "#d44b08",
+            "primary-dark": "#b53e05",
+            secondary: "#4648d4",
+            tertiary: "#7c2ccd",
+            brandDark: "#0b0f19",
+            brandSurface: "#111827",
+            brandCard: "#1f2937",
+            brandBorder: "#374151"
+          },
+          fontFamily: {
+            sans: ['"Public Sans"', 'sans-serif'],
+            display: ['"Plus Jakarta Sans"', 'sans-serif']
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: 'Public Sans', sans-serif;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(17, 24, 39, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #ec5b13;
+      border-radius: 999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #d44b08;
+    }
+    .hero-bg {
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(3, 7, 18, 0.98) 100%), 
+                  url('https://lh3.googleusercontent.com/aida-public/AB6AXuD0QyekD2TckK8APWUUM4R6FlTNSoxlJfBo1XYoO-omrWqre-fiyGAON57vsUlma1sPkVDFfJY7vfLxY1ykKEH064hiESGbb4ehVyetVtJP1PuMlkkkvYhQcdofDB9cRh7QZLKSirFmodWtKGxhf6xuQTZ4sIlaFRXRzi4g4aHB9J4FzgngImSQMeu_q9HecnbdL8lpvXJAhkKteSvQ8hvrcj3JXmMLpzWF_y0LXfWJph7LIjiYk0NG0_E6PNiiLX8now');
+      background-size: cover;
+      background-position: center;
+    }
+    .ai-glow-pulse {
+      box-shadow: 0 0 15px rgba(236, 91, 19, 0.35);
+      animation: subtlePulse 3s infinite ease-in-out;
+    }
+    @keyframes subtlePulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.02); opacity: 0.9; }
+    }
+  </style>
+
+  <!-- React 18, ReactDOM, History, React Router 6.3.0, Babel -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/history@5/umd/history.development.js"></script>
+  <script src="https://unpkg.com/react-router@6.3.0/umd/react-router.development.js"></script>
+  <script src="https://unpkg.com/react-router-dom@6.3.0/umd/react-router-dom.development.js"></script>
+  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+</head>
+<body class="bg-gray-950 text-gray-100 antialiased min-h-screen overflow-x-hidden">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+    const { createRoot } = ReactDOM;
+    const { MemoryRouter, Routes, Route, Link, useNavigate, useLocation } = ReactRouterDOM;
+
+    // --- Mock State & Shared Project Context ---
+    const HUCE_LOGO = "https://lh3.googleusercontent.com/aida-public/AB6AXuBh-mhFotishzTt7HkYF-cE1Hb0634hOucKKqvX1LnzZX_j8eion1xya56vTsx5C2SyuE9IQi1hCrhJYxu1J-zF-EALuPHCz3kgxm4KsDfRaIF1rHz71KLJWiu4W8Ok2w7LkKtW7pHax4bnyCO4flKd6g3Bkhybj0ntIMXFU8fTJHZp1rr24BX3abBHRdu5CXcEZWiIqMID3-XPB4YlDZ3c6HHYBYnKuxHGmxwVP_mRLUfYVZJXWQYnVos6nQlPpxKuBQ";
+    const USER_AVATAR = "https://lh3.googleusercontent.com/aida-public/AB6AXuBGTdk0YtYJ4pF0xfOWh0UGmbTzIVaWbgvUCQaTR7DrpriCTFGOytY3VSccgxIXPyTXG5pXXqvexxJphuuN7TwBRfG7VIsefBVTKaCMQ-TRnHoEtfgACUlNqy1Cu3-GSI-dTVe5boZw_n74KoTNlUtxPYxDFtPA71zxxVi0qwnli8EpFUWmvo4X-S8U8uqplzWwz5lW1TTS8--ojTa48VGSMNM8MC-vJ46ORuN-G48J-IA7ijJSHoVi";
+
+    // --- Global App Layout with Header and Sidebar ---
+    function AppLayout({ children, activeMenu, openAiModal, openCreateModal }) {
+      const navigate = useNavigate();
+      const location = useLocation();
+
+      return (
+        <div class="flex h-screen w-screen overflow-hidden bg-gray-950 text-gray-100">
+          {/* Main Top Header */}
+          <header class="fixed top-0 left-0 right-0 h-14 z-50 bg-gray-900/90 backdrop-blur-xl border-b border-gray-800 flex items-center justify-between px-4">
+            <div class="flex items-center gap-3">
+              <Link to="/home" class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-white shadow-md font-black">
+                  <span class="material-symbols-outlined text-[20px]">dataset</span>
+                </div>
+                <div class="flex flex-col">
+                  <span class="font-bold text-sm leading-tight text-white flex items-center gap-1.5">
+                    HUCE Jira AI <span class="text-[10px] px-1.5 py-0.2 bg-primary/20 text-primary rounded font-mono font-bold">K65 PRO</span>
+                  </span>
+                  <span class="text-[10px] text-gray-400">ĐH Xây Dựng Hà Nội</span>
+                </div>
+              </Link>
+
+              <div class="h-5 w-px bg-gray-800 mx-2 hidden md:block"></div>
+
+              {/* Top Navigation Links */}
+              <nav class="hidden md:flex items-center gap-1 text-xs font-semibold text-gray-300">
+                <Link to="/overview" class={`px-2.5 py-1.5 rounded-md hover:bg-gray-800 hover:text-white transition ${location.pathname === '/overview' ? 'bg-gray-800 text-primary' : ''}`}>
+                  Tổng quan
+                </Link>
+                <Link to="/board" class={`px-2.5 py-1.5 rounded-md hover:bg-gray-800 hover:text-white transition ${location.pathname === '/board' ? 'bg-gray-800 text-primary' : ''}`}>
+                  Bảng Scrum
+                </Link>
+                <Link to="/backlog" class={`px-2.5 py-1.5 rounded-md hover:bg-gray-800 hover:text-white transition ${location.pathname === '/backlog' ? 'bg-gray-800 text-primary' : ''}`}>
+                  Backlog
+                </Link>
+                <Link to="/timeline" class={`px-2.5 py-1.5 rounded-md hover:bg-gray-800 hover:text-white transition ${location.pathname === '/timeline' ? 'bg-gray-800 text-primary' : ''}`}>
+                  Dòng thời gian
+                </Link>
+                <Link to="/reports" class={`px-2.5 py-1.5 rounded-md hover:bg-gray-800 hover:text-white transition ${location.pathname === '/reports' ? 'bg-gray-800 text-primary' : ''}`}>
+                  Báo cáo Burndown
+                </Link>
+              </nav>
+
+              <button onClick={() => navigate('/create-project')} class="ml-2 hidden sm:flex items-center gap-1 px-2.5 py-1 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-lg shadow transition">
+                <span class="material-symbols-outlined text-[16px]">add</span>
+                <span>Dự án mới</span>
+              </button>
+            </div>
+
+            {/* Middle Search Input */}
+            <div class="hidden lg:flex items-center w-72 relative">
+              <span class="material-symbols-outlined absolute left-2.5 text-gray-400 text-[18px]">search</span>
+              <input 
+                type="text" 
+                placeholder="Tìm issue, sprint, code... (Ctrl + K)" 
+                class="w-full bg-gray-900 border border-gray-700 text-xs text-gray-200 rounded-lg pl-8 pr-3 py-1.5 focus:outline-none focus:border-primary transition"
+              />
+            </div>
+
+            {/* Right Tools & User Profile */}
+            <div class="flex items-center gap-2 text-gray-300">
+              <button 
+                onClick={openAiModal} 
+                class="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white text-xs font-bold rounded-full shadow-lg transition ai-glow-pulse"
+              >
+                <span class="material-symbols-outlined text-[16px]">auto_awesome</span>
+                <span class="hidden sm:inline">Claude 3.7 AI</span>
+              </button>
+
+              <Link to="/filters" class="p-1.5 rounded-lg hover:bg-gray-800 text-gray-300 hover:text-white transition" title="Bộ lọc JQL">
+                <span class="material-symbols-outlined text-[20px]">filter_alt</span>
+              </Link>
+              <Link to="/notifications" class="p-1.5 rounded-lg hover:bg-gray-800 text-gray-300 hover:text-white relative transition" title="Thông báo">
+                <span class="material-symbols-outlined text-[20px]">notifications</span>
+                <span class="w-2 h-2 rounded-full bg-primary absolute top-1.5 right-1.5 animate-ping"></span>
+              </Link>
+              <Link to="/settings" class="p-1.5 rounded-lg hover:bg-gray-800 text-gray-300 hover:text-white transition" title="Cài đặt">
+                <span class="material-symbols-outlined text-[20px]">settings</span>
+              </Link>
+              <Link to="/profile" class="flex items-center gap-2 pl-2 border-l border-gray-800 hover:opacity-90">
+                <img src={USER_AVATAR} alt="User avatar" class="w-7 h-7 rounded-full object-cover ring-2 ring-primary" />
+                <span class="text-xs font-semibold hidden xl:inline text-white">Trần Văn Hoàng</span>
+              </Link>
+              <Link to="/auth" class="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-950/30 rounded-lg transition" title="Đăng xuất">
+                <span class="material-symbols-outlined text-[20px]">logout</span>
+              </Link>
+            </div>
+          </header>
+
+          {/* Persistent Left Sidebar */}
+          <aside class="w-60 shrink-0 bg-gray-900 border-r border-gray-800 pt-16 pb-4 flex flex-col justify-between hidden md:flex">
+            <div class="px-3 space-y-4">
+              {/* Project Card Context */}
+              <div class="p-2.5 rounded-xl bg-gray-800/70 border border-gray-700/80 flex items-center justify-between">
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center font-black text-white text-xs">
+                    HUCE
+                  </div>
+                  <div class="truncate">
+                    <h3 class="text-xs font-bold text-white truncate">Scrum AI Project</h3>
+                    <p class="text-[10px] text-gray-400 truncate">K65 CNTT - Đồ Án Tốt Nghiệp</p>
+                  </div>
+                </div>
+                <span class="material-symbols-outlined text-gray-400 text-[18px]">unfold_more</span>
+              </div>
+
+              {/* Navigation Menu Links */}
+              <div class="space-y-1">
+                <div class="px-2 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Kế hoạch & Thực thi Agile</div>
+                <Link to="/overview" class={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium transition ${location.pathname === '/overview' ? 'bg-primary/20 text-primary font-bold border border-primary/30' : 'text-gray-300 hover:bg-gray-800'}`}>
+                  <span class="material-symbols-outlined text-[18px]">space_dashboard</span>
+                  <span>Tổng quan (Summary)</span>
+                </Link>
+                <Link to="/board" class={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium transition ${location.pathname === '/board' ? 'bg-primary/20 text-primary font-bold border border-primary/30' : 'text-gray-300 hover:bg-gray-800'}`}>
+                  <span class="material-symbols-outlined text-[18px]">view_kanban</span>
+                  <span>Bảng Scrum (Board)</span>
+                </Link>
+                <Link to="/backlog" class={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium transition ${location.pathname === '/backlog' ? 'bg-primary/20 text-primary font-bold border border-primary/30' : 'text-gray-300 hover:bg-gray-800'}`}>
+                  <span class="material-symbols-outlined text-[18px]">splitscreen</span>
+                  <span>Kế hoạch Backlog</span>
+                </Link>
+                <Link to="/timeline" class={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium transition ${location.pathname === '/timeline' ? 'bg-primary/20 text-primary font-bold border border-primary/30' : 'text-gray-300 hover:bg-gray-800'}`}>
+                  <span class="material-symbols-outlined text-[18px]">timeline</span>
+                  <span>Dòng thời gian (Timeline)</span>
+                </Link>
+                <Link to="/list" class={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium transition ${location.pathname === '/list' ? 'bg-primary/20 text-primary font-bold border border-primary/30' : 'text-gray-300 hover:bg-gray-800'}`}>
+                  <span class="material-symbols-outlined text-[18px]">format_list_bulleted</span>
+                  <span>Danh sách công việc</span>
+                </Link>
+                <Link to="/calendar" class={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium transition ${location.pathname === '/calendar' ? 'bg-primary/20 text-primary font-bold border border-primary/30' : 'text-gray-300 hover:bg-gray-800'}`}>
+                  <span class="material-symbols-outlined text-[18px]">calendar_today</span>
+                  <span>Lịch dự án (Calendar)</span>
+                </Link>
+                <Link to="/reports" class={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium transition ${location.pathname === '/reports' ? 'bg-primary/20 text-primary font-bold border border-primary/30' : 'text-gray-300 hover:bg-gray-800'}`}>
+                  <span class="material-symbols-outlined text-[18px]">query_stats</span>
+                  <span>Báo cáo Burndown</span>
+                </Link>
+              </div>
+
+              {/* Management & System */}
+              <div class="space-y-1">
+                <div class="px-2 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Quản trị & Cấu hình</div>
+                <Link to="/members" class={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition ${location.pathname === '/members' ? 'bg-primary/20 text-primary font-bold border border-primary/30' : 'text-gray-300 hover:bg-gray-800'}`}>
+                  <span class="material-symbols-outlined text-[18px]">group</span>
+                  <span>Thành viên & Quyền (RBAC)</span>
+                </Link>
+                <Link to="/components" class={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition ${location.pathname === '/components' ? 'bg-primary/20 text-primary font-bold border border-primary/30' : 'text-gray-300 hover:bg-gray-800'}`}>
+                  <span class="material-symbols-outlined text-[18px]">extension</span>
+                  <span>Phân hệ (Components)</span>
+                </Link>
+                <Link to="/releases" class={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition ${location.pathname === '/releases' ? 'bg-primary/20 text-primary font-bold border border-primary/30' : 'text-gray-300 hover:bg-gray-800'}`}>
+                  <span class="material-symbols-outlined text-[18px]">rocket_launch</span>
+                  <span>Phiên bản phát hành</span>
+                </Link>
+                <Link to="/settings" class={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition ${location.pathname === '/settings' ? 'bg-primary/20 text-primary font-bold border border-primary/30' : 'text-gray-300 hover:bg-gray-800'}`}>
+                  <span class="material-symbols-outlined text-[18px]">tune</span>
+                  <span>Cài đặt dự án (Workflow)</span>
+                </Link>
+                <Link to="/notifications" class={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition ${location.pathname === '/notifications' ? 'bg-primary/20 text-primary font-bold border border-primary/30' : 'text-gray-300 hover:bg-gray-800'}`}>
+                  <span class="material-symbols-outlined text-[18px]">history</span>
+                  <span>Nhật ký & Realtime</span>
+                </Link>
+              </div>
+            </div>
+
+            {/* Bottom Toolcard */}
+            <div class="px-3 pt-3 border-t border-gray-800">
+              <div class="p-3 rounded-xl bg-gray-800/50 border border-gray-700/60 flex items-center justify-between">
+                <div class="flex items-center gap-2 min-w-0">
+                  <span class="material-symbols-outlined text-primary text-[20px]">school</span>
+                  <div class="truncate">
+                    <span class="text-xs font-bold text-white block truncate">HUCE Portal</span>
+                    <span class="text-[10px] text-gray-400">SignalR: 24ms Live</span>
+                  </div>
+                </div>
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              </div>
+            </div>
+          </aside>
+
+          {/* Main Dynamic View Area */}
+          <main class="flex-1 overflow-y-auto pt-14 bg-gray-950 text-gray-100">
+            {children}
+          </main>
+        </div>
+      );
+    }
+
+    // --- Modal: AI Task Breakdown Dialog (Claude 3.7 Sonnet) ---
+    function AiBreakdownModal({ isOpen, onClose, onApply }) {
+      const [loading, setLoading] = useState(false);
+      const [applied, setApplied] = useState(false);
+
+      if (!isOpen) return null;
+
+      const handleRunReAi = () => {
+        setLoading(true);
+        setTimeout(() => {
+          setLoading(false);
+          alert("Claude 3.7 đã phân rã xong: 5 Subtasks kỹ thuật và 4 kịch bản AC Given-When-Then!");
+        }, 1000);
+      };
+
+      const handleApply = () => {
+        setApplied(true);
+        setTimeout(() => {
+          onApply();
+        }, 600);
+      };
+
+      return (
+        <div class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div class="bg-gray-900 border border-gray-700 w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden max-h-[942px] flex flex-col animate-in fade-in">
+            {/* Header */}
+            <div class="p-4 sm:p-5 bg-gradient-to-r from-orange-600 via-primary to-amber-700 text-white flex items-center justify-between shrink-0">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center text-xl shadow">
+                  <span class="material-symbols-outlined">auto_awesome</span>
+                </div>
+                <div>
+                  <div class="flex items-center gap-2">
+                    <h3 class="font-bold text-base text-white">AI Auto Task Breakdown & Sinh Acceptance Criteria (Claude 3.7)</h3>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-black/30 border border-white/20 text-amber-200 font-bold font-mono">LLM Streaming</span>
+                  </div>
+                  <p class="text-xs text-orange-100">Phân tách đặc tả công việc chuẩn Agile cho Đồ án Đại học Xây dựng Hà Nội</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <button onClick={handleRunReAi} disabled={loading} class="px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/30 rounded-lg text-xs font-semibold text-white flex items-center gap-1.5 transition">
+                  <span class={`material-symbols-outlined text-[16px] ${loading ? 'animate-spin' : ''}`}>sync</span>
+                  <span>{loading ? 'Đang suy luận...' : 'Chạy lại AI'}</span>
+                </button>
+                <button onClick={onClose} class="w-8 h-8 rounded-lg hover:bg-white/20 flex items-center justify-center text-white transition">
+                  <span class="material-symbols-outlined text-[18px]">close</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div class="p-6 overflow-y-auto space-y-6 text-gray-200">
+              {/* Selected Target Story Card */}
+              <div class="p-4 bg-gray-800/80 border border-gray-700 rounded-xl space-y-2">
+                <div class="flex items-center justify-between gap-2 flex-wrap">
+                  <div class="flex items-center gap-2">
+                    <span class="px-2.5 py-0.5 rounded bg-primary text-white font-mono font-bold text-xs">SCRUMAI-280</span>
+                    <span class="text-xs text-gray-400 font-semibold uppercase">Epic: Tự động hoá Scrum AI</span>
+                  </div>
+                  <div class="flex items-center gap-2 text-xs">
+                    <span class="px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-700 font-bold">13 Story Points</span>
+                    <span class="px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-700 font-bold">Độ phức tạp cao</span>
+                  </div>
+                </div>
+                <h4 class="text-sm font-bold text-white">Tích hợp AI Auto Task Breakdown & Sinh Acceptance Criteria đa ngôn ngữ với LLM Streaming, Token Rate Limit & Human-in-the-Loop Review</h4>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 text-xs">
+                  <div class="p-2 bg-gray-900 rounded-lg border border-gray-800"><span class="text-gray-400 text-[10px] block">Backend:</span> .NET 10 + Hangfire</div>
+                  <div class="p-2 bg-gray-900 rounded-lg border border-gray-800"><span class="text-gray-400 text-[10px] block">Frontend:</span> Angular Standalone + Signals</div>
+                  <div class="p-2 bg-gray-900 rounded-lg border border-gray-800"><span class="text-gray-400 text-[10px] block">AI Engine:</span> Claude 3.7 Sonnet</div>
+                  <div class="p-2 bg-gray-900 rounded-lg border border-gray-800"><span class="text-gray-400 text-[10px] block">Thời gian dự toán:</span> 48 Giờ Kỹ Thuật</div>
+                </div>
+              </div>
+
+              {/* Subtasks Proposed by AI */}
+              <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                  <h5 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-primary"></span>
+                    5 Sub-tasks Kỹ Thuật do AI Phân Rã:
+                  </h5>
+                  <span class="text-xs text-gray-400">Chọn 5/5 Subtasks</span>
+                </div>
+
+                <div class="space-y-2.5 text-xs">
+                  <div class="p-3.5 bg-gray-800 border border-gray-700 rounded-xl hover:border-primary transition">
+                    <div class="flex items-start justify-between gap-2">
+                      <div class="font-bold text-white">[BE] Hangfire Job & Anthropic Claude API Streaming với Polly Circuit Breaker</div>
+                      <span class="px-2 py-0.5 rounded bg-blue-950 text-blue-300 font-bold shrink-0">12 Giờ • Backend</span>
+                    </div>
+                    <p class="text-gray-400 text-[11px] mt-1 leading-relaxed">
+                      Tạo background job xử lý phân rã bất đồng bộ. Tích hợp thư viện Polly thiết lập chính sách Exponential Backoff và Circuit Breaker tự ngắt sau 3 lần timeout từ máy chủ Anthropic.
+                    </p>
+                  </div>
+
+                  <div class="p-3.5 bg-gray-800 border border-gray-700 rounded-xl hover:border-primary transition">
+                    <div class="flex items-start justify-between gap-2">
+                      <div class="font-bold text-white">[BE] Token Bucket Rate Limiting middleware & Schema Logging AiGenerationLog</div>
+                      <span class="px-2 py-0.5 rounded bg-purple-950 text-purple-300 font-bold shrink-0">8 Giờ • Security & DB</span>
+                    </div>
+                    <p class="text-gray-400 text-[11px] mt-1 leading-relaxed">
+                      Giới hạn quota gọi AI theo Tenant/Project (Max 30 requests/giờ). Lưu vết JSON prompt, response tokens, thời gian trễ và người thực hiện vào bảng AiGenerationLog.
+                    </p>
+                  </div>
+
+                  <div class="p-3.5 bg-gray-800 border border-gray-700 rounded-xl hover:border-primary transition">
+                    <div class="flex items-start justify-between gap-2">
+                      <div class="font-bold text-white">[FE] Angular Reactive Modal Preview với Diff Editor & Drag-to-Reorder</div>
+                      <span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 font-bold shrink-0">14 Giờ • Frontend</span>
+                    </div>
+                    <p class="text-gray-400 text-[11px] mt-1 leading-relaxed">
+                      Giao diện Human-in-the-loop: Hiển thị thanh tiến trình streaming, cho phép Product Owner chỉnh sửa trực tiếp nội dung từng subtask trước khi lưu.
+                    </p>
+                  </div>
+
+                  <div class="p-3.5 bg-gray-800 border border-gray-700 rounded-xl hover:border-primary transition">
+                    <div class="flex items-start justify-between gap-2">
+                      <div class="font-bold text-white">[REALTIME] SignalR Hub broadcast tiến trình phân rã (Processing &gt; Validating &gt; Ready)</div>
+                      <span class="px-2 py-0.5 rounded bg-amber-950 text-amber-300 font-bold shrink-0">6 Giờ • Realtime</span>
+                    </div>
+                    <p class="text-gray-400 text-[11px] mt-1 leading-relaxed">
+                      Thiết lập kênh SignalR đa client trong cùng dự án; gửi tín hiệu notification tức thời ngay khi LLM trả về các phần tử subtask mà không cần reload trang.
+                    </p>
+                  </div>
+
+                  <div class="p-3.5 bg-gray-800 border border-gray-700 rounded-xl hover:border-primary transition">
+                    <div class="flex items-start justify-between gap-2">
+                      <div class="font-bold text-white">[TEST/QA] Unit test JSON Schema Validator & Integration test Human-in-the-loop</div>
+                      <span class="px-2 py-0.5 rounded bg-gray-700 text-gray-200 font-bold shrink-0">8 Giờ • QA Automation</span>
+                    </div>
+                    <p class="text-gray-400 text-[11px] mt-1 leading-relaxed">
+                      Bộ 25 test cases kiểm thử định dạng JSON đầu ra, phòng ngừa LLM hallucination và kiểm thử end-to-end chu trình phê duyệt từ PO đến việc cập nhật database Sprint.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Acceptance Criteria */}
+              <div class="p-4 bg-gray-800/60 border border-gray-700 rounded-xl space-y-2.5">
+                <div class="flex items-center justify-between">
+                  <h5 class="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-[16px]">checklist</span>
+                    Bộ Acceptance Criteria (AC) dạng Gherkin BDD:
+                  </h5>
+                  <span class="text-[11px] text-emerald-400 font-bold">4 Kịch bản đạt chuẩn</span>
+                </div>
+                <div class="space-y-2 text-xs text-gray-300">
+                  <div class="p-2 bg-gray-900/80 rounded border border-gray-700">
+                    <strong class="text-primary">Scenario 1 (Rate Limit):</strong> Given Người dùng vượt quá 30 lượt gọi/giờ, When gửi yêu cầu phân rã AI, Then trả mã lỗi 429 kèm thời gian chờ.
+                  </div>
+                  <div class="p-2 bg-gray-900/80 rounded border border-gray-700">
+                    <strong class="text-primary">Scenario 2 (Streaming):</strong> Given Story có độ phức tạp cao (&gt;8 SP), When xử lý, Then SignalR cập nhật trạng thái bước &lt; 300ms.
+                  </div>
+                  <div class="p-2 bg-gray-900/80 rounded border border-gray-700">
+                    <strong class="text-primary">Scenario 3 (Human-in-the-loop):</strong> Given PO sửa hoặc bỏ chọn subtask, When nhấn 'Áp dụng', Then chỉ lưu các subtask được tick với IsAiGenerated = true.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div class="p-4 bg-gray-950 border-t border-gray-800 flex items-center justify-between shrink-0">
+              <span class="text-xs text-gray-400 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-primary text-[16px]">info</span>
+                <span>5 Sub-tasks sẽ được ghi vào <strong>Sprint 1</strong> và gán cờ <code>IsAiGenerated = true</code></span>
+              </span>
+              <div class="flex items-center gap-2">
+                <button onClick={onClose} class="px-4 py-2 rounded-xl text-xs font-semibold text-gray-300 hover:bg-gray-800 transition">Đóng</button>
+                <button onClick={handleApply} class="px-5 py-2 rounded-xl text-xs font-bold bg-primary hover:bg-primary-hover text-white shadow-lg shadow-orange-500/30 flex items-center gap-2 transition active:scale-95">
+                  <span class="material-symbols-outlined text-[18px]">done_all</span>
+                  <span>{applied ? 'Đang đồng bộ...' : 'Áp dụng vào Sprint & Bảng Board'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // PAGE 1: AUTHENTICATION / LOGIN / REGISTER
+    // ==========================================
+    function AuthPage() {
+      const navigate = useNavigate();
+      const [authMode, setAuthMode] = useState("login"); // login | register | otp | forgot
+      const [email, setEmail] = useState("phamthehoai2004hn@huce.edu.vn");
+      const [password, setPassword] = useState("12345678");
+
+      const handleLogin = (e) => {
+        e.preventDefault();
+        navigate("/overview");
+      };
+
+      const handleRegister = (e) => {
+        e.preventDefault();
+        setAuthMode("otp");
+      };
+
+      const handleVerifyOtp = (e) => {
+        e.preventDefault();
+        navigate("/overview");
+      };
+
+      return (
+        <div class="h-screen w-screen hero-bg flex items-center justify-center p-4 sm:p-10 relative overflow-hidden">
+          {/* Ambient Glows */}
+          <div class="absolute w-96 h-96 bg-primary/20 rounded-full blur-3xl -top-10 -left-10 pointer-events-none"></div>
+          <div class="absolute w-96 h-96 bg-secondary/20 rounded-full blur-3xl -bottom-10 -right-10 pointer-events-none"></div>
+
+          <div class="w-full max-w-5xl bg-gray-900/90 border border-gray-700/80 rounded-2xl shadow-2xl backdrop-blur-2xl grid grid-cols-1 lg:grid-cols-12 overflow-hidden z-10">
+            {/* Left Educational Branding Column */}
+            <div class="lg:col-span-6 p-8 lg:p-12 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-gray-800 bg-gray-950/50">
+              <div class="flex items-center gap-3">
+                <img src={HUCE_LOGO} alt="HUCE Logo" class="w-12 h-12 rounded-xl object-contain bg-white/10 p-1" />
+                <div>
+                  <h2 class="text-xs uppercase tracking-widest text-primary font-bold">Trường ĐH Xây Dựng Hà Nội (HUCE)</h2>
+                  <h1 class="text-xl font-extrabold text-white">Hệ Thống Quản Lý Scrum + AI</h1>
+                </div>
+              </div>
+
+              <div class="my-8 space-y-4">
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/20 border border-primary/40 text-primary text-xs font-semibold">
+                  <span class="material-symbols-outlined text-[16px]">auto_awesome</span>
+                  <span>Tích hợp Claude Sonnet 3.7 & Llama 3</span>
+                </div>
+                <h3 class="text-3xl font-black text-white leading-tight">
+                  Quản lý đồ án tốt nghiệp và nghiên cứu khoa học chuyên sâu
+                </h3>
+                <p class="text-xs text-gray-300 leading-relaxed">
+                  Hệ thống Scrum chuyên biệt dành cho giảng viên, sinh viên K65-K67. Tự động hóa phân rã User Story, thiết lập hạn mức WIP, đồng bộ SignalR và dự báo đường cong Burndown Chart chính xác.
+                </p>
+
+                <div class="grid grid-cols-3 gap-3 pt-4">
+                  <div class="p-3 rounded-xl bg-gray-800/80 border border-gray-700 text-center">
+                    <div class="text-xl font-black text-primary">31</div>
+                    <div class="text-[10px] text-gray-400 uppercase font-semibold">Bảng CSDL</div>
+                  </div>
+                  <div class="p-3 rounded-xl bg-gray-800/80 border border-gray-700 text-center">
+                    <div class="text-xl font-black text-white">100%</div>
+                    <div class="text-[10px] text-gray-400 uppercase font-semibold">Chuẩn Scrum</div>
+                  </div>
+                  <div class="p-3 rounded-xl bg-gray-800/80 border border-gray-700 text-center">
+                    <div class="text-xl font-black text-secondary">Realtime</div>
+                    <div class="text-[10px] text-gray-400 uppercase font-semibold">SignalR Hub</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="text-[11px] text-gray-400 flex items-center gap-3">
+                <span>© 2026 Khoa CNTT HUCE</span>
+                <span>•</span>
+                <span>Bảo mật JWT 256-bit</span>
+              </div>
+            </div>
+
+            {/* Right Authentication Form Column */}
+            <div class="lg:col-span-6 p-8 lg:p-12 flex flex-col justify-center">
+              {/* Form 1: Login */}
+              {authMode === "login" && (
+                <div class="space-y-5">
+                  <div class="text-center">
+                    <h2 class="text-2xl font-black text-white tracking-tight">Đăng nhập tài khoản</h2>
+                    <p class="text-xs text-gray-400 mt-1">Sử dụng tài khoản email sinh viên hoặc cán bộ HUCE</p>
+                  </div>
+
+                  <form onSubmit={handleLogin} class="space-y-4">
+                    <div>
+                      <label class="block text-xs font-semibold text-gray-300 mb-1.5">Tài khoản Email</label>
+                      <div class="relative">
+                        <span class="material-symbols-outlined absolute left-3 top-2.5 text-gray-400 text-[18px]">mail</span>
+                        <input 
+                          type="email" 
+                          required 
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="name@huce.edu.vn" 
+                          class="w-full pl-10 pr-4 py-2.5 bg-gray-800/80 border border-gray-700 rounded-lg text-xs text-white focus:outline-none focus:border-primary transition"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div class="flex items-center justify-between mb-1.5">
+                        <label class="text-xs font-semibold text-gray-300">Mật khẩu</label>
+                        <button type="button" onClick={() => setAuthMode("forgot")} class="text-xs text-primary hover:underline">Quên mật khẩu?</button>
+                      </div>
+                      <div class="relative">
+                        <span class="material-symbols-outlined absolute left-3 top-2.5 text-gray-400 text-[18px]">lock</span>
+                        <input 
+                          type="password" 
+                          required 
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="Nhập mật khẩu..." 
+                          class="w-full pl-10 pr-4 py-2.5 bg-gray-800/80 border border-gray-700 rounded-lg text-xs text-white focus:outline-none focus:border-primary transition"
+                        />
+                      </div>
+                    </div>
+
+                    <div class="flex items-center justify-between text-xs text-gray-400">
+                      <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" defaultChecked class="rounded accent-primary" />
+                        <span>Ghi nhớ đăng nhập</span>
+                      </label>
+                      <span>OAuth 2.0 / SSO</span>
+                    </div>
+
+                    <button type="submit" class="w-full py-3 bg-primary hover:bg-primary-hover text-white font-bold text-xs rounded-lg shadow-lg shadow-primary/30 flex items-center justify-center gap-2 transition active:scale-95">
+                      <span>Đăng nhập hệ thống</span>
+                      <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+                    </button>
+                  </form>
+
+                  <div class="relative text-center my-4">
+                    <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-gray-800"></div></div>
+                    <span class="relative px-3 bg-gray-900 text-[11px] text-gray-400 font-semibold uppercase tracking-wider">hoặc</span>
+                  </div>
+
+                  <button onClick={() => navigate("/overview")} type="button" class="w-full py-2.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs font-semibold rounded-lg flex items-center justify-center gap-2 text-white transition">
+                    <span class="material-symbols-outlined text-[18px] text-primary">school</span>
+                    <span>Đăng nhập qua cổng thông tin sinh viên HUCE</span>
+                  </button>
+
+                  <div class="text-center text-xs text-gray-400 pt-2">
+                    Chưa có tài khoản?{' '}
+                    <button onClick={() => setAuthMode("register")} class="text-primary font-bold hover:underline ml-1">Đăng ký mới</button>
+                  </div>
+                </div>
+              )}
+
+              {/* Form 2: Register */}
+              {authMode === "register" && (
+                <div class="space-y-4">
+                  <div class="text-center">
+                    <h2 class="text-2xl font-black text-white tracking-tight">Đăng ký thành viên</h2>
+                    <p class="text-xs text-gray-400 mt-0.5">Tham gia không gian dự án đồ án HUCE</p>
+                  </div>
+
+                  <form onSubmit={handleRegister} class="space-y-3">
+                    <div class="grid grid-cols-2 gap-2">
+                      <input type="text" required placeholder="Họ" class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-xs text-white" defaultValue="Trần" />
+                      <input type="text" required placeholder="Tên" class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-xs text-white" defaultValue="Văn Hoàng" />
+                    </div>
+                    <input type="email" required placeholder="Email @huce.edu.vn" class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-xs text-white" defaultValue="hoang.tv@huce.edu.vn" />
+                    <input type="password" required placeholder="Mật khẩu tối thiểu 8 ký tự" class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-xs text-white" defaultValue="12345678" />
+                    <select class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-xs text-white">
+                      <option>Sinh viên K65 (Làm đồ án)</option>
+                      <option>Giảng viên hướng dẫn (PO / Advisor)</option>
+                      <option>Thành viên Nghiên cứu Lab AI</option>
+                    </select>
+
+                    <button type="submit" class="w-full py-2.5 bg-primary hover:bg-primary-hover text-white font-bold text-xs rounded-lg shadow transition">
+                      Tiếp tục: Nhận mã OTP xác thực
+                    </button>
+                  </form>
+
+                  <div class="text-center text-xs text-gray-400">
+                    Đã có tài khoản?{' '}
+                    <button onClick={() => setAuthMode("login")} class="text-primary font-bold hover:underline">Quay lại Đăng nhập</button>
+                  </div>
+                </div>
+              )}
+
+              {/* Form 3: OTP */}
+              {authMode === "otp" && (
+                <div class="space-y-5 text-center">
+                  <div class="w-12 h-12 rounded-full bg-primary/20 text-primary mx-auto flex items-center justify-center text-2xl">
+                    <span class="material-symbols-outlined">mark_email_read</span>
+                  </div>
+                  <div>
+                    <h2 class="text-2xl font-black text-white">Xác thực mã OTP</h2>
+                    <p class="text-xs text-gray-400 mt-1">Mã 6 chữ số đã được phát sinh theo bảng OtpCode CSDL 7.1</p>
+                  </div>
+
+                  <form onSubmit={handleVerifyOtp} class="space-y-5">
+                    <div class="flex justify-center gap-2">
+                      {["2", "6", "0", "7", "9", "4"].map((digit, i) => (
+                        <input 
+                          key={i} 
+                          type="text" 
+                          maxLength="1" 
+                          defaultValue={digit}
+                          class="w-10 h-12 text-center text-lg font-bold bg-gray-800 border border-gray-700 rounded-lg text-primary focus:border-primary outline-none" 
+                        />
+                      ))}
+                    </div>
+                    <div class="text-xs text-gray-400">
+                      Mã hết hạn sau: <span class="text-primary font-bold">04:45</span>
+                    </div>
+
+                    <button type="submit" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg shadow-lg transition">
+                      Xác nhận & Tự động vào hệ thống
+                    </button>
+                  </form>
+
+                  <div class="text-xs text-gray-400">
+                    <button onClick={() => setAuthMode("login")} class="text-primary font-bold hover:underline">Quay lại trang chủ</button>
+                  </div>
+                </div>
+              )}
+
+              {/* Form 4: Forgot Password */}
+              {authMode === "forgot" && (
+                <div class="space-y-4">
+                  <div class="text-center">
+                    <h2 class="text-2xl font-black text-white">Khôi phục mật khẩu</h2>
+                    <p class="text-xs text-gray-400 mt-1">Nhập email @huce.edu.vn để nhận mã khôi phục</p>
+                  </div>
+
+                  <form onSubmit={() => setAuthMode("otp")} class="space-y-4">
+                    <input type="email" required placeholder="nhap_email@huce.edu.vn" class="w-full px-3 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-xs text-white" defaultValue="hoang.tv@huce.edu.vn" />
+                    <button type="submit" class="w-full py-2.5 bg-primary hover:bg-primary-hover text-white font-bold text-xs rounded-lg shadow">
+                      Gửi mã OTP đặt lại mật khẩu
+                    </button>
+                  </form>
+
+                  <div class="text-center text-xs text-gray-400">
+                    <button onClick={() => setAuthMode("login")} class="text-primary font-bold hover:underline">Quay lại Đăng nhập</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // PAGE 2: DASHBOARD & WORKSPACE OVERVIEW
+    // ==========================================
+    function OverviewPage({ openAiModal }) {
+      const navigate = useNavigate();
+
+      return (
+        <div class="p-6 space-y-6 max-w-7xl mx-auto">
+          {/* Hero Banner with Atlassian Scrum Context */}
+          <div class="p-6 rounded-2xl bg-gradient-to-r from-gray-900 via-gray-900 to-gray-800 border border-gray-800 shadow-md relative overflow-hidden">
+            <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative z-10">
+              <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                  <span class="px-2.5 py-0.5 rounded-full bg-primary/20 text-primary text-[10px] font-bold uppercase tracking-wider">
+                    Sprint 1 Đang Hoạt Động
+                  </span>
+                  <span class="text-xs text-gray-400">• Khoa CNTT - ĐH Xây Dựng Hà Nội</span>
+                </div>
+                <h2 class="text-2xl font-black text-white tracking-tight">Tổng Quan Dự Án: Scrum AI Project Management</h2>
+                <p class="text-xs text-gray-300 max-w-3xl">
+                  Theo dõi tiến độ phân bổ 137 công việc, đo lường năng lực đội ngũ sinh viên K65 và mức độ ứng dụng AI Auto Task Breakdown với Claude Sonnet 3.7.
+                </p>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <button onClick={() => navigate('/board')} class="px-4 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl shadow transition flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[18px]">view_kanban</span>
+                  <span>Mở Bảng Board</span>
+                </button>
+                <button onClick={openAiModal} class="px-4 py-2 bg-gradient-to-r from-orange-600 to-amber-600 hover:opacity-90 text-white text-xs font-bold rounded-xl shadow transition flex items-center gap-1.5 ai-glow-pulse">
+                  <span class="material-symbols-outlined text-[18px]">auto_awesome</span>
+                  <span>Phân rã AI</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* 4 KPI Metrics */}
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="p-4 rounded-xl bg-gray-900 border border-gray-800 shadow flex items-center justify-between">
+              <div>
+                <span class="text-xs text-gray-400 font-medium">Đã hoàn thành</span>
+                <div class="text-3xl font-black text-white mt-1">4 <span class="text-xs text-emerald-400 font-bold">100% Sprint 1</span></div>
+                <span class="text-[10px] text-gray-400">Trong 7 ngày qua</span>
+              </div>
+              <div class="w-12 h-12 rounded-xl bg-emerald-950/60 border border-emerald-800/60 text-emerald-400 flex items-center justify-center text-xl">
+                <span class="material-symbols-outlined">task_alt</span>
+              </div>
+            </div>
+
+            <div class="p-4 rounded-xl bg-gray-900 border border-gray-800 shadow flex items-center justify-between">
+              <div>
+                <span class="text-xs text-gray-400 font-medium">Đang cập nhật</span>
+                <div class="text-3xl font-black text-white mt-1">3 <span class="text-xs text-blue-400 font-bold">In Progress</span></div>
+                <span class="text-[10px] text-gray-400">13 Story Points</span>
+              </div>
+              <div class="w-12 h-12 rounded-xl bg-blue-950/60 border border-blue-800/60 text-blue-400 flex items-center justify-center text-xl">
+                <span class="material-symbols-outlined">edit_note</span>
+              </div>
+            </div>
+
+            <div class="p-4 rounded-xl bg-gray-900 border border-gray-800 shadow flex items-center justify-between">
+              <div>
+                <span class="text-xs text-gray-400 font-medium">Tổng việc trong Backlog</span>
+                <div class="text-3xl font-black text-white mt-1">130 <span class="text-xs text-purple-400 font-bold">To Do</span></div>
+                <span class="text-[10px] text-gray-400">Cần phân bổ vào Sprint 2</span>
+              </div>
+              <div class="w-12 h-12 rounded-xl bg-purple-950/60 border border-purple-800/60 text-purple-400 flex items-center justify-center text-xl">
+                <span class="material-symbols-outlined">playlist_add_check</span>
+              </div>
+            </div>
+
+            <div class="p-4 rounded-xl bg-gray-900 border border-gray-800 shadow flex items-center justify-between">
+              <div>
+                <span class="text-xs text-gray-400 font-medium">AI Sub-tasks sinh ra</span>
+                <div class="text-3xl font-black text-primary mt-1">18 <span class="text-xs text-primary font-bold">92% Acceptance</span></div>
+                <span class="text-[10px] text-gray-400">Tiết kiệm 65% thời gian</span>
+              </div>
+              <div class="w-12 h-12 rounded-xl bg-orange-950/60 border border-orange-800/60 text-primary flex items-center justify-center text-xl">
+                <span class="material-symbols-outlined">psychology</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Charts & Status Overview */}
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Donut Status Overview */}
+            <div class="lg:col-span-6 p-5 rounded-2xl bg-gray-900 border border-gray-800 space-y-4">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h3 class="text-sm font-bold text-white">Tổng quan trạng thái (Status Overview)</h3>
+                  <p class="text-xs text-gray-400">Phân bố 137 công việc của Sprint hiện tại</p>
+                </div>
+                <Link to="/list" class="text-xs text-primary font-bold hover:underline">Xem tất cả</Link>
+              </div>
+
+              <div class="flex flex-col sm:flex-row items-center justify-around py-4 gap-4">
+                {/* CSS Conic Donut representation */}
+                <div class="relative w-40 h-40 rounded-full flex items-center justify-center shadow-inner" style={{ background: "conic-gradient(#8b5cf6 0% 94.9%, #3b82f6 94.9% 97.1%, #10b981 97.1% 100%)" }}>
+                  <div class="w-28 h-28 bg-gray-900 rounded-full flex flex-col items-center justify-center">
+                    <span class="text-2xl font-black text-white">137</span>
+                    <span class="text-[9px] uppercase font-bold text-gray-400">Tổng Tasks</span>
+                  </div>
+                </div>
+
+                <div class="space-y-2 text-xs">
+                  <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded bg-purple-500"></span>
+                    <span class="text-gray-300">Chưa làm (To Do): <strong class="text-white">130 (94.9%)</strong></span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded bg-blue-500"></span>
+                    <span class="text-gray-300">Đang thực hiện (In Progress): <strong class="text-white">3 (2.2%)</strong></span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded bg-emerald-500"></span>
+                    <span class="text-gray-300">Đã nghiệm thu (Done): <strong class="text-white">4 (2.9%)</strong></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* AI Log Activity Summary */}
+            <div class="lg:col-span-6 p-5 rounded-2xl bg-gradient-to-br from-gray-900 to-gray-800 border border-gray-700/80 space-y-3 flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary text-[20px]">auto_awesome</span>
+                    <h3 class="text-sm font-bold text-white">Nhật ký gợi ý AI (Anthropic Claude 3.7)</h3>
+                  </div>
+                  <span class="text-[10px] px-2 py-0.5 rounded bg-primary/20 text-primary font-bold uppercase">SignalR Live</span>
+                </div>
+                <p class="text-xs text-gray-300 leading-relaxed">
+                  Công cụ <strong>Auto Task Breakdown</strong> vừa xử lý thành công yêu cầu phân rã thẻ <strong>SCRUMAI-280</strong> thành 5 Sub-tasks kỹ thuật chuyên sâu và 4 kịch bản nghiệm thu Given-When-Then.
+                </p>
+
+                <div class="mt-3 space-y-2 text-xs">
+                  <div class="p-2.5 rounded-lg bg-gray-800 border border-gray-700 flex items-center justify-between">
+                    <span class="text-gray-200">[BE] Hangfire Job & Anthropic Claude Streaming</span>
+                    <span class="text-[10px] px-1.5 py-0.2 rounded bg-primary/20 text-primary font-bold">12h • AI-Gen</span>
+                  </div>
+                  <div class="p-2.5 rounded-lg bg-gray-800 border border-gray-700 flex items-center justify-between">
+                    <span class="text-gray-200">[FE] Angular Reactive Modal Preview & Diff Editor</span>
+                    <span class="text-[10px] px-1.5 py-0.2 rounded bg-primary/20 text-primary font-bold">14h • AI-Gen</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="pt-3 border-t border-gray-700/60 flex items-center justify-between text-xs">
+                <span class="text-gray-400">Tokens tiêu thụ: <strong>~48,200 tokens</strong></span>
+                <button onClick={openAiModal} class="text-primary font-bold hover:underline">Thử nghiệm Story khác →</button>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Workload Distribution */}
+          <div class="p-5 rounded-2xl bg-gray-900 border border-gray-800 space-y-3">
+            <h3 class="text-sm font-bold text-white">Phân bổ khối lượng công việc nhóm (Team Workload)</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              <div class="space-y-1">
+                <div class="flex justify-between text-gray-300">
+                  <span>Trần Văn Hoàng (Scrum Master / Lead)</span>
+                  <span class="font-bold text-white">52 tasks • 48 SP</span>
+                </div>
+                <div class="w-full bg-gray-800 rounded-full h-2 overflow-hidden flex">
+                  <div class="bg-primary h-full" style={{ width: "38%" }}></div>
+                  <div class="bg-secondary h-full" style={{ width: "14%" }}></div>
+                  <div class="bg-gray-600 h-full" style={{ width: "48%" }}></div>
+                </div>
+              </div>
+              <div class="space-y-1">
+                <div class="flex justify-between text-gray-300">
+                  <span>Hoàng Hưng (Tech Lead / AI Dev)</span>
+                  <span class="font-bold text-white">41 tasks • 34 SP</span>
+                </div>
+                <div class="w-full bg-gray-800 rounded-full h-2 overflow-hidden flex">
+                  <div class="bg-primary h-full" style={{ width: "25%" }}></div>
+                  <div class="bg-secondary h-full" style={{ width: "30%" }}></div>
+                  <div class="bg-gray-600 h-full" style={{ width: "45%" }}></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // PAGE 3: SCRUM BOARD (DRAG & DROP KANBAN)
+    // ==========================================
+    function BoardPage({ openAiModal }) {
+      const navigate = useNavigate();
+      const [columns, setColumns] = useState({
+        todo: [
+          { id: "SCRUMAI-160", title: "[BE] Đăng ký/đăng nhập email-mật khẩu cơ bản", tag: "Identity", points: 3, assignee: "TH" },
+          { id: "SCRUMAI-161", title: "[DB/BE] Entity/migration Role Permission UserRole", tag: "Identity", points: 5, assignee: "HH" }
+        ],
+        inProgress: [
+          { id: "SCRUMAI-280", title: "[SCRUMAI-280] AI Auto Task Breakdown & Sinh Acceptance Criteria (Claude 3.7)", tag: "AI Gen", points: 13, assignee: "AI", isAi: true },
+          { id: "SCRUMAI-155", title: "[DEVOPS] Dựng Docker Compose local MySQL + Ollama", tag: "DevOps", points: 5, assignee: "TH" },
+          { id: "SCRUMAI-158", title: "[TEST/PROCESS] Xây test strategy, DoR/DoD và severity matrix", tag: "QA", points: 3, assignee: "HH" },
+          { id: "SCRUMAI-159", title: "[AI/TEST] Thiết kế tập đánh giá AI thủ công 50-100 mẫu", tag: "Dataset", points: 8, assignee: "HH" }
+        ],
+        inReview: [
+          { id: "SCRUMAI-151", title: "[FE] Dựng bộ khung Layout Jira + Sidebar Glassmorphism", tag: "Core", points: 5, assignee: "TH" }
+        ],
+        done: [
+          { id: "SCRUMAI-139", title: "Project Setup, Architecture & Jira Governance", tag: "Setup", points: 5, assignee: "TH" },
+          { id: "SCRUMAI-154", title: "Dựng 8 Bounded Contexts .NET 10 Solution", tag: "Arch", points: 8, assignee: "TH" },
+          { id: "SCRUMAI-156", title: "Thiết lập ERD 31 bảng SQL Server", tag: "DB", points: 5, assignee: "HH" }
+        ]
+      });
+
+      const moveCard = (cardId, fromCol, toCol) => {
+        const card = columns[fromCol].find(c => c.id === cardId);
+        if (!card) return;
+        setColumns({
+          ...columns,
+          [fromCol]: columns[fromCol].filter(c => c.id !== cardId),
+          [toCol]: [...columns[toCol], card]
+        });
+      };
+
+      return (
+        <div class="p-6 space-y-4 max-w-full">
+          {/* Header */}
+          <div class="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div class="flex items-center gap-2">
+                <h2 class="text-xl font-black text-white">Bảng Scrum: Sprint 1 (24 Aug – 30 Aug)</h2>
+                <span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 text-xs font-bold border border-emerald-800">Đang chạy</span>
+              </div>
+              <p class="text-xs text-gray-400 mt-0.5">Kéo thả hoặc chuyển đổi trạng thái thời gian thực qua SignalR Hub</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onClick={openAiModal} class="px-3.5 py-1.5 bg-gradient-to-r from-orange-600 to-amber-600 hover:opacity-95 text-white font-bold text-xs rounded-lg shadow flex items-center gap-1.5 ai-glow-pulse">
+                <span class="material-symbols-outlined text-[16px]">auto_awesome</span>
+                <span>Demo Story Phức Tạp [SCRUMAI-280]</span>
+              </button>
+              <button onClick={() => alert('Sprint 1 đã hoàn thành và gửi báo cáo nghiệm thu!')} class="px-3.5 py-1.5 bg-gray-800 hover:bg-gray-700 text-white font-bold text-xs rounded-lg border border-gray-700">
+                Hoàn thành Sprint
+              </button>
+            </div>
+          </div>
+
+          {/* 4 Scrum Columns Grid */}
+          <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-start min-h-[600px]">
+            {/* 1. TO DO */}
+            <div class="bg-gray-900/80 border border-gray-800 rounded-2xl p-3 flex flex-col min-h-[580px]">
+              <div class="flex items-center justify-between pb-2 mb-3 border-b border-gray-800">
+                <div class="flex items-center gap-2">
+                  <span class="w-2.5 h-2.5 rounded-full bg-gray-400"></span>
+                  <span class="text-xs font-bold text-gray-300 uppercase">Cần làm (To Do)</span>
+                </div>
+                <span class="text-xs px-2 py-0.5 bg-gray-800 text-gray-300 font-bold rounded-full">{columns.todo.length}</span>
+              </div>
+
+              <div class="space-y-2.5 flex-1">
+                {columns.todo.map(card => (
+                  <div key={card.id} class="p-3 bg-gray-800/90 border border-gray-700 rounded-xl shadow-sm hover:border-primary transition group">
+                    <div class="flex items-center justify-between mb-1">
+                      <span class="text-[11px] font-bold text-primary font-mono">{card.id}</span>
+                      <span class="text-[10px] px-1.5 py-0.2 rounded bg-gray-700 text-gray-300">{card.points} SP</span>
+                    </div>
+                    <p class="text-xs font-bold text-white mb-2 leading-snug">{card.title}</p>
+                    <div class="flex items-center justify-between text-[10px] text-gray-400">
+                      <span class="px-1.5 py-0.5 bg-gray-900 rounded">{card.tag}</span>
+                      <div class="flex items-center gap-1">
+                        <button onClick={() => moveCard(card.id, "todo", "inProgress")} class="text-xs text-primary font-bold hover:underline">Sang Đang làm →</button>
+                        <span class="w-5 h-5 rounded-full bg-primary text-white font-bold flex items-center justify-center">{card.assignee}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 2. IN PROGRESS */}
+            <div class="bg-gray-900/80 border border-blue-900/40 rounded-2xl p-3 flex flex-col min-h-[580px]">
+              <div class="flex items-center justify-between pb-2 mb-3 border-b border-gray-800">
+                <div class="flex items-center gap-2">
+                  <span class="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse"></span>
+                  <span class="text-xs font-bold text-blue-400 uppercase">Đang làm (In Progress)</span>
+                </div>
+                <span class="text-xs px-2 py-0.5 bg-blue-950 text-blue-300 font-bold rounded-full">{columns.inProgress.length}</span>
+              </div>
+
+              <div class="space-y-2.5 flex-1">
+                {columns.inProgress.map(card => (
+                  <div key={card.id} class={`p-3 rounded-xl border transition shadow-md ${card.isAi ? 'bg-gradient-to-br from-orange-950/40 to-gray-800 border-primary' : 'bg-gray-800/90 border-gray-700'}`}>
+                    <div class="flex items-center justify-between mb-1.5">
+                      <div class="flex items-center gap-1.5">
+                        <span class="text-[11px] font-bold text-primary font-mono">{card.id}</span>
+                        <span class="text-[10px] px-1.5 py-0.2 rounded bg-amber-950 text-amber-300 font-bold">{card.points} SP</span>
+                      </div>
+                      {card.isAi && (
+                        <button onClick={openAiModal} class="text-[10px] px-2 py-0.5 rounded-full bg-primary text-white font-bold flex items-center gap-1">
+                          <span class="material-symbols-outlined text-[12px]">auto_awesome</span> AI Demo
+                        </button>
+                      )}
+                    </div>
+                    <p class="text-xs font-bold text-white mb-2 leading-snug">{card.title}</p>
+                    <div class="flex items-center justify-between text-[10px] text-gray-400">
+                      <span class="px-1.5 py-0.5 bg-gray-900 rounded">{card.tag}</span>
+                      <div class="flex items-center gap-2">
+                        <button onClick={() => moveCard(card.id, "inProgress", "inReview")} class="text-xs text-primary font-bold hover:underline">Duyệt →</button>
+                        <span class="w-5 h-5 rounded-full bg-primary text-white font-bold flex items-center justify-center">{card.assignee}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 3. IN REVIEW */}
+            <div class="bg-gray-900/80 border border-amber-900/40 rounded-2xl p-3 flex flex-col min-h-[580px]">
+              <div class="flex items-center justify-between pb-2 mb-3 border-b border-gray-800">
+                <div class="flex items-center gap-2">
+                  <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                  <span class="text-xs font-bold text-amber-400 uppercase">Đang duyệt (In Review)</span>
+                </div>
+                <span class="text-xs px-2 py-0.5 bg-amber-950 text-amber-300 font-bold rounded-full">{columns.inReview.length}</span>
+              </div>
+
+              <div class="space-y-2.5 flex-1">
+                {columns.inReview.map(card => (
+                  <div key={card.id} class="p-3 bg-gray-800/90 border border-gray-700 rounded-xl shadow-sm hover:border-amber-500 transition">
+                    <div class="flex items-center justify-between mb-1">
+                      <span class="text-[11px] font-bold text-primary font-mono">{card.id}</span>
+                      <span class="text-[10px] px-1.5 py-0.2 rounded bg-gray-700 text-gray-300">{card.points} SP</span>
+                    </div>
+                    <p class="text-xs font-bold text-white mb-2 leading-snug">{card.title}</p>
+                    <div class="flex items-center justify-between text-[10px] text-gray-400">
+                      <span class="px-1.5 py-0.5 bg-gray-900 rounded">{card.tag}</span>
+                      <div class="flex items-center gap-2">
+                        <button onClick={() => moveCard(card.id, "inReview", "done")} class="text-xs text-emerald-400 font-bold hover:underline">Hoàn tất ✓</button>
+                        <span class="w-5 h-5 rounded-full bg-primary text-white font-bold flex items-center justify-center">{card.assignee}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 4. DONE */}
+            <div class="bg-gray-900/80 border border-emerald-900/40 rounded-2xl p-3 flex flex-col min-h-[580px]">
+              <div class="flex items-center justify-between pb-2 mb-3 border-b border-gray-800">
+                <div class="flex items-center gap-2">
+                  <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                  <span class="text-xs font-bold text-emerald-400 uppercase">Hoàn thành (Done)</span>
+                </div>
+                <span class="text-xs px-2 py-0.5 bg-emerald-950 text-emerald-300 font-bold rounded-full">{columns.done.length}</span>
+              </div>
+
+              <div class="space-y-2.5 flex-1">
+                {columns.done.map(card => (
+                  <div key={card.id} class="p-3 bg-gray-800/60 border border-emerald-900/50 rounded-xl opacity-80 hover:opacity-100 transition">
+                    <div class="flex items-center justify-between mb-1">
+                      <span class="text-[11px] font-bold text-emerald-400 font-mono line-through">{card.id}</span>
+                      <span class="material-symbols-outlined text-emerald-400 text-[16px]">check_circle</span>
+                    </div>
+                    <p class="text-xs text-gray-300 line-through mb-2">{card.title}</p>
+                    <div class="flex items-center justify-between text-[10px] text-gray-400">
+                      <span class="px-1.5 py-0.5 bg-gray-900 rounded">{card.tag}</span>
+                      <span class="w-5 h-5 rounded-full bg-emerald-700 text-white font-bold flex items-center justify-center">{card.assignee}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // PAGE 4: BACKLOG & SPRINTS PLANNING
+    // ==========================================
+    function BacklogPage({ openAiModal }) {
+      const navigate = useNavigate();
+
+      return (
+        <div class="p-6 space-y-6 max-w-7xl mx-auto">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-xl font-black text-white">Kế hoạch Backlog & Phân bổ Sprints</h2>
+              <p class="text-xs text-gray-400">Quản lý các hạng mục đồ án, phân rã công việc kỹ thuật bằng AI và khởi chạy Sprint mới</p>
+            </div>
+            <button onClick={openAiModal} class="px-4 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl shadow flex items-center gap-2">
+              <span class="material-symbols-outlined text-[16px]">auto_awesome</span>
+              <span>AI Auto Task Breakdown</span>
+            </button>
+          </div>
+
+          {/* Active Sprint 1 */}
+          <div class="p-5 rounded-2xl bg-gray-900 border border-gray-800 space-y-3">
+            <div class="flex items-center justify-between pb-3 border-b border-gray-800">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary text-[20px]">directions_run</span>
+                <h3 class="text-sm font-bold text-white">SCRUMAI Sprint 1</h3>
+                <span class="text-xs text-gray-400">24 Aug – 30 Aug • 3 công việc</span>
+                <span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 font-mono text-[10px] font-bold">Đang chạy</span>
+              </div>
+              <button onClick={() => navigate('/board')} class="text-xs text-primary font-bold hover:underline">Xem trên Board →</button>
+            </div>
+
+            {/* Featured AI Card */}
+            <div class="p-3.5 rounded-xl bg-gradient-to-r from-orange-950/30 via-gray-800 to-gray-800 border border-primary/40 flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div class="flex items-center gap-3">
+                <span class="text-xs font-mono font-bold text-primary px-2 py-0.5 rounded bg-primary/20">SCRUMAI-280</span>
+                <div>
+                  <h4 class="text-xs font-bold text-white">[SCRUMAI-280] AI Auto Task Breakdown & Sinh Acceptance Criteria (Claude 3.7)</h4>
+                  <p class="text-[10px] text-gray-400">13 Story Points • Hangfire Background + SignalR Hub</p>
+                </div>
+              </div>
+              <button onClick={openAiModal} class="px-3 py-1.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-lg shrink-0 flex items-center gap-1">
+                <span class="material-symbols-outlined text-[14px]">auto_awesome</span>
+                <span>Thử nghiệm phân rã AI</span>
+              </button>
+            </div>
+
+            <div class="p-3 rounded-xl bg-gray-800/80 border border-gray-700/80 flex items-center justify-between text-xs">
+              <div class="flex items-center gap-3">
+                <span class="font-mono font-bold text-blue-400">SCRUMAI-155</span>
+                <span class="text-white font-medium">[DEVOPS] Dựng Docker Compose local MySQL + Ollama</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded bg-blue-950 text-blue-400 text-[10px]">In Progress</span>
+                <span class="font-bold text-gray-300">5 SP</span>
+              </div>
+            </div>
+
+            <div class="p-3 rounded-xl bg-gray-800/80 border border-gray-700/80 flex items-center justify-between text-xs">
+              <div class="flex items-center gap-3">
+                <span class="font-mono font-bold text-blue-400">SCRUMAI-158</span>
+                <span class="text-white font-medium">[TEST/PROCESS] Xây test strategy, DoR/DoD và severity matrix</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded bg-blue-950 text-blue-400 text-[10px]">In Progress</span>
+                <span class="font-bold text-gray-300">3 SP</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Planned Sprint 2 */}
+          <div class="p-5 rounded-2xl bg-gray-900 border border-gray-800 space-y-3">
+            <div class="flex items-center justify-between pb-3 border-b border-gray-800">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-gray-400 text-[20px]">calendar_month</span>
+                <h3 class="text-sm font-bold text-white">SCRUMAI Sprint 2 (Kế hoạch)</h3>
+                <span class="text-xs text-gray-400">31 Aug – 06 Sep • 32 Story Points</span>
+              </div>
+              <button onClick={() => alert('Đã bắt đầu Sprint 2!')} class="px-3 py-1 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-lg shadow">
+                Bắt đầu Sprint 2
+              </button>
+            </div>
+
+            <div class="p-3 rounded-xl bg-gray-800/60 border border-gray-700/60 flex items-center justify-between text-xs">
+              <div class="flex items-center gap-3">
+                <span class="font-mono font-bold text-primary">SCRUMAI-160</span>
+                <span class="text-white font-medium">[BE] Đăng ký/đăng nhập email-mật khẩu cơ bản</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded bg-gray-700 text-gray-300 text-[10px]">To Do</span>
+                <span class="font-bold text-gray-300">8 SP</span>
+              </div>
+            </div>
+
+            <div class="p-3 rounded-xl bg-gray-800/60 border border-gray-700/60 flex items-center justify-between text-xs">
+              <div class="flex items-center gap-3">
+                <span class="font-mono font-bold text-primary">SCRUMAI-163</span>
+                <span class="text-white font-medium">[BE+FE] Organization/Project CRUD + ProjectKey</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded bg-gray-700 text-gray-300 text-[10px]">To Do</span>
+                <span class="font-bold text-gray-300">5 SP</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // PAGE 5: TIMELINE / GANTT ROADMAP
+    // ==========================================
+    function TimelinePage() {
+      return (
+        <div class="p-6 space-y-6 max-w-7xl mx-auto">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-xl font-black text-white">Dòng Thời Gian & Tiến Độ Epic (Timeline Gantt)</h2>
+              <p class="text-xs text-gray-400">Lộ trình triển khai phân hệ và thời lượng thực thi qua các tháng</p>
+            </div>
+            <div class="flex items-center gap-1 bg-gray-900 border border-gray-800 p-1 rounded-xl text-xs">
+              <button class="px-3 py-1 bg-primary text-white font-bold rounded-lg">Tháng</button>
+              <button class="px-3 py-1 text-gray-400 hover:text-white">Quý</button>
+              <button class="px-3 py-1 text-gray-400 hover:text-white">Tuần</button>
+            </div>
+          </div>
+
+          <div class="p-5 rounded-2xl bg-gray-900 border border-gray-800 overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead>
+                <tr class="border-b border-gray-800 text-gray-400 uppercase text-[10px] tracking-wider">
+                  <th class="py-3 px-4 w-72">Hạng mục công việc (Epic)</th>
+                  <th class="py-3 px-4 w-32">Trạng thái</th>
+                  <th class="py-3 px-4 w-32">Người phụ trách</th>
+                  <th class="py-3 px-4">Tiến độ Gantt (Tháng 8 - Tháng 9)</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-800">
+                <tr>
+                  <td class="py-3.5 px-4 font-bold text-white flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded bg-purple-500"></span>
+                    <span>SCRUMAI-139 Setup & Jira Governance</span>
+                  </td>
+                  <td class="py-3.5 px-4"><span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 font-bold">100% Hoàn tất</span></td>
+                  <td class="py-3.5 px-4 text-gray-300">Cả nhóm</td>
+                  <td class="py-3.5 px-4">
+                    <div class="w-full bg-gray-800 rounded-full h-3">
+                      <div class="bg-emerald-500 h-3 rounded-full w-full"></div>
+                    </div>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td class="py-3.5 px-4 font-bold text-white flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded bg-blue-500"></span>
+                    <span>SCRUMAI-140 Identity & Scoped RBAC</span>
+                  </td>
+                  <td class="py-3.5 px-4"><span class="px-2 py-0.5 rounded bg-blue-950 text-blue-400 font-bold">Đang làm (75%)</span></td>
+                  <td class="py-3.5 px-4 text-gray-300">Trần Văn Hoàng</td>
+                  <td class="py-3.5 px-4">
+                    <div class="w-full bg-gray-800 rounded-full h-3">
+                      <div class="bg-blue-500 h-3 rounded-full w-3/4"></div>
+                    </div>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td class="py-3.5 px-4 font-bold text-white flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded bg-primary"></span>
+                    <span>SCRUMAI-146 AI Auto Task Breakdown (Claude)</span>
+                  </td>
+                  <td class="py-3.5 px-4"><span class="px-2 py-0.5 rounded bg-orange-950 text-primary font-bold">AI Active (85%)</span></td>
+                  <td class="py-3.5 px-4 text-gray-300">Hoàng Hưng</td>
+                  <td class="py-3.5 px-4">
+                    <div class="w-full bg-gray-800 rounded-full h-3">
+                      <div class="bg-primary h-3 rounded-full w-4/5"></div>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // PAGE 6: ISSUE LIST VIEW
+    // ==========================================
+    function ListPage({ openAiModal }) {
+      return (
+        <div class="p-6 space-y-6 max-w-7xl mx-auto">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-xl font-black text-white">Danh Sách Công Việc Chi Tiết (Issues List)</h2>
+              <p class="text-xs text-gray-400">Hiển thị 12/137 công việc trong đồ án HUCE</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-white font-bold text-xs rounded-lg border border-gray-700">Xuất Excel</button>
+              <button onClick={openAiModal} class="px-3 py-1.5 bg-primary hover:bg-primary-hover text-white font-bold text-xs rounded-lg shadow">Thêm Issue</button>
+            </div>
+          </div>
+
+          <div class="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-gray-800/80 text-gray-400 uppercase text-[10px]">
+                <tr>
+                  <th class="py-3 px-4">Mã Issue</th>
+                  <th class="py-3 px-4">Tiêu đề công việc</th>
+                  <th class="py-3 px-4">Người gán</th>
+                  <th class="py-3 px-4">Trạng thái</th>
+                  <th class="py-3 px-4">Ngày tạo</th>
+                  <th class="py-3 px-4 text-right">Tác vụ AI</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-800 text-gray-200">
+                <tr class="hover:bg-gray-800/50 transition">
+                  <td class="py-3 px-4 font-bold text-primary font-mono">SCRUMAI-139</td>
+                  <td class="py-3 px-4 font-semibold text-white">Project Setup, Architecture & Jira Governance</td>
+                  <td class="py-3 px-4 text-gray-400">Cả nhóm</td>
+                  <td class="py-3 px-4"><span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 font-bold">Done</span></td>
+                  <td class="py-3 px-4 text-gray-400">30 Aug 2026</td>
+                  <td class="py-3 px-4 text-right">
+                    <button onClick={openAiModal} class="text-primary hover:underline font-bold">Phân rã AI</button>
+                  </td>
+                </tr>
+                <tr class="hover:bg-gray-800/50 transition">
+                  <td class="py-3 px-4 font-bold text-primary font-mono">SCRUMAI-155</td>
+                  <td class="py-3 px-4 font-semibold text-white">[DEVOPS] Dựng Docker Compose local MySQL + Ollama</td>
+                  <td class="py-3 px-4 text-gray-400">Trần Văn Hoàng</td>
+                  <td class="py-3 px-4"><span class="px-2 py-0.5 rounded bg-blue-950 text-blue-400 font-bold">In Progress</span></td>
+                  <td class="py-3 px-4 text-gray-400">30 Aug 2026</td>
+                  <td class="py-3 px-4 text-right">
+                    <button onClick={openAiModal} class="text-primary hover:underline font-bold">Phân rã AI</button>
+                  </td>
+                </tr>
+                <tr class="hover:bg-gray-800/50 transition">
+                  <td class="py-3 px-4 font-bold text-primary font-mono">SCRUMAI-280</td>
+                  <td class="py-3 px-4 font-semibold text-white">AI Auto Task Breakdown & Sinh Acceptance Criteria (Claude 3.7)</td>
+                  <td class="py-3 px-4 text-gray-400">Hoàng Hưng</td>
+                  <td class="py-3 px-4"><span class="px-2 py-0.5 rounded bg-orange-950 text-primary font-bold">AI Active</span></td>
+                  <td class="py-3 px-4 text-gray-400">30 Aug 2026</td>
+                  <td class="py-3 px-4 text-right">
+                    <button onClick={openAiModal} class="text-primary hover:underline font-bold">Phân rã AI</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // PAGE 7: CALENDAR VIEW
+    // ==========================================
+    function CalendarPage() {
+      return (
+        <div class="p-6 space-y-6 max-w-7xl mx-auto">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-xl font-black text-white">Lịch Trình & Mốc Bàn Giao (Tháng 9 / 2026)</h2>
+              <p class="text-xs text-gray-400">Lịch họp Daily Scrum, bảo vệ hội đồng và mốc bàn giao Sprint</p>
+            </div>
+            <div class="text-xs text-primary font-bold bg-primary/20 px-3 py-1 rounded-lg border border-primary/30">
+              Sprint 1 & Sprint 2
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div class="p-4 rounded-2xl bg-gray-900 border border-gray-800 min-h-[140px] space-y-2">
+              <span class="text-xs font-bold text-gray-400">Thứ Hai (31 Aug)</span>
+              <div class="p-2.5 rounded-xl bg-blue-950/60 border border-blue-800 text-xs font-bold text-blue-300">
+                Bắt đầu Sprint 2
+              </div>
+            </div>
+            <div class="p-4 rounded-2xl bg-gray-900 border border-gray-800 min-h-[140px] space-y-2">
+              <span class="text-xs font-bold text-gray-400">Thứ Ba (01 Sep)</span>
+              <div class="p-2.5 rounded-xl bg-gray-800 border border-gray-700 text-xs text-gray-200">
+                Daily Scrum 9:00 AM (Lab HUCE)
+              </div>
+            </div>
+            <div class="p-4 rounded-2xl bg-gray-900 border border-gray-800 min-h-[140px] space-y-2">
+              <span class="text-xs font-bold text-gray-400">Thứ Tư (02 Sep)</span>
+              <div class="p-2.5 rounded-xl bg-emerald-950/60 border border-emerald-800 text-xs font-bold text-emerald-300">
+                Nghỉ Lễ Quốc Khánh
+              </div>
+            </div>
+            <div class="p-4 rounded-2xl bg-gray-900 border border-gray-800 min-h-[140px] space-y-2">
+              <span class="text-xs font-bold text-gray-400">Thứ Năm (03 Sep)</span>
+              <div class="p-2.5 rounded-xl bg-orange-950/60 border border-primary/60 text-xs font-bold text-primary">
+                Claude 3.7 AI Model Review
+              </div>
+            </div>
+            <div class="p-4 rounded-2xl bg-gray-900 border border-gray-800 min-h-[140px] space-y-2">
+              <span class="text-xs font-bold text-gray-400">Thứ Sáu (04 Sep)</span>
+              <div class="p-2.5 rounded-xl bg-purple-950/60 border border-purple-800 text-xs font-bold text-purple-300">
+                Sprint Demo & Retro với GVHD
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // PAGE 8: BURNDOWN & REPORTS
+    // ==========================================
+    function ReportsPage() {
+      return (
+        <div class="p-6 space-y-6 max-w-7xl mx-auto">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-xl font-black text-white">Biểu Đồ Burndown & Năng Suất (Velocity)</h2>
+              <p class="text-xs text-gray-400">Dữ liệu tự động tính từ bảng SprintSnapshot qua Background Job Hangfire</p>
+            </div>
+            <span class="px-3 py-1 bg-emerald-950 text-emerald-400 border border-emerald-800 text-xs font-bold rounded-full">
+              Chu kỳ Sprint 1
+            </span>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Burndown SVG Chart */}
+            <div class="lg:col-span-7 p-6 rounded-2xl bg-gray-900 border border-gray-800 space-y-4">
+              <div class="flex items-center justify-between">
+                <h3 class="text-sm font-bold text-white">Sprint 1 Burndown Chart (14 Ngày)</h3>
+                <span class="text-xs text-gray-400 font-mono">Còn lại: 12 SP</span>
+              </div>
+
+              {/* Chart SVG Visualization */}
+              <div class="h-64 flex items-end justify-between pt-6 px-4 relative border-b border-l border-gray-700 bg-gray-950/40 rounded-xl">
+                <svg class="w-full h-full absolute inset-0 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+                  {/* Dashed ideal line */}
+                  <line x1="5" y1="10" x2="95" y2="90" stroke="#6b7280" strokeDasharray="3" strokeWidth="2"></line>
+                  {/* Actual burndown */}
+                  <polyline points="5,10 20,25 40,35 60,50 80,68 95,85" fill="none" stroke="#ec5b13" strokeWidth="3.5"></polyline>
+                </svg>
+                <span class="text-[10px] text-gray-400">D1</span>
+                <span class="text-[10px] text-gray-400">D3</span>
+                <span class="text-[10px] text-gray-400">D7</span>
+                <span class="text-[10px] text-gray-400">D10 (Nay)</span>
+                <span class="text-[10px] text-gray-400">D14</span>
+              </div>
+
+              <div class="flex items-center justify-center gap-6 text-xs pt-2">
+                <div class="flex items-center gap-2">
+                  <span class="w-3 h-0.5 bg-gray-500 border-dashed"></span>
+                  <span class="text-gray-400">Đường lý tưởng (Guideline)</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="w-3 h-1 bg-primary rounded"></span>
+                  <span class="text-white font-bold">Thực tế nhóm K65</span>
+                </div>
+              </div>
+            </div>
+
+            {/* AI Performance Statistics */}
+            <div class="lg:col-span-5 p-6 rounded-2xl bg-gray-900 border border-gray-800 flex flex-col justify-between space-y-4">
+              <div>
+                <h3 class="text-sm font-bold text-white mb-2">Thống Kê Hiệu Quả AI Auto Task Breakdown</h3>
+                <p class="text-xs text-gray-400 leading-relaxed mb-4">
+                  Đo lường mức độ tin cậy và tần suất giữ nguyên Sub-task do Anthropic LLM sinh ra mà không cần chỉnh sửa thủ công.
+                </p>
+
+                <div class="space-y-4 text-xs">
+                  <div>
+                    <div class="flex justify-between font-semibold mb-1">
+                      <span class="text-gray-300">Tỷ lệ giữ nguyên Sub-task AI</span>
+                      <span class="text-primary font-bold">84%</span>
+                    </div>
+                    <div class="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
+                      <div class="bg-primary h-full rounded-full" style={{ width: "84%" }}></div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div class="flex justify-between font-semibold mb-1">
+                      <span class="text-gray-300">Tỷ lệ đạt Acceptance Criteria</span>
+                      <span class="text-emerald-400 font-bold">92%</span>
+                    </div>
+                    <div class="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
+                      <div class="bg-emerald-500 h-full rounded-full" style={{ width: "92%" }}></div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div class="flex justify-between font-semibold mb-1">
+                      <span class="text-gray-300">Thời gian Sprint Planning tiết kiệm</span>
+                      <span class="text-secondary font-bold">~65%</span>
+                    </div>
+                    <div class="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
+                      <div class="bg-secondary h-full rounded-full" style={{ width: "65%" }}></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="pt-4 border-t border-gray-800 flex items-center justify-between text-xs text-gray-400">
+                <span>Dựa trên <strong>18 lượt gọi AI</strong></span>
+                <span class="text-emerald-400 font-bold">Đạt chuẩn DoD K65</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // PAGE 9: MEMBERS & SCOPED RBAC
+    // ==========================================
+    function MembersPage() {
+      return (
+        <div class="p-6 space-y-6 max-w-7xl mx-auto">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-xl font-black text-white">Quản trị Thành viên & Phân quyền (Scoped RBAC)</h2>
+              <p class="text-xs text-gray-400">Mô hình phân quyền theo phạm vi dự án và hạn mức Token AI</p>
+            </div>
+            <button onClick={() => alert('Đã gửi thư mời kèm link kích hoạt!')} class="px-4 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl shadow">
+              + Mời thành viên mới
+            </button>
+          </div>
+
+          <div class="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-gray-800/80 text-gray-400 uppercase text-[10px]">
+                <tr>
+                  <th class="py-3 px-4">Thành viên</th>
+                  <th class="py-3 px-4">Vai trò Scoped</th>
+                  <th class="py-3 px-4">Phạm vi (Scope)</th>
+                  <th class="py-3 px-4">Hạn mức AI / Ngày</th>
+                  <th class="py-3 px-4">Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-800 text-gray-200">
+                <tr>
+                  <td class="py-3.5 px-4 font-bold text-white flex items-center gap-2">
+                    <span class="w-6 h-6 rounded-full bg-primary text-white font-bold text-[10px] flex items-center justify-center">TH</span>
+                    <div>
+                      <div>Trần Văn Hoàng</div>
+                      <div class="text-[10px] text-gray-400 font-normal">phamthehoai2004hn@huce.edu.vn</div>
+                    </div>
+                  </td>
+                  <td class="py-3.5 px-4"><span class="px-2 py-0.5 rounded bg-primary/20 text-primary font-bold">Scrum Master</span></td>
+                  <td class="py-3.5 px-4 text-gray-300">SCRUMAI-2025</td>
+                  <td class="py-3.5 px-4 font-mono text-gray-300">30,000 Tokens</td>
+                  <td class="py-3.5 px-4"><span class="text-emerald-400 font-bold">Active</span></td>
+                </tr>
+                <tr>
+                  <td class="py-3.5 px-4 font-bold text-white flex items-center gap-2">
+                    <span class="w-6 h-6 rounded-full bg-secondary text-white font-bold text-[10px] flex items-center justify-center">HH</span>
+                    <div>
+                      <div>Hoàng Hưng</div>
+                      <div class="text-[10px] text-gray-400 font-normal">hung.hh@huce.edu.vn</div>
+                    </div>
+                  </td>
+                  <td class="py-3.5 px-4"><span class="px-2 py-0.5 rounded bg-secondary/20 text-secondary font-bold">Tech Lead</span></td>
+                  <td class="py-3.5 px-4 text-gray-300">SCRUMAI-2025</td>
+                  <td class="py-3.5 px-4 font-mono text-gray-300">30,000 Tokens</td>
+                  <td class="py-3.5 px-4"><span class="text-emerald-400 font-bold">Active</span></td>
+                </tr>
+                <tr>
+                  <td class="py-3.5 px-4 font-bold text-white flex items-center gap-2">
+                    <span class="w-6 h-6 rounded-full bg-purple-600 text-white font-bold text-[10px] flex items-center justify-center">DTD</span>
+                    <div>
+                      <div>PGS.TS Đặng Tiến Dũng</div>
+                      <div class="text-[10px] text-gray-400 font-normal">dungdt@huce.edu.vn</div>
+                    </div>
+                  </td>
+                  <td class="py-3.5 px-4"><span class="px-2 py-0.5 rounded bg-purple-950 text-purple-300 font-bold">GV Hướng Dẫn</span></td>
+                  <td class="py-3.5 px-4 text-gray-300">Khoa CNTT HUCE</td>
+                  <td class="py-3.5 px-4 font-mono text-gray-300">Không giới hạn</td>
+                  <td class="py-3.5 px-4"><span class="text-emerald-400 font-bold">Active</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // PAGE 10: COMPONENTS (MODULES)
+    // ==========================================
+    function ComponentsPage() {
+      return (
+        <div class="p-6 space-y-6 max-w-7xl mx-auto">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-xl font-black text-white">Module Kỹ Thuật (Components)</h2>
+              <p class="text-xs text-gray-400">Phân nhóm các công việc kỹ thuật theo kiến trúc hệ thống CSDL 7.2</p>
+            </div>
+            <button onClick={() => alert('Đã mở form tạo Component mới!')} class="px-4 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl shadow">
+              + Tạo Component mới
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="p-4 rounded-xl bg-gray-900 border border-gray-800 space-y-2">
+              <span class="text-xs font-bold text-primary">Backend API (.NET 10)</span>
+              <p class="text-xs text-gray-400">Kiến trúc Modular Monolith, ASP.NET Core Web API, EF Core 10</p>
+              <div class="flex justify-between text-xs pt-2 border-t border-gray-800 text-gray-300">
+                <span>Lead: Trần Văn Hoàng</span>
+                <span class="font-bold">34 Tasks</span>
+              </div>
+            </div>
+            <div class="p-4 rounded-xl bg-gray-900 border border-gray-800 space-y-2">
+              <span class="text-xs font-bold text-secondary">AI Engine & LLM Orchestration</span>
+              <p class="text-xs text-gray-400">Module Claude 3.7, Prompt Engineering, Auto Task Breakdown</p>
+              <div class="flex justify-between text-xs pt-2 border-t border-gray-800 text-gray-300">
+                <span>Lead: Hoàng Hưng</span>
+                <span class="font-bold">22 Tasks</span>
+              </div>
+            </div>
+            <div class="p-4 rounded-xl bg-gray-900 border border-gray-800 space-y-2">
+              <span class="text-xs font-bold text-emerald-400">Frontend SPA (Angular 19)</span>
+              <p class="text-xs text-gray-400">Signals Store, Tailwind CSS, Drag & Drop Board</p>
+              <div class="flex justify-between text-xs pt-2 border-t border-gray-800 text-gray-300">
+                <span>Lead: Lê Mai Anh</span>
+                <span class="font-bold">28 Tasks</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // PAGE 11: RELEASES & VERSIONS
+    // ==========================================
+    function ReleasesPage() {
+      return (
+        <div class="p-6 space-y-6 max-w-7xl mx-auto">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-xl font-black text-white">Quản Lý Phát Hành & Phiên Bản (Releases)</h2>
+              <p class="text-xs text-gray-400">Theo dõi tiến độ đóng gói phần mềm và trích xuất Release Notes tự động</p>
+            </div>
+            <button onClick={() => alert('Đã tạo bản phát hành mới!')} class="px-4 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl shadow">
+              + Tạo phiên bản mới
+            </button>
+          </div>
+
+          <div class="space-y-4">
+            <div class="p-5 rounded-2xl bg-gray-900 border border-gray-800 space-y-3">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h3 class="text-sm font-bold text-white">v1.0.0-Beta (Đang phát triển)</h3>
+                  <p class="text-xs text-gray-400">Hạn dự kiến: 15/09/2026 • Còn 8 ngày</p>
+                </div>
+                <span class="px-2.5 py-0.5 rounded bg-primary/20 text-primary font-bold text-xs">72% Hoàn tất</span>
+              </div>
+              <div class="w-full bg-gray-800 rounded-full h-2.5 overflow-hidden flex">
+                <div class="bg-primary h-full" style={{ width: "72%" }}></div>
+              </div>
+              <div class="flex justify-between text-xs text-gray-400 pt-2">
+                <span>18 / 25 Issues đã xong</span>
+                <button onClick={() => alert('Xuất Release Notes đồ án thành công!')} class="text-primary font-bold hover:underline">Xuất Release Notes</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // PAGE 12: JQL ADVANCED FILTERS
+    // ==========================================
+    function FiltersPage() {
+      const [jqlQuery, setJqlQuery] = useState('project = "SCRUMAI-2025" AND (isAiGenerated = true OR priority in ("High"))');
+
+      return (
+        <div class="p-6 space-y-6 max-w-7xl mx-auto">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-xl font-black text-white">Bộ Lọc Nâng Cao & Truy Vấn JQL</h2>
+              <p class="text-xs text-gray-400">Truy vấn dữ liệu chi tiết theo ngôn ngữ JQL kết hợp AI</p>
+            </div>
+            <button onClick={() => alert('Đã lưu bộ lọc cá nhân!')} class="px-4 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl shadow">
+              Lưu bộ lọc
+            </button>
+          </div>
+
+          {/* JQL Query Console */}
+          <div class="p-4 rounded-xl bg-gray-900 border border-gray-800 space-y-3">
+            <div class="flex items-center justify-between text-xs text-gray-400">
+              <span class="font-mono text-primary font-bold">huce-query-compiler.jql</span>
+              <span class="text-emerald-400 font-bold">Cú pháp hợp lệ (Syntax OK)</span>
+            </div>
+            <textarea 
+              value={jqlQuery} 
+              onChange={(e) => setJqlQuery(e.target.value)}
+              rows="3" 
+              class="w-full bg-gray-950 border border-gray-700 text-xs font-mono text-primary p-3 rounded-lg focus:outline-none focus:border-primary"
+            />
+            <div class="flex justify-end gap-2">
+              <button onClick={() => setJqlQuery('project = "SCRUMAI-2025" ORDER BY rankOrder ASC')} class="px-3 py-1 bg-gray-800 text-xs rounded hover:bg-gray-700 text-gray-300">Đặt lại</button>
+              <button onClick={() => alert('Đang chạy truy vấn JQL...')} class="px-4 py-1 bg-primary text-white text-xs font-bold rounded hover:bg-primary-hover">Chạy truy vấn</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // PAGE 13: NOTIFICATIONS & AUDIT TRAIL
+    // ==========================================
+    function NotificationsPage() {
+      return (
+        <div class="p-6 space-y-6 max-w-7xl mx-auto">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-xl font-black text-white">Trung Tâm Thông Báo & Nhật Ký Kiểm Toán (Audit Trail)</h2>
+              <p class="text-xs text-gray-400">Dòng sự kiện SignalR thời gian thực kết nối Hub /hub/scrum-events</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span class="text-xs font-mono text-emerald-400 font-bold">SignalR: Connected (24ms)</span>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <div class="p-4 rounded-xl bg-gray-900 border border-primary/40 space-y-1">
+              <div class="flex items-center justify-between text-xs">
+                <span class="px-2 py-0.5 rounded bg-primary/20 text-primary font-bold">GenAI Copilot</span>
+                <span class="text-gray-400">5 phút trước</span>
+              </div>
+              <h4 class="text-sm font-bold text-white">Trợ lý AI đã hoàn tất phân rã 5 Sub-tasks cho User Story SCRUMAI-280!</h4>
+              <p class="text-xs text-gray-400">Đã đối soát JSON schema và sẵn sàng đồng bộ vào Sprint 1.</p>
+            </div>
+
+            <div class="p-4 rounded-xl bg-gray-900 border border-gray-800 space-y-1">
+              <div class="flex items-center justify-between text-xs">
+                <span class="px-2 py-0.5 rounded bg-blue-950 text-blue-400 font-bold">Phân công nhiệm vụ</span>
+                <span class="text-gray-400">28 phút trước</span>
+              </div>
+              <h4 class="text-sm font-bold text-white">PGS.TS Đặng Tiến Dũng đã gán bạn vào task SCRUMAI-155</h4>
+              <p class="text-xs text-gray-400">Dựng Docker Compose local MySQL 8.4 + Ollama LLM Service.</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // PAGE 14: CREATE PROJECT WIZARD
+    // ==========================================
+    function CreateProjectPage() {
+      const navigate = useNavigate();
+      const [name, setName] = useState("Phần mềm Quản lý Đồ án Tốt nghiệp CNTT");
+      const [key, setKey] = useState("DATN");
+
+      const handleCreate = (e) => {
+        e.preventDefault();
+        alert(`Dự án [${key}] - ${name} đã được khởi tạo thành công với mẫu Scrum AI!`);
+        navigate("/board");
+      };
+
+      return (
+        <div class="p-6 space-y-6 max-w-4xl mx-auto">
+          <div>
+            <h2 class="text-2xl font-black text-white tracking-tight">Khởi Tạo Dự Án Mới (Project Setup)</h2>
+            <p class="text-xs text-gray-400 mt-1">Thiết lập không gian làm việc chuẩn Agile phối hợp AI cho đồ án HUCE</p>
+          </div>
+
+          <form onSubmit={handleCreate} class="p-6 rounded-2xl bg-gray-900 border border-gray-800 space-y-5">
+            <div>
+              <label class="block text-xs font-bold text-gray-300 mb-1">Tên dự án / Đề tài đồ án *</label>
+              <input 
+                type="text" 
+                required 
+                value={name} 
+                onChange={(e) => setName(e.target.value)}
+                class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-xs text-white focus:border-primary outline-none" 
+              />
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-bold text-gray-300 mb-1">Mã khóa (Key) *</label>
+                <input 
+                  type="text" 
+                  required 
+                  value={key} 
+                  onChange={(e) => setKey(e.target.value.toUpperCase())}
+                  class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-xs text-primary font-mono font-bold outline-none" 
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-gray-300 mb-1">Quy trình (Template)</label>
+                <select class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-xs text-white">
+                  <option>Agile Scrum + Claude 3.7 AI (Khuyên dùng)</option>
+                  <option>Kanban liên tục</option>
+                  <option>Theo dõi lỗi Bug Tracking</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="p-3 bg-gray-800/60 rounded-xl border border-gray-700 text-xs space-y-1">
+              <span class="text-primary font-bold">Tính năng AI kích hoạt tự động:</span>
+              <p class="text-gray-400">• Tự động phân rã User Story thành Subtasks và ước lượng Story Points Fibonacci</p>
+              <p class="text-gray-400">• Sinh tiêu chí nghiệm thu Acceptance Criteria chuẩn Given-When-Then</p>
+            </div>
+
+            <div class="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => navigate(-1)} class="px-4 py-2 rounded-xl text-xs font-semibold text-gray-400 hover:bg-gray-800">Hủy</button>
+              <button type="submit" class="px-5 py-2 rounded-xl text-xs font-bold bg-primary hover:bg-primary-hover text-white shadow-md">Tạo dự án ngay</button>
+            </div>
+          </form>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // PAGE 15: USER PROFILE & SETTINGS
+    // ==========================================
+    function ProfilePage() {
+      return (
+        <div class="p-6 space-y-6 max-w-4xl mx-auto">
+          <div class="p-6 rounded-2xl bg-gray-900 border border-gray-800 flex items-center gap-5">
+            <img src={USER_AVATAR} alt="Profile avatar" class="w-20 h-20 rounded-full object-cover ring-4 ring-primary" />
+            <div>
+              <div class="flex items-center gap-2">
+                <h2 class="text-xl font-black text-white">Trần Văn Hoàng (TH)</h2>
+                <span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 text-xs font-bold">Online</span>
+              </div>
+              <p class="text-xs text-gray-400 mt-0.5">Scrum Master / Lead AI Lab HUCE • Khoa CNTT ĐH Xây Dựng</p>
+              <p class="text-xs text-primary font-mono mt-1">phamthehoai2004hn@huce.edu.vn</p>
+            </div>
+          </div>
+
+          <div class="p-6 rounded-2xl bg-gray-900 border border-gray-800 space-y-4">
+            <h3 class="text-sm font-bold text-white">Thông Tin Định Danh & Cấu Hình Cá Nhân</h3>
+            <div class="grid grid-cols-2 gap-4 text-xs">
+              <div>
+                <label class="block text-gray-400 mb-1">Múi giờ</label>
+                <input type="text" readOnly value="GMT+07:00 Hanoi, Bangkok" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-gray-200" />
+              </div>
+              <div>
+                <label class="block text-gray-400 mb-1">Ngôn ngữ</label>
+                <input type="text" readOnly value="Tiếng Việt (Mặc định)" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-gray-200" />
+              </div>
+              <div>
+                <label class="block text-gray-400 mb-1">Xác thực 2 lớp (2FA)</label>
+                <input type="text" readOnly value="Đã kích hoạt qua Email OTP" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-emerald-400 font-bold" />
+              </div>
+              <div>
+                <label class="block text-gray-400 mb-1">Quyền hạn hệ thống</label>
+                <input type="text" readOnly value="Scrum Master (Full Project Access)" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-primary font-bold" />
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // PAGE 16: PROJECT SETTINGS & WORKFLOW
+    // ==========================================
+    function SettingsPage() {
+      return (
+        <div class="p-6 space-y-6 max-w-5xl mx-auto">
+          <div>
+            <h2 class="text-xl font-black text-white">Cài Đặt Dự Án & Lược Đồ Quy Trình (Workflow Scheme)</h2>
+            <p class="text-xs text-gray-400">Cấu hình vòng đời nhiệm vụ: Cần làm &gt; Đang làm &gt; Đang kiểm thử &gt; Hoàn thành</p>
+          </div>
+
+          <div class="p-5 rounded-2xl bg-gray-900 border border-gray-800 space-y-4">
+            <div class="flex items-center justify-between pb-3 border-b border-gray-800">
+              <span class="text-sm font-bold text-white">Quy trình: HUCE Agile Standard (4 Bước Nghiệm Thu)</span>
+              <span class="px-2 py-0.5 rounded bg-primary/20 text-primary text-xs font-bold">Mặc định</span>
+            </div>
+
+            <div class="grid grid-cols-4 gap-3 text-center text-xs">
+              <div class="p-3 bg-gray-800 rounded-xl border border-gray-700">
+                <span class="w-2.5 h-2.5 rounded-full bg-gray-400 mx-auto block mb-1"></span>
+                <span class="font-bold text-white">1. Cần làm</span>
+                <span class="text-[10px] text-gray-400 block">To Do</span>
+              </div>
+              <div class="p-3 bg-gray-800 rounded-xl border border-blue-800">
+                <span class="w-2.5 h-2.5 rounded-full bg-blue-500 mx-auto block mb-1"></span>
+                <span class="font-bold text-white">2. Đang làm</span>
+                <span class="text-[10px] text-gray-400 block">In Progress</span>
+              </div>
+              <div class="p-3 bg-gray-800 rounded-xl border border-amber-800">
+                <span class="w-2.5 h-2.5 rounded-full bg-amber-500 mx-auto block mb-1"></span>
+                <span class="font-bold text-white">3. Kiểm thử</span>
+                <span class="text-[10px] text-gray-400 block">In Review</span>
+              </div>
+              <div class="p-3 bg-gray-800 rounded-xl border border-emerald-800">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 mx-auto block mb-1"></span>
+                <span class="font-bold text-white">4. Hoàn thành</span>
+                <span class="text-[10px] text-gray-400 block">Done</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // --- Main App Root with MemoryRouter Wrapping ALL Screens ---
+    function App() {
+      const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+
+      const openAiModal = () => setIsAiModalOpen(true);
+      const closeAiModal = () => setIsAiModalOpen(false);
+
+      const handleAiApply = () => {
+        setIsAiModalOpen(false);
+        alert("Đã áp dụng thành công 5 Sub-tasks và 4 Acceptance Criteria vào Sprint 1!");
+      };
+
+      return (
+        <MemoryRouter initialEntries={["/overview"]}>
+          <AppLayout openAiModal={openAiModal}>
+            <Routes>
+              <Route path="/" element={<OverviewPage openAiModal={openAiModal} />} />
+              <Route path="/home" element={<OverviewPage openAiModal={openAiModal} />} />
+              <Route path="/overview" element={<OverviewPage openAiModal={openAiModal} />} />
+              <Route path="/auth" element={<AuthPage />} />
+              <Route path="/board" element={<BoardPage openAiModal={openAiModal} />} />
+              <Route path="/backlog" element={<BacklogPage openAiModal={openAiModal} />} />
+              <Route path="/timeline" element={<TimelinePage />} />
+              <Route path="/list" element={<ListPage openAiModal={openAiModal} />} />
+              <Route path="/calendar" element={<CalendarPage />} />
+              <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/members" element={<MembersPage />} />
+              <Route path="/components" element={<ComponentsPage />} />
+              <Route path="/releases" element={<ReleasesPage />} />
+              <Route path="/filters" element={<FiltersPage />} />
+              <Route path="/notifications" element={<NotificationsPage />} />
+              <Route path="/create-project" element={<CreateProjectPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              {/* Fallback route */}
+              <Route path="*" element={<OverviewPage openAiModal={openAiModal} />} />
+            </Routes>
+
+            {/* Global AI Breakdown Modal */}
+            <AiBreakdownModal 
+              isOpen={isAiModalOpen} 
+              onClose={closeAiModal} 
+              onApply={handleAiApply} 
+            />
+          </AppLayout>
+        </MemoryRouter>
+      );
+    }
+
+    // Render application
+    const rootElement = document.getElementById("root");
+    const root = createRoot(rootElement);
+    root.render(<App />);
+  </script>
+</body>
+</html>

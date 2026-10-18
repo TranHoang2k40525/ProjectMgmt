@@ -1,0 +1,1533 @@
+# ProjectMgmt — Cẩm nang kỹ thuật hoàn thiện hệ thống
+
+![Kiến trúc ProjectMgmt với ba module vật lý, hai hệ AI và tuyến CI/CD](assets/projectmgmt-technical-handbook-cover.png)
+
+> **Loại tài liệu:** Engineering Design Report + Implementation Handbook  
+> **Phiên bản:** 1.0 — chốt ngày 20/09/2026  
+> **Baseline mã nguồn:** nhánh `hoangtv`, commit đầy đủ `05ce307951635dfd92b40ee1009400f38c25b7c9`; tại lúc audit nhánh local ahead `origin/hoangtv` 7 commit, nên phải push/tag baseline này trước khi máy khác tái lập; các tệp Jira/test untracked không được coi là source chuẩn  
+> **Đối tượng đọc:** ba thành viên phát triển, người hướng dẫn, reviewer, vận hành TEST/PRODUCTION  
+> **Mục tiêu:** đủ thông tin để phân tích, xây dựng, tích hợp, kiểm thử và triển khai mà không phải dò lại nhiều tài liệu rời rạc.
+
+---
+
+## Mục lục
+
+1. [Tóm tắt điều hành](#1-tóm-tắt-điều-hành)
+2. [Toàn cảnh hệ thống](#2-toàn-cảnh-hệ-thống)
+3. [Cách đọc và thứ tự nguồn sự thật](#3-cách-đọc-và-thứ-tự-nguồn-sự-thật)
+4. [Phân tích bài toán và phạm vi](#4-phân-tích-bài-toán-và-phạm-vi)
+5. [Các phát hiện chính từ mã nguồn](#5-các-phát-hiện-chính-từ-mã-nguồn)
+6. [Kiến trúc mục tiêu và kiến trúc hiện tại](#6-kiến-trúc-mục-tiêu-và-kiến-trúc-hiện-tại)
+7. [Phân ranh ba module và trách nhiệm ba thành viên](#7-phân-ranh-ba-module-và-trách-nhiệm-ba-thành-viên)
+8. [Hợp đồng liên module](#8-hợp-đồng-liên-module)
+9. [Kiến trúc dữ liệu MySQL 55 bảng](#9-kiến-trúc-dữ-liệu-mysql-55-bảng)
+10. [Backend và API](#10-backend-và-api)
+11. [Frontend Angular](#11-frontend-angular)
+12. [Hai hệ AI và vòng đời dữ liệu](#12-hai-hệ-ai-và-vòng-đời-dữ-liệu)
+13. [Các luồng nghiệp vụ đầu-cuối](#13-các-luồng-nghiệp-vụ-đầu-cuối)
+14. [Bảo mật và phân quyền](#14-bảo-mật-và-phân-quyền)
+15. [Hiệu năng, quan sát và độ tin cậy](#15-hiệu-năng-quan-sát-và-độ-tin-cậy)
+16. [CI/CD, môi trường và vận hành](#16-ci-cd-môi-trường-và-vận-hành)
+17. [Chiến lược kiểm thử và tiêu chí chất lượng](#17-chiến-lược-kiểm-thử-và-tiêu-chí-chất-lượng)
+18. [Lộ trình hoàn thiện theo mức ưu tiên](#18-lộ-trình-hoàn-thiện-theo-mức-ưu-tiên)
+19. [Playbook riêng cho từng thành viên](#19-playbook-riêng-cho-từng-thành-viên)
+20. [Hướng dẫn khởi động cho thành viên mới](#20-hướng-dẫn-khởi-động-cho-thành-viên-mới)
+21. [Runbook xử lý sự cố](#21-runbook-xử-lý-sự-cố)
+22. [Các quyết định kiến trúc](#22-các-quyết-định-kiến-trúc)
+23. [Khuyến nghị và kết luận](#23-khuyến-nghị-và-kết-luận)
+24. [Phụ lục tra cứu](#24-phụ-lục-tra-cứu)
+
+---
+
+## 1. Tóm tắt điều hành
+
+ProjectMgmt là hệ thống quản lý dự án theo Scrum, định hướng tương đương một Jira thu gọn, có hai năng lực AI tách biệt:
+
+- **AI 1 — Auto Task Breakdown:** phân rã User Story/Task thành các sub-task có cấu trúc và Acceptance Criteria; người dùng phải xem, sửa, chấp nhận hoặc từ chối trước khi ghi thành issue thật.
+- **AI 2 — Intelligent Assignment:** xếp hạng người phù hợp cho từng issue theo tải, kỹ năng, lịch sử và capacity; PM/SM quyết định cuối cùng, còn hệ thống lưu cả đề xuất, override và kết quả thực tế để cải thiện mô hình.
+
+[VERIFIED] Thiết kế dữ liệu hiện hành là **MySQL 8, 55 bảng, 4 view và 2 trigger**. Mã nguồn vật lý đã được gom thành **ba module lớn** tương ứng ba thành viên: `IdentityExperience`, `Planning`, `DeliveryIntelligence`; mỗi module có `Domain`, `Application`, `Infrastructure`, dùng chung `Contracts` và `Core`, chạy trong một ASP.NET Core host.
+
+[VERIFIED] Nền tảng đã có giá trị thực: solution .NET 10 build được, mô hình EF bao phủ 55 bảng, API quản lý Organization/Project/Workflow/Board đã có, Angular có hệ thống route và giao diện rộng, CI cho backend/frontend/container, pipeline deploy TEST lên IIS, backup và rollback ứng dụng.
+
+[VERIFIED] Ứng dụng **chưa phải bản hoàn thiện nghiệp vụ**. Authentication chưa được cấu hình vào pipeline HTTP; nhiều màn hình Angular đang dùng signal/mock data thay vì API; Delivery/Issue, Sprint, Notification, SignalR và hai AI chưa có luồng chạy đầu-cuối; test backend mới có 2 ca cho Result; frontend có 22 test pass nhưng job hiện trả lỗi vì hai timer truy cập `nativeElement` sau khi fixture đã hủy.
+
+> **Kết luận điều hành:** giữ kiến trúc modular monolith ba module và MySQL hiện tại; ưu tiên đóng các lỗ hổng bảo mật/tích hợp P0, hoàn thiện Scrum core trước, sau đó đưa AI Breakdown rồi AI Assignment vào theo contract và event rõ ràng. Không quay lại kiến trúc 9–10 project nghiệp vụ, không chuyển về SQL Server, không đưa LLM vào quyết định tự động không có Human-in-the-loop.
+
+## 2. Toàn cảnh hệ thống
+
+| Hạng mục | Trạng thái đã kiểm chứng | Đích cần đạt |
+|---|---|---|
+| Sản phẩm | Scrum project management + UI dạng Jira | Luồng Project → Backlog → Sprint → Board → Report hoàn chỉnh |
+| Backend | ASP.NET Core/.NET 10; 3 module vật lý; repository/service truyền thống | API có auth, validation, transaction, contract liên module và observability |
+| Frontend | Angular 21, standalone, Signals; 20 route nghiệp vụ | Bỏ mock, dùng API thật, guard thật, SignalR thật, loading/error nhất quán |
+| Database | MySQL; 55 table; 4 view; 2 trigger; 3 DbContext | Migration policy an toàn; review 32 XMOD index left-prefix còn thiếu |
+| AI 1 | Có schema và thiết kế; chưa có runtime end-to-end | Async breakdown, JSON Schema, review/apply, feedback, evaluation |
+| AI 2 | Có schema và công thức thiết kế; chưa có engine | Candidate ranking giải thích được, quyết định cuối bởi người dùng, hậu kiểm |
+| DataOps | Có 7 bảng schema; UI placeholder | Dataset version/freeze, PII redaction, dedup, export, train/evaluate |
+| CI | PR vào `develop`: build/test/lint/container build | Thêm security scan, integration/E2E, migration validation, quality gates |
+| CD TEST | Build artifact, self-hosted Windows runner, IIS, health, rollback | Artifact bất biến, smoke test rộng hơn, migration/DB rollback plan |
+| Kiểm thử hiện tại | Backend 2/2 pass; lint pass; build Angular pass; 22 test chạy | Sửa 2 async error; tăng unit/integration/architecture/E2E |
+
+### 2.1 Bản chất sản phẩm
+
+ProjectMgmt không chỉ là bảng Kanban. Sản phẩm phải quản lý xuyên suốt:
+
+1. Danh tính, hồ sơ, kỹ năng và quyền theo phạm vi.
+2. Organization, Project, workflow, issue type, priority và board.
+3. Product Backlog, Sprint Backlog, capacity và snapshot báo cáo.
+4. Issue đa cấp, liên kết, cộng tác và lịch sử thay đổi.
+5. Thông báo lưu bền và realtime.
+6. Hai AI có nhiệm vụ, dữ liệu, chỉ số đánh giá và quyền áp dụng khác nhau.
+7. Dataset, training run, evaluation và model/prompt governance.
+8. Quy trình build, test, triển khai, health check, backup và rollback.
+
+### 2.2 Nguyên tắc không thay đổi
+
+- Một cơ sở dữ liệu MySQL vật lý; module sở hữu bảng logic của mình.
+- Không tạo foreign key hoặc SQL join xuyên module trong **luồng command/transaction** cho các cột `XMOD`. Bốn reporting view do Delivery sở hữu là ngoại lệ read-only đã được phê duyệt; không dùng chúng để ghi dữ liệu hay cưỡng chế rule. “XMOD có index” là target; trước khi chuẩn hóa đủ 64 cột, index được quyết định theo query pattern + `EXPLAIN` và audit phải nêu rõ phần chưa đạt.
+- Giao tiếp xuyên module qua interface/DTO trong `ProjectMgmt.Contracts`.
+- Repository/service truyền thống; không áp CQRS/Event Sourcing vào code hiện tại nếu chưa có nhu cầu được chứng minh.
+- AI đưa ra **gợi ý**, con người chịu trách nhiệm áp dụng hoặc override.
+- Không hard-code secret; không commit connection string thật, token, mật khẩu hoặc key OAuth.
+- Không chạy DDL có `DROP DATABASE` vào DB hiện hữu.
+- Không coi UI đẹp hoặc schema đầy đủ là bằng chứng nghiệp vụ đã chạy.
+
+## 3. Cách đọc và thứ tự nguồn sự thật
+
+### 3.1 Nhãn bằng chứng
+
+- [VERIFIED] Đã đối chiếu trực tiếp từ mã nguồn, workflow, DDL, kết quả command hoặc tài liệu v3 hiện hành.
+- [INFERRED] Suy luận hợp lý từ nhiều bằng chứng nhưng chưa có test/runtime xác nhận đầy đủ.
+- [RECOMMENDATION] Thiết kế đích hoặc hành động nên làm; không phải trạng thái hiện tại.
+
+### 3.2 Thứ tự ưu tiên khi có mâu thuẫn
+
+1. Mã nguồn đang chạy, workflow CI/CD và `docs/projectmgmt_schema_mysql_optimized.sql`.
+2. `07_Thiet_ke_co_so_du_lieu_v3.pdf` và ERD v3 55 bảng.
+3. `Phan_bo_vai_tro_module_nhom_3_nguoi.pdf`.
+4. `Mo_ta_bai_toan_va_pham_vi_du_an_v2.docx`.
+5. Excel/Jira plan và các CSV import mới nhất.
+6. PDF mô tả hệ thống cũ và prompt Sprint 1.
+7. Lịch sử phiên Codex — hữu ích để hiểu quyết định, nhưng luôn phải kiểm lại trên source.
+
+### 3.3 Các mâu thuẫn đã được giải quyết
+
+| Chủ đề | Tài liệu cũ/đề xuất | Nguồn hiện hành | Quyết định dùng trong handbook |
+|---|---|---|---|
+| CSDL | SQL Server, 31 bảng | MySQL, 55 bảng, 4 view, 2 trigger | MySQL là nguồn thật |
+| Kiến trúc xử lý | CQRS/Event Sourcing/CRDT được nêu trong scope nghiên cứu | Người dùng chốt repository truyền thống; source đang dùng service/repository | Giữ repository; các kỹ thuật kia là nghiên cứu tùy chọn, không là baseline |
+| Module vật lý | 9–10 project nghiệp vụ | 3 module lớn, mỗi module 3 layer | 3 module vật lý; 10 module chỉ là vùng nghiệp vụ logic |
+| DbContext | Từng có kế hoạch 9 context | Source có 3 context và 3 migration history | Dùng 3 context |
+| AI | Tài liệu scope nêu nhiều bài toán ML | Kế hoạch và DB chốt Breakdown + Assignment | Hai AI sản phẩm; estimation/process mining là submodel tương lai |
+| EF provider | Kỳ vọng EF Core 10 | Source hiện dùng EF/Pomelo 9 trên `net10.0` | Ghi đúng package đang có; chỉ nâng khi Pomelo tương thích và test pass |
+| Trạng thái Sprint | Excel/Jira ghi các story `To Do` theo lịch | Source đã có một phần UI/API nhưng thiếu core | Đánh giá theo code/test, không theo ngày kế hoạch |
+| AiCore ownership | Role PDF chia `AiPromptTemplate` cho A, `AiModel` cho C | Cả hai table/config hiện nằm trong IdentityExperience | A/C đồng sở hữu logic; một người chịu migration tại một thời điểm |
+
+### 3.4 Phạm vi quét và loại trừ
+
+[VERIFIED] Audit đã đọc solution/project files, C# tự viết, Angular source/config, Docker, GitHub Actions, PowerShell deploy, DDL/README/docs, PDF/DOCX/XLSX/CSV/ảnh ERD trong thư mục tài liệu và lịch sử phiên `01a09072-8caa-7743-8a5f-be64f3d5c3b8`.
+
+Các thư mục sinh tự động như `.git`, `.vs`, `bin`, `obj`, `node_modules`, `dist`, cache và binary PDF không được coi là source nghiệp vụ. Tệp `promt thực tập.txt` mô tả một đề tài AI Import Excel cho hệ thống khác; nó không thuộc phạm vi ProjectMgmt và không được trộn vào backlog sản phẩm này. `AI id.txt` và `Ngữ cảnh AI/Sestion.txt` chỉ chứa ID phiên khác, không phải đặc tả nghiệp vụ.
+
+## 4. Phân tích bài toán và phạm vi
+
+### 4.1 Bài toán cần giải quyết
+
+Nhóm dự án Scrum nhỏ thường gặp bốn vấn đề:
+
+- Story Point phụ thuộc cảm tính và không đồng nhất giữa thành viên.
+- Việc phân rã yêu cầu thành task/Acceptance Criteria tốn thời gian và dễ bỏ sót.
+- Việc gán task ít dựa vào tải, kỹ năng, capacity và kết quả lịch sử.
+- Quy trình khai báo trên công cụ có thể khác quy trình thực tế; dữ liệu lịch sử không được biến thành phản hồi cải tiến.
+
+ProjectMgmt giải quyết lớp quản lý Scrum trước, sau đó tận dụng dữ liệu do chính hệ thống sinh ra để hỗ trợ phân rã và phân công. AI không được đứng ngoài quy trình: mọi generation, edit, accept, override và outcome phải truy vết được.
+
+### 4.2 Mục tiêu chức năng
+
+- Quản lý user, profile, skill, đăng nhập và phân quyền theo System/Organization/Project.
+- Tạo Organization/Project với ProjectKey và cấu hình workflow/board mặc định.
+- Quản lý backlog, issue hierarchy, sprint lifecycle, capacity, board/WIP và lịch sử.
+- Hỗ trợ comment, attachment, watcher, label, component, version và acceptance criteria.
+- Báo cáo workload, velocity, burndown, chất lượng breakdown và độ chính xác assignment.
+- Gửi notification persistence + realtime theo user/project/entity.
+- Chạy AI Breakdown bất đồng bộ, có preview/edit/apply.
+- Chạy AI Assignment giải thích được, có accept/override/reject và outcome evaluation.
+- Quản trị dataset/model/prompt theo version, PII, checksum và metric tái lập.
+
+### 4.3 Tác nhân và quyền điển hình
+
+| Tác nhân | Quyền/nghiệp vụ chính |
+|---|---|
+| System Admin | Quản trị user, role, permission, AI model/prompt governance, vận hành |
+| Project Manager | Tạo project, member/scope role, release, báo cáo, quyết định assignment |
+| Scrum Master | Workflow/board/WIP, sprint lifecycle, capacity, xử lý blocker |
+| Product Owner/Tech Lead | Backlog, ưu tiên, AC, breakdown review, component/version |
+| Developer | Xem/nhận issue, cập nhật trạng thái, comment, log effort, phản hồi AI |
+| Viewer/Stakeholder | Xem dashboard/report theo quyền, không thay đổi dữ liệu |
+| Background Worker | Chạy AI/job/snapshot/notification bằng service identity bị giới hạn quyền |
+
+### 4.4 Trong và ngoài phạm vi
+
+**Trong phạm vi v1:** web SPA, Google OAuth nếu đủ thời gian, REST API, SignalR, MySQL, local AI, issue/sprint/board/report, hai AI, DataOps, CI/CD TEST và production-ready runbook.
+
+**Ngoài phạm vi v1:** mobile native, billing, marketplace/plugin, pretrain LLM từ đầu, tự động sinh code, microservice hóa toàn hệ thống, tích hợp hàng loạt OAuth provider, tự động quyết định nhân sự không cần con người.
+
+### 4.5 Điều kiện thành công
+
+Sản phẩm chỉ được xem là hoàn thiện khi một người dùng có thể đăng nhập thật, tạo project, cấu hình hoặc dùng workflow mặc định, tạo backlog/issue, lập sprint, kéo issue qua board hợp lệ, nhận notification, chạy hai AI với feedback, xem report, và toàn bộ luồng vượt qua test trên TEST environment.
+
+## 5. Các phát hiện chính từ mã nguồn
+
+### 5.1 Điểm mạnh hiện tại
+
+- [VERIFIED] Solution `ProjectMgmt.slnx` có 13 project: Contracts/Core, 9 project thuộc ba module, Host và một test project.
+- [VERIFIED] 55 entity/table configuration và 4 keyless view đã được phân vào ba DbContext; mỗi configuration tách file.
+- [VERIFIED] Planning có API/service/repository thực cho Organization, Project, workflow transition và Board.
+- [VERIFIED] Angular có route lazy, design system, responsive layout và nhiều màn hình nghiệp vụ.
+- [VERIFIED] CI tách backend, frontend, container; CD TEST có artifact, IIS, health check, backup và rollback ứng dụng.
+- [VERIFIED] Connection string không chứa secret trong Git; staging/prod dùng file cấu hình ngoài artifact.
+
+### 5.2 Khoảng trống chặn phát hành
+
+| Mức | Khoảng trống | Bằng chứng/ảnh hưởng |
+|---|---|---|
+| P0 | Authentication chưa được bật | `Program.cs` có `AddAuthorization` nhưng không `AddAuthentication`; controller chưa có `[Authorize]` |
+| P0 | Auth service/controller chưa hoàn chỉnh | Login thiếu `await`; register/OTP placeholder; verify chưa implement; frontend dùng `mock-jwt-token` và admin mặc định |
+| P0 | Frontend phần lớn dùng mock state | `project-management.service.ts` không gọi HttpClient; identity service dùng dữ liệu in-memory |
+| P0 | Issue/Sprint/AI/Notification thiếu API end-to-end | Delivery Application gần như rỗng; không có Hub được map; route issue/DataOps là placeholder |
+| P0 | Frontend test job đang đỏ | 22 test pass nhưng có 2 unhandled timer error tại `auth-page.ts:110` |
+| P1 | Contract liên module thiếu | Hiện chỉ có Identity lookup/skill và Project lookup, chưa đủ contract đã thiết kế |
+| P1 | XMOD index cần review | Script read-only báo 32/64 cột XMOD không có index left-prefix độc lập |
+| P1 | CORS/Serilog chỉ có config | `Program.cs` chưa gọi middleware/registration tương ứng |
+| P1 | Test backend quá mỏng | Chỉ 2 Result tests; chưa có integration/architecture/security tests |
+| P1 | Deploy không quản lý migration DB | Pipeline deploy app; chưa có validate/apply migration có kiểm soát hoặc DB rollback |
+| P2 | CODEOWNERS/contract docs/evaluation set chưa tồn tại | Các tệp mục tiêu trong prompt Sprint 1 chưa có trong repo hiện tại |
+
+### 5.3 Trạng thái theo vùng nghiệp vụ
+
+| Vùng | Schema | Backend | Frontend | Mức sẵn sàng |
+|---|---|---|---|---|
+| Identity/RBAC | Đủ nền tảng | Một phần, có lỗi/placeholder | UI phong phú nhưng mock | 1/4 |
+| Project/Workflow/Board config | Đủ | Có API/service/repository chính | Có màn hình; service vẫn mock | 2/4 |
+| Sprint/Backlog | Đủ | Chưa đủ service/controller | UI backlog/board có | 1/4 |
+| Issue collaboration | Đủ | Application gần như trống | Issue detail placeholder | 0.5/4 |
+| Notification/realtime | Có table | Chưa map Hub | UI/mock | 0.5/4 |
+| AI Breakdown | Có 2 table + model/prompt | Chưa có orchestrator/worker | Component/UI định hướng | 0.5/4 |
+| AI Assignment | Có 5 bảng + 1 view | Chưa có engine/API | Chưa có review flow đầy đủ | 0.5/4 |
+| AI DataOps | Có 7 table | Chưa có pipeline | Placeholder | 0.5/4 |
+| CI/CD | N/A | Build/test/deploy script | Build artifact | 2.5/4 |
+
+## 6. Kiến trúc mục tiêu và kiến trúc hiện tại
+
+### 6.1 Sơ đồ ngữ cảnh
+
+```mermaid
+flowchart LR
+  U[Admin / PM / SM / PO / Dev / Viewer] --> WEB[Angular SPA]
+  WEB -->|REST /api| HOST[ASP.NET Core Host]
+  WEB <-->|SignalR /hubs| HOST
+  HOST --> ID[IdentityExperience]
+  HOST --> PL[Planning]
+  HOST --> DI[DeliveryIntelligence]
+  ID --> DB[(MySQL projectmgmt)]
+  PL --> DB
+  DI --> DB
+  HOST --> Q[Background jobs]
+  Q --> AI1[AI 1 Breakdown service]
+  Q --> AI2[AI 2 Assignment service]
+  AI1 --> OLLAMA[Ollama / pinned model]
+  AI1 -. structured result .-> HOST
+  AI2 -. ranked candidates .-> HOST
+  HOST --> OBS[Logs / metrics / traces]
+```
+
+### 6.2 Cấu trúc vật lý hiện tại
+
+```text
+ProjectMgmt/
+├─ ProjectMgmt.Contracts/
+├─ ProjectMgmt.Core/
+├─ ProjectMgmt.Modules.IdentityExperience/
+│  ├─ Domain/
+│  ├─ Application/
+│  └─ Infrastructure/
+├─ ProjectMgmt.Modules.Planning/
+│  ├─ Domain/
+│  ├─ Application/
+│  ├─ Infrastructure/
+│  └─ ProjectManagement/        # mã legacy được compile include, cần dọn dần
+├─ ProjectMgmt.Modules.DeliveryIntelligence/
+│  ├─ Domain/
+│  ├─ Application/
+│  └─ Infrastructure/
+├─ ProjectMgmt.Solution/        # composition root / API host
+├─ ProjectMgmt.Tests/
+├─ frontend/projectmgmt-web/
+├─ docs/
+├─ scripts/
+├─ .github/workflows/
+└─ docker-compose*.yml
+```
+
+### 6.3 Quy tắc dependency
+
+```mermaid
+flowchart TD
+  HOST[Host / Composition Root] --> IA[Identity Application]
+  HOST --> PA[Planning Application]
+  HOST --> DA[Delivery Application]
+  HOST --> II[Identity Infrastructure]
+  HOST --> PI[Planning Infrastructure]
+  HOST --> DI[Delivery Infrastructure]
+  IA --> ID[Identity Domain]
+  PA --> PD[Planning Domain]
+  DA --> DD[Delivery Domain]
+  IA --> C[Contracts]
+  PA --> C
+  DA --> C
+  II --> IA
+  II --> ID
+  PI --> PA
+  PI --> PD
+  DI --> DA
+  DI --> DD
+  C --> CORE[Core abstractions]
+```
+
+- Domain không reference Infrastructure hoặc Host.
+- Application điều phối use case; không chứa HTTP hoặc EF-specific query nếu có thể tránh.
+- Infrastructure cài repository, DbContext, adapter external.
+- Host là nơi duy nhất ghép module, middleware và endpoint.
+- Module không reference implementation của module khác.
+- DTO contract không được chứa EF entity/navigation property.
+
+### 6.4 Modular monolith, không phải microservice giả
+
+[RECOMMENDATION] Giữ một process .NET và một DB để phù hợp nhóm ba người. Hai AI có thể là hai process Python/FastAPI độc lập vì vòng đời model, GPU và dependency khác .NET; chúng chỉ nhận DTO qua API/job và không đọc DB trực tiếp. Điều này giữ monolith nghiệp vụ nhưng tách runtime ML hợp lý.
+
+### 6.5 Current và target runtime
+
+| Thành phần | Current | Target |
+|---|---|---|
+| Host | REST, Swagger, health, static SPA | AuthN/AuthZ, ProblemDetails, CORS, rate limit, SignalR, job scheduler, telemetry |
+| Module | 3 DbContext, một phần service | Đủ use case, transaction boundary, outbox/event nội process khi cần |
+| AI runtime | Chưa có | Hai service có `/health`, version, timeout, retry, schema validation |
+| Realtime | Frontend client có skeleton | Hub theo user/project; reconnect, idempotency, authorization |
+| Observability | Cấu hình rời rạc | Structured log + correlation ID + metrics/traces + alert |
+
+## 7. Phân ranh ba module và trách nhiệm ba thành viên
+
+### 7.1 Thành viên A — Trần Văn Hoàng — IdentityExperience
+
+**Vùng logic:** M1 Identity & Access, M6 AI Core phần prompt/model governance, M7 AI Breakdown, M10 Notification.  
+**Bảng hiện thuộc DbContext:** 16 bảng — 11 Identity, 2 AiCore, 2 Breakdown, 1 Notification.
+
+Trách nhiệm chính:
+
+- Register/login, password hash, normalized email, OTP, refresh rotation, Google external login.
+- Scoped RBAC/ReBAC với `UserRole.ScopeType/ScopeId` và permission code.
+- Profile/skill cung cấp contract cho Planning và Delivery.
+- Notification persistence, unread, deep-link, SignalR theo user/project.
+- AI Breakdown: request, prompt/model selection, worker, JSON validation, preview/edit/apply/reject và feedback export.
+- Frontend: auth, profile, RBAC admin, notification, AI governance, shared breakdown.
+
+Không được làm:
+
+- Ghi trực tiếp `Issue` hoặc `Project` bằng DbContext của module khác.
+- Cho model tự tạo issue mà không gọi `IIssueService` và không có user apply.
+- Đưa mật khẩu/OTP/token/prompt nhạy cảm vào log.
+
+### 7.2 Thành viên B — Nguyễn Thế Hoài — Planning
+
+**Vùng logic:** M2 Organization & Project, M3 Workflow/Board, M4 Sprint & Backlog, M8 AI Assignment.  
+**Bảng hiện thuộc DbContext:** 18 bảng.
+
+Trách nhiệm chính:
+
+- Organization/Project CRUD, ProjectKey, IssueCounter an toàn đồng thời.
+- Workflow status/transition, issue type/priority, Board/Column/WIP.
+- Sprint lifecycle, một sprint Active mỗi project, capacity, snapshot/report.
+- Backlog planning qua contract của Delivery, không query `Issue` trực tiếp.
+- AI Assignment: feature snapshot, candidate ranking, explanation, decision và outcome.
+- Frontend: projects, settings, backlog, board, roadmap, reports, assignment review.
+
+Không được làm:
+
+- Tính lại feature lịch sử khi huấn luyện; phải dùng `FeatureSnapshot` tại thời điểm đề xuất.
+- Tự gán user mà bỏ qua quyền, capacity hoặc quyết định cuối của PM/SM.
+- SQL join trực tiếp sang Identity/Issue tables.
+
+### 7.3 Thành viên C — Hoàng Trần Huy Hoàng — DeliveryIntelligence
+
+**Vùng logic:** M5 Issue Tracking và M9 AI Dataset/Training.  
+**Bảng hiện thuộc DbContext:** 21 bảng — 14 Issue và 7 DataOps; thêm 4 keyless reporting view.
+
+Trách nhiệm chính:
+
+- Issue CRUD/hierarchy, issue number, RankOrder, transition validation qua contract.
+- Link, watcher, comment, attachment, label, component/version/skill, AC.
+- Status/assignment/activity history đầy đủ và audit-friendly.
+- Dataset/version/sample, cleaning rule, quality flag, freeze/checksum/export.
+- Training/evaluation metadata, PII redaction, dedup, reproducibility.
+- Frontend: issue detail/timeline, DataOps, evaluation dashboard.
+
+Không được làm:
+
+- Query User/Project DbContext để “tiện”; phải dùng lookup contract.
+- Sửa sample đã freeze; mọi thay đổi phải tạo dataset version mới.
+- Đưa raw production text chứa PII vào train set trước khi review/redaction.
+
+### 7.4 Ma trận RACI tối thiểu
+
+| Công việc | A | B | C |
+|---|---:|---:|---:|
+| Auth/RBAC/Profile | A/R | C | C |
+| Project/Workflow/Sprint/Board | C | A/R | C |
+| Issue/Collaboration/History | C | C | A/R |
+| AI Breakdown | A/R | C | C/Data feedback |
+| AI Assignment | C/User features | A/R | C/Issue outcome |
+| Dataset/Training/Evaluation | C | C | A/R |
+| AiPromptTemplate logic | A/R | C | C |
+| AiModel registry/migration | C | C | A/R |
+| CI/CD TEST | R | R | R/test gate |
+| Production approval | R/pipeline | R/DB | R/quality sign-off |
+
+`A` = Accountable, `R` = Responsible, `C` = Consulted.
+
+## 8. Hợp đồng liên module
+
+### 8.1 Hợp đồng hiện có
+
+[VERIFIED] `ProjectMgmt.Contracts` hiện có các nhóm Identity, Planning và Result. Các năng lực cốt lõi quan sát được gồm lookup user/display, user skill/profile feature và project lookup. Đây là nền tốt nhưng chưa đủ cho luồng Sprint/Issue/AI.
+
+### 8.2 Bộ contract cần hoàn thiện
+
+| Provider | Contract | Consumer chính | Mục đích |
+|---|---|---|---|
+| Identity | `IUserLookupService` | Planning, Delivery | Tồn tại, display info theo một/nhiều ID |
+| Identity | `IUserSkillService` | AI Assignment | Skill và profile feature; không trả EF entity |
+| Identity | `ICurrentUserContext` | Mọi module/Host | `UserId`, `SecurityStamp`, trạng thái authenticated; không chứa token thô |
+| Identity | `IPermissionEvaluator` | Policies/Module use case | Kiểm permission theo resource và System/Organization/Project scope |
+| Identity | `IRoleAssignmentService` | Admin/Project membership | Grant/revoke role theo scope, audit actor và chống escalation |
+| Identity/Notification | `INotificationSender` | Planning, Delivery, AI | Lưu + phát notification idempotent |
+| Planning | `IProjectLookupService` | Delivery | ProjectKey, issue types, statuses, tồn tại |
+| Planning | `IWorkflowValidationService` | Delivery | Initial status, transition, WIP và lý do từ chối |
+| Planning | `IIssueNumberGenerator` | Delivery | Cấp số issue atomic theo project |
+| Delivery | `IIssueService` | AI Breakdown | Tạo issue/sub-task qua use case hợp lệ |
+| Delivery | `IIssueReadService` | Planning/AI | Đọc issue, sprint, assignee và history dạng DTO |
+| Delivery | `IIssueSprintService` | Planning | Move to sprint/return backlog |
+| Delivery | `IIssueSkillService` | AI Assignment | Required skill của issue |
+| AI Breakdown | `IAiBreakdownFeedbackExportService` | DataOps | Raw output + user edit + action |
+| AI Assignment | `IAiAssignmentFeedbackExportService` | DataOps | Candidate snapshot + decision + outcome |
+
+### 8.3 Chuẩn contract
+
+- Mọi method async nhận `CancellationToken`.
+- Trả `Result<T>` cho lỗi nghiệp vụ dự đoán được; exception cho lỗi bất thường.
+- DTO bất biến hoặc record, field có meaning/unit rõ.
+- Không expose IQueryable, DbContext, navigation hoặc lazy-loading proxy.
+- Method mới được phép add backward-compatible; rename/remove phải cập nhật changelog và đồng thuận nhóm.
+- Consumer test bằng fake/deterministic stub; provider có contract/integration test.
+- Correlation ID đi qua REST, job, AI service và notification.
+
+[RECOMMENDATION] Chuẩn hóa lỗi nghiệp vụ về `ProjectMgmt.Contracts.Results.Result<T>`. Auth hiện còn kiểu `IdentityExperience.Application.Dto.Result/ResultLogin`; trong giai đoạn chuyển đổi, controller map kiểu cũ sang Result/ProblemDetails chuẩn, sau đó xóa duplicate chỉ khi toàn bộ caller và test đã chuyển. Không đổi đồng loạt mà thiếu characterization test.
+
+### 8.4 Mẫu contract gợi ý
+
+```csharp
+public interface IWorkflowValidationService
+{
+    Task<Result<TransitionDecisionDto>> CanTransitionAsync(
+        Guid projectId,
+        Guid issueId,
+        Guid fromStatusId,
+        Guid toStatusId,
+        IReadOnlySet<string> permissionCodes,
+        CancellationToken cancellationToken = default);
+}
+
+public sealed record TransitionDecisionDto(
+    bool Allowed,
+    string? ReasonCode,
+    string? Message,
+    int? CurrentWip,
+    int? WipLimit);
+```
+
+## 9. Kiến trúc dữ liệu MySQL 55 bảng
+
+### 9.1 Danh mục theo module logic và module vật lý
+
+| Module logic | Owner | Module vật lý | Bảng |
+|---|---|---|---|
+| M1 Identity & Access | A | IdentityExperience | `User`, `UserProfile`, `ExternalLogin`, `OtpCode`, `RefreshToken`, `Role`, `Permission`, `RolePermission`, `UserRole`, `SkillCatalog`, `UserSkill` |
+| M2 Organization & Project | B | Planning | `Organization`, `Project`, `ProjectComponent`, `ProjectVersion` |
+| M3 Workflow & Board | B | Planning | `WorkflowStatus`, `WorkflowTransition`, `IssueType`, `Priority`, `Board`, `BoardColumn` |
+| M4 Sprint & Backlog | B | Planning | `Sprint`, `SprintSnapshot`, `SprintMemberCapacity` |
+| M5 Issue Tracking | C | DeliveryIntelligence | `Issue`, `IssueLink`, `IssueWatcher`, `Comment`, `Attachment`, `ActivityLog`, `IssueStatusHistory`, `IssueAssignmentHistory`, `Label`, `IssueLabel`, `IssueComponentLink`, `IssueVersionLink`, `IssueRequiredSkill`, `AcceptanceCriteria` |
+| M6 AI Core | A/C | IdentityExperience hiện tại | `AiModel`, `AiPromptTemplate` |
+| M7 AI Breakdown | A | IdentityExperience | `AiGenerationLog`, `AiSuggestedTask` |
+| M8 AI Assignment | B | Planning | `UserWorkloadSnapshot`, `UserPerformanceMetric`, `AiAssignmentRun`, `AiAssignmentCandidate`, `AiAssignmentDecision` |
+| M9 AI DataOps | C | DeliveryIntelligence | `AiDataset`, `AiDatasetVersion`, `AiDatasetSample`, `AiDataCleaningRule`, `AiDataQualityFlag`, `AiTrainingRun`, `AiEvaluationResult` |
+| M10 Notification | A | IdentityExperience | `Notification` |
+
+Tổng vật lý: IdentityExperience 16, Planning 18, DeliveryIntelligence 21 = **55 bảng**.
+
+### 9.2 View và trigger
+
+| Loại | Tên | Ý nghĩa |
+|---|---|---|
+| View | `vw_UserActiveWorkload` | Workload đang mở theo user; read-model ngoại lệ join xuyên module |
+| View | `vw_SprintVelocity` | Velocity/current sprint scope; cần snapshot lúc Start nếu muốn “commitment” lịch sử |
+| View | `vw_AiBreakdownQuality` | Keep/edit/reject; `AvgLatencyMs` hiện có thể bị weight theo số suggested task, cần sửa trước khi dùng làm SLO |
+| View | `vw_AiAssignmentAccuracy` | Mức chấp nhận/override và outcome assignment |
+| Trigger | `TRG_Issue_NoSelfParent_Insert` | Không cho issue tự làm parent khi insert |
+| Trigger | `TRG_Issue_NoSelfParent_Update` | Không cho issue tự làm parent khi update |
+
+### 9.3 Ràng buộc quan trọng
+
+- `Project(OrgId, ProjectKey)` unique; ProjectKey theo regex chữ hoa/số.
+- `Issue(ProjectId, IssueNumber)` unique; cấp số phải atomic.
+- `Sprint.ActiveGuard` generated + unique bảo đảm một Active sprint/project ngay cả khi concurrent.
+- `UserRole.ScopeKey` xử lý uniqueness khi `ScopeId` null ở System scope.
+- Workflow transition unique, không self-transition; status/category có check.
+- `AiDatasetSample(DatasetVersionId, ContentHash)` chặn trùng; schema có field freeze/checksum/seed nhưng **chưa có trigger/constraint** ngăn sửa sample sau freeze hoặc buộc `Approved => IsPiiRedacted=1`. Application service và integration test phải cưỡng chế, hoặc bổ sung DB guard được review.
+- `AiAssignmentCandidate.FeatureSnapshot` lưu dữ liệu tại thời điểm gợi ý. Nó chỉ chống leakage khi payload có `asOf`, `featureSchemaVersion`, mọi metric dùng cutoff `<= asOf`, và training chỉ đọc snapshot bất biến; bản thân cột JSON không tự bảo đảm điều đó.
+- Decision lưu suggested, final, override reason và outcome sau hoàn thành.
+
+### 9.4 Quy tắc XMOD
+
+`XMOD` là GUID tham chiếu logic sang module khác: có index, không FK vật lý, được validate qua contract. Ví dụ `Issue.ProjectId`, `Issue.AssigneeId`, `Sprint.ProjectId`, `Notification.UserId`.
+
+[VERIFIED] Script `scripts/validate-xmod-indexes.ps1` đọc DDL hiện tại và báo 64 cột XMOD, trong đó 32 cột chưa là cột đầu của một index sử dụng được. Danh sách cần review:
+
+```text
+UserRole.ScopeId
+ProjectComponent.LeadUserId, ProjectComponent.DefaultSkillId
+SprintMemberCapacity.UserId
+Issue.StatusId, Issue.IssueTypeId, Issue.PriorityId
+IssueLink.CreatedBy, Attachment.UploadedBy
+IssueStatusHistory.FromStatusId, ToStatusId, ChangedBy
+IssueAssignmentHistory.FromAssigneeId, AssignedBy, AiCandidateId
+AcceptanceCriteria.MetBy, AcceptanceCriteria.AiGenerationLogId
+AiModel.TrainingRunId, AiPromptTemplate.CreatedBy
+AiSuggestedTask.ReviewedBy
+AiAssignmentRun.SprintId, AiAssignmentRun.RequestedBy
+AiAssignmentCandidate.CandidateUserId
+AiAssignmentDecision.SuggestedUserId, FinalUserId, DecidedBy
+AiDataset.CreatedBy, AiDatasetSample.SourceRefId, ReviewedBy
+AiDataQualityFlag.ResolvedBy, AiTrainingRun.CreatedBy
+Notification.ActorId
+```
+
+[RECOMMENDATION] Không thêm máy móc 32 index. Với từng cột, viết query pattern, dùng `EXPLAIN`, kiểm cardinality/write cost, rồi thêm index left-prefix khi truy vấn độc lập thực sự cần. Tuy nhiên rule tài liệu đang nói “mọi XMOD có index”; hoặc DDL phải đáp ứng, hoặc rule phải được sửa rõ thành “có index phù hợp với query pattern”.
+
+Luôn truyền DDL trong repo vì default hiện tại của script có thể tìm nhầm bản `projectmgmt_schema_mysql.sql` ngoài repo và cho kết quả khác:
+
+```powershell
+& .\scripts\validate-xmod-indexes.ps1 `
+  -DdlPath .\docs\projectmgmt_schema_mysql_optimized.sql
+```
+
+Các contract validate XMOD hiện còn thiếu một phần; câu “validate qua contract” là kiến trúc đích, không phải bảo đảm đầy đủ của source hiện tại.
+
+### 9.5 DbContext và migration
+
+| DbContext | Migration history hiện tại | Sở hữu |
+|---|---|---|
+| `IdentityExperienceDbContext` | `__EFMigrationsHistory_IdentityExperience` | 16 bảng |
+| `PlanningDbContext` | `__EFMigrationsHistory_Planning` | 18 bảng |
+| `DeliveryIntelligenceDbContext` | `__EFMigrationsHistory_DeliveryIntelligence` | 21 bảng + 4 view |
+
+- Không gọi `EnsureCreated`, `EnsureDeleted` hoặc tự `Migrate()` khi app start.
+- Một migration chỉ sửa bảng thuộc context đó.
+- Trước merge: generate SQL idempotent, review DDL, backup/restore rehearsal trên TEST.
+- Production: backup → maintenance/readiness gate → migration được duyệt → smoke → rollback app; thay đổi DB phá hủy phải có forward-fix/restore plan riêng.
+
+### 9.6 An toàn DDL và Docker
+
+[VERIFIED] DDL tối ưu hiện có `DROP DATABASE IF EXISTS projectmgmt`. `docker-compose.yml` mount nó vào `/docker-entrypoint-initdb.d` cho MySQL container riêng. Script init chỉ nên dùng với **volume Docker mới và cô lập**; tuyệt đối không chạy file này thủ công trên instance MySQL đang có dữ liệu. `docker compose down -v` sẽ xóa volume local và phải được xem là thao tác phá hủy.
+
+## 10. Backend và API
+
+### 10.1 Nền tảng kỹ thuật
+
+- Target framework: `net10.0`.
+- ASP.NET Core Controllers, Swagger/OpenAPI, ProblemDetails định hướng.
+- EF Core + Pomelo MySQL; server version mặc định `8.0.46`.
+- FluentValidation packages có trong Application projects.
+- `Result`/`Result<T>` và Error trong Contracts/Core.
+- BCrypt package đã có nhưng auth use case chưa hoàn thiện.
+
+### 10.2 API hiện có
+
+[VERIFIED] Host có khoảng 25 controller actions và 2 health endpoints:
+
+| Nhóm | Endpoint chính | Trạng thái |
+|---|---|---|
+| Account | `POST /api/Account/Login`, `Register`, `PostOtp` | Có controller nhưng chưa production-ready |
+| Users | `GET /api/users`, display, skills query | Dữ liệu/service còn giả lập |
+| Organizations | `GET/POST /api/organizations` | Có implementation |
+| Projects | list/get/create/update/delete | Có implementation chính |
+| Project config | issue-types, statuses, workflow transitions, boards | Có implementation chính |
+| Workflow | update/delete transition | Có implementation |
+| Boards | columns list/add/reorder/delete | Có implementation |
+| Health | `/health`, `/health/live` | Có |
+
+### 10.3 Chuẩn endpoint mục tiêu
+
+- URL danh từ số nhiều, status code đúng, lỗi theo RFC ProblemDetails.
+- Input từ body cho command phức tạp; không truyền credential qua query string.
+- Validation trả field errors; conflict trả 409; permission trả 403; chưa đăng nhập trả 401.
+- Pagination cursor/page cho issue, activity, notification, dataset sample.
+- ETag/concurrency token hoặc optimistic concurrency cho board/order/config dễ xung đột.
+- Idempotency key cho request AI và command có thể retry.
+- Mọi endpoint thay đổi dữ liệu ghi actor, UTC timestamp, correlation ID.
+
+### 10.4 Backlog API bắt buộc
+
+| Vùng | API cần có trước v1 |
+|---|---|
+| Auth | register, login, refresh, revoke/logout, OTP request/verify, current user; external callback là stretch |
+| RBAC | role/permission query, assign/revoke scoped role, permission evaluation |
+| Profile | get/update profile, skill CRUD/verify |
+| Project | component/version/member/config CRUD |
+| Sprint | create/update/start/complete, capacity, move issues, snapshots |
+| Issue | CRUD, hierarchy, transition, rank, assignee, comment, attachment, watcher, label, AC, history |
+| Notification | inbox, unread count, mark read/all read, SignalR hub |
+| AI 1 | request/status/result/apply/reject; prompt/model version visible |
+| AI 2 | request/status/candidates/decision/outcome; explanation visible |
+| DataOps | dataset/version/sample/rule/flag/freeze/export/train/evaluate |
+| Report | workload, velocity, burndown, AI quality/accuracy |
+
+Google external login là **stretch scope** của v1: chỉ đưa `external callback` vào release gate nếu auth email/password, refresh rotation và scoped authorization đã ổn định. Nó không chặn vertical slice P0.
+
+### 10.5 Transaction và consistency
+
+- Tạo Project + default config là một transaction trong Planning. `Project.LeadUserId` cấp quyền owner ngầm qua policy/lookup ở v1; không grant `UserRole` xuyên module trong cùng command để tránh trạng thái “project đã commit nhưng role grant thất bại”. Việc gán thêm member/role là command Identity riêng, retry/idempotent và có audit.
+- Cấp IssueNumber phải dùng atomic update/lock trong Planning rồi Delivery tạo Issue; thiết kế retry khi xung đột.
+- Transition Issue: Delivery đọc current state → gọi workflow validator → cập nhật Issue/history trong một transaction → phát notification sau commit.
+- AI apply: chỉ tạo sub-task qua `IIssueService`; generation log và apply count phải nhất quán/idempotent.
+- Cross-module event có thể dispatch in-process sau commit. Nếu cần retry bền vững, thêm outbox nhỏ theo module; không cần triển khai event sourcing.
+
+### 10.6 Vertical slice P0 chính thức — Auth thật đến Project thật
+
+Đây là slice đầu tiên cả nhóm dùng làm mẫu. Owner chính: **A** cho Auth, **B** cho Project, **C** review contract/integration test. Không đưa Google OAuth, SignalR hoặc AI vào PR này.
+
+#### API contract v1
+
+| Method/path | Request | Success | Lỗi chính |
+|---|---|---|---|
+| `POST /api/auth/login` | `{ email, password }` | 200 `{ accessToken, expiresAt, user }`; refresh token được set bằng cookie HttpOnly | 400 validation; 401 generic invalid credentials; 429 rate limit |
+| `POST /api/auth/refresh` | Không body; refresh cookie | 200 access token mới + rotate refresh cookie | 401 expired/revoked/reuse; reuse revoke cả token family |
+| `POST /api/auth/logout` | Không body | 204, revoke refresh token/family hiện tại | 401 nếu session không hợp lệ |
+| `GET /api/auth/me` | Bearer access token | 200 user/profile/scope summary tối thiểu | 401 token invalid/stamp stale |
+| `GET /api/projects` | Bearer token | 200 danh sách project caller được xem | 401/403 |
+| `POST /api/projects` | `{ orgId, projectKey, name, description?, leadUserId }` | 201 + `Location` + Project DTO; default config được seed atomic | 400; 403 `project.create`; 409 duplicate key |
+
+Quyết định token v1:
+
+- Access JWT TTL 10 phút, issuer/audience từ config, ký HS256 bằng key ngẫu nhiên tối thiểu 256 bit nằm ngoài Git; hỗ trợ current+previous key khi rotate.
+- Claims tối thiểu: `sub`, `jti`, `security_stamp`, `iat`, `exp`; không nhồi toàn bộ permission dài hạn vào token.
+- Access token giữ trong memory của SPA. Refresh token ngẫu nhiên chỉ nằm trong cookie `HttpOnly`, `Secure` trên TEST/PROD, `SameSite=Strict`, path `/api/auth`; lưu hash + family + expiry trong DB.
+- Production phục vụ SPA/API cùng site. Nếu sau này tách cross-site, phải bổ sung CSRF token và CORS credentials có allowlist; không đổi `SameSite=None` một cách đơn lẻ.
+- Absolute refresh lifetime 14 ngày, rotate mỗi lần dùng; reuse/revocation/security stamp change làm session mất hiệu lực.
+
+#### File bắt đầu và chiến lược tương thích
+
+| Owner | Điểm chạm |
+|---|---|
+| A | `ProjectMgmt.Solution/Program.cs`, Account/Auth controller, `IdentityExperience.Application` account service/DTO, Identity repository, frontend auth/token store/interceptor |
+| B | Projects controller, `Planning` project service/repository/DTO, frontend project service/pages |
+| Shared | `ProjectMgmt.Contracts/Identity`, `ProjectMgmt.Contracts/Planning`, Result/ProblemDetails mapping, integration test fixture |
+
+Endpoint cũ `/api/Account/*` được giữ tạm tối đa một sprint với deprecation note hoặc chuyển thẳng nếu chưa có consumer thật; không duy trì hai implementation auth. Project API hiện có được giữ URL, bổ sung authorization và contract tests.
+
+#### Acceptance Criteria
+
+1. User hợp lệ login được; sai email/password luôn trả thông báo generic; không log credential/token.
+2. Refresh rotate thành công; token cũ reuse làm revoke family; logout làm refresh không dùng lại được.
+3. `/api/auth/me` và Project endpoints trả 401 khi thiếu/sai token; Project create trả 403 nếu sai scope.
+4. Create Project tạo default workflow/board trong một transaction và không tạo bản ghi dở khi seed lỗi.
+5. Angular không còn admin mặc định, `mock-jwt-token` hoặc OTP hard-code trên luồng này; reload dùng refresh cookie.
+6. Backend unit + integration, frontend service/component và một E2E smoke pass; Swagger mô tả request/response/error.
+7. Không sửa DB thật bằng `EnsureCreated/Migrate` lúc app start; test dùng database cô lập.
+
+## 11. Frontend Angular
+
+### 11.1 Stack và cấu trúc
+
+- Angular 21 standalone components, Router, Signals, RxJS 7.8.
+- SignalR client 10, Angular CDK, GSAP 3.15 và Three.js 0.186.
+- Environment development: API `http://localhost:5083/api`, hub cùng host.
+- Lazy routes cho auth, dashboard, profile, RBAC, AI governance, project settings, backlog, board, task list, roadmap, reports, issue detail, notification, DataOps.
+
+### 11.2 Route inventory và integration target
+
+| Route | UI hiện tại | API/contract cần nối |
+|---|---|---|
+| `/auth` | Màn hình hoàn chỉnh về giao diện | Auth/OTP/refresh; bỏ mã OTP `123456` và mock token |
+| `/for-you` | Dashboard | My issues, notification, sprint/project summary |
+| `/project/summary`, `/project/members` | Có UI | Project/member/scoped role API |
+| `/profile` | Có UI mock | Current user/profile/skill API |
+| `/admin/identity` | Có UI mock | Role/permission/scoped assignment API |
+| `/admin/ai-governance` | Có UI | Model/prompt version/activation/audit API |
+| `/projects*` | Có UI | Project CRUD/settings API thật |
+| `/backlog` | Có UI phong phú | Issue/Sprint/read/move/rank API |
+| `/board` | Có UI phong phú | Issue query/transition/WIP/SignalR |
+| `/task-list`, `/roadmap`, `/reports` | Có UI | Query/report API thật |
+| `/issues/:id` | Placeholder | Issue detail/collaboration/history |
+| `/notifications` | Có UI mock | Inbox/read/SignalR |
+| `/ai-dataops` | Placeholder | Dataset/training/evaluation API |
+
+### 11.3 Khoảng trống tích hợp
+
+[VERIFIED] `project-management.service.ts` dùng Signals và `of(...)`, chưa gọi HttpClient dù có import. `identity.service.ts` lưu admin mặc định, mock token và OTP cố định. Routes chưa gắn auth/permission guard. Realtime service có client connection nhưng backend chưa map hub.
+
+[RECOMMENDATION] Không rewrite UI. Thay service mock theo từng vertical slice:
+
+1. Định nghĩa API DTO và adapter mapping sang view model.
+2. Giữ signal store hiện có, thay nguồn dữ liệu bằng HttpClient.
+3. Thêm loading/error/empty/retry state.
+4. Thêm auth interceptor và refresh single-flight.
+5. Gắn `CanMatch`/guard theo permission sau khi Auth thật pass.
+6. Kết nối SignalR sau khi REST baseline ổn định; event chỉ invalidates/refetch hoặc patch idempotent.
+
+### 11.4 Chuẩn UX bắt buộc
+
+- Keyboard/focus/ARIA cho dialog, menu, drag-and-drop và board.
+- `prefers-reduced-motion` cho GSAP/Three.js; scene trang trí không được chặn nghiệp vụ.
+- Responsive ở 390 px, tablet và desktop; không giấu command quan trọng.
+- Mọi AI output phải hiển thị trạng thái, model/prompt version, warning và hành động người dùng.
+- Không optimistic update cho transition/assignment nếu server chưa xác nhận business rule.
+
+## 12. Hai hệ AI và vòng đời dữ liệu
+
+### 12.1 Phân biệt chính xác hai AI
+
+| Thuộc tính | AI 1 — Requirement Intelligence / Breakdown | AI 2 — Planning Intelligence / Assignment |
+|---|---|---|
+| Câu hỏi | “Yêu cầu này cần những task và AC nào?” | “Ai phù hợp nhất để làm issue này và vì sao?” |
+| Input | title, description, issue type, project context, constraint | issue feature, required skills, candidate profile, load, capacity, history |
+| Output | JSON danh sách sub-task + mô tả + AC + skill/estimate gợi ý | danh sách candidate đã rank + component score + explanation |
+| Kỹ thuật đầu tiên | Prompt + JSON Schema + local instruct LLM; RAG chỉ thêm sau khi có corpus/isolation/evaluation | Deterministic weighted ranker + constraint filter |
+| Kỹ thuật nâng cấp | Project-scoped RAG, QLoRA/fine-tune, constrained decoding, embedding dedup | Learning-to-rank/GBDT, OR-Tools/NSGA-II, calibrated estimator |
+| Người quyết định | PO/Tech Lead/PM review rồi Apply | PM/SM accept/override/reject |
+| Dữ liệu phản hồi | raw output, edited output, keep/edit/reject | features tại thời điểm chạy, rank, final user, outcome |
+| Owner | A; C quản trị dataset/model | B; C quản trị dataset/model |
+
+Story Point estimation và predictive late-risk có thể là submodel của **Planning Intelligence** ở giai đoạn sau. Process mining là năng lực phân tích quy trình, không nên xuất hiện như “AI thứ ba” đối với người dùng v1.
+
+### 12.2 Kiến trúc runtime đề xuất
+
+```text
+ai-services/
+├─ requirement-intelligence/
+│  ├─ app/                 # FastAPI, schema, prompt/RAG, health
+│  ├─ evaluation/
+│  ├─ training/            # notebook/script QLoRA, không chạy trong API
+│  └─ tests/
+└─ planning-intelligence/
+   ├─ app/                 # ranker/optimizer API, health
+   ├─ evaluation/
+   ├─ training/
+   └─ tests/
+```
+
+Hai service:
+
+- Là peer với source .NET, không đặt trong Domain/Application.
+- Không có quyền truy cập MySQL; .NET gửi DTO tối thiểu.
+- Có model/version endpoint, health/readiness, timeout và request ID.
+- Image/container/model artifact được pin version; không tự kéo “latest” khi deploy.
+- Có contract test JSON giữa .NET và Python.
+
+### 12.3 Luồng AI 1 — Breakdown
+
+```mermaid
+sequenceDiagram
+  actor U as PO/PM/Tech Lead
+  participant API as .NET API
+  participant DB as MySQL
+  participant JOB as Background Worker
+  participant AI as Breakdown Service
+  participant ISSUE as Issue Contract
+  U->>API: Request breakdown(issueId, options)
+  API->>DB: AiGenerationLog = Pending
+  API-->>U: 202 + generationId
+  JOB->>DB: Pending -> Processing
+  JOB->>AI: Structured input + schema + versions
+  AI-->>JOB: JSON subTasks
+  JOB->>JOB: Validate/sanitize/schema check
+  JOB->>DB: SuggestedTasks + raw response + Completed
+  API-->>U: SignalR/poll completed
+  U->>API: Edit / Reject / Apply
+  API->>ISSUE: CreateIssueAsync for accepted tasks
+  API->>DB: user action + edited content + applied count
+```
+
+#### Output contract tối thiểu
+
+```json
+{
+  "schemaVersion": "1.0",
+  "subTasks": [
+    {
+      "summary": "Tạo endpoint refresh token",
+      "description": "Rotate refresh token và vô hiệu token cũ.",
+      "acceptanceCriteria": [
+        "Token cũ không dùng lại được",
+        "Concurrent refresh chỉ một request thành công"
+      ],
+      "requiredSkills": ["dotnet", "security"],
+      "suggestedStoryPoints": 5
+    }
+  ]
+}
+```
+
+#### Guardrail
+
+- Giới hạn kích thước input/output, timeout, retry có backoff và circuit breaker.
+- JSON phải parse và match schema trước khi lưu thành suggested task.
+- Không để prompt injection lấy secret/system prompt; project context phải được delimit và sanitize.
+- Không tự apply; yêu cầu permission `ai.breakdown.request` và `ai.breakdown.apply` tách biệt.
+- Log raw response được bảo vệ và có retention; UI dùng dữ liệu đã sanitize.
+
+#### Chỉ số
+
+- `json_valid_rate`, `schema_match_rate`.
+- `keep_rate`, `edit_rate`, `reject_rate`, average edit distance.
+- AC coverage/testability do reviewer chấm.
+- Duplicate/hallucination rate.
+- p50/p95 latency, timeout/error rate, token/compute cost.
+
+### 12.4 Luồng AI 2 — Assignment
+
+AI Assignment không nên bắt đầu bằng LLM. Bản v1 dùng filter constraint + ranking tái lập và giải thích được:
+
+```text
+TotalScore = 0.40 × LoadBalanceScore
+           + 0.30 × SkillMatchScore
+           + 0.20 × HistoryScore
+           + 0.10 × CapacityScore
+```
+
+Quy tắc:
+
+1. Loại candidate không có quyền/project membership hoặc unavailable.
+2. Snapshot feature vào `AiAssignmentCandidate.FeatureSnapshot`.
+3. Snapshot phải có `asOf`, `featureSchemaVersion`, nguồn/cutoff của metric; không dùng dữ liệu phát sinh sau run.
+4. Normalize component score về cùng thang, ghi weight/version/strategy.
+5. Cold-start dùng profile/skill/seniority thay cho lịch sử rỗng.
+6. Rank top N, sinh explanation từ score thật; không bịa explanation bằng LLM.
+7. PM/SM accept/override/reject; lưu lý do và final user.
+8. Khi issue Done/Reassigned, cập nhật cycle time/on-time/reassigned outcome.
+
+Acceptance/override phản ánh quyết định của PM, không phải ground truth tuyệt đối về “người tốt nhất”; outcome cũng chỉ quan sát được cho người thực sự được giao, không có counterfactual cho candidate còn lại. Vì vậy:
+
+- Dùng acceptance/override để đo mức hệ thống mô phỏng/chấp nhận được theo quyết định PM.
+- Chỉ dùng Precision@1/NDCG@3 khi relevance label đã được curated và định nghĩa rõ.
+- Tách metric “agreement with PM” khỏi “business outcome” như workload gap, reassignment, cycle time và on-time.
+- Báo cáo theo project/team/time window để theo dõi bias/fairness; không xếp hạng con người công khai từ dữ liệu ít.
+
+### 12.5 DataOps không phải AI thứ ba
+
+DataOps là control plane dùng chung:
+
+```mermaid
+flowchart LR
+  FB1[Breakdown feedback] --> RAW[Raw samples]
+  FB2[Assignment decision/outcome] --> RAW
+  RAW --> CLEAN[PII redaction + rules + dedup]
+  CLEAN --> REVIEW[Human review]
+  REVIEW --> FREEZE[Dataset version + seed + checksum]
+  FREEZE --> TRAIN[Training run]
+  TRAIN --> EVAL[Fixed test set + metrics]
+  EVAL --> GATE{Better and safe?}
+  GATE -->|Yes| REG[Model registry / activation]
+  GATE -->|No| REJECT[Keep baseline]
+```
+
+Yêu cầu tái lập:
+
+- Freeze version, split seed, SHA-256 checksum, code/model/prompt version. Application hiện phải enforce freeze/PII vì DB chưa cưỡng chế đầy đủ.
+- Dedup/near-dedup trước khi split; group theo `IssueId`/generation/run/project và tách theo thời gian để sibling không rơi vào nhiều tập.
+- Dùng train để fit, validation để tune/chọn prompt/model; locked holdout test chỉ mở ở release gate, không lặp đi lặp lại để chọn model.
+- PII redaction phải pass trước `Approved`, có integration test chặn update/delete sample thuộc frozen version.
+- Baseline prompt/rule và candidate model được đo trên cùng locked holdout tại release gate.
+- Model activation có canary/rollback; dữ liệu production mới không tự train lại.
+- “Huấn luyện tiếp không từ đầu” là continued fine-tuning/parameter-efficient fine-tuning; với LLM ưu tiên LoRA/QLoRA, nhưng chỉ sau khi baseline chứng minh cần thiết.
+
+Nếu bật RAG, phải có contract riêng cho corpus, chunk/index version, provenance, freshness, permission filter theo project và test chống cross-project retrieval. Trước khi đủ các điều kiện đó, dùng prompt + context DTO tối thiểu, không quảng bá RAG là năng lực đã có.
+
+#### Data dictionary nhãn AI v1
+
+| Trường | Giá trị/kiểu | Ý nghĩa và cách dùng |
+|---|---|---|
+| `breakdownUserAction` | `Kept`, `Edited`, `Rejected`, `Applied` | Hành động trên từng suggested task; `Applied` không đồng nghĩa nội dung không bị sửa |
+| `breakdownEditDistance` | số chuẩn hóa 0..1 | Mức thay đổi original→final; dùng kèm action, không dùng đơn độc làm quality |
+| `assignmentDecision` | `Accepted`, `Overridden`, `Rejected` | Agreement với đề xuất tại thời điểm PM quyết định |
+| `overrideReasonCode` | enum versioned + note tùy chọn | Skill mismatch, overload, unavailable, mentoring, priority/context khác |
+| `relevanceGrade` | 0..3, curated | Chỉ dùng cho Precision/NDCG khi ít nhất hai reviewer hoặc adjudication đã chấm |
+| `businessOutcome` | cycle time, on-time, reassigned | Kết quả của **final assignee**, không phải counterfactual cho candidate khác |
+| `asOf` | UTC timestamp | Cutoff feature; mọi source metric phải có thời điểm `<= asOf` |
+| `labelSchemaVersion` | semantic version | Bắt buộc để dataset/model biết định nghĩa label nào đã dùng |
+
+Định nghĩa này phải được version hóa trong code/schema dataset; thay enum/meaning tạo dataset version mới, không reinterpret dữ liệu cũ im lặng.
+
+## 13. Các luồng nghiệp vụ đầu-cuối
+
+### 13.1 Tạo project sẵn sàng sử dụng
+
+1. User có `project.create` tại Organization.
+2. Validate Organization, ProjectKey, name.
+3. Tạo Project và seed issue types, priorities, workflow statuses/transitions, board/columns trong transaction Planning.
+4. `LeadUserId` được policy coi là owner ngầm ở v1; role/member bổ sung dùng Identity command riêng, idempotent và audit được.
+5. Trả Project DTO; frontend chuyển tới settings/summary.
+6. Integration test xác nhận rollback toàn bộ nếu seed lỗi.
+
+### 13.2 Tạo issue
+
+1. Delivery nhận command và current user.
+2. Dùng Project lookup kiểm project, issue type, priority và initial status.
+3. Dùng IssueNumberGenerator cấp số atomic.
+4. Validate parent/epic hierarchy và assignee qua contracts.
+5. Lưu Issue + AC/skills/history trong transaction Delivery.
+6. Gửi notification sau commit; trả key dạng `PROJ-123`.
+
+### 13.3 Chuyển trạng thái trên Board
+
+1. UI gửi issueId, targetStatusId, expected version.
+2. Delivery gọi WorkflowValidation với permissions và board context.
+3. Planning kiểm transition, required permission, WIP.
+4. Delivery cập nhật status + history atomic.
+5. Notification/event phát sau commit; UI patch/refetch.
+6. Concurrent/stale request trả 409 thay vì ghi đè im lặng.
+
+### 13.4 Sprint lifecycle
+
+- Planned → Active: kiểm dates, capacity, permission; DB `ActiveGuard` chặn concurrent active sprint.
+- Move backlog: Planning gọi `IIssueSprintService`; không update table Issue trực tiếp.
+- Snapshot: job UTC theo ngày, idempotent `(SprintId, SnapshotDate)`.
+- Complete: chốt snapshot, xử lý issue chưa Done theo lựa chọn rõ, ghi actual completion.
+
+### 13.5 Chuỗi hai AI
+
+Breakdown → người dùng edit/apply → Issue/sub-task thật → feature snapshot → Assignment rank → PM quyết định → issue thực thi → outcome → DataOps. Không gọi Assignment trên suggested task chưa Apply; không đưa raw unreviewed breakdown vào approved dataset.
+
+## 14. Bảo mật và phân quyền
+
+### 14.1 Hiện trạng rủi ro
+
+- Không có authentication middleware nhưng có API thay đổi dữ liệu.
+- Chưa thấy `[Authorize]`/policy trên controller.
+- Frontend có admin session/token mock và auth guard chưa áp dụng.
+- Login action có lỗi async và binding không phù hợp credential.
+- OTP/register/refresh chưa có bảo vệ replay/brute-force hoàn chỉnh.
+- CORS có trong appsettings nhưng chưa được wiring trong `Program.cs`.
+- Realtime chưa có user/project authorization.
+
+### 14.2 Mô hình đích
+
+| Lớp | Yêu cầu |
+|---|---|
+| Authentication | JWT access ngắn hạn; refresh token hash + rotation + reuse detection; external login theo provider key |
+| Authorization | Permission code `group.action`; role gán theo System/Organization/Project; policy kiểm resource scope |
+| OTP | Random CSPRNG, chỉ lưu hash, TTL, purpose, attempt limit, resend cooldown, one-time use |
+| Password | BCrypt/Argon2 cấu hình cost, password policy hợp lý, generic error chống user enumeration |
+| API | HTTPS, rate limit, request size, validation, ProblemDetails không lộ stack/secret |
+| SignalR | Access token, user identifier server-side, chỉ join group sau permission check |
+| File | MIME/signature/size scan, tên file sinh lại, storage ngoài web root, authorization khi download |
+| AI | Prompt injection defense, PII minimization, output schema, permission tách request/apply, audit |
+| Secret | User Secrets/CI environment/file staging ACL; rotation và không log |
+| Audit | Login, role grant, workflow config, sprint state, issue transition, AI apply/override, model activation |
+
+### 14.3 Permission catalog tối thiểu
+
+```text
+organization.read, organization.manage
+project.read, project.create, project.manage, project.member.manage
+workflow.read, workflow.manage
+sprint.read, sprint.manage, sprint.start, sprint.complete
+issue.read, issue.create, issue.update, issue.assign, issue.transition, issue.delete
+comment.create, attachment.upload
+notification.read
+ai.breakdown.request, ai.breakdown.review, ai.breakdown.apply
+ai.assignment.request, ai.assignment.decide
+ai.dataset.manage, ai.training.run, ai.model.activate
+report.read
+```
+
+### 14.4 Threat-driven test bắt buộc
+
+- Access/refresh token expired, forged, reuse, revoked, security stamp changed.
+- Cross-project IDOR: user Project A không đọc/sửa ID Project B.
+- Role scope escalation và mass assignment.
+- OTP replay/brute force/resend abuse.
+- Unauthorized SignalR group join.
+- Attachment path traversal/polyglot/oversize.
+- Prompt injection và JSON output vượt schema.
+- AI apply/assignment replay/idempotency.
+
+## 15. Hiệu năng, quan sát và độ tin cậy
+
+### 15.1 Mục tiêu phi chức năng đề xuất
+
+| Chỉ số | Mục tiêu v1 |
+|---|---|
+| REST read p95 | < 400 ms trên TEST data mục tiêu |
+| REST command p95 | < 800 ms, không tính AI |
+| Board initial load | < 2 s với 500 issue/project sau pagination |
+| AI Breakdown p95 | < 60 s hoặc timeout có trạng thái rõ |
+| AI Assignment p95 | < 3 s cho candidate set của một team nhỏ |
+| Availability | 99.5% cho đồ án/demo; health/readiness chính xác |
+| Error rate | < 1% request không do validation/user |
+| Recovery | Deploy rollback ứng dụng < 10 phút trên TEST |
+
+### 15.2 Dữ liệu và query
+
+- Tránh `Include` graph lớn; projection DTO và `AsNoTracking` cho read.
+- Pagination cho issue/activity/notification/sample.
+- Query board theo Project/Sprint/Status và select field cần thiết.
+- Dùng index theo query plan; không thêm index đơn lẻ cho mọi GUID mà không đo.
+- GUID `CHAR(36)` chấp nhận được ở quy mô đồ án; chỉ cân nhắc `BINARY(16)` sau benchmark và migration plan.
+- Không query reporting view trong command transaction.
+- RankOrder cần job rebalance khi khoảng cách quá nhỏ, có lock/project scope.
+
+### 15.3 Observability
+
+Mỗi log phải có `TraceId`, `CorrelationId`, `UserId` đã pseudonymize nếu cần, `ProjectId`, `Module`, `Operation`, duration và result code. Không log password, token, OTP, connection string, raw attachment hoặc raw prompt chứa PII.
+
+Metrics tối thiểu:
+
+- HTTP request duration/error theo route/status.
+- DB command duration, pool saturation, retry/deadlock.
+- Job queue depth, retry, age, failure.
+- SignalR connection/reconnect/message error.
+- AI latency/error/schema failure theo model/prompt version.
+- Business: active sprint, transition rejection, breakdown apply, assignment override.
+
+## 16. CI/CD, môi trường và vận hành
+
+### 16.1 Pipeline hiện tại
+
+```mermaid
+flowchart LR
+  PR[Pull request → develop] --> B1[Backend restore/build/test]
+  PR --> F1[Frontend npm ci/lint/test/build]
+  PR --> C1[Compose validate + container build]
+  B1 --> G[CI status]
+  F1 --> G
+  C1 --> G
+  G -. required only if branch protection enforces it .-> M[Merge develop]
+  M --> P[Push develop]
+  P --> A[Deploy workflow builds artifacts]
+  MAN[Manual dispatch] --> A
+  A --> R[Self-hosted Windows runner]
+  R --> BK[Backup current app]
+  BK --> IIS[Deploy IIS API + Web]
+  IIS --> H[Health check]
+  H -->|Fail| RB[Rollback app backup]
+  H -->|Pass| OK[TEST ready]
+```
+
+### 16.2 CI đã có
+
+- Trigger PR vào `develop` hoặc manual.
+- Ubuntu + .NET 10: restore/build/test.
+- Node 24: `npm ci`, lint, unit test, production build.
+- Docker Compose config validation và Buildx build API/web image.
+- Chưa có dependency/secret/container scan, architecture/integration/E2E gate riêng.
+- Branch protection/required checks là cấu hình GitHub ngoài repo và **chưa được xác minh** trong audit này. Vì vậy không được mặc định rằng CI xanh là điều kiện kỹ thuật bắt buộc để merge.
+
+### 16.3 CD TEST đã có
+
+- Trigger push `develop` hoặc manual; concurrency không cancel deploy đang chạy.
+- Build artifact backend/frontend trên Ubuntu.
+- Self-hosted Windows runner có tag `projectmgmt-test`.
+- `deploy-test.ps1` kiểm path, backup, `app_offline`, app pool, copy artifact/config, health check, rollback và giữ 5 backup.
+- Config staging ở ngoài Git; connection string yêu cầu TLS.
+- `deploy-test.yml` là workflow độc lập, không có `needs`/workflow dependency với `ci.yml`. Direct push hoặc manual dispatch có thể deploy dù CI PR không chạy/không xanh; phải cấu hình branch protection hoặc bổ sung gate/check artifact trước production hóa.
+
+### 16.4 Khoảng trống CI/CD
+
+- Frontend test hiện làm pipeline đỏ vì 2 unhandled error dù assertions pass.
+- Backend chỉ có 2 unit test; chưa đủ để gate release.
+- Deploy chưa có migration artifact/gate, backup DB hoặc DB rollback/forward-fix.
+- Path IIS/backup/log đang hard-code cho runner cụ thể; nên chuyển sang environment variables/vars có validate.
+- Artifact build chưa ký/SBOM/scan; image chưa push immutable registry trong pipeline này.
+- Health check chỉ chứng minh process sống; cần readiness có DB và smoke business read-only.
+
+### 16.5 Môi trường
+
+| Môi trường | Trigger | Data/secret | Mục tiêu |
+|---|---|---|---|
+| DEV native | Manual | User Secrets, MySQL local | Phát triển nhanh từng module |
+| DEV Compose | Manual | `.env` ignored; volume local | Stack tái lập API/web/MySQL |
+| TEST IIS | Merge `develop` | `appsettings.Staging.json` ACL ngoài repo | Integration, smoke, demo nội bộ |
+| STAGING | [RECOMMENDATION] release candidate | Dữ liệu giả gần production | E2E/UAT/performance/security |
+| PRODUCTION | [RECOMMENDATION] manual approval artifact đã pass | Secret manager/file ACL + backup | Người dùng thật |
+
+### 16.6 Release gate mục tiêu
+
+1. Source/branch/CODEOWNERS/contract review.
+2. Secret/dependency/license/static analysis.
+3. Build backend/frontend.
+4. Unit + architecture + integration.
+5. Container build/scan; tag commit SHA.
+6. Deploy STAGING và migration dry-run.
+7. Smoke/E2E/performance budget/security baseline.
+8. Manual approval.
+9. DB backup + migration được duyệt.
+10. Promote cùng artifact/image, không rebuild.
+11. Smoke, metrics green; rollback app hoặc forward-fix/restore DB theo plan.
+
+## 17. Chiến lược kiểm thử và tiêu chí chất lượng
+
+### 17.1 Kết quả audit ngày 20/09/2026
+
+| Command | Kết quả |
+|---|---|
+| `dotnet test ProjectMgmt.slnx -c Release --no-restore -m:1` | Pass 2/2; có analyzer warnings |
+| `npm run lint` | Pass khi cấp heap phù hợp |
+| `npm test -- --watch=false` | 5 files, 22 tests pass nhưng process fail vì 2 unhandled timer errors ở auth page |
+| `npm run build` | Pass; warning `backlog-page.scss` vượt style budget 3.52 kB |
+| `docker compose config --quiet` | Không chạy được vì máy hiện tại không có Docker CLI |
+| XMOD validator | Fail audit: 32/64 cột chưa có usable left-prefix index |
+
+Lần chạy song song đầu tiên từng thiếu tài nguyên/Node heap; chạy tuần tự với `NODE_OPTIONS=--max-old-space-size=4096` cho lint/build thành công. Đây là vấn đề môi trường kiểm tra, khác với hai lỗi async thật trong frontend test.
+
+### 17.2 Test pyramid cần đạt
+
+| Lớp | Nội dung | Owner |
+|---|---|---|
+| Unit | domain rule, validator, score, mapper, Result | Từng module |
+| Contract | DTO/schema giữa module và .NET↔AI | Provider + consumer |
+| Integration | MySQL Testcontainers/instance cô lập, repository, transaction, index/constraint | Từng module |
+| API | auth, status/ProblemDetails, permission, idempotency | Host + module |
+| Architecture | project reference, Contracts không có EF entity, no cross implementation | Shared |
+| Component UI | signal store, form, guard, timer cleanup, a11y | FE owner |
+| E2E | login → project → issue → sprint → board; hai AI review | C dẫn QA, cả nhóm |
+| Non-functional | load, security, backup/rollback, AI eval | Shared |
+
+### 17.3 Definition of Ready
+
+- User value, scope và Acceptance Criteria kiểm thử được.
+- Owner/module/provider-consumer xác định.
+- API/contract/data dependency có version hoặc fake.
+- Security/permission, error cases, test data và migration impact được ghi.
+- Không phụ thuộc feature tương lai chưa có contract/fake.
+- Story nhỏ đủ hoàn thành trong sprint và có estimate/risk.
+
+### 17.4 Definition of Done
+
+- Code review bởi ít nhất một thành viên khác; CODEOWNERS nếu có.
+- Build/lint/unit/integration/architecture test liên quan pass.
+- AuthZ, validation, audit/log, failure/retry case được test.
+- Migration và rollback/forward plan được review nếu đổi DB.
+- Swagger/API contract và handbook/changelog cập nhật.
+- Không secret, PII hoặc debug bypass.
+- Demo trên đúng environment; Jira trạng thái/AC/evidence cập nhật.
+- Không còn Sev-1/Sev-2; performance budget không bị phá không giải thích.
+
+### 17.5 AI evaluation gate
+
+AI 1 cần tập 60–100 mẫu curated song ngữ ban đầu, JSON Schema gate và review rubric: coverage, specificity, feasibility, duplicate, hallucination, AC testability. Dedup/group/time split trước; validation dùng để tune, locked holdout chỉ dùng ở release gate. AI 2 cần replay dataset có label được định nghĩa rõ; acceptance/override đo agreement với PM, còn outcome đo workload/reassignment/on-time và không tạo counterfactual cho người không được chọn. Chỉ dùng Precision@1/NDCG@3 trên relevance label curated. Không activate model chỉ vì loss thấp.
+
+## 18. Lộ trình hoàn thiện theo mức ưu tiên
+
+Kế hoạch Excel có 13 sprint, 138 work item và mốc release đến 30/11/2026. Đây là kế hoạch tham khảo. Lộ trình dưới đây sắp lại theo dependency thực của code hiện tại.
+
+### 18.1 P0 — Làm baseline an toàn và tích hợp được
+
+1. Sửa 2 unhandled timer error; giữ CI frontend xanh ổn định.
+2. Hoàn thiện authentication, JWT/refresh/OTP và gắn middleware/policy.
+3. Bỏ mock admin/token/OTP; nối Auth/Profile đầu-cuối.
+4. Nối frontend Project/Workflow/Board với API hiện có.
+5. Hoàn thiện ProblemDetails, validation, CORS và correlation ID.
+6. Đóng băng contract v1; thêm contract docs/changelog, fake và architecture tests.
+7. Review XMOD indexes theo query plan; chốt migration policy.
+8. Thêm CODEOWNERS, test strategy và AI evaluation seed.
+
+**Exit:** login thật; project config thật; CI xanh; không endpoint write công khai; integration test MySQL cơ bản.
+
+### 18.2 P1 — Hoàn thiện Scrum core
+
+1. Issue CRUD/hierarchy/number/history/collaboration.
+2. Sprint lifecycle/capacity/backlog move/snapshot.
+3. Board transition/WIP và concurrent conflict.
+4. Notification persistence + SignalR.
+5. Frontend issue detail, backlog/board data thật và reports nền.
+
+**Exit:** Project → Issue → Sprint → Board → Report chạy E2E, không cần AI.
+
+### 18.3 P2 — AI 1 Breakdown
+
+1. Model/prompt governance và input/output schema.
+2. Background job, timeout/retry/status, local Ollama baseline.
+3. Preview/edit/reject/apply idempotent.
+4. Feedback export, curated evaluation, metrics dashboard.
+5. Chỉ thử QLoRA nếu baseline không đạt rubric.
+
+**Exit:** AI gợi ý có truy vết, người dùng kiểm soát, evaluation report tái lập.
+
+### 18.4 P3 — AI 2 Assignment và DataOps
+
+1. Workload/performance/capacity snapshots.
+2. Deterministic filter + weighted ranking + explanation.
+3. Review/override/reject và outcome job.
+4. Data cleaning/freeze/export/training/evaluation UI/API.
+5. Learned ranker/optimizer chỉ sau khi có đủ labels.
+
+**Exit:** chuỗi Breakdown → Apply → Assignment → Decision → Outcome → Dataset chạy E2E.
+
+### 18.5 P4 — Hardening và release
+
+- Security/load/accessibility/E2E, observability dashboard.
+- STAGING giống production, backup/restore và rollback drill.
+- Dependency/container/secret scan, immutable artifact.
+- UAT, data retention, privacy notice, runbook và final demo.
+
+## 19. Playbook riêng cho từng thành viên
+
+### 19.1 Playbook A — Trần Văn Hoàng — IdentityExperience
+
+**Bắt đầu tại:** `ProjectMgmt.Modules.IdentityExperience/*`, Account controller/service, frontend auth/profile/identity/notifications.
+
+Thứ tự:
+
+1. Viết auth contract/use cases và tests trước; sửa controller async/body binding.
+2. Password hash, normalized email unique, refresh rotation/reuse detection.
+3. OTP hashed/TTL/attempt/rate limit; external login theo Provider+ProviderKey.
+4. CurrentUser + permission evaluator; gắn policies cho endpoint hiện có.
+5. Profile/skill API và lookup contracts thật.
+6. Notification repository/API/hub với authorized groups.
+7. AI Breakdown job/orchestrator sau khi `IIssueService` của C ổn định.
+8. Frontend bỏ mock theo từng luồng; timer/subscription cleanup bằng lifecycle-safe pattern.
+
+DoD riêng: security tests, token/OTP không log, cross-scope denial, SignalR auth, breakdown schema và apply idempotent.
+
+### 19.2 Playbook B — Nguyễn Thế Hoài — Planning
+
+**Bắt đầu tại:** `ProjectMgmt.Modules.Planning/*`, nested `ProjectManagement`, Projects/Workflow/Boards controllers, frontend projects/backlog/board/reports.
+
+Thứ tự:
+
+1. Viết characterization tests cho API Project/Workflow/Board hiện có.
+2. Dọn dần nested compile include mà không đổi namespace hàng loạt trong một PR.
+3. Hoàn thiện Project components/versions/default config transaction.
+4. Implement workflow validator và issue number generator contract.
+5. Sprint lifecycle/capacity/snapshot; test concurrent active sprint.
+6. Backlog orchestration qua Delivery contracts.
+7. Nối frontend Project/Workflow/Board rồi Sprint/Backlog.
+8. AI Assignment deterministic; version weights và snapshot features.
+
+DoD riêng: no cross-module SQL join, query plan cho board/report, concurrent tests, explanation khớp score, override/outcome lưu đủ.
+
+### 19.3 Playbook C — Hoàng Trần Huy Hoàng — DeliveryIntelligence
+
+**Bắt đầu tại:** `ProjectMgmt.Modules.DeliveryIntelligence/*`, frontend issue-detail và ai-dataops.
+
+Thứ tự:
+
+1. Thiết kế use-case API và repository cho Issue tối thiểu; dùng contract/fake của A/B.
+2. Tạo issue/hierarchy/number/status history; transaction tests.
+3. Transition, assignment history, rank/rebalance và optimistic concurrency.
+4. Comment/attachment/watcher/label/component/version/skill/AC.
+5. Issue read/sprint/skill contracts cho B và AI.
+6. Issue detail/timeline UI thật.
+7. DataOps API: dataset/version/sample/rules/flags/freeze/export.
+8. Training/evaluation metadata, PII/dedup/reproducibility; không huấn luyện trong web process.
+
+DoD riêng: authorization theo project, attachment security, immutable frozen dataset, checksum/split seed, no data leakage.
+
+### 19.4 Cách phối hợp không chặn nhau
+
+- Ngày đầu sprint: chốt DTO/signature/example/error; commit contract riêng.
+- Consumer dùng fake ngay, provider phát triển song song.
+- Mọi thay đổi contract có changelog và reviewer của consumer.
+- Migration mỗi module tách commit; không để hai người sửa cùng context/migration snapshot.
+- Integration window cố định giữa sprint; không đợi cuối sprint mới ghép.
+- Feature flag cho API/UI chưa hoàn thiện; không merge bypass security.
+
+### 19.5 Starter PR được khuyến nghị
+
+| Thứ tự | Owner/reviewer | Scope một PR | Acceptance Criteria |
+|---|---|---|---|
+| PR-0 | A; C review | Sửa timer lifecycle `auth-page.ts:110`, thêm fake-timer/destroy test | `npm test -- --watch=false` exit 0, không unhandled error; không đổi nghiệp vụ |
+| PR-1A | A; B review | Auth contract + login/refresh/logout/me backend, chưa nối toàn UI | Unit/integration security cases trong §10.6 pass; Swagger rõ |
+| PR-1B | B; C review | Characterization tests cho Project/Workflow/Board hiện có | Ghi behavior hiện tại, transaction/default seed và error mapping pass |
+| PR-1C | C; B review | `IIssueService`/DTO/fake + create-issue domain validation skeleton | Contract compile; fake deterministic; chưa cần CRUD UI |
+| PR-2 | A+B; C review | Nối Angular Auth + Project list/create bằng API thật | Không mock token/admin; E2E smoke login→project pass |
+
+Nếu có thành viên frontend/full-stack mới chưa được gán module, bắt đầu PR-0 rồi tham gia PR-2; không tự mở thêm màn hình mock.
+
+Mặc định tạo `feature/<module>/<short-description>` từ `develop` đã đồng bộ và mở PR về `develop`. Dependency: PR-0 độc lập; PR-1A/1B/1C có thể song song sau khi contract commit được chốt; PR-2 chỉ bắt đầu sau PR-1A và API Project characterization pass. Test bắt buộc tương ứng: PR-0 chạy `npm run lint` và `npm test -- --watch=false`; PR-1A/1B/1C chạy `dotnet test ProjectMgmt.slnx -c Release -m:1`; PR-2 chạy cả hai bộ cùng `npm run build`. PR description phải ghi test file mới/sửa và paste summary, không chỉ ghi “pass”.
+
+## 20. Hướng dẫn khởi động cho thành viên mới
+
+### 20.1 Yêu cầu công cụ
+
+- Git.
+- .NET SDK 10.x.
+- Node.js 24 và npm theo lockfile.
+- MySQL 8.0.16+; source đang mặc định 8.0.46, Compose dùng 8.4.
+- Docker Desktop/Compose nếu chạy stack container.
+- IDE bất kỳ hỗ trợ C#/Angular; PowerShell 7/Windows PowerShell cho scripts.
+
+### 20.2 Clone và backend native
+
+```powershell
+git clone --branch hoangtv https://github.com/TranHoang2k40525/ProjectMgmt.git ProjectMgmt
+Set-Location ProjectMgmt
+git fetch origin --prune
+git checkout --detach 05ce307951635dfd92b40ee1009400f38c25b7c9
+git rev-parse HEAD
+dotnet restore ProjectMgmt.slnx
+dotnet user-secrets set --project ProjectMgmt.Solution/ProjectMgmt.Solution.csproj `
+  "ConnectionStrings:ProjectMgmt" `
+  "Server=localhost;Port=3306;Database=projectmgmt;User=<user>;Password=<password>;CharSet=utf8mb4;"
+dotnet run --project ProjectMgmt.Solution/ProjectMgmt.Solution.csproj --launch-profile http
+```
+
+`git rev-parse HEAD` phải in đúng `05ce307951635dfd92b40ee1009400f38c25b7c9`. Hiện commit này chưa có trên `origin/hoangtv` tại thời điểm audit; nếu clone/fetch báo không tìm thấy object, dừng và yêu cầu owner push/tag baseline, không âm thầm dùng `main` hoặc commit khác. `UserSecretsId` đã có trong host, không chạy `user-secrets init` lần nữa. Kiểm tra `http://localhost:5083/health/live` và Swagger tại `http://localhost:5083/swagger` ở Development. Trước khi P0 có registration/bootstrap-admin, health/Swagger có thể chạy nhưng chưa có đường login hợp lệ. Không dùng mật khẩu từng xuất hiện trong tài liệu/chat; phải tạo hoặc rotate credential local riêng.
+
+#### Chuẩn bị schema cho backend native
+
+- Nếu dùng DB development **đã có schema v3**, chỉ cấu hình connection string; không chạy DDL/migration tự động.
+- Nếu cần DB mới, cách an toàn nhất là dùng MySQL container/volume cô lập ở §20.4.
+- Nếu bắt buộc dùng MySQL native mới và rỗng, cài `dotnet-ef` đúng version package (`9.0.19`), backup/xác minh target rồi apply theo thứ tự Identity → Planning → Delivery; Delivery cuối cùng tạo view/trigger phụ thuộc bảng module khác:
+
+```powershell
+dotnet tool install --global dotnet-ef --version 9.0.19
+
+dotnet ef database update `
+  --project ProjectMgmt.Modules.IdentityExperience/Infrastructure/IdentityExperience.Infrastructure.csproj `
+  --startup-project ProjectMgmt.Solution/ProjectMgmt.Solution.csproj `
+  --context IdentityExperienceDbContext
+
+dotnet ef database update `
+  --project ProjectMgmt.Modules.Planning/Infrastructure/Planning.Infrastructure.csproj `
+  --startup-project ProjectMgmt.Solution/ProjectMgmt.Solution.csproj `
+  --context PlanningDbContext
+
+dotnet ef database update `
+  --project ProjectMgmt.Modules.DeliveryIntelligence/Infrastructure/DeliveryIntelligence.Infrastructure.csproj `
+  --startup-project ProjectMgmt.Solution/ProjectMgmt.Solution.csproj `
+  --context DeliveryIntelligenceDbContext
+```
+
+Chỉ chạy trên database rỗng/cô lập sau khi review generated SQL. Migrations seed role/permission/skill/model/prompt reference, **không seed admin user**. P0 phải có registration thật hoặc bootstrap-admin command one-time đọc secret từ environment; không thêm mật khẩu mặc định vào migration.
+
+### 20.3 Frontend
+
+```powershell
+Set-Location frontend/projectmgmt-web
+npm ci
+$env:NODE_OPTIONS='--max-old-space-size=4096'
+npm run lint
+npm test -- --watch=false
+npm start
+```
+
+Frontend mặc định `http://localhost:4200`; API development `http://localhost:5083`.
+
+### 20.4 Docker local
+
+```powershell
+Copy-Item .env.example .env
+# Sửa .env bằng credential local mạnh, không commit.
+docker compose config --quiet
+docker compose up --build -d
+docker compose ps
+```
+
+Cảnh báo: stack mount DDL có `DROP DATABASE` nhưng chỉ được chấp nhận cho MySQL container/volume cô lập. Không trỏ file init này vào DB hiện hữu. Không chạy `docker compose down -v` nếu cần giữ dữ liệu local.
+
+| Biến `.env` | Mục đích | Mặc định/mẫu |
+|---|---|---|
+| `MYSQL_USER` | App user local | Bắt buộc đổi |
+| `MYSQL_PASSWORD` | Mật khẩu app user | Bắt buộc đổi, không commit |
+| `MYSQL_ROOT_PASSWORD` | Root của container | Bắt buộc đổi, không commit |
+| `MYSQL_PORT` | Host → MySQL | `3306` |
+| `API_PORT` | Host → API | `5083` |
+| `WEB_PORT` | Host → web | `4200` |
+
+Compose hiện chỉ có MySQL, API và web; hai AI service/Ollama chưa tồn tại trong stack hiện hành, vì vậy chưa có lệnh local hợp lệ để chạy chúng. Khi P2/P3 tạo service, phải bổ sung image, model version, health, resource limit và runbook trước khi cập nhật phần này.
+
+### 20.5 Kiểm tra trước PR
+
+```powershell
+dotnet test ProjectMgmt.slnx -c Release -m:1
+Set-Location frontend/projectmgmt-web
+$env:NODE_OPTIONS='--max-old-space-size=4096'
+npm run lint
+npm test -- --watch=false
+npm run build
+```
+
+Thêm integration/architecture/E2E command khi các suite đó được tạo. Không bỏ qua test đỏ bằng cách đổi CI thành continue-on-error.
+
+## 21. Runbook xử lý sự cố
+
+### 21.1 API không khởi động
+
+1. Kiểm `ConnectionStrings__ProjectMgmt`/User Secrets không rỗng.
+2. Kiểm MySQL reachable, version/config và TLS mode phù hợp.
+3. Kiểm ba DbContext registration/migration history.
+4. Không dùng `EnsureCreated` để “chữa nhanh”.
+5. Xem structured log theo TraceId, không bật sensitive logging trên TEST/PROD.
+
+### 21.2 Health live pass nhưng nghiệp vụ lỗi
+
+`/health/live` chỉ chứng minh process sống. Kiểm `/health` và thêm readiness có `CanConnect`/query read-only. Chạy smoke: login, current user, list project, read board. Nếu deploy vừa xảy ra, so config artifact, DB schema version và frontend/API compatibility.
+
+### 21.3 Frontend test có unhandled timer
+
+Hiện lỗi ở `auth-page.ts:110`: callback timeout chạy sau khi ViewChild/fixture không còn. Cần clear timer trong destroy, dùng lifecycle-aware utility, hoặc test với fake timers và flush/clear. Không chỉ suppress unhandled error vì assertion pass.
+
+### 21.4 Board/transition conflict
+
+- 409: refetch issue/version, hiển thị người dùng trạng thái mới.
+- 422/validation: hiển thị lý do transition/WIP từ server.
+- Không tự kéo card về state optimistic trước khi server xác nhận.
+- Kiểm status/board mapping và permission scope.
+
+### 21.5 AI timeout hoặc JSON lỗi
+
+- Generation/Run chuyển `Failed` với reason code; không để `Processing` vô hạn.
+- Retry chỉ lỗi transient và idempotent; schema invalid không retry vô hạn cùng prompt/model.
+- Giữ raw response hạn chế quyền để debug; UI hiển thị thông báo an toàn.
+- Có fallback tạo task thủ công/weighted assignment baseline.
+
+### 21.6 Deploy TEST fail
+
+1. Đọc `C:\Logs\ProjectMgmt\deploy-test.log`.
+2. Xác minh artifact có đủ backend/frontend và staging config tồn tại.
+3. Kiểm app pool/site ACL và Hosting Bundle.
+4. Nếu health fail, script phải rollback app backup gần nhất.
+5. Nếu schema mismatch, không tự rollback DB bằng lệnh phá hủy; dừng, đánh giá forward-fix hoặc restore backup đã kiểm chứng.
+
+## 22. Các quyết định kiến trúc
+
+| ADR | Quyết định | Lý do | Hệ quả |
+|---|---|---|---|
+| ADR-01 | Modular monolith 3 module vật lý | Nhóm 3 người, một DB, giảm project/merge overhead | Boundary phải được kiểm bằng contract/test, không bằng process isolation |
+| ADR-02 | Repository/service, không CQRS/Event Sourcing baseline | Phù hợp năng lực, code hiện tại và tốc độ đồ án | Có thể dùng command/query object cục bộ nhưng không áp framework nặng |
+| ADR-03 | MySQL là nguồn dữ liệu thật | DDL/ERD v3 và source hiện tại | Tài liệu SQL Server cũ bị supersede |
+| ADR-04 | XMOD không FK vật lý | Module độc lập migration | Validate qua contract; cần index/query discipline |
+| ADR-05 | Ba DbContext/migration history | Khớp ba ownership lớn | AiCore logic đồng sở hữu nhưng migration phải điều phối |
+| ADR-06 | Hai AI tách nhiệm vụ | Dễ đánh giá, giải thích và quản trị rủi ro | Hai schema/metric/feedback flow riêng |
+| ADR-07 | Human-in-the-loop | AI output có thể sai/hallucinate/bias | Không auto apply/assign; lưu quyết định người dùng |
+| ADR-08 | Deterministic Assignment trước ML | Ít dữ liệu ban đầu, cần explain/reproduce | Learned ranker chỉ thay khi thắng baseline trên test set |
+| ADR-09 | AI service không truy cập DB | Giảm coupling và rò rỉ dữ liệu | .NET chịu orchestration, auth, persistence |
+| ADR-10 | Artifact/config/secret tách rời | Deploy lặp lại và an toàn | Cần quản lý version config/model rõ |
+
+## 23. Khuyến nghị và kết luận
+
+### 23.1 Key findings
+
+Kiến trúc nền và dữ liệu của ProjectMgmt đã mạnh hơn mức một prototype trống: schema đủ sâu, module đã được gom hợp lý, Planning có code thực và UI/DevOps đã có nền đáng kể. Vấn đề lớn nhất không phải “thiếu thêm framework”, mà là khoảng cách giữa thiết kế và luồng chạy thật: auth chưa bảo vệ API, frontend dùng mock, Issue/Sprint/AI thiếu orchestration, test chưa đủ chứng minh.
+
+### 23.2 Hệ quả nếu không xử lý đúng thứ tự
+
+| Nếu làm trước | Rủi ro |
+|---|---|
+| AI trước Scrum core | AI không có input/output contract thật, feedback không đáng tin, demo rời rạc |
+| UI tiếp tục mở rộng trước API integration | Mock debt tăng; khó biết nghiệp vụ nào thật |
+| Tách thêm microservice/module | Tăng deployment/contract overhead, ba người bị chia nhỏ |
+| Fine-tune LLM sớm | Tốn compute, dataset bẩn/leak, không biết có hơn baseline |
+| Deploy migration tự động không review | Có thể mất dữ liệu và không rollback được |
+| Bỏ qua auth để demo | Tạo lỗ hổng IDOR/privilege escalation ngay trong thiết kế |
+
+### 23.3 Khuyến nghị hành động ngay
+
+1. Đóng băng một sprint P0 chỉ cho auth, contract, API integration, test xanh và DB audit.
+2. Dùng một vertical slice chuẩn làm mẫu: login → current user → list/create project → UI thật.
+3. Sau đó làm issue/sprint/board end-to-end trước AI.
+4. Giữ AI Breakdown và Assignment tách runtime/schema/metric; DataOps phục vụ cả hai.
+5. Dùng bảng maturity và exit criteria trong handbook để review hằng sprint.
+6. Cập nhật handbook trong cùng PR khi thay contract, schema, pipeline hoặc quyết định kiến trúc.
+
+### 23.4 Kết luận
+
+ProjectMgmt nên được hoàn thiện như một **modular monolith có kỷ luật**, không phải tập hợp màn hình và bảng dữ liệu. Ba module là ba ownership lớn; Contracts là biên làm việc chung; MySQL v3 là nguồn thật; hai AI là hai sản phẩm hỗ trợ có con người kiểm soát. Khi P0 và Scrum core đã chạy E2E, phần AI mới có dữ liệu đúng, feedback đúng và giá trị đo được.
+
+## 24. Phụ lục tra cứu
+
+### 24.1 File quan trọng trong repo
+
+| File/thư mục | Vai trò |
+|---|---|
+| `ProjectMgmt.slnx` | Danh mục project và dependency cấp solution |
+| `ProjectMgmt.Solution/Program.cs` | Composition root, DbContext, middleware, health/static SPA |
+| `ProjectMgmt.Contracts/` | DTO/Result/interface liên module |
+| `ProjectMgmt.Modules.*/` | Ba module vật lý |
+| `docs/projectmgmt_schema_mysql_optimized.sql` | DDL hiện hành 55 bảng |
+| `frontend/projectmgmt-web/src/app/app.routes.ts` | Route frontend |
+| `frontend/projectmgmt-web/src/app/core/services/` | Service/mock/realtime/health |
+| `.github/workflows/ci.yml` | CI PR |
+| `.github/workflows/deploy-test.yml` | CD TEST IIS |
+| `scripts/deploy-test.ps1` | Backup/deploy/health/rollback |
+| `scripts/validate-xmod-indexes.ps1` | Audit index XMOD read-only |
+| `docker-compose.yml` | Local MySQL/API/web |
+| `docker-compose.test.yml` | Container TEST override |
+
+### 24.2 Nguồn tài liệu ngoài repo đã tổng hợp
+
+| Nguồn | Nội dung lấy vào handbook |
+|---|---|
+| `Hệ thống Quản lý Dự án Scrum + AI-Nhóm 7 Kỹ Sư (1).pdf` | Nghiệp vụ nền, workflow AI Breakdown, local/HITL; các claim SQL Server/31 bảng bị supersede |
+| `Phan_bo_vai_tro_module_nhom_3_nguoi.pdf` | Ownership, 10 vùng logic, 2 AI, contract-first, trách nhiệm A/B/C |
+| `Mo_ta_bai_toan_va_pham_vi_du_an_v2.docx` | Vấn đề, mục tiêu nghiên cứu, actor, scope/out-of-scope, risk |
+| `07_Thiet_ke_co_so_du_lieu_v3.pdf` | MySQL 55 bảng, 4 view, constraint/index/XMOD |
+| `ERD_v3_He_thong_Scrum_AI_55bang (1).png` | Quan hệ và boundary dữ liệu |
+| `Ke_hoach_Jira_Scrum_AI_3_nguoi_2026.xlsx` | 13 sprint, epic, RACI, risk, environment, scoring/DoD |
+| `JiraImport_FINAL_CO_SPRINT_ID.csv` và CSV liên quan | 138 work item và mapping sprint |
+| `PROMPT_CODE_X_HOAN_THIEN_SPRINT1_PROJECTMGMT.md` | Baseline foundation mong muốn; được đối chiếu với source hiện tại |
+| Lịch sử phiên `01a09072-8caa-7743-8a5f-be64f3d5c3b8` | Lý do chuyển 3 module, EF/MySQL, CI/CD/IIS, Swagger, responsive/motion |
+
+### 24.3 Các rủi ro dự án chính
+
+| Rủi ro | Xác suất/Tác động | Giảm thiểu |
+|---|---|---|
+| Scope quá lớn cho 3 người | Cao/Cao | P0/P1 trước, cắt stretch, exit criteria rõ |
+| AI local chậm/JSON lỗi | TB/Cao | schema, async job, timeout, baseline nhỏ, fallback |
+| Dependency chặn nhau | TB/Cao | contract-first, fake, integration window |
+| Migration xung đột/mất dữ liệu | TB/Cao | 3 history, owner, SQL review, backup/restore rehearsal |
+| Auth/IDOR | Cao/Cao | P0, policy/resource tests, không endpoint write công khai |
+| PII/duplicate/leakage AI | TB/Cao | redaction, hash, freeze, split discipline, review |
+| TEST khác PROD | TB/Cao | cùng artifact/config pattern, staging rehearsal |
+| UI đẹp nhưng mock | Cao/Cao | vertical slice API thật, maturity tracking |
+
+### 24.4 Checklist review PR
+
+- [ ] Đúng module ownership, không reference implementation chéo.
+- [ ] Contract/DTO/changelog được cập nhật nếu thay biên.
+- [ ] AuthN/AuthZ và resource scope test.
+- [ ] Validation, error mapping, cancellation và idempotency phù hợp.
+- [ ] Transaction/history/audit/event sau commit đúng.
+- [ ] Migration/index/query plan/rollback được xem xét.
+- [ ] Không secret, token, OTP, PII, raw prompt nhạy cảm trong Git/log.
+- [ ] Unit/integration/architecture/frontend/E2E liên quan pass.
+- [ ] UI có loading/error/empty/accessibility/reduced-motion.
+- [ ] AI thay đổi có fixed evaluation, version và Human-in-the-loop.
+- [ ] Docs/Swagger/Jira/runbook cập nhật.
+
+### 24.5 Lệnh tái sinh ba tài liệu
+
+Sau khi sửa bản Markdown nguồn:
+
+```powershell
+node scripts/render-technical-handbook.cjs
+```
+
+Lệnh này sinh lại bản HTML và TXT từ cùng nội dung, giúp ba định dạng không bị lệch.
+
+---
+
+**Chủ sở hữu tài liệu:** cả nhóm; mỗi module owner chịu cập nhật phần module của mình.  
+**Chu kỳ review:** cuối mỗi sprint và bắt buộc khi thay schema, contract, AI model/prompt activation hoặc pipeline deploy.  
+**Tiêu chí tài liệu còn hiệu lực:** baseline commit, bảng maturity, command kiểm thử và file path vẫn khớp repo.

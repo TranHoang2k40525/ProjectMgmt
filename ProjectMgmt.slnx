@@ -1,9 +1,25 @@
 <Solution>
-  <Project Path="ProjectMgmt.Contracts/ProjectMgmt.Contracts.csproj" />
-  <Project Path="ProjectMgmt.Core/ProjectMgmt.Core.csproj" />
-  <Project Path="ProjectMgmt.Modules.DeliveryIntelligence/ProjectMgmt.Modules.DeliveryIntelligence.csproj" />
-  <Project Path="ProjectMgmt.Modules.IdentityExperience/ProjectMgmt.Modules.IdentityExperience.csproj" />
-  <Project Path="ProjectMgmt.Modules.Planning/ProjectMgmt.Modules.Planning.csproj" />
-  <Project Path="ProjectMgmt.Solution/ProjectMgmt.Solution.csproj" />
-  <Project Path="ProjectMgmt.Tests/ProjectMgmt.Tests.csproj" />
+  <Folder Name="/Foundation/">
+    <Project Path="ProjectMgmt.Contracts/ProjectMgmt.Contracts.csproj" />
+    <Project Path="ProjectMgmt.Core/ProjectMgmt.Core.csproj" />
+  </Folder>
+  <Folder Name="/Modules/DeliveryIntelligence/">
+    <Project Path="ProjectMgmt.Modules.DeliveryIntelligence/Application/DeliveryIntelligence.Application.csproj" />
+    <Project Path="ProjectMgmt.Modules.DeliveryIntelligence/Domain/DeliveryIntelligence.Domain.csproj" />
+    <Project Path="ProjectMgmt.Modules.DeliveryIntelligence/Infrastructure/DeliveryIntelligence.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Modules/IdentityExperience/">
+    <Project Path="ProjectMgmt.Modules.IdentityExperience/Application/IdentityExperience.Application.csproj" />
+    <Project Path="ProjectMgmt.Modules.IdentityExperience/Domain/IdentityExperience.Domain.csproj" />
+    <Project Path="ProjectMgmt.Modules.IdentityExperience/Infrastructure/IdentityExperience.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Modules/Planning/">
+    <Project Path="ProjectMgmt.Modules.Planning/Application/Planning.Application.csproj" />
+    <Project Path="ProjectMgmt.Modules.Planning/Domain/Planning.Domain.csproj" />
+    <Project Path="ProjectMgmt.Modules.Planning/Infrastructure/Planning.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Runtime/">
+    <Project Path="ProjectMgmt.Solution/ProjectMgmt.Solution.csproj" />
+    <Project Path="ProjectMgmt.Tests/ProjectMgmt.Tests.csproj" />
+  </Folder>
 </Solution>

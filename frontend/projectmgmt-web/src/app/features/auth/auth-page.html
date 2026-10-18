@@ -1,0 +1,257 @@
+<div #authPage class="auth-page font-body-md" [class.auth-page--panel-open]="panelOpen()">
+  @if (sceneVisible()) {
+    <app-sylva-arrival class="auth-arrival" (enter)="openAuth()" />
+  }
+
+  @if (!panelOpen()) {
+    <div class="arrival-bar">
+      <div class="arrival-brand">
+        <img src="assets/images/huce-branding/huce-official-logo.png" alt="Biểu trưng HUCE" />
+        <span>ProjectMgmt <small>by HUCE</small></span>
+      </div>
+      <button type="button" class="arrival-skip" (click)="openAuth()">
+        Bỏ qua và đăng nhập <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
+      </button>
+    </div>
+  }
+
+  @if (panelOpen()) {
+    <main class="auth-panel-layer">
+      <div class="auth-panel-layout">
+        <section class="auth-panel-intro" aria-labelledby="auth-intro-heading">
+          <div class="auth-panel-brand">
+            <img src="assets/images/huce-branding/huce-official-logo.png" alt="" />
+            <span>HUCE <b>ProjectMgmt</b></span>
+          </div>
+          <div class="auth-panel-copy">
+            <span class="auth-eyebrow">Một nơi cho công việc của cả nhóm</span>
+            <h1 id="auth-intro-heading">Trở lại với điều<br />bạn đang xây dựng.</h1>
+            <p>Tiếp tục sprint, giải quyết việc cần chú ý và giữ mọi thành viên cùng một nhịp.</p>
+          </div>
+          <div class="auth-panel-footnote">Trường Đại học Xây dựng Hà Nội · Không gian làm việc nhóm</div>
+        </section>
+
+        <div class="auth-panel-form">
+          <div class="auth-card text-slate-900">
+            <div class="auth-card-topline">
+              <span>TRUY CẬP KHÔNG GIAN LÀM VIỆC</span>
+              @if (canReplayArrival()) {
+                <button type="button" (click)="reopenArrival()">Xem lại khu vườn</button>
+              }
+            </div>
+
+        <!-- Auth Body Content -->
+        <div class="auth-card-body p-6 sm:p-8 space-y-6">
+          
+          <!-- Center Logo & Title -->
+          <div class="text-center space-y-2">
+            <div class="w-14 h-14 rounded-2xl bg-blue-50 border border-blue-100 p-2 mx-auto shadow-sm flex items-center justify-center">
+              <img src="assets/images/huce-branding/huce-official-logo.png" alt="HUCE" class="w-full h-full object-contain" />
+            </div>
+
+            <h3 class="text-2xl font-black text-slate-900 tracking-tight">
+              @if (mode() === 'LOGIN') { Đăng nhập tài khoản }
+              @else if (mode() === 'SIGNUP') { Đăng ký tài khoản mới }
+              @else if (mode() === 'OTP_REGISTER' || mode() === 'OTP_FORGOT') { Xác thực mã OTP }
+              @else { Khôi phục mật khẩu }
+            </h3>
+
+            <p class="text-xs text-slate-500 font-medium">
+              Sử dụng tài khoản email sinh viên hoặc cán bộ HUCE
+            </p>
+          </div>
+
+          <!-- Alert Banners -->
+          @if (errorMessage()) {
+            <div class="p-3 rounded-xl bg-red-50 text-red-700 border border-red-200 flex items-center gap-2 text-xs font-medium">
+              <span class="material-symbols-outlined text-[18px]">error</span>
+              <span>{{ errorMessage() }}</span>
+            </div>
+          }
+          @if (successMessage()) {
+            <div class="p-3 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-2 text-xs font-medium">
+              <span class="material-symbols-outlined text-[18px]">check_circle</span>
+              <span>{{ successMessage() }}</span>
+            </div>
+          }
+
+          <!-- VIEW 1: LOGIN MODE -->
+          @if (mode() === 'LOGIN') {
+            <form [formGroup]="loginForm" (ngSubmit)="onLogin()" class="space-y-4">
+              <div>
+                <label for="loginEmail" class="block text-xs font-bold text-slate-700 mb-1.5">Tài khoản Email</label>
+                <div class="relative flex items-center">
+                  <span class="material-symbols-outlined absolute left-3.5 text-slate-400 text-[18px]">mail</span>
+                  <input
+                    id="loginEmail"
+                    type="email"
+                    formControlName="email"
+                    placeholder="phamthehoai2004hn@huce.edu.vn"
+                    class="w-full h-11 pl-10 pr-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 text-sm font-medium focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
+                </div>
+              </div>
+
+              <div>
+                <div class="flex items-center justify-between mb-1.5">
+                  <label for="loginPass" class="text-xs font-bold text-slate-700">Mật khẩu</label>
+                  <button type="button" (click)="setMode('FORGOT')" class="text-xs font-bold text-blue-600 hover:underline">Quên mật khẩu?</button>
+                </div>
+                <div class="relative flex items-center">
+                  <span class="material-symbols-outlined absolute left-3.5 text-slate-400 text-[18px]">lock</span>
+                  <input
+                    id="loginPass"
+                    [type]="passwordVisible() ? 'text' : 'password'"
+                    formControlName="password"
+                    placeholder="••••••••"
+                    class="w-full h-11 pl-10 pr-10 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 text-sm font-medium focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
+                  <button type="button" class="password-toggle" (click)="passwordVisible.set(!passwordVisible())" [attr.aria-label]="passwordVisible() ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'">
+                    <span class="material-symbols-outlined text-[18px]" aria-hidden="true">{{ passwordVisible() ? 'visibility_off' : 'visibility' }}</span>
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                [disabled]="loading() || loginForm.invalid"
+                class="w-full h-12 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-50">
+                @if (loading()) {
+                  <span class="spinner"></span> Đang xử lý...
+                } @else {
+                  <span>Đăng nhập hệ thống</span>
+                  <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+                }
+              </button>
+            </form>
+          }
+
+          <!-- VIEW 2: SIGNUP MODE -->
+          @if (mode() === 'SIGNUP') {
+            <form [formGroup]="signupForm" (ngSubmit)="onSignup()" class="space-y-4">
+              <div>
+                <label for="signupName" class="block text-xs font-bold text-slate-700 mb-1.5">Họ và tên sinh viên / cán bộ</label>
+                <div class="relative flex items-center">
+                  <span class="material-symbols-outlined absolute left-3.5 text-slate-400 text-[18px]">badge</span>
+                  <input id="signupName" type="text" formControlName="displayName" placeholder="Trần Văn Hoàng" class="w-full h-11 pl-10 pr-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 text-sm font-medium focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
+                </div>
+              </div>
+
+              <div>
+                <label for="signupEmail" class="block text-xs font-bold text-slate-700 mb-1.5">Email trường (@huce.edu.vn)</label>
+                <div class="relative flex items-center">
+                  <span class="material-symbols-outlined absolute left-3.5 text-slate-400 text-[18px]">mail</span>
+                  <input id="signupEmail" type="email" formControlName="email" placeholder="hoang.tv@huce.edu.vn" class="w-full h-11 pl-10 pr-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 text-sm font-medium focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
+                </div>
+              </div>
+
+              <div>
+                <label for="signupPass" class="block text-xs font-bold text-slate-700 mb-1.5">Mật khẩu</label>
+                <div class="relative flex items-center">
+                  <span class="material-symbols-outlined absolute left-3.5 text-slate-400 text-[18px]">key</span>
+                  <input id="signupPass" type="password" formControlName="password" placeholder="Tối thiểu 6 ký tự" class="w-full h-11 pl-10 pr-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 text-sm font-medium focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                [disabled]="loading() || signupForm.invalid"
+                class="w-full h-12 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25 transition-all cursor-pointer disabled:opacity-50">
+                @if (loading()) {
+                  <span class="spinner"></span> Đang khởi tạo...
+                } @else {
+                  <span>Đăng ký tài khoản</span>
+                  <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+                }
+              </button>
+            </form>
+          }
+
+          <!-- VIEW 3: OTP VERIFICATION MODE -->
+          @if (mode() === 'OTP_REGISTER' || mode() === 'OTP_FORGOT') {
+            <div class="space-y-4 text-center">
+              <p class="text-xs text-slate-600 font-medium">
+                Mã OTP 6 số đã được gửi đến email <strong class="text-blue-600">{{ mode() === 'OTP_REGISTER' ? signupForm.value.email : forgotForm.value.email }}</strong>
+              </p>
+
+              <div class="flex items-center justify-center gap-2 my-4">
+                @for (pin of otpPins; track $index) {
+                  <input
+                    type="text"
+                    maxlength="1"
+                    class="w-10 h-12 text-center text-lg font-bold rounded-xl bg-slate-50 border border-slate-300 text-blue-600 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                    [value]="pin"
+                    (input)="onOtpInput($index, $event)"
+                    (keydown)="onOtpKeyDown($index, $event)" />
+                }
+              </div>
+
+              <div class="flex items-center justify-between text-xs text-slate-500">
+                <span>Hết hạn: <strong class="text-red-500 font-mono">{{ formatTime(otpCountdown()) }}</strong></span>
+                <button type="button" (click)="resendOtp()" [disabled]="otpCountdown() > 240" class="text-blue-600 font-bold hover:underline">Gửi lại OTP</button>
+              </div>
+
+              @if (mode() === 'OTP_FORGOT') {
+                <div class="text-left space-y-1.5 pt-2" [formGroup]="otpForm">
+                  <label for="otpNewPass" class="block text-xs font-bold text-slate-700">Thiết lập mật khẩu mới</label>
+                  <input id="otpNewPass" type="password" formControlName="newPassword" placeholder="Mật khẩu mới..." class="w-full h-11 px-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-sm font-medium focus:bg-white focus:border-blue-600 outline-none" />
+                </div>
+              }
+
+              @if (mode() === 'OTP_REGISTER') {
+                <button type="button" (click)="onVerifyOtp()" [disabled]="loading()" class="w-full h-12 rounded-xl bg-blue-600 text-white font-bold text-sm shadow-md hover:bg-blue-700 transition-all cursor-pointer">
+                  Xác nhận & Đồng bộ
+                </button>
+              } @else {
+                <button type="button" (click)="onResetPassword()" [disabled]="loading()" class="w-full h-12 rounded-xl bg-blue-600 text-white font-bold text-sm shadow-md hover:bg-blue-700 transition-all cursor-pointer">
+                  Cập nhật mật khẩu
+                </button>
+              }
+            </div>
+          }
+
+          <!-- VIEW 4: FORGOT PASSWORD MODE -->
+          @if (mode() === 'FORGOT') {
+            <form [formGroup]="forgotForm" (ngSubmit)="onSendForgotOtp()" class="space-y-4">
+              <div>
+                <label for="forgotEmail" class="block text-xs font-bold text-slate-700 mb-1.5">Email tài khoản HUCE</label>
+                <div class="relative flex items-center">
+                  <span class="material-symbols-outlined absolute left-3.5 text-slate-400 text-[18px]">alternate_email</span>
+                  <input id="forgotEmail" type="email" formControlName="email" placeholder="phamthehoai2004hn@huce.edu.vn" class="w-full h-11 pl-10 pr-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 text-sm font-medium focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                [disabled]="loading() || forgotForm.invalid"
+                class="w-full h-12 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25 transition-all cursor-pointer disabled:opacity-50">
+                @if (loading()) {
+                  <span class="spinner"></span> Đang gửi...
+                } @else {
+                  <span>Gửi mã khôi phục qua Email</span>
+                  <span class="material-symbols-outlined text-[18px]">send</span>
+                }
+              </button>
+            </form>
+          }
+
+          <!-- Chỉ hiển thị phương thức đăng nhập thực sự được cấu hình. -->
+          <div class="pt-4 border-t border-slate-100 text-center text-xs text-slate-500 font-medium">
+            @if (mode() === 'LOGIN') {
+              <span>Chưa có tài khoản? </span>
+              <button type="button" (click)="setMode('SIGNUP')" class="font-bold text-blue-600 hover:underline cursor-pointer">Đăng ký mới</button>
+            } @else if (mode() === 'SIGNUP') {
+              <span>Đã có tài khoản? </span>
+              <button type="button" (click)="setMode('LOGIN')" class="font-bold text-blue-600 hover:underline cursor-pointer">Đăng nhập ngay</button>
+            } @else {
+              <span>Nhớ lại mật khẩu? </span>
+              <button type="button" (click)="setMode('LOGIN')" class="font-bold text-blue-600 hover:underline cursor-pointer">Quay lại Đăng nhập</button>
+            }
+          </div>
+
+        </div>
+
+      </div>
+        </div>
+      </div>
+    </main>
+  }
+</div>

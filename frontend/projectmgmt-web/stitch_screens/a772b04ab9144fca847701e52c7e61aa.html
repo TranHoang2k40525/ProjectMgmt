@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="vi"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><title>HUCE Jira Scrum AI</title><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet"/><style>@layer base { html, body { margin: 0; padding: 0; } body { overscroll-behavior: none; } main > :first-child { margin-top: 0 !important; } main > :last-child { margin-bottom: 0 !important; } } ::-webkit-scrollbar { display: none; }</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "secondary": "#4648d4", "surface-container": "#e9edff", "inverse-surface": "#1d3054", "on-secondary": "#ffffff", "surface-container-lowest": "#ffffff", "on-primary-container": "#c4d2ff", "on-tertiary-fixed": "#2b0052", "surface-container-high": "#e1e8ff", "tertiary-container": "#7c2ccd", "error-container": "#ffdad6", "on-primary-fixed": "#001848", "surface": "#faf9ff", "on-error-container": "#93000a", "on-secondary-fixed-variant": "#2f2ebe", "surface-container-low": "#f1f3ff", "surface-dim": "#ccdaff", "on-surface": "#051a3e", "on-tertiary-container": "#e4c8ff", "outline-variant": "#c3c6d6", "surface-variant": "#d8e2ff", "surface-bright": "#faf9ff", "on-primary": "#ffffff", "on-secondary-container": "#fffbff", "secondary-container": "#6063ee", "on-tertiary-fixed-variant": "#6600b7", "primary-fixed": "#dae2ff", "inverse-primary": "#b2c5ff", "background": "#faf9ff", "surface-tint": "#0c56d0", "error": "#ba1a1a", "secondary-fixed": "#e1e0ff", "primary": "#003d9b", "on-background": "#051a3e", "on-tertiary": "#ffffff", "on-primary-fixed-variant": "#0040a2", "secondary-fixed-dim": "#c0c1ff", "on-surface-variant": "#434654", "tertiary-fixed": "#efdbff", "inverse-on-surface": "#edf0ff", "tertiary": "#6100af", "tertiary-fixed-dim": "#dbb8ff", "outline": "#737685", "primary-fixed-dim": "#b2c5ff", "on-error": "#ffffff", "surface-container-highest": "#d8e2ff", "primary-container": "#0052cc", "on-secondary-fixed": "#07006c" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-xs": "0.25rem", "space-lg": "1.5rem", "margin": "1.5rem", "gutter": "1rem", "space-md": "1rem", "margin-mobile": "1rem", "space-sm": "0.5rem", "space-xl": "2rem", "gutter-compact": "0.5rem" }, "fontFamily": { "label-lg": ["Inter"], "headline-sm": ["Inter"], "display-lg-mobile": ["Inter"], "label-md": ["Inter"], "label-sm": ["Inter"], "headline-lg": ["Inter"], "headline-lg-mobile": ["Inter"], "body-md": ["Inter"], "headline-md": ["Inter"], "body-lg": ["Inter"], "display-lg": ["Inter"], "body-sm": ["Inter"] }, "fontSize": { "label-lg": ["14px", { "lineHeight": "20px", "letterSpacing": "0.005em", "fontWeight": "500" }], "headline-sm": ["16px", { "lineHeight": "24px", "letterSpacing": "-0.005em", "fontWeight": "600" }], "display-lg-mobile": ["30px", { "lineHeight": "38px", "letterSpacing": "-0.015em", "fontWeight": "700" }], "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600" }], "label-sm": ["11px", { "lineHeight": "14px", "letterSpacing": "0.04em", "fontWeight": "700" }], "headline-lg": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.015em", "fontWeight": "600" }], "headline-lg-mobile": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "body-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400" }], "headline-md": ["20px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "body-lg": ["16px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "400" }], "display-lg": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700" }], "body-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "400" }] } } } };</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><header class="fixed top-0 left-0 right-0 z-50 bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-14 w-full px-gutter flex items-center justify-between gap-space-md"><div class="flex items-center gap-space-md flex-shrink-0"><button class="flex items-center justify-center w-8 h-8 rounded text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]">apps</span></button><div class="flex items-center gap-space-xs"><div class="w-8 h-8 rounded-lg bg-primary-container flex items-center justify-center text-on-primary font-headline-sm text-headline-sm">H</div><div class="flex flex-col"><span class="font-headline-sm text-headline-sm leading-tight text-primary">HUCE Jira</span><span class="font-label-sm text-label-sm leading-none text-on-surface-variant">Scrum AI Studio</span></div></div><nav class="hidden xl:flex items-center gap-space-xs" data-active-classes="bg-surface-container-high text-primary font-label-lg font-semibold rounded-lg"><a class="px-3 py-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface font-label-lg text-label-lg transition-colors flex items-center gap-1" data-path="workspaces" href="#">Không gian làm việc <span class="material-symbols-outlined text-[16px]">expand_more</span></a><a class="px-3 py-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface font-label-lg text-label-lg transition-colors flex items-center gap-1" data-path="recent-issues" href="#">Gần đây <span class="material-symbols-outlined text-[16px]">expand_more</span></a><a class="px-3 py-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface font-label-lg text-label-lg transition-colors flex items-center gap-1" data-path="starred-boards" href="#">Đánh dấu <span class="material-symbols-outlined text-[16px]">expand_more</span></a><a class="px-3 py-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface font-label-lg text-label-lg transition-colors flex items-center gap-1" data-path="filters-view" href="#">Bộ lọc <span class="material-symbols-outlined text-[16px]">expand_more</span></a></nav><button class="px-3.5 py-1.5 rounded-lg bg-primary-container text-on-primary font-label-lg text-label-lg hover:bg-primary transition-colors flex items-center gap-1.5 shadow-sm"><span class="material-symbols-outlined text-[18px]">add</span><span>Tạo mới</span></button></div><div class="flex-1 max-w-md hidden md:block"><div class="relative flex items-center"><span class="material-symbols-outlined absolute left-3 text-outline text-[18px]">search</span><input class="w-full pl-9 pr-8 py-1.5 rounded-xl bg-surface-container-low text-on-surface placeholder:text-outline font-body-sm text-body-sm focus:outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary/20 transition-all" placeholder="Tìm kiếm đồ án, mã issue (HUCE-...), thành viên..." type="text"/><span class="absolute right-2.5 px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm">/</span></div></div><div class="flex items-center gap-space-xs flex-shrink-0"><button class="px-3 py-1 rounded-full bg-gradient-to-r from-secondary to-tertiary-container text-on-primary font-label-md text-label-md flex items-center gap-1.5 shadow-[0_0_12px_rgba(99,102,241,0.25)] hover:opacity-95 transition-opacity"><span class="material-symbols-outlined text-[16px]">auto_awesome</span><span>Trợ lý AI</span><span class="px-1 py-0.2 rounded bg-surface-container-lowest/20 font-label-sm text-label-sm uppercase">BETA</span></button><div class="h-4 w-px bg-outline-variant mx-1 hidden sm:block"></div><button class="relative p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" title="Thông báo"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-error"></span></button><button class="p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" title="Trợ giúp & Hướng dẫn HUCE"><span class="material-symbols-outlined text-[20px]">help_outline</span></button><button class="p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" title="Cài đặt hệ thống"><span class="material-symbols-outlined text-[20px]">settings</span></button><div class="ml-1 flex items-center gap-2"><img alt="Profile" class="w-8 h-8 rounded-full object-cover ring-1 ring-outline-variant/40" src="https://lh3.googleusercontent.com/aida/AEtjO1XtHjbcVDz-UBjctM0LfVUGmqUeR39WQIoExjpXXhoH4Wu_I9_Qpk42NbzSi5dIoyYQuxC6PmMSr__bvB8G1iRv51zwwYHyLI9epDcSeaSJ_23pgMSoDqCavTtJMnh_VUr1XiaX_dfIJVrOpVNtqTGgwFT5FuXj3i9tQVUICLqvROYKaCksEl97aHgdr2n-KIVSDs0bZzIZ5hDOpx0AeyayjF5Y_iybOHjJnpBXyyQz40C4Rx5A_y32U-v-DZxAw_gb18RoyaUMMA"/></div></div></div></header><aside class="fixed left-0 top-14 bottom-0 w-64 bg-surface-container-low/95 backdrop-blur-xl z-40 flex flex-col justify-between overflow-y-auto"><div class="p-space-sm"><div class="px-3 py-2.5 mb-2 rounded-xl bg-surface-container flex items-center gap-space-sm"><div class="w-7 h-7 rounded bg-primary text-on-primary flex items-center justify-center font-label-md text-label-md font-bold">DA</div><div class="flex flex-col min-w-0 flex-1"><span class="font-label-md text-label-md font-semibold text-on-surface truncate">Đồ án Tốt nghiệp K65</span><span class="font-label-sm text-label-sm text-on-surface-variant truncate">Phần mềm Scrum HUCE</span></div><span class="material-symbols-outlined text-outline text-[18px]">unfold_more</span></div><div class="mb-3"><div class="px-3 py-1 font-label-sm text-label-sm uppercase tracking-wider text-outline">Dự án & Không gian</div><nav class="flex flex-col gap-0.5" data-active-classes="bg-surface-container-high text-primary font-semibold rounded-lg"><a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface font-label-md text-label-md transition-colors" data-path="kanban-board" href="#"><span class="material-symbols-outlined text-[18px] text-primary">view_kanban</span><span>Bảng Kanban</span></a><a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface font-label-md text-label-md transition-colors" data-path="sprint-backlog" href="#"><span class="material-symbols-outlined text-[18px]">list_alt</span><span>Backlog & Sprint</span></a><a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface font-label-md text-label-md transition-colors" data-path="timeline-gantt" href="#"><span class="material-symbols-outlined text-[18px]">timeline</span><span>Tiến độ Timeline</span></a><a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface font-label-md text-label-md transition-colors" data-path="burndown-reports" href="#"><span class="material-symbols-outlined text-[18px]">insights</span><span>Báo cáo Burndown</span></a></nav></div><div class="mb-3"><div class="px-3 py-1 font-label-sm text-label-sm uppercase tracking-wider text-outline">Trí tuệ Nhân tạo HUCE</div><nav class="flex flex-col gap-0.5" data-active-classes="bg-surface-container-high text-primary font-semibold rounded-lg"><a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface font-label-md text-label-md transition-colors" data-path="ai-task-breakdown" href="#"><span class="material-symbols-outlined text-[18px] text-secondary-container">psychology</span><span>Tự động rã Task (AI)</span></a><a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface font-label-md text-label-md transition-colors" data-path="ai-sprint-forecast" href="#"><span class="material-symbols-outlined text-[18px] text-secondary-container">smart_toy</span><span>Dự báo Tốc độ Velocity</span></a></nav></div><div><div class="px-3 py-1 font-label-sm text-label-sm uppercase tracking-wider text-outline">Quản trị & Cấu hình</div><nav class="flex flex-col gap-0.5" data-active-classes="bg-surface-container-high text-primary font-semibold rounded-lg"><a aria-current="page" class="flex items-center gap-2.5 px-3 py-2 transition-colors bg-surface-container-high text-primary font-semibold rounded-lg" data-path="project-settings" href="#"><span class="material-symbols-outlined text-[18px]">tune</span><span>Cài đặt dự án</span></a><a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface font-label-md text-label-md transition-colors" data-path="system-admin" href="#"><span class="material-symbols-outlined text-[18px]">admin_panel_settings</span><span>Quản trị hệ thống</span></a></nav></div></div><div class="p-space-sm"><div class="p-3 rounded-xl bg-surface-container-high/60 flex items-center justify-between"><div class="flex items-center gap-2 min-w-0"><span class="material-symbols-outlined text-primary text-[18px]">school</span><span class="font-label-sm text-label-sm text-on-surface truncate">HUCE Tech Portal</span></div><span class="material-symbols-outlined text-outline text-[16px]">open_in_new</span></div></div></aside><div class="pl-64"><main class="relative w-full pt-14 px-gutter bg-surface min-h-screen"><div class="flex flex-col w-full">
+<div class="w-full max-w-6xl mx-auto py-space-md pb-16">
+<!-- Breadcrumb & Workspace Context -->
+<div class="flex items-center justify-between mb-space-md">
+<div class="flex items-center gap-space-sm text-on-surface-variant font-label-md text-label-md">
+<span class="flex items-center gap-1 hover:text-primary cursor-pointer transition-colors">
+<span class="material-symbols-outlined text-[16px]">domain</span>
+<span>HUCE AI Lab Workspace</span>
+</span>
+<span class="material-symbols-outlined text-[14px] text-outline">chevron_right</span>
+<span class="text-on-surface font-semibold">Dự án & Không gian đồ án</span>
+<span class="material-symbols-outlined text-[14px] text-outline">chevron_right</span>
+<span class="text-primary font-bold">Khởi tạo mới</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container font-label-sm text-label-sm text-primary font-semibold">
+<span class="material-symbols-outlined text-[16px] text-secondary">psychology</span>
+          AI Model: Claude 3.7 Sonnet for HUCE
+        </span>
+</div>
+</div>
+<!-- Main Wizard Card Surface -->
+<div class="relative bg-surface-container-lowest rounded-xl shadow-xl overflow-hidden">
+<!-- Top Decorative AI Glow Accent -->
+<div class="h-1.5 w-full bg-gradient-to-r from-primary-container via-secondary to-tertiary-container"></div>
+<!-- Header Section -->
+<div class="px-space-xl pt-space-lg pb-space-md bg-surface-container-low/60 flex flex-col md:flex-row md:items-center md:justify-between gap-space-md">
+<div class="space-y-1">
+<div class="flex items-center gap-2">
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Khởi tạo dự án mới</h1>
+<span class="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary font-label-sm text-label-sm uppercase tracking-wider font-bold">Scrum Edition</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-2xl">
+            Thiết lập không gian làm việc chuẩn Agile phối hợp Trợ lý Trí tuệ Nhân tạo cho đề tài nghiên cứu, đồ án tốt nghiệp và dự án phần mềm HUCE.
+          </p>
+</div>
+<!-- Wizard Step Indicator -->
+<div class="flex items-center gap-3 bg-surface-container rounded-xl p-1.5 shadow-sm">
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-lowest text-primary shadow-sm font-label-md text-label-md">
+<span class="w-5 h-5 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-label-sm text-label-sm font-bold">1</span>
+<span>Mẫu dự án</span>
+</div>
+<div class="h-4 w-px bg-outline-variant"></div>
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-on-surface-variant font-label-md text-label-md">
+<span class="w-5 h-5 rounded-full bg-surface-container-high text-on-surface-variant flex items-center justify-center font-label-sm text-label-sm font-bold">2</span>
+<span>Cấu hình chi tiết</span>
+</div>
+</div>
+</div>
+<!-- Content Body: 2 Steps Interactive Flow -->
+<div class="p-space-xl space-y-space-xl">
+<!-- STEP 1: Template Selection -->
+<section class="space-y-space-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="w-6 h-6 rounded-md bg-primary text-on-primary flex items-center justify-center font-label-md text-label-md font-bold">1</span>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Chọn mẫu quy trình dự án (Project Template)</h2>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Chọn mẫu phù hợp với mô hình vận hành nhóm</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-md">
+<!-- Template 1: Scrum (Selected) -->
+<div class="group relative rounded-xl p-space-md bg-surface-container-lowest shadow-md transition-all duration-300 cursor-pointer ring-2 ring-primary bg-gradient-to-b from-primary-fixed/30 to-surface-container-lowest" id="template-scrum">
+<div class="absolute -top-2.5 right-4 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-secondary to-tertiary-container text-on-primary font-label-sm text-label-sm flex items-center gap-1 shadow-sm">
+<span class="material-symbols-outlined text-[14px]">auto_awesome</span>
+<span>AI POWERED</span>
+</div>
+<div class="flex items-start gap-space-sm mb-3">
+<div class="w-10 h-10 rounded-lg bg-primary-container text-on-primary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[24px]">view_timeline</span>
+</div>
+<div class="min-w-0 flex-1">
+<div class="flex items-center justify-between">
+<h3 class="font-headline-sm text-headline-sm text-primary">Agile Scrum</h3>
+<span class="material-symbols-outlined text-primary text-[20px]">check_circle</span>
+</div>
+<span class="font-label-sm text-label-sm text-secondary font-semibold">Khuyên dùng cho Đồ án K65</span>
+</div>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+                Lập kế hoạch theo Sprint định kỳ (1-2 tuần), Backlog đồ án, biểu đồ Burndown & tự động rã task bằng Claude AI.
+              </p>
+<div class="space-y-1.5 pt-2 bg-surface-container-low/70 rounded-lg p-2.5">
+<div class="flex items-center gap-2 font-label-sm text-label-sm text-on-surface">
+<span class="material-symbols-outlined text-[16px] text-primary">done</span>
+<span>Quản lý Sprint & Sprint Goal</span>
+</div>
+<div class="flex items-center gap-2 font-label-sm text-label-sm text-on-surface">
+<span class="material-symbols-outlined text-[16px] text-primary">done</span>
+<span>Tự động sinh User Story & AC</span>
+</div>
+<div class="flex items-center gap-2 font-label-sm text-label-sm text-on-surface">
+<span class="material-symbols-outlined text-[16px] text-primary">done</span>
+<span>Dự báo vận tốc Velocity đồ án</span>
+</div>
+</div>
+</div>
+<!-- Template 2: Kanban -->
+<div class="group relative rounded-xl p-space-md bg-surface-container-low hover:bg-surface-container transition-all duration-300 cursor-pointer shadow-sm" id="template-kanban">
+<div class="flex items-start gap-space-sm mb-3">
+<div class="w-10 h-10 rounded-lg bg-surface-container-high text-on-surface-variant flex items-center justify-center">
+<span class="material-symbols-outlined text-[24px]">view_kanban</span>
+</div>
+<div class="min-w-0 flex-1">
+<div class="flex items-center justify-between">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Kanban Liên tục</h3>
+<span class="material-symbols-outlined text-outline text-[20px]">radio_button_unchecked</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Luồng công việc linh hoạt</span>
+</div>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+                Theo dõi luồng công việc liên tục, áp dụng hạn mức WIP giới hạn số lượng công việc đang xử lý đồng thời.
+              </p>
+<div class="space-y-1.5 pt-2 bg-surface-container-high/60 rounded-lg p-2.5">
+<div class="flex items-center gap-2 font-label-sm text-label-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px] text-outline">done</span>
+<span>Trực quan hóa hàng đợi</span>
+</div>
+<div class="flex items-center gap-2 font-label-sm text-label-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px] text-outline">done</span>
+<span>Kiểm soát tắc nghẽn công việc</span>
+</div>
+<div class="flex items-center gap-2 font-label-sm text-label-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px] text-outline">done</span>
+<span>Phù hợp nhóm bảo trì/vận hành</span>
+</div>
+</div>
+</div>
+<!-- Template 3: Bug Tracking & General Tasks -->
+<div class="group relative rounded-xl p-space-md bg-surface-container-low hover:bg-surface-container transition-all duration-300 cursor-pointer shadow-sm" id="template-bug">
+<div class="flex items-start gap-space-sm mb-3">
+<div class="w-10 h-10 rounded-lg bg-surface-container-high text-on-surface-variant flex items-center justify-center">
+<span class="material-symbols-outlined text-[24px]">pest_control</span>
+</div>
+<div class="min-w-0 flex-1">
+<div class="flex items-center justify-between">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Theo dõi lỗi & Công việc</h3>
+<span class="material-symbols-outlined text-outline text-[20px]">radio_button_unchecked</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Tối giản cho đội QA</span>
+</div>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+                Tập trung phân loại, gán trách nhiệm và kiểm thử các lỗi phần mềm từ khâu nghiệm thu sản phẩm.
+              </p>
+<div class="space-y-1.5 pt-2 bg-surface-container-high/60 rounded-lg p-2.5">
+<div class="flex items-center gap-2 font-label-sm text-label-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px] text-outline">done</span>
+<span>Biểu mẫu báo cáo Bug chi tiết</span>
+</div>
+<div class="flex items-center gap-2 font-label-sm text-label-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px] text-outline">done</span>
+<span>Tích hợp Release notes tự động</span>
+</div>
+<div class="flex items-center gap-2 font-label-sm text-label-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px] text-outline">done</span>
+<span>Thống kê tỷ lệ lỗi nghiệm thu</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- STEP 2: Project Details & Configuration -->
+<section class="space-y-space-md pt-space-xs">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="w-6 h-6 rounded-md bg-primary text-on-primary flex items-center justify-center font-label-md text-label-md font-bold">2</span>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Thiết lập chi tiết dự án (Project Details)</h2>
+</div>
+<span class="font-label-sm text-label-sm text-secondary font-semibold">Tự động đồng bộ chuẩn danh mục Khoa CNTT - HUCE</span>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-lg">
+<!-- Left Form Column (7 cols) -->
+<div class="lg:col-span-7 space-y-space-md">
+<!-- Project Name -->
+<div class="space-y-1.5">
+<label class="flex items-center justify-between font-label-lg text-label-lg text-on-surface" for="project-name">
+<span class="flex items-center gap-1">Tên dự án / Đề tài đồ án <span class="text-error">*</span></span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Tối đa 80 ký tự</span>
+</label>
+<div class="relative">
+<input class="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary shadow-inner transition-all" id="project-name" type="text" value="Phần mềm Quản lý Tiến độ Đồ án Tốt nghiệp CNTT"/>
+<span class="material-symbols-outlined absolute right-3 top-2.5 text-primary text-[20px]">edit_note</span>
+</div>
+</div>
+<!-- Project Key & Access Type (2 columns) -->
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-space-md">
+<!-- Project Key -->
+<div class="space-y-1.5">
+<div class="flex items-center justify-between font-label-lg text-label-lg text-on-surface">
+<span class="flex items-center gap-1">Mã khóa (Key) <span class="text-error">*</span></span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container font-label-sm text-label-sm text-primary font-mono">Tự gợi ý</span>
+</div>
+<div class="relative">
+<input class="w-full px-3.5 py-2.5 uppercase font-mono font-bold tracking-wider rounded-xl bg-surface-container-low text-primary font-headline-sm text-headline-sm focus:bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary shadow-inner transition-all" id="project-key" type="text" value="DATN"/>
+<span class="material-symbols-outlined absolute right-3 top-2.5 text-secondary text-[20px]">lock_reset</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Ví dụ mã task sẽ là: <span class="font-mono font-semibold text-primary">DATN-101</span>, <span class="font-mono font-semibold text-primary">DATN-102</span></p>
+</div>
+<!-- Access Permission -->
+<div class="space-y-1.5">
+<label class="block font-label-lg text-label-lg text-on-surface">Phạm vi truy cập (Access)</label>
+<div class="relative">
+<select class="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary appearance-none cursor-pointer">
+<option selected="" value="private">Riêng tư (Nhóm SV & GV Hướng dẫn)</option>
+<option value="faculty">Khoa CNTT (Tất cả sinh viên K65 xem)</option>
+<option value="open">Toàn trường HUCE (Public View)</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-2.5 text-outline text-[20px] pointer-events-none">expand_more</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Chỉ thành viên được mời mới có quyền nộp code và tạo issue.</p>
+</div>
+</div>
+<!-- Project Lead / Scrum Master -->
+<div class="space-y-1.5">
+<label class="block font-label-lg text-label-lg text-on-surface">Trưởng dự án / Cán bộ hướng dẫn (Project Lead)</label>
+<div class="p-2.5 rounded-xl bg-surface-container-low flex items-center justify-between">
+<div class="flex items-center gap-3">
+<img class="w-10 h-10 rounded-full object-cover ring-2 ring-primary/20" data-alt="Chân dung giảng viên kỹ thuật công nghệ thông tin HUCE mặc áo sơ mi trắng đeo kính đang mỉm cười trong phòng nghiên cứu lab hiện đại ánh sáng xanh lam dịu nhẹ" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDvSL_OjabSRVoe_dhwqJGvdhGpBMVnhXhhFJVqrsksx03BfJv8_3uuIdbxHkZSgGhsslFXoHvmi2uqYQOkK7AOXAX2ZK4Zzx-WfcMwzXO6hMIqE6LWIxeeXD8Ttt66G36kj33Av50M02DXFbxeVj-atknyHrSWU8kqmvxc0-MxxfjGxhS966bSycMRxat_EtV_70mkWK3zAOLGZJjBt3OHTzU6vmgBcFhiw1UyphrXe5WacouPMLgj"/>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg font-semibold text-on-surface">TS. Nguyễn Văn Hùng</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Bộ môn Công nghệ Phần mềm - Khoa CNTT HUCE</span>
+</div>
+</div>
+<button class="px-3 py-1 rounded-lg bg-surface-container-high text-primary font-label-md text-label-md hover:bg-surface-variant transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">sync_alt</span>
+<span>Đổi trưởng nhóm</span>
+</button>
+</div>
+</div>
+<!-- Workflow Scheme Selector -->
+<div class="space-y-1.5">
+<label class="block font-label-lg text-label-lg text-on-surface">Quy trình luân chuyển trạng thái (Workflow Scheme)</label>
+<div class="p-3.5 rounded-xl bg-surface-container-low space-y-2">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md font-semibold text-primary">HUCE Scrum Standard (4 Bước nghiệm thu)</span>
+<span class="px-2 py-0.5 rounded bg-primary/10 text-primary font-label-sm text-label-sm font-semibold">Được xác thực</span>
+</div>
+<!-- Workflow Step Chips -->
+<div class="flex flex-wrap items-center gap-1.5 pt-1">
+<span class="px-2.5 py-1 rounded-md bg-surface-container-highest text-on-surface-variant font-label-sm text-label-sm font-medium">To Do (Cần làm)</span>
+<span class="material-symbols-outlined text-[14px] text-outline">arrow_forward</span>
+<span class="px-2.5 py-1 rounded-md bg-secondary-fixed text-on-secondary-fixed-variant font-label-sm text-label-sm font-medium">In Progress (Đang làm)</span>
+<span class="material-symbols-outlined text-[14px] text-outline">arrow_forward</span>
+<span class="px-2.5 py-1 rounded-md bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-sm text-label-sm font-medium">In Review (Duyệt/Demo)</span>
+<span class="material-symbols-outlined text-[14px] text-outline">arrow_forward</span>
+<span class="px-2.5 py-1 rounded-md bg-primary text-on-primary font-label-sm text-label-sm font-semibold">Done (Hoàn thành)</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Right AI & Meta Settings Column (5 cols) -->
+<div class="lg:col-span-5 flex flex-col justify-between space-y-space-md">
+<!-- AI Integration Panel Card -->
+<div class="p-space-md rounded-xl bg-gradient-to-br from-surface-container to-surface-container-high/70 shadow-sm space-y-space-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="w-7 h-7 rounded-lg bg-gradient-to-tr from-secondary to-tertiary-container text-on-primary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[18px]">auto_awesome</span>
+</div>
+<span class="font-headline-sm text-headline-sm text-on-surface">HUCE AI Co-Pilot</span>
+</div>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-semibold">Active Engine</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                  Trợ lý Scrum thông minh hỗ trợ đội ngũ sinh viên và cố vấn học tập tối ưu hóa quy trình thiết kế phần mềm.
+                </p>
+<div class="space-y-2.5">
+<!-- Checkbox AI 1 -->
+<label class="flex items-start gap-2.5 p-2 rounded-lg bg-surface-container-lowest/80 hover:bg-surface-container-lowest transition-colors cursor-pointer">
+<input checked="" class="mt-0.5 w-4 h-4 rounded text-primary focus:ring-primary accent-primary cursor-pointer" type="checkbox"/>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-semibold text-on-surface">Auto Task Breakdown</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Rã tự động User Story thành Sub-tasks & Checklist kỹ thuật</span>
+</div>
+</label>
+<!-- Checkbox AI 2 -->
+<label class="flex items-start gap-2.5 p-2 rounded-lg bg-surface-container-lowest/80 hover:bg-surface-container-lowest transition-colors cursor-pointer">
+<input checked="" class="mt-0.5 w-4 h-4 rounded text-primary focus:ring-primary accent-primary cursor-pointer" type="checkbox"/>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-semibold text-on-surface">Acceptance Criteria (AC) Generator</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Sinh tiêu chuẩn nghiệm thu theo cú pháp Given-When-Then</span>
+</div>
+</label>
+<!-- Checkbox AI 3 -->
+<label class="flex items-start gap-2.5 p-2 rounded-lg bg-surface-container-lowest/80 hover:bg-surface-container-lowest transition-colors cursor-pointer">
+<input checked="" class="mt-0.5 w-4 h-4 rounded text-primary focus:ring-primary accent-primary cursor-pointer" type="checkbox"/>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-semibold text-on-surface">Dự báo rủi ro trễ hạn đồ án</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Cảnh báo sớm nếu Velocity thực tế lệch so với kế hoạch bảo vệ</span>
+</div>
+</label>
+</div>
+<!-- Academic Preset Badge -->
+<div class="p-2.5 rounded-lg bg-surface-container-lowest/90 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[18px]">school</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Đã nạp sẵn biểu mẫu Đồ án tốt nghiệp Khoa Xây dựng & CNTT.</span>
+</div>
+</div>
+<!-- Project Visual Identity Preview -->
+<div class="p-space-md rounded-xl bg-surface-container-low space-y-2">
+<span class="font-label-md text-label-md font-semibold text-on-surface">Nhận diện bảng làm việc (Board Avatar)</span>
+<div class="flex items-center gap-3">
+<div class="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-primary-container text-on-primary flex items-center justify-center font-headline-md text-headline-md font-black shadow-md">
+                    DA
+                  </div>
+<div class="flex-1 min-w-0">
+<p class="font-label-md text-label-md font-semibold text-on-surface truncate">DATN-HUCE-SCRUM</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Bảng Kanban/Sprint sẽ dùng biểu tượng này</p>
+</div>
+<button class="px-2.5 py-1 rounded bg-surface-container-high text-on-surface font-label-sm text-label-sm hover:bg-surface-variant transition-colors">
+                    Đổi màu
+                  </button>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- Action Footer Toolbar -->
+<div class="px-space-xl py-space-md bg-surface-container-low/80 flex flex-col-reverse sm:flex-row items-center justify-between gap-space-md">
+<div class="flex items-center gap-2 text-on-surface-variant font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-[18px] text-primary">info</span>
+<span>Dự án tạo xong sẽ lập tức xuất hiện tại Sidebar và danh sách đề tài K65.</span>
+</div>
+<div class="flex items-center gap-3 w-full sm:w-auto justify-end">
+<button class="px-5 py-2.5 rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface font-label-lg text-label-lg transition-colors" onclick="window.history.back()" type="button">
+            Hủy bỏ
+          </button>
+<button class="px-5 py-2.5 rounded-xl bg-surface-container text-on-surface font-label-lg text-label-lg hover:bg-surface-container-high transition-colors flex items-center gap-1.5" onclick="history.back()" type="button">
+<span class="material-symbols-outlined text-[18px]">arrow_back</span>
+<span>Quay lại</span>
+</button>
+<button class="px-6 py-2.5 rounded-xl bg-primary-container text-on-primary font-label-lg text-label-lg hover:bg-primary transition-all shadow-md hover:shadow-lg flex items-center gap-2 group" id="btn-create-project" type="button">
+<span class="material-symbols-outlined text-[20px] transition-transform group-hover:scale-110">rocket_launch</span>
+<span class="font-semibold">Tạo dự án mới</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Supplementary Information Cards (Bento row) -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-md mt-space-lg">
+<div class="p-space-md rounded-xl bg-surface-container-low shadow-sm flex items-start gap-3">
+<div class="p-2 rounded-lg bg-primary-fixed text-primary">
+<span class="material-symbols-outlined text-[20px]">groups</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface">Mời thành viên sau</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Có thể cấp tài khoản cho sinh viên làm cùng đồ án sau khi khởi tạo bảng thành công.</span>
+</div>
+</div>
+<div class="p-space-md rounded-xl bg-surface-container-low shadow-sm flex items-start gap-3">
+<div class="p-2 rounded-lg bg-secondary-fixed text-secondary">
+<span class="material-symbols-outlined text-[20px]">hub</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface">Đồng bộ Git / GitHub</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Tự động liên kết commit và pull request vào thẻ nhiệm vụ tương ứng với mã DATN.</span>
+</div>
+</div>
+<div class="p-space-md rounded-xl bg-surface-container-low shadow-sm flex items-start gap-3">
+<div class="p-2 rounded-lg bg-tertiary-fixed text-tertiary">
+<span class="material-symbols-outlined text-[20px]">description</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface">Xuất báo cáo đồ án</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Sinh file PDF tổng kết Sprint kèm chữ ký số phục vụ hội đồng bảo vệ HUCE.</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+  (function() {
+    // Interactive selection for templates
+    const templates = [
+      { id: 'template-scrum', name: 'Scrum' },
+      { id: 'template-kanban', name: 'Kanban' },
+      { id: 'template-bug', name: 'Bug Tracking' }
+    ];
+
+    templates.forEach(t => {
+      const el = document.getElementById(t.id);
+      if (!el) return;
+      el.addEventListener('click', () => {
+        templates.forEach(other => {
+          const otherEl = document.getElementById(other.id);
+          if (otherEl) {
+            otherEl.classList.remove('ring-2', 'ring-primary', 'bg-gradient-to-b', 'from-primary-fixed/30', 'to-surface-container-lowest');
+            otherEl.classList.add('bg-surface-container-low');
+            const icon = otherEl.querySelector('.material-symbols-outlined:last-child');
+            if (icon && (icon.textContent === 'check_circle' || icon.textContent === 'radio_button_unchecked')) {
+              icon.textContent = 'radio_button_unchecked';
+              icon.className = 'material-symbols-outlined text-outline text-[20px]';
+            }
+          }
+        });
+
+        el.classList.remove('bg-surface-container-low');
+        el.classList.add('ring-2', 'ring-primary', 'bg-gradient-to-b', 'from-primary-fixed/30', 'to-surface-container-lowest');
+        const icon = el.querySelector('.material-symbols-outlined:last-child');
+        if (icon && (icon.textContent === 'check_circle' || icon.textContent === 'radio_button_unchecked')) {
+          icon.textContent = 'check_circle';
+          icon.className = 'material-symbols-outlined text-primary text-[20px]';
+        }
+      });
+    });
+
+    // Auto Key generator from Project Name
+    const nameInput = document.getElementById('project-name');
+    const keyInput = document.getElementById('project-key');
+    if (nameInput && keyInput) {
+      nameInput.addEventListener('input', (e) => {
+        const words = e.target.value
+          .trim()
+          .split(/\s+/)
+          .filter(Boolean);
+        if (words.length > 0) {
+          const generatedKey = words
+            .slice(0, 4)
+            .map(w => w[0].toUpperCase())
+            .join('');
+          if (generatedKey.length >= 2) {
+            keyInput.value = generatedKey;
+          }
+        }
+      });
+    }
+
+    // Interactive button loading state feedback
+    const btnCreate = document.getElementById('btn-create-project');
+    if (btnCreate) {
+      btnCreate.addEventListener('click', function() {
+        const originalHtml = this.innerHTML;
+        this.innerHTML = '<span class="material-symbols-outlined animate-spin text-[20px]">sync</span><span>Đang khởi tạo không gian Scrum...</span>';
+        this.classList.add('opacity-80', 'pointer-events-none');
+        setTimeout(() => {
+          this.innerHTML = '<span class="material-symbols-outlined text-[20px]">check</span><span>Đã tạo thành công!</span>';
+          this.classList.remove('bg-primary-container');
+          this.classList.add('bg-secondary');
+          setTimeout(() => {
+            alert('Khởi tạo dự án [DATN] thành công! Đang chuyển hướng đến Backlog & Sprint Planning...');
+            window.location.reload();
+          }, 600);
+        }, 1200);
+      });
+    }
+  })();
+</script></main></div></body></html>

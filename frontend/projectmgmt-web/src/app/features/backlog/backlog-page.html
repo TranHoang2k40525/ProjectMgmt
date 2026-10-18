@@ -1,0 +1,187 @@
+<!-- Context Menu Component Overlay -->
+<app-context-menu
+  [visible]="contextMenuVisible()"
+  [x]="contextMenuX()"
+  [y]="contextMenuY()"
+  [itemKey]="contextMenuItem()?.issueKey || ''"
+  (action)="onContextMenuAction($event)"
+  (menuClose)="closeAllPopups()"
+></app-context-menu>
+
+<section class="backlog-page" aria-labelledby="backlog-title">
+  <header class="backlog-toolbar">
+    <div class="backlog-heading-row">
+      <div class="backlog-heading">
+        <span class="material-symbols-outlined text-primary" aria-hidden="true">format_list_bulleted</span>
+        <div>
+          <h1 id="backlog-title" class="font-headline">Kế hoạch Sprint &amp; Backlog</h1>
+          <p>{{ workItems().length }} công việc · {{ epics().length }} Epic</p>
+        </div>
+      </div>
+
+      <div class="toolbar-actions" aria-label="Thao tác Backlog">
+        <button type="button" class="button button-ai" (click)="triggerAiBreakdown()"><span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span><span>Phân rã AI</span></button>
+        <button type="button" class="button button-secondary" (click)="exportExcel()"><span class="material-symbols-outlined" aria-hidden="true">download</span><span>Xuất Excel</span></button>
+        <button type="button" class="button button-primary" (click)="createSprint()"><span class="material-symbols-outlined" aria-hidden="true">add</span><span>Tạo Sprint</span></button>
+      </div>
+    </div>
+
+    <div class="filter-row">
+      <label class="search-field">
+        <span class="sr-only">Tìm kiếm công việc</span>
+        <span class="material-symbols-outlined" aria-hidden="true">search</span>
+        <input type="search" [ngModel]="searchQuery()" (ngModelChange)="searchQuery.set($event)" placeholder="Tìm tên công việc, mã SCRUMAI hoặc Epic" />
+      </label>
+
+      <button #filterOrigin="cdkOverlayOrigin" cdkOverlayOrigin type="button" class="button button-secondary" [class.is-active]="hasActiveFilters()" [attr.aria-expanded]="isFilterMenuOpen()" aria-haspopup="dialog" (click)="toggleFilterMenu($event)">
+        <span class="material-symbols-outlined" aria-hidden="true">filter_list</span><span>Bộ lọc</span>
+        @if (hasActiveFilters()) { <span class="active-dot" aria-hidden="true"></span> }
+      </button>
+
+      <ng-template cdkConnectedOverlay [cdkConnectedOverlayOrigin]="filterOrigin" [cdkConnectedOverlayOpen]="isFilterMenuOpen()" [cdkConnectedOverlayPositions]="startAlignedOverlayPositions" [cdkConnectedOverlayHasBackdrop]="true" cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop" [cdkConnectedOverlayPush]="true" [cdkConnectedOverlayViewportMargin]="12" (backdropClick)="isFilterMenuOpen.set(false)" (detach)="isFilterMenuOpen.set(false)">
+        <div class="overlay-panel filter-panel" role="dialog" aria-label="Bộ lọc công việc">
+          <div class="overlay-title"><strong>Bộ lọc công việc</strong><button type="button" class="text-button" (click)="resetFilters()">Xóa bộ lọc</button></div>
+          <label><span>Người xử lý</span><select [ngModel]="selectedAssigneeFilter()" (ngModelChange)="selectedAssigneeFilter.set($event)"><option [ngValue]="null">Tất cả người xử lý</option><option value="Trần Văn Hoàng">Trần Văn Hoàng (Lead)</option><option value="Nguyễn Thanh Hà">Nguyễn Thanh Hà</option><option value="Phạm Đức Anh">Phạm Đức Anh</option><option value="Lê Minh Khiêm">Lê Minh Khiêm</option></select></label>
+          <label><span>Loại công việc</span><select [ngModel]="selectedTypeFilter()" (ngModelChange)="selectedTypeFilter.set($event)"><option [ngValue]="null">Tất cả loại công việc</option><option value="Story">Story</option><option value="Task">Task</option><option value="Bug">Bug</option><option value="Use-Case">Use-Case</option><option value="Epic">Epic</option><option value="Sub-task">Sub-task</option></select></label>
+          <label><span>Mức độ ưu tiên</span><select [ngModel]="selectedPriorityFilter()" (ngModelChange)="selectedPriorityFilter.set($event)"><option [ngValue]="null">Tất cả mức độ</option><option value="Urgent">Khẩn cấp</option><option value="High">Cao</option><option value="Medium">Trung bình</option><option value="Low">Thấp</option></select></label>
+          <label><span>Epic</span><select [ngModel]="selectedEpicFilter()" (ngModelChange)="selectedEpicFilter.set($event)"><option [ngValue]="null">Tất cả Epic</option>@for (epic of epics(); track epic.id) { <option [value]="epic.name">{{ epic.name }}</option> }</select></label>
+        </div>
+      </ng-template>
+
+      <button type="button" class="button button-secondary" [class.is-active]="onlyMineFilter()" (click)="onlyMineFilter.update(value => !value)"><span class="material-symbols-outlined" aria-hidden="true">person</span><span>Của tôi</span></button>
+      <button type="button" class="button button-secondary" [class.is-active-purple]="isEpicPanelOpen()" (click)="toggleEpicPanel()"><span class="material-symbols-outlined" aria-hidden="true">view_column</span><span>Epic</span></button>
+      @if (hasActiveFilters()) { <button type="button" class="text-button" (click)="resetFilters()">Xóa lọc</button> }
+    </div>
+  </header>
+
+  <div class="backlog-layout">
+    @if (isEpicPanelOpen()) {
+      <button type="button" class="epic-panel-backdrop" aria-label="Đóng bảng Epic" (click)="isEpicPanelOpen.set(false)"></button>
+      <aside class="epic-panel" aria-label="Danh sách Epic">
+        <div class="epic-panel-title">
+          <div><span class="eyebrow">Phạm vi công việc</span><strong>Bảng Epic</strong></div>
+          <div class="compact-actions"><button type="button" class="icon-button" title="Tạo Epic" (click)="showNewEpicModal.set(true)"><span class="material-symbols-outlined" aria-hidden="true">add</span></button><button type="button" class="icon-button" title="Đóng bảng Epic" (click)="isEpicPanelOpen.set(false)"><span class="material-symbols-outlined" aria-hidden="true">close</span></button></div>
+        </div>
+        <button type="button" class="epic-card" [class.is-selected]="!selectedEpicFilter()" (click)="filterByEpic(null)"><span>Tất cả công việc</span><strong>{{ workItems().length }}</strong></button>
+        <div class="epic-list">
+          @for (epic of epics(); track epic.id) {
+            @let stats = getEpicProgress(epic.name);
+            <button type="button" class="epic-card epic-card-detail" [class.is-selected]="selectedEpicFilter() === epic.name" (click)="filterByEpic(epic.name)">
+              <span class="epic-card-top"><strong>{{ epic.key }}</strong><span>{{ stats.points }} SP</span></span><span class="epic-name">{{ epic.name }}</span><span class="epic-progress-label"><span>{{ stats.done }}/{{ stats.total }} hoàn thành</span><strong>{{ stats.percent }}%</strong></span><span class="progress-track"><span [style.width.%]="stats.percent"></span></span>
+            </button>
+          }
+        </div>
+      </aside>
+    }
+
+    <main class="sprint-list">
+      @for (sprint of sprints(); track sprint.id) {
+        @let sprintTasks = getSprintItems(sprint.id);
+        @let sprintAssignees = getSprintAssignees(sprint.id);
+        <article 
+          cdkDropList
+          [cdkDropListData]="sprintTasks"
+          (cdkDropListDropped)="onSprintDrop($event, sprint.id, sprint.name)"
+          class="sprint-section"
+        >
+          <div class="sprint-header">
+            <div class="sprint-info">
+              @if (editingSprintId() === sprint.id) {
+                <div class="sprint-edit-row"><input type="text" [(ngModel)]="editingSprintName" aria-label="Tên Sprint" /><input type="date" [(ngModel)]="editingStartDate" aria-label="Ngày bắt đầu" /><input type="date" [(ngModel)]="editingEndDate" aria-label="Ngày kết thúc" /><button type="button" class="button button-primary" (click)="saveEditingSprint(sprint.id)">Lưu</button><button type="button" class="button button-secondary" (click)="editingSprintId.set(null)">Hủy</button></div>
+              } @else {
+                <button type="button" class="sprint-title" (click)="startEditingSprint(sprint, $event)" title="Sửa thông tin Sprint"><strong>{{ sprint.name }}</strong><span>{{ sprint.startDate || 'Chưa có ngày' }} – {{ sprint.endDate || 'Chưa có ngày' }}</span><span class="material-symbols-outlined" aria-hidden="true">edit</span></button>
+              }
+              <span class="sprint-state" [class.state-active]="sprint.status === 'active'" [class.state-completed]="sprint.status === 'completed'" [class.state-future]="sprint.status === 'future'">{{ sprint.status === 'active' ? 'Đang chạy' : (sprint.status === 'completed' ? 'Hoàn thành' : 'Kế hoạch') }}</span>
+              <span class="muted-count">{{ sprintTasks.length }} việc</span>
+            </div>
+            <div class="sprint-actions">
+              <div class="avatar-stack" [title]="sprintAssignees.join(', ')" aria-label="Thành viên Sprint">@for (assignee of sprintAssignees; track assignee) { <span>{{ getAssigneeInitials(assignee) }}</span> }</div>
+              <span class="points-summary">{{ sprint.totalStoryPoints }} SP</span>
+              <button type="button" class="button button-secondary" (click)="toggleSprintStatus(sprint, $event)"><span class="material-symbols-outlined" aria-hidden="true">{{ sprint.status === 'future' ? 'play_arrow' : (sprint.status === 'active' ? 'check_circle' : 'restart_alt') }}</span><span>{{ sprint.status === 'future' ? 'Bắt đầu' : (sprint.status === 'active' ? 'Hoàn thành' : 'Mở lại') }}</span></button>
+              <button type="button" class="button button-primary" (click)="activeInlineSprintId.set(activeInlineSprintId() === sprint.id ? null : sprint.id)"><span class="material-symbols-outlined" aria-hidden="true">add</span><span>Tạo việc</span></button>
+            </div>
+          </div>
+          @if (activeInlineSprintId() === sprint.id) { <div class="inline-create"><input type="text" [(ngModel)]="inlineTaskTitleMap[sprint.id]" (keyup.enter)="createInlineSprintTask(sprint.id, sprint.name)" placeholder="Nhập tên công việc rồi nhấn Enter" /><button type="button" class="button button-primary" (click)="createInlineSprintTask(sprint.id, sprint.name)">Thêm</button><button type="button" class="button button-secondary" (click)="activeInlineSprintId.set(null)">Hủy</button></div> }
+          @if (sprintTasks.length > 0) { <ng-container *ngTemplateOutlet="workItemList; context: { $implicit: sprintTasks }"></ng-container> } @else { <div class="empty-state"><span class="material-symbols-outlined" aria-hidden="true">inventory_2</span><p>Sprint chưa có công việc.</p></div> }
+        </article>
+      }
+
+      @let backlogPoolItems = getBacklogItems();
+      <article 
+        cdkDropList
+        [cdkDropListData]="backlogPoolItems"
+        (cdkDropListDropped)="onSprintDrop($event, 'sp-backlog', 'Backlog Pool')"
+        class="sprint-section backlog-pool"
+      >
+        <div class="sprint-header"><div class="sprint-info"><span class="material-symbols-outlined text-slate-500" aria-hidden="true">inbox</span><div><h2>Backlog</h2><p>Kho công việc chưa gán Sprint · {{ backlogPoolItems.length }} việc</p></div></div><button type="button" class="button button-primary" (click)="activeInlineSprintId.set(activeInlineSprintId() === 'sp-backlog' ? null : 'sp-backlog')"><span class="material-symbols-outlined" aria-hidden="true">add</span><span>Tạo việc</span></button></div>
+        @if (activeInlineSprintId() === 'sp-backlog') { <div class="inline-create"><input type="text" [(ngModel)]="inlineTaskTitleMap['sp-backlog']" (keyup.enter)="createInlineSprintTask('sp-backlog', 'Backlog Pool')" placeholder="Nhập tên công việc vào Backlog" /><button type="button" class="button button-primary" (click)="createInlineSprintTask('sp-backlog', 'Backlog Pool')">Thêm</button><button type="button" class="button button-secondary" (click)="activeInlineSprintId.set(null)">Hủy</button></div> }
+        @if (backlogPoolItems.length > 0) { <ng-container *ngTemplateOutlet="workItemList; context: { $implicit: backlogPoolItems }"></ng-container> } @else { <div class="empty-state"><span class="material-symbols-outlined" aria-hidden="true">inbox</span><p>Backlog đang trống.</p></div> }
+      </article>
+    </main>
+  </div>
+
+  @if (selectedTaskIds().length > 0) {
+    <aside class="bulk-toolbar" aria-label="Thao tác hàng loạt"><strong>{{ selectedTaskIds().length }} đã chọn</strong><select aria-label="Đổi trạng thái" (change)="bulkChangeStatus($any($event.target).value)"><option value="" disabled selected>Đổi trạng thái</option><option value="To Do">To Do</option><option value="In Progress">In Progress</option><option value="Code Review">Code Review</option><option value="Done">Done</option></select><select aria-label="Chuyển Sprint" (change)="bulkChangeSprint($any($event.target).value, 'Sprint đã chọn')"><option value="" disabled selected>Chuyển Sprint</option>@for (sprint of sprints(); track sprint.id) { <option [value]="sprint.id">{{ sprint.name }}</option> }</select><button type="button" class="danger-button" (click)="bulkDeleteTasks()">Xóa</button><button type="button" class="icon-button icon-button-dark" title="Bỏ chọn" (click)="clearSelection()"><span class="material-symbols-outlined" aria-hidden="true">close</span></button></aside>
+  }
+
+  @if (showNewEpicModal()) {
+    <div class="modal-backdrop" role="presentation"><button type="button" class="modal-dismiss" aria-label="Đóng hộp thoại tạo Epic" (click)="showNewEpicModal.set(false)"></button><section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="new-epic-title"><div class="modal-title"><h2 id="new-epic-title">Tạo Epic mới</h2><button type="button" class="icon-button" title="Đóng" (click)="showNewEpicModal.set(false)"><span class="material-symbols-outlined" aria-hidden="true">close</span></button></div><label class="modal-field"><span>Tên Epic</span><input type="text" [(ngModel)]="newEpicName" placeholder="Ví dụ: Mobile App Integration" /></label><div class="modal-actions"><button type="button" class="button button-secondary" (click)="showNewEpicModal.set(false)">Hủy</button><button type="button" class="button button-ai-solid" [disabled]="!newEpicName.trim()" (click)="createEpic()">Tạo Epic</button></div></section></div>
+  }
+</section>
+
+<ng-template #workItemList let-items>
+  <div class="work-item-table">
+    <div class="work-item-header" aria-hidden="true"><span></span><span>Mã</span><span>Công việc</span><span>Epic</span><span>Ưu tiên</span><span>SP</span><span>Trạng thái</span><span>Người xử lý</span><span></span></div>
+    @for (item of items; track item.id) {
+      @let subtasks = getSubtasks(item.id);
+      <div class="work-item-group">
+        <div 
+          cdkDrag
+          [cdkDragData]="item"
+          (contextmenu)="onContextMenu($event, item)"
+          (dblclick)="startEditingTaskTitle(item, $event)"
+          class="work-item-row interactive-card" 
+          [class.is-selected]="isTaskSelected(item.id)"
+        >
+          <div class="cell-select no-drawer">@if (subtasks.length > 0) { <button type="button" class="icon-button icon-button-small" [title]="expandedSubtasks()[item.id] ? 'Thu gọn Sub-task' : 'Mở Sub-task'" (click)="toggleSubtasks(item.id, $event)"><span class="material-symbols-outlined" aria-hidden="true">{{ expandedSubtasks()[item.id] ? 'expand_more' : 'chevron_right' }}</span></button> } @else { <input type="checkbox" [checked]="isTaskSelected(item.id)" [attr.aria-label]="'Chọn ' + item.issueKey" (change)="toggleTaskSelection(item.id, $event)" /> }</div>
+          <div class="cell-key"><span class="material-symbols-outlined issue-type-icon" [title]="item.issueType" aria-hidden="true">{{ getIssueTypeIcon(item.issueType) }}</span><strong>{{ item.issueKey }}</strong></div>
+          <div class="cell-title">
+            @if (editingTaskId() === item.id) { <input class="title-input" type="text" [ngModel]="editingTaskTitle()" (ngModelChange)="editingTaskTitle.set($event)" (click)="$event.stopPropagation()" (keyup.enter)="saveEditingTaskTitle(item.id)" (blur)="saveEditingTaskTitle(item.id)" /> } @else { <button type="button" class="task-title-button" (click)="openTask(item, $event)">{{ item.title }}</button><button type="button" class="edit-title-button" title="Sửa tên công việc" (click)="startEditingTaskTitle(item, $event)"><span class="material-symbols-outlined" aria-hidden="true">edit</span></button> }
+            @if (subtasks.length > 0) { <span class="subtask-count">{{ getSubtaskProgress(item.id).done }}/{{ subtasks.length }} Sub-task</span> }
+          </div>
+
+          <div class="cell-epic no-drawer">
+            <button #epicOrigin="cdkOverlayOrigin" cdkOverlayOrigin type="button" class="epic-pill" [attr.aria-expanded]="activeEpicDropdownTaskId() === item.id" (click)="toggleEpicDropdown(item.id, $event)"><span>{{ item.epicName || 'Gán Epic' }}</span><span class="material-symbols-outlined" aria-hidden="true">expand_more</span></button>
+            <ng-template cdkConnectedOverlay [cdkConnectedOverlayOrigin]="epicOrigin" [cdkConnectedOverlayOpen]="activeEpicDropdownTaskId() === item.id" [cdkConnectedOverlayPositions]="startAlignedOverlayPositions" [cdkConnectedOverlayHasBackdrop]="true" cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop" [cdkConnectedOverlayPush]="true" [cdkConnectedOverlayViewportMargin]="12" (backdropClick)="activeEpicDropdownTaskId.set(null)" (detach)="activeEpicDropdownTaskId.set(null)">
+              <div class="overlay-panel option-menu" role="menu"><div class="overlay-title"><strong>Chọn Epic</strong></div><button type="button" role="menuitem" (click)="selectTaskEpic(item.id, null, $event)"><span>Không gán Epic</span>@if (!item.epicName) { <span class="material-symbols-outlined">check</span> }</button>@for (epic of epics(); track epic.id) { <button type="button" role="menuitem" class="epic-option" (click)="selectTaskEpic(item.id, epic.name, $event)"><span>{{ epic.name }}</span>@if (item.epicName === epic.name) { <span class="material-symbols-outlined">check</span> }</button> }</div>
+            </ng-template>
+          </div>
+
+          <button type="button" class="cell-priority no-drawer" [class.priority-urgent]="item.priority === 'Urgent'" [class.priority-high]="item.priority === 'High'" title="Bấm để chuyển mức ưu tiên" (click)="updateInlinePriorityNext(item.id, item.priority, $event)">{{ item.priority }}</button>
+
+          <div class="cell-points no-drawer">@if (editingStoryPointsTaskId() === item.id) { <input type="number" min="0" max="999" [ngModel]="editingStoryPointsValue()" (ngModelChange)="editingStoryPointsValue.set($event)" (click)="$event.stopPropagation()" (keyup.enter)="saveStoryPoints(item.id, $event)" (blur)="saveStoryPoints(item.id, $event)" aria-label="Story Points" /> } @else { <button type="button" title="Sửa Story Points" (click)="startEditingStoryPoints(item, $event)">{{ item.storyPoints }}</button> }</div>
+
+          <div class="cell-status no-drawer">
+            <button #statusOrigin="cdkOverlayOrigin" cdkOverlayOrigin type="button" class="status-pill" [class.status-todo]="item.statusName === 'To Do'" [class.status-progress]="item.statusName === 'In Progress'" [class.status-review]="item.statusName === 'Code Review'" [class.status-done]="item.statusName === 'Done'" [attr.aria-expanded]="activeStatusDropdownTaskId() === item.id" (click)="toggleStatusDropdown(item.id, $event)"><span>{{ item.statusName }}</span><span class="material-symbols-outlined" aria-hidden="true">expand_more</span></button>
+            <ng-template cdkConnectedOverlay [cdkConnectedOverlayOrigin]="statusOrigin" [cdkConnectedOverlayOpen]="activeStatusDropdownTaskId() === item.id" [cdkConnectedOverlayPositions]="endAlignedOverlayPositions" [cdkConnectedOverlayHasBackdrop]="true" cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop" [cdkConnectedOverlayPush]="true" [cdkConnectedOverlayViewportMargin]="12" (backdropClick)="activeStatusDropdownTaskId.set(null)" (detach)="activeStatusDropdownTaskId.set(null)">
+              <div class="overlay-panel option-menu status-menu" role="menu">@for (status of ['To Do', 'In Progress', 'Code Review', 'Done']; track status) { <button type="button" role="menuitem" (click)="updateInlineStatus(item.id, status, $event); activeStatusDropdownTaskId.set(null)"><span class="status-pill" [class.status-todo]="status === 'To Do'" [class.status-progress]="status === 'In Progress'" [class.status-review]="status === 'Code Review'" [class.status-done]="status === 'Done'">{{ status }}</span>@if (item.statusName === status) { <span class="material-symbols-outlined">check</span> }</button> }</div>
+            </ng-template>
+          </div>
+
+          <div class="cell-assignee" [title]="item.assigneeName || 'Chưa gán'"><span class="assignee-avatar">{{ getAssigneeInitials(item.assigneeName) }}</span><span>{{ item.assigneeName || 'Chưa gán' }}</span></div>
+
+          <div class="cell-menu no-drawer">
+            <button #menuOrigin="cdkOverlayOrigin" cdkOverlayOrigin type="button" class="icon-button icon-button-small" title="Thêm thao tác" [attr.aria-expanded]="activeMenuTaskId() === item.id" (click)="toggleRowMenu(item.id, $event)"><span class="material-symbols-outlined" aria-hidden="true">more_vert</span></button>
+            <ng-template cdkConnectedOverlay [cdkConnectedOverlayOrigin]="menuOrigin" [cdkConnectedOverlayOpen]="activeMenuTaskId() === item.id" [cdkConnectedOverlayPositions]="endAlignedOverlayPositions" [cdkConnectedOverlayHasBackdrop]="true" cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop" [cdkConnectedOverlayPush]="true" [cdkConnectedOverlayViewportMargin]="12" (backdropClick)="activeMenuTaskId.set(null)" (detach)="activeMenuTaskId.set(null)">
+              <div class="overlay-panel option-menu action-menu" role="menu"><button type="button" role="menuitem" (click)="assignToMe(item.id, $event)"><span class="material-symbols-outlined">person_add</span><span>Gán cho tôi</span></button><button type="button" role="menuitem" (click)="openSubtaskInput(item.id, $event); activeMenuTaskId.set(null)"><span class="material-symbols-outlined">account_tree</span><span>Thêm Sub-task</span></button><button type="button" role="menuitem" (click)="cloneItem(item.id, $event)"><span class="material-symbols-outlined">content_copy</span><span>Nhân bản</span></button><div class="menu-separator"></div><div class="menu-label">Chuyển Sprint</div>@for (sprint of sprints(); track sprint.id) { <button type="button" role="menuitem" (click)="updateWorkItemSprint(item.id, sprint.id, sprint.name, $event); activeMenuTaskId.set(null)"><span class="material-symbols-outlined">arrow_forward</span><span>{{ sprint.name }}</span></button> }<button type="button" role="menuitem" (click)="updateWorkItemSprint(item.id, 'sp-backlog', 'Backlog Pool', $event); activeMenuTaskId.set(null)"><span class="material-symbols-outlined">inbox</span><span>Backlog</span></button><div class="menu-separator"></div><button type="button" role="menuitem" class="danger-menu-item" (click)="deleteItem(item.id, $event)"><span class="material-symbols-outlined">delete</span><span>Xóa công việc</span></button></div>
+            </ng-template>
+          </div>
+        </div>
+
+        @if (activeSubtaskInputId() === item.id) { <div class="subtask-create"><span class="material-symbols-outlined" aria-hidden="true">subdirectory_arrow_right</span><input type="text" [(ngModel)]="subtaskTitleMap[item.id]" (keyup.enter)="createInlineSubtask(item.id)" placeholder="Tên Sub-task mới" /><button type="button" class="button button-primary" (click)="createInlineSubtask(item.id)">Thêm</button><button type="button" class="button button-secondary" (click)="activeSubtaskInputId.set(null)">Hủy</button></div> }
+        @if (expandedSubtasks()[item.id]) { <div class="subtask-list">@for (subtask of subtasks; track subtask.id) { <button type="button" class="subtask-row" (click)="openTask(subtask, $event)"><span class="material-symbols-outlined" aria-hidden="true">subdirectory_arrow_right</span><strong>{{ subtask.issueKey }}</strong><span>{{ subtask.title }}</span><span class="status-pill" [class.status-todo]="subtask.statusName === 'To Do'" [class.status-progress]="subtask.statusName === 'In Progress'" [class.status-review]="subtask.statusName === 'Code Review'" [class.status-done]="subtask.statusName === 'Done'">{{ subtask.statusName }}</span></button> }</div> }
+      </div>
+    }
+  </div>
+</ng-template>
+

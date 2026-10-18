@@ -1,0 +1,342 @@
+PROJECTMGMT — KẾ HOẠCH VÀ TRẠNG THÁI TRIỂN KHAI MODULAR MONOLITH
+Cập nhật: 12/09/2026
+Trạng thái: phần mô hình dữ liệu EF Core/MySQL đã hoàn thành và được kiểm chứng trên database tạm.
+
+======================================================================
+1. KIẾN TRÚC ĐÃ CHỐT
+======================================================================
+
+1.1. Hệ thống có đúng ba business module:
+     - DeliveryIntelligence
+     - IdentityExperience
+     - Planning
+
+1.2. Mỗi module là một solution folder trong ProjectMgmt.slnx, không phải facade
+     project và không phải solution con. Bên trong mỗi solution folder có đúng ba
+     class library thật:
+     - <Module>.Domain
+     - <Module>.Application
+     - <Module>.Infrastructure
+
+1.3. Cây trong Solution Explorer:
+
+     Modules
+     ├─ DeliveryIntelligence
+     │  ├─ DeliveryIntelligence.Domain
+     │  ├─ DeliveryIntelligence.Application
+     │  └─ DeliveryIntelligence.Infrastructure
+     ├─ IdentityExperience
+     │  ├─ IdentityExperience.Domain
+     │  ├─ IdentityExperience.Application
+     │  └─ IdentityExperience.Infrastructure
+     └─ Planning
+        ├─ Planning.Domain
+        ├─ Planning.Application
+        └─ Planning.Infrastructure
+
+1.4. Cấu trúc vật lý áp dụng giống nhau:
+
+     ProjectMgmt.Modules.<Module>/
+     ├─ Domain/
+     │  ├─ <Module>.Domain.csproj
+     │  ├─ Entities/
+     │  ├─ IRepositories/
+     │  └─ UseCases/
+     ├─ Application/
+     │  ├─ <Module>.Application.csproj
+     │  ├─ IServices/
+     │  ├─ Services/
+     │  └─ Dto/
+     └─ Infrastructure/
+        ├─ <Module>.Infrastructure.csproj
+        ├─ <Module>DbContext.cs
+        ├─ <Module>DbContextFactory.cs
+        ├─ Configurations/
+        ├─ Migrations/
+        ├─ Repositories/
+        └─ BusinessLogicLayer/
+
+1.5. Không tạo folder sâu cho từng feature nếu chưa cần. Entity và configuration
+     là từng file trực tiếp trong thư mục chung. Namespace ngắn theo project:
+     <Module>.Domain.Entities và <Module>.Infrastructure.Configurations.
+
+1.6. AiAssist và AiAssignment là service/process AI riêng trong tương lai, nằm ngang
+     cấp Domain/Application/Infrastructure. Hai thư mục này không chứa code, manifest,
+     Dockerfile hoặc .gitkeep ở giai đoạn hiện tại. Git không theo dõi folder rỗng;
+     folder sẽ chỉ xuất hiện local cho đến khi có source AI thật.
+
+======================================================================
+2. CHIỀU PHỤ THUỘC VÀ DI
+======================================================================
+
+     <Module>.Application    -> <Module>.Domain + ProjectMgmt.Contracts
+     <Module>.Infrastructure -> <Module>.Application + <Module>.Domain
+     ProjectMgmt.Solution    -> ba Application + ba Infrastructure + Foundation
+
+Application không tham chiếu Infrastructure. Domain không phụ thuộc EF Core. Module
+không gọi trực tiếp implementation nội bộ của module khác; giao tiếp liên module đi
+qua contract công khai trong ProjectMgmt.Contracts hoặc do host điều phối.
+
+Toàn bộ DI đặt trực tiếp tại ProjectMgmt.Solution/Program.cs. Hiện Program.cs đọc một
+connection string dùng chung và đăng ký ba DbContext. Khi có repository/service:
+
+     builder.Services.AddScoped<IIdentityRepository, IdentityRepository>();
+     builder.Services.AddScoped<IIdentityService, IdentityService>();
+
+Consumer chỉ inject interface qua constructor. DI container của ASP.NET Core sẽ dựng
+object graph. Nhiều ProjectReference tại host là đúng vai trò composition root và
+không gây hỏng nếu không có vòng tham chiếu hoặc package/framework xung đột.
+
+======================================================================
+3. NGUỒN SCHEMA VÀ PHÂN QUYỀN BẢNG
+======================================================================
+
+Nguồn duy nhất dùng để sinh mô hình:
+     docs/projectmgmt_schema_mysql_optimized.sql
+SHA-256:
+     9751F54E4F75550CEF96C5FED2F7C4170860917C850DFC6FCCC3811B6C7C39BF
+
+Schema yêu cầu MySQL >= 8.0.16, InnoDB, utf8mb4 và utf8mb4_0900_ai_ci.
+
+IdentityExperience sở hữu 16 bảng:
+     User, UserProfile, ExternalLogin, OtpCode, RefreshToken, Role, Permission,
+     RolePermission, UserRole, SkillCatalog, UserSkill, AiModel, AiPromptTemplate,
+     AiGenerationLog, AiSuggestedTask, Notification.
+
+Planning sở hữu 18 bảng:
+     Organization, Project, ProjectComponent, ProjectVersion, WorkflowStatus,
+     WorkflowTransition, IssueType, Priority, Board, BoardColumn, Sprint,
+     SprintSnapshot, SprintMemberCapacity, UserWorkloadSnapshot,
+     UserPerformanceMetric, AiAssignmentRun, AiAssignmentCandidate,
+     AiAssignmentDecision.
+
+DeliveryIntelligence sở hữu 21 bảng:
+     Issue, IssueLink, IssueWatcher, Comment, Attachment, ActivityLog,
+     IssueStatusHistory, IssueAssignmentHistory, Label, IssueLabel,
+     IssueComponentLink, IssueVersionLink, IssueRequiredSkill, AcceptanceCriteria,
+     AiDataset, AiDatasetVersion, AiDatasetSample, AiDataCleaningRule,
+     AiDataQualityFlag, AiTrainingRun, AiEvaluationResult.
+
+DeliveryIntelligence còn map 4 view dưới dạng entity keyless:
+     vw_UserActiveWorkload, vw_SprintVelocity, vw_AiBreakdownQuality,
+     vw_AiAssignmentAccuracy.
+
+======================================================================
+4. ENTITY, CONFIGURATION VÀ DBSET ĐÃ VIẾT
+======================================================================
+
+4.1. Đã tạo 59 entity:
+     - 55 entity cho toàn bộ bảng trong schema.
+     - 4 entity keyless cho toàn bộ view.
+     - Đúng type/nullability: Guid, string, bool, sbyte, int, long, decimal,
+       DateOnly và DateTime.
+     - Domain entity không tham chiếu EF Core hoặc thư viện database.
+
+4.2. Đã tạo 59 IEntityTypeConfiguration<T> trong Infrastructure/Configurations:
+     - tên bảng, tên cột, kiểu cột và nullability;
+     - primary key và 167 index được khai báo trong file SQL;
+     - unique index, composite index và FULLTEXT index;
+     - 55 foreign key của database (54 cùng module + 1 liên module trong migration);
+     - 33 CHECK constraint;
+     - default SQL, ON UPDATE, generated/computed column;
+     - charset, collation, table/column/index comment;
+     - delete/update behavior.
+
+4.3. Có ba DbContext đúng project Infrastructure:
+     - IdentityExperienceDbContext: 16 DbSet.
+     - PlanningDbContext: 18 DbSet.
+     - DeliveryIntelligenceDbContext: 21 DbSet bảng + 4 DbSet view.
+
+Mỗi context dùng ApplyConfigurationsFromAssembly và vô hiệu hóa convention tự sinh
+index cho FK. Nhờ vậy migration chỉ khai báo index có chủ đích từ SQL; MySQL vẫn tự
+tạo index hỗ trợ FK khi cần.
+
+4.4. Một FK trong file SQL nối AiEvaluationResult.ModelId tới AiModel.Id. Configuration
+không tham chiếu Domain của module khác để giữ ranh giới compile-time; FK này được tạo
+trong migration FinalizeDeliveryDatabaseObjects, đúng với database nguồn.
+
+======================================================================
+5. PACKAGE VÀ CÔNG CỤ
+======================================================================
+
+Các phiên bản được quản lý tập trung trong Directory.Packages.props:
+     - Microsoft.EntityFrameworkCore 9.0.19
+     - Microsoft.EntityFrameworkCore.Design 9.0.19
+     - Microsoft.EntityFrameworkCore.Relational 9.0.19
+     - Microsoft.EntityFrameworkCore.Tools 9.0.19
+     - Pomelo.EntityFrameworkCore.MySql 9.0.0
+
+Không trộn MySql.EntityFrameworkCore của Oracle với Pomelo. Ba Infrastructure project
+tham chiếu EF Core Design + Pomelo; host tham chiếu EF Core Design/Tools + Pomelo.
+Local tool manifest .config/dotnet-tools.json khóa dotnet-ef 9.0.19.
+
+Khôi phục package/tool:
+     dotnet restore ProjectMgmt.slnx
+     dotnet tool restore
+     dotnet ef --version
+
+======================================================================
+6. CONNECTION STRING VÀ CẤU HÌNH
+======================================================================
+
+6.1. ProjectMgmt.Solution/appsettings.json chỉ lưu:
+     - ConnectionStrings:ProjectMgmt = chuỗi rỗng;
+     - Database:Provider = Pomelo.EntityFrameworkCore.MySql;
+     - Database:ServerVersion = 8.0.46.
+
+Không đặt mật khẩu trong Domain, Application, Infrastructure, migration hoặc file được
+commit. Connection string local đã được lưu bằng .NET User Secrets bên ngoài repository.
+
+6.2. Tạo/cập nhật secret local:
+
+     dotnet user-secrets --project .\ProjectMgmt.Solution set `
+       "ConnectionStrings:ProjectMgmt" `
+       "Server=127.0.0.1;Port=3306;Database=projectmgmt;User=root;Password=<MẬT_KHẨU>;SslMode=None"
+
+SslMode=None chỉ dùng cho MySQL local hiện tại. Production/IIS phải cấp secret riêng,
+bật TLS phù hợp và ưu tiên SslMode=VerifyCA hoặc VerifyFull.
+
+6.3. Biến môi trường dùng cho IIS, container và design-time factory:
+
+     ConnectionStrings__ProjectMgmt=<connection string môi trường>
+     Database__ServerVersion=8.0.46
+
+ASP.NET Core chuyển dấu gạch dưới kép thành dấu hai chấm. Program.cs fail-fast nếu
+thiếu connection string. Cả ba context dùng chung database vật lý nhưng có lịch sử:
+     __EFMigrationsHistory_IdentityExperience
+     __EFMigrationsHistory_Planning
+     __EFMigrationsHistory_DeliveryIntelligence
+
+======================================================================
+7. MIGRATION VÀ DATABASE OBJECT
+======================================================================
+
+IdentityExperience/Infrastructure/Migrations:
+     20260911191023_InitialIdentityExperienceSchema
+     20260911191028_SeedIdentityReferenceData
+
+Planning/Infrastructure/Migrations:
+     20260911191033_InitialPlanningSchema
+     20260911191039_SeedPlanningReferenceData
+
+DeliveryIntelligence/Infrastructure/Migrations:
+     20260911191045_InitialDeliveryIntelligenceSchema
+     20260911191050_FinalizeDeliveryDatabaseObjects
+
+Các migration chứa toàn bộ cấu trúc và dữ liệu tham chiếu trong SQL: 7 role,
+22 permission, 66 role-permission, 9 skill, 5 priority, 2 AI model, 1 prompt và
+10 cleaning rule. Finalize migration tạo:
+     - TRG_Issue_NoSelfParent_Insert
+     - TRG_Issue_NoSelfParent_Update
+     - vw_UserActiveWorkload
+     - vw_SprintVelocity
+     - vw_AiBreakdownQuality
+     - vw_AiAssignmentAccuracy
+
+Mọi bảng được giữ ENGINE=InnoDB, ROW_FORMAT=DYNAMIC, charset/collation/comment như SQL.
+
+======================================================================
+8. WORKFLOW CODE-FIRST: CODE -> DATABASE
+======================================================================
+
+Trong PowerShell tại thư mục repository, đặt connection string cho phiên terminal:
+
+     $env:ConnectionStrings__ProjectMgmt =
+       "Server=127.0.0.1;Port=3306;Database=<DB_MỚI>;User=root;Password=<MẬT_KHẨU>;SslMode=None"
+
+Database mới/rỗng phải cập nhật theo thứ tự để thỏa FK liên module:
+
+     dotnet ef database update --project .\ProjectMgmt.Modules.IdentityExperience\Infrastructure --context IdentityExperienceDbContext
+     dotnet ef database update --project .\ProjectMgmt.Modules.Planning\Infrastructure --context PlanningDbContext
+     dotnet ef database update --project .\ProjectMgmt.Modules.DeliveryIntelligence\Infrastructure --context DeliveryIntelligenceDbContext
+
+Sau khi sửa entity/configuration, tạo migration trong đúng module:
+
+     dotnet ef migrations add <TenMigration> --project .\ProjectMgmt.Modules.<Module>\Infrastructure --context <Module>DbContext
+     dotnet ef database update --project .\ProjectMgmt.Modules.<Module>\Infrastructure --context <Module>DbContext
+
+Không tự động Database.Migrate() khi startup production. Nên sinh script để review và
+triển khai có kiểm soát:
+
+     dotnet ef migrations script --idempotent --project <InfrastructurePath> --context <Module>DbContext --output <file.sql>
+
+======================================================================
+9. WORKFLOW DB-FIRST: DATABASE -> CODE
+======================================================================
+
+Reverse engineering đã được chạy thử thành công với provider Pomelo trên MySQL local.
+Luôn scaffold vào thư mục tạm để review, không ghi đè trực tiếp 59 entity/config hiện có:
+
+     dotnet ef dbcontext scaffold `
+       "Server=127.0.0.1;Port=3306;Database=projectmgmt;User=root;Password=<MẬT_KHẨU>;SslMode=None" `
+       Pomelo.EntityFrameworkCore.MySql `
+       --project .\ProjectMgmt.Modules.DeliveryIntelligence\Infrastructure `
+       --output-dir <THƯ_MỤC_TẠM> `
+       --context ProjectMgmtScaffoldDbContext `
+       --no-onconfiguring
+
+Lưu ý: reverse engineer có thể rút gọn bảng nối thuần thành quan hệ many-to-many, vì
+vậy số class scaffold không nhất thiết bằng số bảng. So sánh và phân vùng lại theo ba
+module trước khi chép code vào project thật.
+
+======================================================================
+10. DATABASE projectmgmt HIỆN HỮU VÀ BASELINE
+======================================================================
+
+Database projectmgmt đang có schema nhưng chưa có ba bảng __EFMigrationsHistory_*.
+KHÔNG chạy các initial migration trực tiếp lên database này: EF sẽ cố tạo lại bảng.
+
+Quy trình baseline an toàn:
+     1. Backup database.
+     2. So sánh schema hiện hữu với migration/script đã sinh.
+     3. Chọn chiến lược baseline và ghi nhận sáu migration là đã áp dụng, hoặc tạo
+        baseline migration riêng phù hợp quy trình vận hành.
+     4. Thử trên bản clone/staging trước.
+     5. Chỉ triển khai production sau khi review script và có phương án rollback.
+
+Không tự ý chèn lịch sử migration vào database thật. Việc baseline phải là thao tác
+vận hành có chủ đích và được phê duyệt.
+
+======================================================================
+11. KẾT QUẢ KIỂM CHỨNG
+======================================================================
+
+Đã apply đủ sáu migration lên database tạm độc lập, không sửa database projectmgmt.
+Kết quả database sinh từ code:
+     - 55 bảng nghiệp vụ;
+     - 4 view;
+     - 2 trigger;
+     - 55 foreign key;
+     - 33 CHECK constraint;
+     - 173 index thực tế (167 khai báo + 6 index hỗ trợ FK do MySQL tạo);
+     - 55/55 bảng có ROW_FORMAT=DYNAMIC;
+     - 6 bản ghi lịch sử migration.
+
+So sánh information_schema giữa database sinh từ migration và database nguồn:
+     - Không lệch tên/thuộc tính cột, type, null, default, generated expression,
+       charset, collation hoặc comment.
+     - Không lệch index, uniqueness, index type, thứ tự cột hoặc index comment.
+     - Không lệch FK/delete/update rule, CHECK, table engine/row format/comment.
+     - Trigger và nội dung view được version hóa từ chính SQL nguồn.
+     - dotnet build: 0 warning, 0 error tại lần kiểm chứng triển khai.
+
+Database tạm chỉ dùng nghiệm thu và đã được xóa sau kiểm chứng. Dữ liệu thật trong
+projectmgmt không bị migration thay đổi.
+
+======================================================================
+12. PHẦN VIỆC TIẾP THEO
+======================================================================
+
+[x] Khóa cấu trúc ba module và chiều reference.
+[x] Phân quyền đủ 55 bảng theo ba module.
+[x] Viết đủ entity, view model keyless và configuration.
+[x] Viết ba DbContext, DbSet và design-time factory.
+[x] Cài provider Pomelo/EF Core và local dotnet-ef.
+[x] Viết sáu migration, seed, index, FK, CHECK, view, trigger.
+[x] Đăng ký ba DbContext trực tiếp trong Program.cs.
+[x] Cấu hình secret ngoài repository.
+[x] Kiểm chứng code-first và DB-first trên MySQL local.
+[ ] Baseline database projectmgmt hiện hữu sau khi có phê duyệt vận hành.
+[ ] Viết repository/service/DTO và nghiệp vụ Application theo từng tính năng.
+[ ] Viết AI riêng trong AiAssist/AiAssignment khi bắt đầu giai đoạn AI.
+[ ] Thêm integration test dùng database disposable/container cho CI.

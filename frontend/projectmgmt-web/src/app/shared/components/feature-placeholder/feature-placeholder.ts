@@ -16,6 +16,8 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
     h1 { font-size: clamp(1.8rem, 4vw, 2.7rem); margin: 14px 0 12px; }
     p { color: #64748b; font-size: 1.05rem; line-height: 1.65; }
     .notice { background: #f1faf8; border-left: 3px solid #48c6a8; border-radius: 6px; color: #285c51; margin-top: 28px; padding: 14px 16px; }
+    @media (max-width: 1279px) { .card { width: 100%; max-width: 100%; min-width: 0; } }
+    @media (max-width: 767px) { .card { padding: 24px 18px; } .notice { margin-top: 20px; } }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush
 })

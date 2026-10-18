@@ -1,48 +1,40 @@
-# ScrumAI Project Management
+# Hệ thống Quản lý Dự án Scrum tích hợp AI
 
-Modular monolith dùng ASP.NET Core/.NET 10, EF Core + MySQL và Angular. Backend có đúng 7 project để ba thành viên có ranh giới sở hữu rõ ràng.
+Tên mã nguồn `ProjectMgmt` được giữ ổn định. **[Cẩm nang kỹ thuật của sản phẩm](docs/cam-nang-du-an/Cam-nang-ky-thuat.md)** là điểm bắt đầu chính thức cho người đọc, nhóm phát triển và người tiếp quản: bài toán, hai AI, ba module, kiến trúc Modular Monolith + Clean Architecture, sơ đồ, kiểm thử và CI/CD.
 
-## Cấu trúc backend
+Backend được tổ chức thành đúng ba business module:
 
-| Project | Vai trò |
-|---|---|
-| `ProjectMgmt.Solution` | ASP.NET Core Web API, thư mục `Controllers`, cấu hình HTTP và composition root/DI |
-| `ProjectMgmt.Core` | Building blocks thuần dùng chung; không chứa EF Core, MySQL hoặc cấu hình kết nối DB |
-| `ProjectMgmt.Contracts` | DTO và interface giao tiếp liên module; không chứa EF entity |
-| `ProjectMgmt.Modules.IdentityExperience` | IdentityAccess, Notification, AiAssist (14 bảng) |
-| `ProjectMgmt.Modules.Planning` | ProjectManagement, SprintBacklog, AiAssignment (18 bảng) |
-| `ProjectMgmt.Modules.DeliveryIntelligence` | IssueTracking, AiCore, AiDataOps (23 bảng) |
-| `ProjectMgmt.Tests` | Unit, architecture, integration và test fakes |
+1. `DeliveryIntelligence`
+2. `IdentityExperience`
+3. `Planning`
 
-Mỗi logical module dùng cấu trúc `Domain/IRepositories`, `Application/IServices`, `Application/Services`, `Infrastructure/Repositories` và `Infrastructure/Persistence/Configurations`. Code dùng class, constructor và repository/service truyền thống; không dùng `record`, `sealed`, primary constructor, CQRS hoặc MediatR.
+Mỗi module là một solution folder trong `ProjectMgmt.slnx` và chứa ba class library thật: `Domain`, `Application`, `Infrastructure`. `ProjectMgmt.Solution` là ASP.NET Core host/composition root; toàn bộ đăng ký DI nằm trực tiếp trong `Program.cs`.
 
-## Database
+## Database hiện tại
 
-Ba context cùng đọc `ConnectionStrings:ProjectMgmt`, nhưng tự sở hữu cấu hình provider và bảng của module:
+Schema chuẩn: `docs/projectmgmt_schema_mysql_optimized.sql` (MySQL 8.0.16+, database `projectmgmt`).
 
-- `IdentityExperienceAppDbContext`
-- `PlanningAppDbContext`
-- `DeliveryIntelligenceAppDbContext`
+EF Core đã được hiện thực đầy đủ theo schema:
 
-Các file `*DatabaseConfiguration.cs` trong từng module cấu hình MySQL, retry, migration history và health check. Các lớp `IEntityTypeConfiguration<T>` trong `Infrastructure/Persistence/Configurations` cấu hình table, column, relationship và index. Tổng cộng 55 bảng được ánh xạ, không trùng quyền sở hữu.
+- 55 entity cho 55 bảng và 4 entity keyless cho 4 view.
+- 59 `IEntityTypeConfiguration<T>`.
+- 3 `DbContext`, mỗi module sở hữu một context và một bảng lịch sử migration riêng.
+- 6 migration, gồm bảng/index/FK/CHECK/default/computed column/comment/seed, 4 view và 2 trigger.
+- Pomelo EF Core MySQL và `dotnet-ef` được khóa phiên bản tại repository.
 
-Ứng dụng không gọi `EnsureCreated`, `EnsureDeleted`, `Migrate` hoặc tự chạy DDL. Chuỗi kết nối lưu bằng User Secrets:
+Connection string chỉ được đọc từ host bằng khóa `ConnectionStrings:ProjectMgmt`. `appsettings.json` không chứa mật khẩu. Khi phát triển, dùng User Secrets; khi chạy IIS/production, dùng biến môi trường hoặc secret store:
 
 ```powershell
-dotnet user-secrets set "ConnectionStrings:ProjectMgmt" "Server=localhost;Port=3306;Database=projectmgmt;User ID=YOUR_USER;Password=YOUR_PASSWORD;SslMode=Preferred;AllowPublicKeyRetrieval=True" --project .\ProjectMgmt.Solution\ProjectMgmt.Solution.csproj
+dotnet user-secrets --project .\ProjectMgmt.Solution set `
+  "ConnectionStrings:ProjectMgmt" `
+  "Server=127.0.0.1;Port=3306;Database=projectmgmt;User=root;Password=<MẬT_KHẨU>;SslMode=None"
 ```
 
-## Chạy và kiểm tra
+`SslMode=None` chỉ phù hợp với MySQL local đang dùng. Môi trường thật phải cấu hình TLS phù hợp, ưu tiên `VerifyCA` hoặc `VerifyFull`.
 
-```powershell
-dotnet restore .\ProjectMgmt.slnx
-dotnet build .\ProjectMgmt.slnx
-dotnet test .\ProjectMgmt.Tests\ProjectMgmt.Tests.csproj
-dotnet run --project .\ProjectMgmt.Solution\ProjectMgmt.Solution.csproj --launch-profile http
-```
+## Tài liệu
 
-- Live health: `http://localhost:5083/health/live`
-- Database readiness: `http://localhost:5083/health`
-- OpenAPI (Development): `http://localhost:5083/openapi/v1.json`
+- Cẩm nang chuẩn tắc: `docs/cam-nang-du-an/Cam-nang-ky-thuat.md` (có bản Word, PDF, HTML, TXT và draw.io cùng thư mục).
+- Tư liệu cấu trúc mã nguồn để đối chiếu (không thay cẩm nang): `docs/plane.txt`, `docs/project-structure-guide.html`.
 
-Frontend nằm tại `frontend/projectmgmt-web`. Xem thêm [kiến trúc](docs/ARCHITECTURE.md), [phân công module](docs/MODULE-OWNERSHIP.md), [contracts](docs/CONTRACTS.md), [chiến lược test](docs/TEST-STRATEGY.md) và [Docker cục bộ](docs/LOCAL-DOCKER.md).
+Lưu ý: database `projectmgmt` hiện hữu chưa có ba bảng lịch sử EF Migration. Không chạy các initial migration lên database đó trước khi thực hiện baseline. Quy trình an toàn được ghi rõ trong tài liệu HTML.

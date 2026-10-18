@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\Domain\Planning.Domain.csproj" />
+    <ProjectReference Include="..\..\ProjectMgmt.Contracts\ProjectMgmt.Contracts.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\ProjectManagement\Application\**\*.cs" />
+  </ItemGroup>
+</Project>

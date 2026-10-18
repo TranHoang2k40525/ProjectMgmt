@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
-    <ProjectReference Include="..\ProjectMgmt.Core\ProjectMgmt.Core.csproj" />
+    <PackageReference Include="BCrypt.Net-Next" />
   </ItemGroup>
 </Project>

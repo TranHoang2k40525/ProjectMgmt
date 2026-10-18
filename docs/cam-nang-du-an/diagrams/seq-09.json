@@ -1,0 +1,78 @@
+{
+  "title": "09 AI phân rã",
+  "participants": [
+    {
+      "id": "po",
+      "label": "PO / Tech Lead",
+      "actor": true
+    },
+    {
+      "id": "api",
+      "label": "Identity API"
+    },
+    {
+      "id": "job",
+      "label": "Worker"
+    },
+    {
+      "id": "model",
+      "label": "AI 1 runtime"
+    },
+    {
+      "id": "issue",
+      "label": "Issue contract"
+    }
+  ],
+  "messages": [
+    {
+      "from": "po",
+      "to": "api",
+      "label": "Yêu cầu phân rã Story"
+    },
+    {
+      "from": "api",
+      "to": "po",
+      "label": "202 generationId",
+      "return": true
+    },
+    {
+      "from": "job",
+      "to": "model",
+      "label": "Prompt + schema + context"
+    },
+    {
+      "from": "model",
+      "to": "job",
+      "label": "JSON subTasks + AC",
+      "return": true
+    },
+    {
+      "from": "job",
+      "to": "api",
+      "label": "Lưu bản nháp đã validate",
+      "async": true
+    },
+    {
+      "from": "po",
+      "to": "api",
+      "label": "Xem / sửa / áp dụng"
+    },
+    {
+      "from": "api",
+      "to": "issue",
+      "label": "CreateSubTasks idempotent"
+    },
+    {
+      "from": "issue",
+      "to": "api",
+      "label": "IssueIds",
+      "return": true
+    },
+    {
+      "from": "api",
+      "to": "po",
+      "label": "Kết quả + feedback",
+      "return": true
+    }
+  ]
+}

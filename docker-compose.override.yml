@@ -1,0 +1,11 @@
+# Local access for database tools. The backend network remains isolated.
+# Compose loads this file automatically alongside docker-compose.yml.
+services:
+  mysql:
+    networks:
+      - backend
+      - local_database
+
+networks:
+  local_database:
+    driver: bridge

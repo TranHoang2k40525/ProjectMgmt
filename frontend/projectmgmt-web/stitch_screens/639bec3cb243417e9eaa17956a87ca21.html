@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+
+<html lang="vi"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><title>HUCE Agile Intelligence</title><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base { html, body { margin: 0; padding: 0; } body { overscroll-behavior: none; } main > :first-child { margin-top: 0 !important; } main > :last-child { margin-bottom: 0 !important; } } ::-webkit-scrollbar { display: none; }</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "surface": "#faf9ff", "inverse-on-surface": "#edf0ff", "outline-variant": "#c3c6d6", "on-tertiary-fixed": "#2b0052", "primary-container": "#0052cc", "tertiary": "#6100af", "tertiary-fixed": "#efdbff", "secondary": "#4648d4", "inverse-surface": "#1d3054", "on-primary-container": "#c4d2ff", "on-error-container": "#93000a", "on-tertiary-container": "#e4c8ff", "on-surface": "#051a3e", "secondary-fixed": "#e1e0ff", "on-surface-variant": "#434654", "on-secondary-fixed-variant": "#2f2ebe", "secondary-fixed-dim": "#c0c1ff", "primary": "#003d9b", "surface-variant": "#d8e2ff", "on-secondary-container": "#fffbff", "on-secondary": "#ffffff", "secondary-container": "#6063ee", "on-primary-fixed-variant": "#0040a2", "surface-dim": "#ccdaff", "tertiary-container": "#7c2ccd", "tertiary-fixed-dim": "#dbb8ff", "primary-fixed-dim": "#b2c5ff", "on-tertiary-fixed-variant": "#6600b7", "surface-container-lowest": "#ffffff", "surface-bright": "#faf9ff", "inverse-primary": "#b2c5ff", "on-primary-fixed": "#001848", "error-container": "#ffdad6", "primary-fixed": "#dae2ff", "surface-container-high": "#e1e8ff", "on-tertiary": "#ffffff", "background": "#faf9ff", "outline": "#737685", "surface-container-low": "#f1f3ff", "on-secondary-fixed": "#07006c", "on-primary": "#ffffff", "surface-container-highest": "#d8e2ff", "error": "#ba1a1a", "surface-container": "#e9edff", "surface-tint": "#0c56d0", "on-error": "#ffffff", "on-background": "#051a3e" }, borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, spacing: { "gutter": "1rem", "space-xs": "0.25rem", "margin-mobile": "1rem", "space-md": "1rem", "space-sm": "0.5rem", "space-lg": "1.5rem", "margin": "1.5rem", "space-xl": "2rem", "gutter-compact": "0.5rem" }, fontFamily: { "display-lg": ["Inter"], "label-md": ["Inter"], "headline-lg": ["Inter"], "body-sm": ["Inter"], "headline-sm": ["Inter"], "headline-md": ["Inter"], "label-sm": ["Inter"], "display-lg-mobile": ["Inter"], "body-md": ["Inter"], "headline-lg-mobile": ["Inter"], "body-lg": ["Inter"], "label-lg": ["Inter"] }, fontSize: { "display-lg": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700" }], "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600" }], "headline-lg": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.015em", "fontWeight": "600" }], "body-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "400" }], "headline-sm": ["16px", { "lineHeight": "24px", "letterSpacing": "-0.005em", "fontWeight": "600" }], "headline-md": ["20px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "label-sm": ["11px", { "lineHeight": "14px", "letterSpacing": "0.04em", "fontWeight": "700" }], "display-lg-mobile": ["30px", { "lineHeight": "38px", "letterSpacing": "-0.015em", "fontWeight": "700" }], "body-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400" }], "headline-lg-mobile": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "body-lg": ["16px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "400" }], "label-lg": ["14px", { "lineHeight": "20px", "letterSpacing": "0.005em", "fontWeight": "500" }] } } } };</script></head><body class="bg-surface font-body-md text-body-md text-on-surface"><aside class="fixed left-0 top-0 h-full w-64 bg-surface-container-low shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-50 flex flex-col pt-space-md pb-space-lg"><div class="px-space-md mb-space-md flex items-center justify-between"><div class="flex items-center gap-space-sm"><div class="w-9 h-9 rounded-xl bg-primary flex items-center justify-center text-on-primary font-headline-sm text-headline-sm shadow-sm">H</div><div class="flex flex-col"><span class="font-headline-sm text-headline-sm text-on-surface leading-tight tracking-tight">HUCE Jira</span><span class="font-label-sm text-label-sm text-outline">Agile Intelligence</span></div></div><button class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[18px]">dock_to_left</span></button></div><div class="px-space-md mb-space-md"><div class="p-space-sm rounded-xl bg-surface-container-lowest shadow-[0_1px_4px_rgba(0,0,0,0.03)] flex items-center justify-between"><div class="flex items-center gap-space-sm truncate"><div class="w-7 h-7 rounded-lg bg-secondary-container text-on-secondary-container flex items-center justify-center font-label-md text-label-md shrink-0">DA</div><div class="truncate"><p class="font-label-md text-label-md text-on-surface truncate">Khoa CNTT - Đồ Án 2025</p><p class="font-label-sm text-label-sm text-outline">HUCE-SCRUM-01</p></div></div><span class="material-symbols-outlined text-[18px] text-on-surface-variant">unfold_more</span></div></div><nav class="flex-1 px-space-sm overflow-y-auto space-y-space-sm" data-active-classes="bg-primary-container text-on-primary font-label-lg rounded-xl shadow-[0_2px_8px_rgba(0,82,204,0.25)]"><div class="px-space-sm pt-space-xs"><span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Kế hoạch &amp; Agile</span></div><div class="space-y-1"><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="tong-quan-du-an" href="#"><span class="material-symbols-outlined text-[20px]">analytics</span><span class="font-body-md text-body-md">Tổng quan Dự án</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="bang-scrum" href="#"><span class="material-symbols-outlined text-[20px]">view_kanban</span><span class="font-body-md text-body-md">Bảng Scrum</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="backlog-and-sprints" href="#"><span class="material-symbols-outlined text-[20px]">format_list_bulleted</span><span class="font-body-md text-body-md">Backlog &amp; Sprints</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="dong-thoi-gian" href="#"><span class="material-symbols-outlined text-[20px]">timeline</span><span class="font-body-md text-body-md">Dòng thời gian</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="bao-cao-and-burndown" href="#"><span class="material-symbols-outlined text-[20px]">monitoring</span><span class="font-body-md text-body-md">Báo cáo &amp; Burndown</span></a></div><div class="px-space-sm pt-space-md"><span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Trí tuệ nhân tạo (AI)</span></div><div class="space-y-1"><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="ai-task-breakdown" href="#"><span class="material-symbols-outlined text-[20px] text-tertiary">auto_awesome</span><span class="font-body-md text-body-md">AI Task Breakdown</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="du-bao-velocity-ai" href="#"><span class="material-symbols-outlined text-[20px] text-secondary">query_stats</span><span class="font-body-md text-body-md">Dự báo Velocity AI</span></a></div><div class="px-space-sm pt-space-md"><span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Quản trị &amp; Cấu hình</span></div><div class="space-y-1"><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="thanh-vien-and-rbac" href="#"><span class="material-symbols-outlined text-[20px]">group</span><span class="font-body-md text-body-md">Thành viên &amp; Phân quyền</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="cai-dat-du-an" href="#"><span class="material-symbols-outlined text-[20px]">tune</span><span class="font-body-md text-body-md">Cài đặt dự án</span></a></div></nav><div class="px-space-md pt-space-sm mt-auto"><div class="p-space-sm rounded-xl bg-surface-container-highest/60 flex items-center justify-between"><a class="flex items-center gap-space-xs text-primary hover:text-primary-container transition-colors font-label-md text-label-md" href="#"><span class="material-symbols-outlined text-[18px]">school</span>HUCE Portal</a><span class="font-label-sm text-label-sm text-outline">v3.4-Agile</span></div></div></aside><div class="pl-64"><header class="fixed top-0 left-64 right-0 z-40 bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 w-full px-8 flex items-center justify-between gap-space-md"><div class="flex items-center gap-space-lg"><nav class="hidden lg:flex items-center gap-space-sm" data-active-classes="bg-surface-container text-primary font-label-lg rounded-lg"><a class="px-space-sm py-1.5 text-on-surface-variant hover:text-on-surface font-label-lg text-label-lg transition-colors" data-path="tong-quan-du-an" href="#">Dự án</a><a class="px-space-sm py-1.5 text-on-surface-variant hover:text-on-surface font-label-lg text-label-lg transition-colors" data-path="bang-scrum" href="#">Không gian</a><a class="px-space-sm py-1.5 text-on-surface-variant hover:text-on-surface font-label-lg text-label-lg transition-colors" data-path="backlog-and-sprints" href="#">Bộ lọc</a><a class="px-space-sm py-1.5 text-on-surface-variant hover:text-on-surface font-label-lg text-label-lg transition-colors" data-path="bao-cao-and-burndown" href="#">Bảng điều khiển</a></nav><div class="relative hidden sm:block w-72"><span class="material-symbols-outlined absolute left-3 top-2.5 text-[18px] text-outline">search</span><input class="w-full pl-9 pr-4 py-2 bg-surface-container-low rounded-xl text-on-surface placeholder:text-outline font-body-sm text-body-sm focus:outline-none focus:ring-2 focus:ring-primary-container" placeholder="Tìm kiếm (issue, sprint, mã)..." type="text"/></div></div><div class="flex items-center gap-space-sm"><button class="flex items-center gap-space-xs px-3 py-1.5 rounded-xl bg-gradient-to-r from-secondary to-tertiary text-on-secondary shadow-[0_2px_12px_rgba(99,102,241,0.25)] hover:opacity-95 transition-opacity font-label-md text-label-md"><span class="material-symbols-outlined text-[18px]">smart_toy</span><span>HUCE Copilot</span></button><div class="h-6 w-px bg-surface-container-high mx-1"></div><div class="relative"><button class="w-9 h-9 rounded-xl flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]">notifications</span></button><span class="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-error rounded-full ring-2 ring-surface"></span></div><button class="w-9 h-9 rounded-xl flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]">help</span></button><button class="w-9 h-9 rounded-xl flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]">settings</span></button><div class="flex items-center gap-space-xs pl-space-xs"><img alt="Profile" class="w-8 h-8 rounded-full object-cover ring-2 ring-surface-variant" src="https://lh3.googleusercontent.com/aida/AEtjO1XtHjbcVDz-UBjctM0LfVUGmqUeR39WQIoExjpXXhoH4Wu_I9_Qpk42NbzSi5dIoyYQuxC6PmMSr__bvB8G1iRv51zwwYHyLI9epDcSeaSJ_23pgMSoDqCavTtJMnh_VUr1XiaX_dfIJVrOpVNtqTGgwFT5FuXj3i9tQVUICLqvROYKaCksEl97aHgdr2n-KIVSDs0bZzIZ5hDOpx0AeyayjF5Y_iybOHjJnpBXyyQz40C4Rx5A_y32U-v-DZxAw_gb18RoyaUMMA"/></div></div></div></header><main class="w-full pt-16 bg-surface min-h-screen"><div class="flex flex-col w-full">
+<!-- Subtle Ambient Glow Orbs behind key sections -->
+<div class="relative w-full overflow-hidden">
+<div class="absolute -top-24 right-1/4 w-96 h-96 bg-gradient-to-br from-secondary/15 via-tertiary/10 to-transparent rounded-full blur-3xl pointer-events-none"></div>
+<div class="absolute top-96 -left-20 w-80 h-80 bg-gradient-to-tr from-primary/10 via-surface-variant/30 to-transparent rounded-full blur-3xl pointer-events-none"></div>
+<!-- Main Workspace Container -->
+<div class="w-full max-w-[1600px] mx-auto px-6 lg:px-10 py-8 space-y-8">
+<!-- Breadcrumbs & Meta Overline -->
+<div class="flex flex-wrap items-center justify-between gap-4">
+<div class="flex items-center gap-2">
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container-high text-primary font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[15px]" style="font-variation-settings: 'FILL' 1;">analytics</span>
+            HUCE-AI-SCRUM-01
+          </span>
+<span class="text-outline text-body-sm">/</span>
+<span class="font-label-sm text-label-sm text-outline tracking-wide uppercase">Mục 5.8 • 7.4 • 7.7 Data Model Engine</span>
+</div>
+<div class="flex items-center gap-3">
+<span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-surface-container text-on-surface-variant font-label-sm text-label-sm shadow-sm">
+<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            Snapshot SnapshotSync: 00:00:00 (Daily Auto-Cron)
+          </span>
+<div class="px-2.5 py-1 rounded-lg bg-surface-container-high text-on-surface font-label-sm text-label-sm font-semibold">
+            K65 - Khoa CNTT
+          </div>
+</div>
+</div>
+<!-- Header Section with Distinct Typography & Actions -->
+<div class="flex flex-col xl:flex-row xl:items-end justify-between gap-6 pb-2">
+<div class="space-y-2">
+<div class="inline-flex items-center gap-2 text-tertiary font-label-md text-label-md uppercase tracking-wider">
+<span class="material-symbols-outlined text-[18px]">query_stats</span>
+            Sprint Telemetry &amp; Machine Learning Forecasting
+          </div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight leading-tight">
+            Báo cáo Hiệu suất &amp; Phân tích Agile
+            <span class="text-primary font-bold"> — Scrum AI Project Management</span>
+</h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-3xl">
+            Tổng hợp dữ liệu theo thời gian thực từ bảng <code class="px-1.5 py-0.5 rounded bg-surface-container-high text-primary font-mono text-[13px]">SprintSnapshot</code>, <code class="px-1.5 py-0.5 rounded bg-surface-container-high text-primary font-mono text-[13px]">Issue</code> và nhật ký suy luận <code class="px-1.5 py-0.5 rounded bg-surface-container-high text-primary font-mono text-[13px]">AiGenerationLog</code> phục vụ hội đồng nghiệm thu Đồ án Tốt nghiệp.
+          </p>
+</div>
+<!-- Primary Actions Group -->
+<div class="flex flex-wrap items-center gap-3 shrink-0">
+<button class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface-container-lowest text-on-surface shadow-sm hover:shadow-md hover:bg-surface-container-low transition-all font-label-md text-label-md" id="btn-export-pdf">
+<span class="material-symbols-outlined text-[18px] text-error">picture_as_pdf</span>
+<span>Xuất báo cáo PDF đồ án K65</span>
+</button>
+<button class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-secondary to-tertiary text-on-secondary shadow-[0_4px_16px_rgba(97,0,175,0.25)] hover:shadow-[0_6px_20px_rgba(97,0,175,0.35)] hover:scale-[1.01] active:scale-[0.99] transition-all font-label-md text-label-md" id="btn-ai-predict">
+<span class="material-symbols-outlined text-[18px] animate-spin" style="animation-duration: 3s;">auto_awesome</span>
+<span>Phân tích dự báo rủi ro bằng AI</span>
+</button>
+</div>
+</div>
+<!-- Control Toolbar Filter Strip -->
+<div class="p-4 rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div class="flex flex-wrap items-center gap-3">
+<!-- Sprint Selector Dropdown -->
+<div class="flex flex-col gap-1">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Sprint hoạt động</span>
+<div class="relative">
+<select class="appearance-none pl-3.5 pr-9 py-2 rounded-xl bg-surface-container font-label-md text-label-md text-on-surface focus:outline-none focus:bg-surface-container-high cursor-pointer">
+<option selected="">Sprint 1: Nền tảng Hạ tầng &amp; AI — Đang chạy</option>
+<option>Sprint 0: Khởi tạo Kiến trúc &amp; SRS (Đã đóng)</option>
+<option>Sprint 2: Triển khai Kanban &amp; RBAC (Dự thảo)</option>
+</select>
+<span class="material-symbols-outlined absolute right-2.5 top-2.5 text-[18px] text-on-surface-variant pointer-events-none">expand_more</span>
+</div>
+</div>
+<!-- Time Window Filter -->
+<div class="flex flex-col gap-1">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Kỳ báo cáo</span>
+<div class="inline-flex p-1 rounded-xl bg-surface-container text-on-surface-variant">
+<button class="px-3 py-1 rounded-lg text-label-sm font-label-sm hover:text-on-surface transition-colors">7 ngày</button>
+<button class="px-3 py-1 rounded-lg bg-surface-container-lowest text-primary font-label-sm text-label-sm shadow-xs font-semibold">14 ngày</button>
+<button class="px-3 py-1 rounded-lg text-label-sm font-label-sm hover:text-on-surface transition-colors">Toàn Sprint</button>
+</div>
+</div>
+</div>
+<!-- Metric Units Switcher -->
+<div class="flex flex-col md:items-end gap-1">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Chế độ hiển thị đơn vị</span>
+<div class="inline-flex p-1 rounded-xl bg-surface-container text-on-surface-variant" id="unit-switcher">
+<button class="unit-btn active flex items-center gap-1.5 px-3 py-1 rounded-lg bg-primary-container text-on-primary font-label-sm text-label-sm shadow-xs font-semibold" data-unit="sp">
+<span class="material-symbols-outlined text-[15px]">straighten</span>
+              Story Points (SP)
+            </button>
+<button class="unit-btn flex items-center gap-1.5 px-3 py-1 rounded-lg text-label-sm font-label-sm hover:text-on-surface transition-colors" data-unit="hours">
+<span class="material-symbols-outlined text-[15px]">schedule</span>
+              Giờ làm việc (Hours)
+            </button>
+<button class="unit-btn flex items-center gap-1.5 px-3 py-1 rounded-lg text-label-sm font-label-sm hover:text-on-surface transition-colors" data-unit="issues">
+<span class="material-symbols-outlined text-[15px]">check_box</span>
+              Số Issue
+            </button>
+</div>
+</div>
+</div>
+<!-- SECTION 1: BURNDOWN CHART & SPRINT TELEMETRY SUMMARY -->
+<div class="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+<!-- Left: Interactive Burndown Graph (8 cols) -->
+<div class="xl:col-span-8 p-6 rounded-3xl bg-surface-container-lowest shadow-sm flex flex-col justify-between space-y-6">
+<div class="flex flex-wrap items-center justify-between gap-4">
+<div class="space-y-1">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[22px]">ssid_chart</span>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Sprint Burndown Chart (14 Ngày)</h2>
+</div>
+<p class="font-body-sm text-body-sm text-outline">
+                Đồng bộ tự động mỗi 24h • Cập nhật gần nhất: Hôm nay 00:00 UTC+7 (Ngày 10/14)
+              </p>
+</div>
+<!-- Legend Items -->
+<div class="flex flex-wrap items-center gap-4 text-body-sm font-body-sm">
+<div class="flex items-center gap-2">
+<span class="w-4 h-0.5 border-t-2 border-dashed border-outline"></span>
+<span class="text-on-surface-variant font-label-sm text-label-sm">Guideline (Lý thuyết)</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 rounded-full bg-primary-container"></span>
+<span class="text-on-surface font-semibold font-label-sm text-label-sm">Thực tế (SprintSnapshot)</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-3.5 h-3.5 rounded bg-tertiary/20"></span>
+<span class="text-tertiary font-medium font-label-sm text-label-sm">AI Forecast (Khu vực dự báo)</span>
+</div>
+</div>
+</div>
+<!-- SVG Burndown Visualization Canvas -->
+<div class="w-full relative bg-surface-container-low/40 rounded-2xl p-4 overflow-x-auto">
+<svg class="w-full h-auto min-w-[640px] text-on-surface select-none font-label-sm text-label-sm" viewbox="0 0 760 360">
+<defs>
+<!-- AI Forecast Corridor Gradient -->
+<lineargradient id="aiCorridorGrad" x1="0%" x2="100%" y1="0%" y2="100%">
+<stop offset="0%" stop-color="#7c2ccd" stop-opacity="0.32"></stop>
+<stop offset="100%" stop-color="#4648d4" stop-opacity="0.08"></stop>
+</lineargradient>
+<!-- Actual Line Drop Shadow -->
+<filter height="140%" id="actualGlow" width="140%" x="-20%" y="-20%">
+<fedropshadow dx="0" dy="3" flood-color="#0052cc" flood-opacity="0.3" stddeviation="3"></fedropshadow>
+</filter>
+</defs>
+<!-- Grid Horizontal Lines & Y-Axis Labels -->
+<g class="text-outline-variant stroke-current" opacity="0.35" stroke-width="1">
+<line x1="50" x2="730" y1="40" y2="40"></line>
+<line x1="50" x2="730" y1="105" y2="105"></line>
+<line x1="50" x2="730" y1="170" y2="170"></line>
+<line x1="50" x2="730" y1="235" y2="235"></line>
+<line x1="50" x2="730" y1="300" y2="300"></line>
+</g>
+<g class="fill-current text-outline font-label-sm text-[11px]" text-anchor="end">
+<text x="42" y="44">40 SP</text>
+<text x="42" y="109">30 SP</text>
+<text x="42" y="174">20 SP</text>
+<text x="42" y="239">10 SP</text>
+<text x="42" y="304">0 SP</text>
+</g>
+<!-- X-Axis Labels (Days 1 to 14) -->
+<g class="fill-current text-outline font-label-sm text-[11px]" text-anchor="middle">
+<text x="65" y="325">D1 (17/8)</text>
+<text x="115" y="325">D2</text>
+<text x="165" y="325">D3</text>
+<text x="215" y="325">D4</text>
+<text x="265" y="325">D5</text>
+<text x="315" y="325">D6</text>
+<text x="365" y="325">D7</text>
+<text x="415" y="325">D8</text>
+<text x="465" y="325">D9</text>
+<text x="515" y="325">D10 (Hôm nay)</text>
+<text x="565" y="325">D11</text>
+<text x="615" y="325">D12</text>
+<text x="665" y="325">D13</text>
+<text x="715" y="325">D14 (30/8)</text>
+</g>
+<!-- Today Marker Vertical Line -->
+<line opacity="0.65" stroke="#6063ee" stroke-dasharray="4 4" stroke-width="1.5" x1="515" x2="515" y1="30" y2="300"></line>
+<rect fill="#e1e0ff" height="20" rx="6" width="80" x="475" y="16"></rect>
+<text fill="#07006c" font-size="10" font-weight="700" text-anchor="middle" x="515" y="30">HÔM NAY (D10)</text>
+<!-- AI Forecast Corridor Area (D10 to D14) -->
+<!-- Points: D10(515, 222) -> upper edge: D11(565, 245), D12(615, 270), D13(665, 288), D14(715, 300)
+                   lower edge return: D14(715, 300), D13(665, 300), D12(615, 290), D11(565, 260), D10(515, 222) -->
+<polygon fill="url(#aiCorridorGrad)" points="515,222 565,242 615,268 665,286 715,300 715,300 665,296 615,282 565,255 515,222"></polygon>
+<!-- Guideline (Ideal Line: 38 SP at D1 -> 0 SP at D14) -->
+<!-- y = 300 - (SP / 40) * 260. 38 SP => 300 - 247 = 53 -->
+<line stroke="#737685" stroke-dasharray="6 6" stroke-width="2" x1="65" x2="715" y1="53" y2="300"></line>
+<!-- AI Projected Trajectory Line (Median Forecast) -->
+<path d="M 515 222 L 565 248 L 615 274 L 665 292 L 715 300" fill="none" stroke="#7c2ccd" stroke-dasharray="5 3" stroke-width="2.5"></path>
+<!-- Actual Remaining Points Line (SprintSnapshot D1 -> D10) -->
+<!-- D1: 38 (y=53) -> D2: 38 (53) -> D3: 35 (72.5) -> D4: 33 (85.5) -> D5: 31 (98.5) -> D6: 28 (118) -> D7: 24 (144) -> D8: 20 (170) -> D9: 16 (196) -> D10: 12 (222) -->
+<path d="M 65 53 L 115 53 L 165 73 L 215 86 L 265 99 L 315 118 L 365 144 L 415 170 L 465 196 L 515 222" fill="none" filter="url(#actualGlow)" stroke="#0052cc" stroke-linecap="round" stroke-linejoin="round" stroke-width="3.5"></path>
+<!-- Actual Line Anchor Dots -->
+<circle cx="65" cy="53" fill="#ffffff" r="4.5" stroke="#0052cc" stroke-width="3"></circle>
+<circle cx="115" cy="53" fill="#ffffff" r="4.5" stroke="#0052cc" stroke-width="3"></circle>
+<circle cx="165" cy="73" fill="#ffffff" r="4.5" stroke="#0052cc" stroke-width="3"></circle>
+<circle cx="215" cy="86" fill="#ffffff" r="4.5" stroke="#0052cc" stroke-width="3"></circle>
+<circle cx="265" cy="99" fill="#ffffff" r="4.5" stroke="#0052cc" stroke-width="3"></circle>
+<circle cx="315" cy="118" fill="#ffffff" r="4.5" stroke="#0052cc" stroke-width="3"></circle>
+<circle cx="365" cy="144" fill="#ffffff" r="4.5" stroke="#0052cc" stroke-width="3"></circle>
+<circle cx="415" cy="170" fill="#ffffff" r="4.5" stroke="#0052cc" stroke-width="3"></circle>
+<circle cx="465" cy="196" fill="#ffffff" r="4.5" stroke="#0052cc" stroke-width="3"></circle>
+<circle class="cursor-pointer" cx="515" cy="222" fill="#0052cc" r="6" stroke="#ffffff" stroke-width="3"></circle>
+<!-- Milestone Finish Star on D14 (30/08) -->
+<g transform="translate(715, 300)">
+<circle class="animate-ping" cx="0" cy="0" fill="#6100af" opacity="0.2" r="8"></circle>
+<polygon fill="#7c2ccd" points="0,-6 2,-2 6,-2 3,1 4,5 0,3 -4,5 -3,1 -6,-2 -2,-2"></polygon>
+</g>
+<!-- Interactive Floating Point Callout on D10 -->
+<g transform="translate(485, 175)">
+<rect fill="#1d3054" filter="drop-shadow(0 4px 8px rgba(0,0,0,0.15))" height="34" rx="8" width="76" x="0" y="0"></rect>
+<text fill="#ffffff" font-size="10" font-weight="700" text-anchor="middle" x="38" y="15">Còn 12 SP</text>
+<text fill="#b2c5ff" font-size="9" text-anchor="middle" x="38" y="27">Đúng kỳ vọng</text>
+<polygon fill="#1d3054" points="38,34 34,39 42,39"></polygon>
+</g>
+</svg>
+</div>
+<!-- Bottom Forecast Insight Banner -->
+<div class="p-4 rounded-2xl bg-gradient-to-r from-tertiary/10 via-secondary/10 to-primary/5 flex items-center justify-between gap-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl bg-tertiary-container text-on-tertiary flex items-center justify-center shrink-0 shadow-sm">
+<span class="material-symbols-outlined text-[20px]">auto_graph</span>
+</div>
+<div>
+<p class="font-headline-sm text-headline-sm text-on-surface">Dự báo hoàn thành Sprint đúng hạn: 30/08/2026</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Mô hình AI Monte Carlo kết luận nhóm sinh viên sẽ hoàn thành 100% Backlog đúng kế hoạch với độ tin cậy P94.</p>
+</div>
+</div>
+<div class="hidden sm:flex flex-col items-end shrink-0">
+<span class="font-label-sm text-label-sm text-outline uppercase">Độ tin cậy AI</span>
+<span class="font-headline-md text-headline-md text-tertiary font-bold">94.0%</span>
+</div>
+</div>
+</div>
+<!-- Right: Telemetry KPI Cards Column (4 cols) -->
+<div class="xl:col-span-4 flex flex-col gap-4">
+<!-- Total Committed -->
+<div class="p-5 rounded-2xl bg-surface-container-lowest shadow-sm flex items-center justify-between">
+<div class="space-y-1">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Tổng Story Points ban đầu</span>
+<div class="flex items-baseline gap-2">
+<span class="font-display-lg text-display-lg text-on-surface font-bold">38</span>
+<span class="font-label-lg text-label-lg text-outline">SP</span>
+</div>
+<span class="text-body-sm font-body-sm text-on-surface-variant">Cam kết tại buổi Sprint Planning #1</span>
+</div>
+<div class="w-12 h-12 rounded-2xl bg-surface-container-high text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[24px]">flag</span>
+</div>
+</div>
+<!-- Completed -->
+<div class="p-5 rounded-2xl bg-surface-container-lowest shadow-sm flex items-center justify-between">
+<div class="space-y-1">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Đã hoàn thành (Done)</span>
+<div class="flex items-baseline gap-2">
+<span class="font-display-lg text-display-lg text-emerald-600 font-bold">26</span>
+<span class="font-label-lg text-label-lg text-outline">SP</span>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold">68.4%</span>
+</div>
+<span class="text-body-sm font-body-sm text-on-surface-variant">14/19 Issue đã qua DoD &amp; Review</span>
+</div>
+<div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+<span class="material-symbols-outlined text-[24px]">task_alt</span>
+</div>
+</div>
+<!-- Remaining -->
+<div class="p-5 rounded-2xl bg-surface-container-lowest shadow-sm flex items-center justify-between">
+<div class="space-y-1">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Story Points còn lại</span>
+<div class="flex items-baseline gap-2">
+<span class="font-display-lg text-display-lg text-primary-container font-bold">12</span>
+<span class="font-label-lg text-label-lg text-outline">SP</span>
+</div>
+<span class="text-body-sm font-body-sm text-on-surface-variant">5 Issue đang ở In-Progress / Review</span>
+</div>
+<div class="w-12 h-12 rounded-2xl bg-primary-fixed text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[24px]">pending_actions</span>
+</div>
+</div>
+<!-- Burn Rate -->
+<div class="p-5 rounded-2xl bg-gradient-to-br from-surface-container-lowest to-surface-container-low shadow-sm flex items-center justify-between">
+<div class="space-y-1">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Tốc độ tiêu thụ (Burn Rate)</span>
+<div class="flex items-baseline gap-2">
+<span class="font-display-lg text-display-lg text-secondary font-bold">2.8</span>
+<span class="font-label-lg text-label-lg text-outline">SP / ngày</span>
+</div>
+<div class="flex items-center gap-1 text-emerald-600 font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[16px]">trending_up</span>
+<span>Vượt kế hoạch dự kiến 0.3 SP/ngày</span>
+</div>
+</div>
+<div class="w-12 h-12 rounded-2xl bg-secondary-fixed text-secondary flex items-center justify-center">
+<span class="material-symbols-outlined text-[24px]">local_fire_department</span>
+</div>
+</div>
+</div>
+</div>
+<!-- SECTION 2: VELOCITY CHART & HISTORICAL PERFORMANCE -->
+<div class="p-6 lg:p-8 rounded-3xl bg-surface-container-lowest shadow-sm space-y-6">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+<div class="space-y-1">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-[22px]">bar_chart</span>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Đo lường Vận tốc Nhóm (Velocity Chart)</h2>
+</div>
+<p class="font-body-sm text-body-sm text-outline">
+              So sánh năng lực cam kết (Committed) vs Thực tế hoàn thành (Completed) qua các Sprint
+            </p>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2">
+<span class="w-3.5 h-3.5 rounded bg-surface-variant"></span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Committed</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-3.5 h-3.5 rounded bg-primary-container"></span>
+<span class="font-label-sm text-label-sm text-on-surface font-semibold">Completed</span>
+</div>
+<div class="h-6 w-px bg-surface-container-high"></div>
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-surface-container font-label-md text-label-md text-on-surface">
+<span class="text-outline">Velocity Trung bình:</span>
+<span class="font-bold text-primary">34 SP / Sprint</span>
+</div>
+</div>
+</div>
+<!-- Velocity Chart Layout: SVG Histogram + Sprint Breakdown Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+<!-- Histogram Graphic (7 cols) -->
+<div class="lg:col-span-7 bg-surface-container-low/40 rounded-2xl p-5">
+<svg class="w-full h-auto text-on-surface select-none font-label-sm text-label-sm" viewbox="0 0 540 240">
+<!-- Y Grid Lines -->
+<line opacity="0.4" stroke="#c3c6d6" stroke-dasharray="3 3" stroke-width="1" x1="45" x2="520" y1="30" y2="30"></line>
+<line opacity="0.4" stroke="#c3c6d6" stroke-dasharray="3 3" stroke-width="1" x1="45" x2="520" y1="80" y2="80"></line>
+<line opacity="0.4" stroke="#c3c6d6" stroke-dasharray="3 3" stroke-width="1" x1="45" x2="520" y1="130" y2="130"></line>
+<line opacity="0.7" stroke="#c3c6d6" stroke-width="1" x1="45" x2="520" y1="180" y2="180"></line>
+<g class="fill-current text-outline font-label-sm text-[10px]" text-anchor="end">
+<text x="38" y="34">40 SP</text>
+<text x="38" y="84">30 SP</text>
+<text x="38" y="134">20 SP</text>
+<text x="38" y="184">0 SP</text>
+</g>
+<!-- Average Line -->
+<!-- 34 SP => y = 180 - (34/40)*150 = 180 - 127.5 = 52.5 -->
+<line stroke="#6100af" stroke-dasharray="4 4" stroke-width="1.5" x1="45" x2="520" y1="52.5" y2="52.5"></line>
+<text fill="#6100af" font-size="10" font-weight="700" text-anchor="end" x="515" y="47">TB: 34 SP</text>
+<!-- SPRINT 0 BARS -->
+<!-- Committed: 32 SP (height = 120, y = 60) | Completed: 30 SP (height = 112.5, y = 67.5) -->
+<rect fill="#d8e2ff" height="120" rx="6" width="36" x="95" y="60"></rect>
+<text fill="#434654" font-size="10" text-anchor="middle" x="113" y="52">32</text>
+<rect fill="#0052cc" height="112.5" rx="6" width="36" x="135" y="67.5"></rect>
+<text fill="#0052cc" font-size="10" font-weight="700" text-anchor="middle" x="153" y="60">30</text>
+<text fill="#051a3e" font-size="11" font-weight="600" text-anchor="middle" x="133" y="202">Sprint 0</text>
+<text fill="#737685" font-size="9.5" text-anchor="middle" x="133" y="218">Khởi tạo</text>
+<!-- SPRINT 1 BARS (Current) -->
+<!-- Committed: 38 SP (height = 142.5, y = 37.5) | Completed so far: 26 SP (height = 97.5, y = 82.5) -->
+<rect fill="#d8e2ff" height="142.5" rx="6" width="36" x="235" y="37.5"></rect>
+<text fill="#434654" font-size="10" text-anchor="middle" x="253" y="30">38</text>
+<rect fill="#0052cc" height="97.5" rx="6" width="36" x="275" y="82.5"></rect>
+<text fill="#0052cc" font-size="10" font-weight="700" text-anchor="middle" x="293" y="75">26*</text>
+<!-- Hatched prediction block on Sprint 1 -->
+<rect fill="#6100af" height="45" opacity="0.18" rx="6" stroke="#6100af" stroke-dasharray="2 2" width="36" x="275" y="37.5"></rect>
+<text fill="#0052cc" font-size="11" font-weight="700" text-anchor="middle" x="273" y="202">Sprint 1 (Đang chạy)</text>
+<text fill="#6100af" font-size="9.5" font-weight="600" text-anchor="middle" x="273" y="218">Dự kiến đạt 38 SP</text>
+<!-- SPRINT 2 BARS (Planned) -->
+<!-- Planned Committed: 36 SP (height = 135, y = 45) | Forecast Completed: 35 SP (height = 131, y = 49) -->
+<rect fill="#d8e2ff" height="135" opacity="0.6" rx="6" stroke="#4648d4" stroke-dasharray="3 3" width="36" x="375" y="45"></rect>
+<text fill="#737685" font-size="10" text-anchor="middle" x="393" y="37">36</text>
+<rect fill="#7c2ccd" height="131" opacity="0.3" rx="6" stroke="#7c2ccd" stroke-dasharray="3 3" width="36" x="415" y="49"></rect>
+<text fill="#7c2ccd" font-size="10" font-weight="700" text-anchor="middle" x="433" y="41">~35</text>
+<text fill="#051a3e" font-size="11" font-weight="600" text-anchor="middle" x="413" y="202">Sprint 2 (Kế hoạch)</text>
+<text fill="#737685" font-size="9.5" text-anchor="middle" x="413" y="218">Bắt đầu 01/09</text>
+</svg>
+</div>
+<!-- Velocity Insights Summary Cards (5 cols) -->
+<div class="lg:col-span-5 space-y-3">
+<div class="p-4 rounded-2xl bg-surface-container flex items-start gap-3.5">
+<div class="w-9 h-9 rounded-xl bg-primary text-on-primary flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[18px]">verified</span>
+</div>
+<div class="space-y-0.5">
+<span class="font-label-sm text-label-sm text-primary font-semibold">Tỷ lệ hoàn thành cam kết</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">93.7% (Độ ổn định cao)</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                  Nhóm sinh viên K65 duy trì chỉ số cam kết xuất sắc so với chuẩn đồ án Atlassian (mức chuẩn: &gt;85%).
+                </p>
+</div>
+</div>
+<div class="p-4 rounded-2xl bg-surface-container flex items-start gap-3.5">
+<div class="w-9 h-9 rounded-xl bg-tertiary-container text-on-tertiary flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[18px]">psychology</span>
+</div>
+<div class="space-y-0.5">
+<span class="font-label-sm text-label-sm text-tertiary font-semibold">Khuyến nghị lập kế hoạch Sprint 2</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Tải trọng tối ưu: 35 – 37 SP</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                  Dựa trên độ biến thiên vận tốc ±3.2%, Sprint 2 không nên vượt quá 37 SP để tránh nợ kỹ thuật (Technical Debt).
+                </p>
+</div>
+</div>
+<!-- Mini Member Contribution Chip Array -->
+<div class="p-3.5 rounded-2xl bg-surface-container-low flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="font-label-sm text-label-sm text-outline">Kỹ sư chính:</span>
+<div class="flex -space-x-2">
+<div class="w-7 h-7 rounded-full bg-primary text-on-primary flex items-center justify-center text-[10px] font-bold ring-2 ring-surface">NV</div>
+<div class="w-7 h-7 rounded-full bg-secondary text-on-secondary flex items-center justify-center text-[10px] font-bold ring-2 ring-surface">TH</div>
+<div class="w-7 h-7 rounded-full bg-tertiary text-on-tertiary flex items-center justify-center text-[10px] font-bold ring-2 ring-surface">LA</div>
+<div class="w-7 h-7 rounded-full bg-surface-container-highest text-on-surface text-[10px] font-bold ring-2 ring-surface">+2</div>
+</div>
+</div>
+<span class="font-label-sm text-label-sm text-secondary font-medium">5 thành viên active</span>
+</div>
+</div>
+</div>
+</div>
+<!-- SECTION 3: AI AUTO TASK BREAKDOWN IMPACT METRICS (Mục 7.4 & 7.7) -->
+<div class="p-6 lg:p-8 rounded-3xl bg-surface-container-lowest shadow-sm space-y-6">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+<div class="space-y-1">
+<div class="flex items-center gap-2">
+<div class="w-7 h-7 rounded-lg bg-gradient-to-r from-secondary to-tertiary text-on-secondary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[16px]">neurology</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">
+                Hiệu quả Tính năng AI Auto Task Breakdown
+              </h2>
+<span class="px-2 py-0.5 rounded-md bg-tertiary/10 text-tertiary font-label-sm text-label-sm font-semibold">
+                Bảng AiGenerationLog
+              </span>
+</div>
+<p class="font-body-sm text-body-sm text-outline">
+              Đánh giá tỷ lệ chấp nhận của con người (Human-in-the-loop) và tài nguyên mô hình sinh sub-tasks
+            </p>
+</div>
+<div class="flex items-center gap-2 text-on-surface-variant font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[18px] text-tertiary">memory</span>
+<span>Mô hình suy luận: Claude 3.7 Sonnet (Anthropic Bedrock Engine)</span>
+</div>
+</div>
+<!-- 3 Major AI KPI Cards -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+<!-- Acceptance Rate -->
+<div class="p-5 rounded-2xl bg-gradient-to-br from-tertiary/5 via-surface-container to-surface-container-low flex flex-col justify-between space-y-4">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-tertiary uppercase font-bold tracking-wider">Human Acceptance Rate</span>
+<span class="material-symbols-outlined text-tertiary text-[20px]">thumb_up</span>
+</div>
+<div class="space-y-1">
+<div class="flex items-baseline gap-2">
+<span class="font-display-lg text-display-lg text-tertiary font-bold">92.4%</span>
+<span class="text-emerald-700 font-label-sm text-label-sm font-semibold">↑ 4.2%</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                Tỉ lệ sub-task do AI sinh ra được kỹ sư duyệt giữ nguyên không chỉnh sửa hoặc xóa bỏ.
+              </p>
+</div>
+<div class="w-full bg-surface-container-high h-2 rounded-full overflow-hidden">
+<div class="bg-gradient-to-r from-secondary to-tertiary h-full rounded-full" style="width: 92.4%"></div>
+</div>
+</div>
+<!-- Time Saved -->
+<div class="p-5 rounded-2xl bg-gradient-to-br from-secondary/5 via-surface-container to-surface-container-low flex flex-col justify-between space-y-4">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-secondary uppercase font-bold tracking-wider">Thời gian tiết kiệm</span>
+<span class="material-symbols-outlined text-secondary text-[20px]">hourglass_bottom</span>
+</div>
+<div class="space-y-1">
+<div class="flex items-baseline gap-2">
+<span class="font-display-lg text-display-lg text-secondary font-bold">4.5</span>
+<span class="font-headline-md text-headline-md text-on-surface font-semibold">giờ</span>
+<span class="font-body-sm text-body-sm text-outline">/ Sprint</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                Rút ngắn thời gian phân rã đặc tả kỹ thuật và viết User Stories trong các phiên Sprint Planning.
+              </p>
+</div>
+<div class="flex items-center gap-1.5 text-secondary font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[16px]">speed</span>
+<span>Giảm 62% thời gian thảo luận phân nhỏ task</span>
+</div>
+</div>
+<!-- Tokens Consumed -->
+<div class="p-5 rounded-2xl bg-gradient-to-br from-primary/5 via-surface-container to-surface-container-low flex flex-col justify-between space-y-4">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-primary uppercase font-bold tracking-wider">Tổng Tokens tiêu thụ</span>
+<span class="material-symbols-outlined text-primary text-[20px]">token</span>
+</div>
+<div class="space-y-1">
+<div class="flex items-baseline gap-2">
+<span class="font-display-lg text-display-lg text-primary font-bold">48,200</span>
+<span class="font-label-md text-label-md text-outline">tokens</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                Chi phí xấp xỉ ~0.14 USD cho toàn bộ Sprint 1. Cực kỳ tối ưu cho ngân sách nghiên cứu Đại học Xây dựng.
+              </p>
+</div>
+<div class="flex items-center gap-1 text-outline font-label-sm text-label-sm">
+<span>Avg Prompt: 340 tok • Avg Completion: 624 tok</span>
+</div>
+</div>
+</div>
+<!-- Table: 5 Most Recent AI Decomposed User Stories -->
+<div class="space-y-3">
+<div class="flex items-center justify-between">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">5 User Story gần nhất được AI phân rã</h3>
+<span class="font-label-sm text-label-sm text-outline">Truy vấn từ AiGenerationLog liên kết Issue</span>
+</div>
+<div class="overflow-x-auto rounded-2xl bg-surface-container-low">
+<table class="w-full text-left font-body-sm text-body-sm">
+<thead>
+<tr class="font-label-sm text-label-sm text-outline uppercase tracking-wider bg-surface-container">
+<th class="py-3 px-4">Mã Issue</th>
+<th class="py-3 px-4">Tên User Story / Đặc tả</th>
+<th class="py-3 px-4 text-center">Sub-tasks do AI sinh</th>
+<th class="py-3 px-4 text-center">Được duyệt (Chấp nhận)</th>
+<th class="py-3 px-4 text-center">Story Points</th>
+<th class="py-3 px-4">Tiến độ DoD</th>
+<th class="py-3 px-4 text-right">Trạng thái</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-container text-on-surface">
+<!-- Row 1 -->
+<tr class="hover:bg-surface-container-high/50 transition-colors">
+<td class="py-3.5 px-4 font-semibold text-primary">
+<span class="inline-flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px] text-emerald-600">bookmark</span>
+                      HUCE-102
+                    </span>
+</td>
+<td class="py-3.5 px-4 font-medium text-on-surface">
+                    Tích hợp kiến trúc Microservices cho dịch vụ phân tích dữ liệu Sprint
+                  </td>
+<td class="py-3.5 px-4 text-center font-semibold">6 sub-tasks</td>
+<td class="py-3.5 px-4 text-center">
+<span class="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-label-sm text-label-sm font-bold">
+                      6 / 6 (100%)
+                    </span>
+</td>
+<td class="py-3.5 px-4 text-center">
+<span class="px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface font-bold text-label-sm">8 SP</span>
+</td>
+<td class="py-3.5 px-4 min-w-[160px]">
+<div class="flex items-center gap-2">
+<div class="w-full bg-surface-container-high h-2 rounded-full overflow-hidden">
+<div class="bg-primary-container h-full rounded-full" style="width: 100%"></div>
+</div>
+<span class="font-label-sm text-label-sm font-semibold text-primary">100%</span>
+</div>
+</td>
+<td class="py-3.5 px-4 text-right">
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+                      DONE
+                    </span>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-surface-container-high/50 transition-colors">
+<td class="py-3.5 px-4 font-semibold text-primary">
+<span class="inline-flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px] text-emerald-600">bookmark</span>
+                      HUCE-105
+                    </span>
+</td>
+<td class="py-3.5 px-4 font-medium text-on-surface">
+                    Thiết lập phân quyền RBAC đa cấp độ (Giảng viên, Trưởng nhóm, Thành viên)
+                  </td>
+<td class="py-3.5 px-4 text-center font-semibold">5 sub-tasks</td>
+<td class="py-3.5 px-4 text-center">
+<span class="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-label-sm text-label-sm font-bold">
+                      5 / 5 (100%)
+                    </span>
+</td>
+<td class="py-3.5 px-4 text-center">
+<span class="px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface font-bold text-label-sm">5 SP</span>
+</td>
+<td class="py-3.5 px-4 min-w-[160px]">
+<div class="flex items-center gap-2">
+<div class="w-full bg-surface-container-high h-2 rounded-full overflow-hidden">
+<div class="bg-primary-container h-full rounded-full" style="width: 100%"></div>
+</div>
+<span class="font-label-sm text-label-sm font-semibold text-primary">100%</span>
+</div>
+</td>
+<td class="py-3.5 px-4 text-right">
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+                      DONE
+                    </span>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-surface-container-high/50 transition-colors">
+<td class="py-3.5 px-4 font-semibold text-primary">
+<span class="inline-flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px] text-secondary">view_agenda</span>
+                      HUCE-108
+                    </span>
+</td>
+<td class="py-3.5 px-4 font-medium text-on-surface">
+                    Bộ lập lịch Daily SprintSnapshot lưu trữ dung lượng trạng thái nhiệm vụ
+                  </td>
+<td class="py-3.5 px-4 text-center font-semibold">4 sub-tasks</td>
+<td class="py-3.5 px-4 text-center">
+<span class="px-2.5 py-1 rounded-full bg-surface-container-highest text-on-surface font-label-sm text-label-sm font-bold">
+                      3 / 4 (75%)
+                    </span>
+</td>
+<td class="py-3.5 px-4 text-center">
+<span class="px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface font-bold text-label-sm">5 SP</span>
+</td>
+<td class="py-3.5 px-4 min-w-[160px]">
+<div class="flex items-center gap-2">
+<div class="w-full bg-surface-container-high h-2 rounded-full overflow-hidden">
+<div class="bg-secondary h-full rounded-full" style="width: 75%"></div>
+</div>
+<span class="font-label-sm text-label-sm font-semibold text-secondary">75%</span>
+</div>
+</td>
+<td class="py-3.5 px-4 text-right">
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[14px]">sync</span>
+                      IN PROGRESS
+                    </span>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-surface-container-high/50 transition-colors">
+<td class="py-3.5 px-4 font-semibold text-primary">
+<span class="inline-flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px] text-tertiary">auto_fix_high</span>
+                      HUCE-111
+                    </span>
+</td>
+<td class="py-3.5 px-4 font-medium text-on-surface">
+                    Giao diện hiển thị gợi ý phân tích rủi ro trễ hạn đồ án dựa trên Velocity
+                  </td>
+<td class="py-3.5 px-4 text-center font-semibold">5 sub-tasks</td>
+<td class="py-3.5 px-4 text-center">
+<span class="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-label-sm text-label-sm font-bold">
+                      5 / 5 (100%)
+                    </span>
+</td>
+<td class="py-3.5 px-4 text-center">
+<span class="px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface font-bold text-label-sm">4 SP</span>
+</td>
+<td class="py-3.5 px-4 min-w-[160px]">
+<div class="flex items-center gap-2">
+<div class="w-full bg-surface-container-high h-2 rounded-full overflow-hidden">
+<div class="bg-secondary h-full rounded-full" style="width: 40%"></div>
+</div>
+<span class="font-label-sm text-label-sm font-semibold text-secondary">40%</span>
+</div>
+</td>
+<td class="py-3.5 px-4 text-right">
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[14px]">sync</span>
+                      IN PROGRESS
+                    </span>
+</td>
+</tr>
+<!-- Row 5 -->
+<tr class="hover:bg-surface-container-high/50 transition-colors">
+<td class="py-3.5 px-4 font-semibold text-primary">
+<span class="inline-flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px] text-error">bug_report</span>
+                      HUCE-114
+                    </span>
+</td>
+<td class="py-3.5 px-4 font-medium text-on-surface">
+                    Sửa lỗi lệch timezone khi lưu trữ SprintSnapshot tại cột mốc 00:00 UTC+7
+                  </td>
+<td class="py-3.5 px-4 text-center font-semibold">3 sub-tasks</td>
+<td class="py-3.5 px-4 text-center">
+<span class="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-label-sm text-label-sm font-bold">
+                      3 / 3 (100%)
+                    </span>
+</td>
+<td class="py-3.5 px-4 text-center">
+<span class="px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface font-bold text-label-sm">3 SP</span>
+</td>
+<td class="py-3.5 px-4 min-w-[160px]">
+<div class="flex items-center gap-2">
+<div class="w-full bg-surface-container-high h-2 rounded-full overflow-hidden">
+<div class="bg-primary-container h-full rounded-full" style="width: 100%"></div>
+</div>
+<span class="font-label-sm text-label-sm font-semibold text-primary">100%</span>
+</div>
+</td>
+<td class="py-3.5 px-4 text-right">
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+                      DONE
+                    </span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<!-- BOTTOM AUDIT FOOTER & CONTEXT CARD -->
+<div class="p-6 rounded-3xl bg-surface-container-high/60 flex flex-col md:flex-row items-center justify-between gap-4 text-on-surface-variant">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-[28px]">verified_user</span>
+<div class="text-body-sm font-body-sm">
+<span class="font-semibold text-on-surface">Hội đồng Đồ án K65 • Khoa Công nghệ Thông tin HUCE</span>
+<p class="text-outline">Tài liệu và số liệu đạt chuẩn kiểm định chất lượng kỹ thuật phần mềm Agile/Scrum Atlassian Standard.</p>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<span class="font-label-sm text-label-sm text-outline">Mã chứng thực dữ liệu:</span>
+<code class="px-2.5 py-1 rounded-lg bg-surface-container-lowest text-primary font-mono text-[12px] shadow-xs">SHA-256: 8f4b2e...c901a</code>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+  // Micro-interactions for Unit Switcher & AI Dialog trigger
+  document.querySelectorAll('#unit-switcher .unit-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('#unit-switcher .unit-btn').forEach(b => {
+        b.className = 'unit-btn flex items-center gap-1.5 px-3 py-1 rounded-lg text-label-sm font-label-sm hover:text-on-surface transition-colors';
+      });
+      this.className = 'unit-btn active flex items-center gap-1.5 px-3 py-1 rounded-lg bg-primary-container text-on-primary font-label-sm text-label-sm shadow-xs font-semibold';
+    });
+  });
+
+  const exportBtn = document.getElementById('btn-export-pdf');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', () => {
+      const originalText = exportBtn.innerHTML;
+      exportBtn.innerHTML = '<span class="material-symbols-outlined text-[18px] animate-spin">sync</span><span>Đang tạo PDF K65...</span>';
+      setTimeout(() => {
+        exportBtn.innerHTML = '<span class="material-symbols-outlined text-[18px] text-emerald-600">check</span><span>Đã tải xuống PDF</span>';
+        setTimeout(() => { exportBtn.innerHTML = originalText; }, 2500);
+      }, 1200);
+    });
+  }
+
+  const aiPredictBtn = document.getElementById('btn-ai-predict');
+  if (aiPredictBtn) {
+    aiPredictBtn.addEventListener('click', () => {
+      const originalHtml = aiPredictBtn.innerHTML;
+      aiPredictBtn.innerHTML = '<span class="material-symbols-outlined text-[18px] animate-spin">refresh</span><span>Đang chạy suy luận...</span>';
+      setTimeout(() => {
+        alert('Phân tích Rủi ro AI (Claude 3.7):\n- Độ lệch Velocity: Thấp (< 5%)\n- Nguy cơ trễ hạn Sprint: 6.0% (Rất an toàn)\n- Khuyến nghị: Bàn giao sớm bản demo cho Giảng viên hướng dẫn vào ngày 28/08.');
+        aiPredictBtn.innerHTML = originalHtml;
+      }, 800);
+    });
+  }
+</script></main></div></body></html>

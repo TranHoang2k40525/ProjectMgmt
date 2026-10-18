@@ -1,0 +1,211 @@
+<div class="rbac-container animate-fade-in">
+  <!-- Top Title Bar -->
+  <div class="title-bar">
+    <div class="title-meta">
+      <h2>Quản Trị Danh Tính & Phân Quyền (RBAC)</h2>
+      <p>Thiết lập ma trận phân quyền chi tiết cho 7 Vai trò & 22 Quyền hạn trong dự án</p>
+    </div>
+
+    <div class="view-switches">
+      <button class="switch-btn" [class.active]="activeView() === 'MATRIX'" (click)="activeView.set('MATRIX')">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+        Ma Trận Phân Quyền
+      </button>
+      <button class="switch-btn" [class.active]="activeView() === 'USERS'" (click)="activeView.set('USERS')">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+        Danh Sách Người Dùng ({{ users().length }})
+      </button>
+    </div>
+  </div>
+
+  @if (successMsg()) {
+    <div class="alert-banner success">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+      <span>{{ successMsg() }}</span>
+    </div>
+  }
+
+  <!-- VIEW 1: PERMISSION MATRIX -->
+  @if (activeView() === 'MATRIX') {
+    <div class="matrix-card">
+      <div class="matrix-toolbar">
+        <div class="toolbar-info">
+          <span>Tích chọn để cấp hoặc thu hồi quyền hạn từng Vai trò</span>
+        </div>
+        <div class="toolbar-actions">
+          <button class="btn-create-role" (click)="openRoleModal()">
+            + Tạo Vai Trò Mới
+          </button>
+          <button class="btn-save-matrix" (click)="saveMatrix()" [disabled]="loading()">
+            @if (loading()) {
+              <span class="spinner"></span> Đang lưu...
+            } @else {
+              Lưu Ma Trận Phân Quyền
+            }
+          </button>
+        </div>
+      </div>
+
+      <div class="matrix-table-wrapper">
+        <table class="matrix-table">
+          <thead>
+            <tr>
+              <th class="perm-col">Quyền Hạn / Module</th>
+              @for (r of roles(); track r.id) {
+                <th class="role-col">
+                  <div class="role-header">
+                    <span class="role-title">{{ r.name }}</span>
+                    @if (r.isSystem) {
+                      <span class="system-tag">Hệ thống</span>
+                    }
+                  </div>
+                </th>
+              }
+            </tr>
+          </thead>
+          <tbody>
+            @for (group of groupedPermissions; track group.module) {
+              <tr class="module-row">
+                <td [attr.colspan]="roles().length + 1">
+                  <strong>Module: {{ group.module }}</strong>
+                </td>
+              </tr>
+
+              @for (p of group.items; track p.id) {
+                <tr class="perm-row">
+                  <td class="perm-info">
+                    <div class="perm-name">{{ p.name }}</div>
+                    <div class="perm-code"><code>{{ p.code }}</code> • {{ p.description }}</div>
+                  </td>
+
+                  @for (r of roles(); track r.id) {
+                    <td class="checkbox-cell">
+                      <input
+                        type="checkbox"
+                        class="matrix-checkbox"
+                        [checked]="hasPermission(r, p.code)"
+                        (change)="togglePermission(r, p.code)"
+                        [attr.aria-label]="'Permission ' + p.code + ' for role ' + r.name"
+                      />
+                    </td>
+                  }
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+
+  <!-- VIEW 2: USERS DIRECTORY -->
+  @if (activeView() === 'USERS') {
+    <div class="users-card">
+      <div class="users-filter-bar">
+        <div class="search-box">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <input type="text" [(ngModel)]="searchQuery" placeholder="Tìm theo tên hoặc email..." class="search-input" aria-label="Tìm theo tên hoặc email" />
+        </div>
+
+        <div class="filter-select">
+          <select [(ngModel)]="selectedRoleFilter" class="select-input" aria-label="Lọc theo vai trò">
+            <option value="">-- Tất cả vai trò --</option>
+            @for (r of roles(); track r.id) {
+              <option [value]="r.id">{{ r.name }}</option>
+            }
+          </select>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="users-table">
+          <thead>
+            <tr>
+              <th>Người Dùng</th>
+              <th>Chức Danh</th>
+              <th>Vai Trò Phân Quyền</th>
+              <th>Trạng Thái</th>
+              <th>Đăng Nhập Cuối</th>
+              <th class="text-right">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (u of filteredUsers; track u.id) {
+              <tr>
+                <td>
+                  <div class="user-cell">
+                    <div class="avatar-mini">{{ u.displayName.charAt(0).toUpperCase() }}</div>
+                    <div class="user-text">
+                      <strong>{{ u.displayName }}</strong>
+                      <span>{{ u.email }}</span>
+                    </div>
+                  </div>
+                </td>
+                <td>{{ u.jobTitle }}</td>
+                <td>
+                  <select [value]="u.roleId" (change)="onUserRoleChange(u.id, $event)" class="role-select-inline" [attr.aria-label]="'Vai trò người dùng ' + u.displayName">
+                    @for (r of roles(); track r.id) {
+                      <option [value]="r.id">{{ r.name }}</option>
+                    }
+                  </select>
+                </td>
+                <td>
+                  <span class="status-pill" [class.active]="u.isActive" [class.disabled]="!u.isActive">
+                    {{ u.isActive ? 'Hoạt động' : 'Đã khóa' }}
+                  </span>
+                </td>
+                <td>{{ u.lastLoginAt | date:'HH:mm - dd/MM/yyyy' }}</td>
+                <td class="text-right">
+                  <button class="btn-toggle-status" (click)="onToggleUserStatus(u.id)">
+                    {{ u.isActive ? 'Khóa Tài Khoản' : 'Mở Khóa' }}
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+
+  <!-- MODAL CREATE ROLE -->
+  @if (showRoleModal) {
+    <div class="modal-backdrop">
+      <div class="modal-content animate-fade-in">
+        <div class="modal-header">
+          <h3>Tạo Vai Trò Mới</h3>
+          <button class="btn-close" (click)="closeRoleModal()">×</button>
+        </div>
+
+        <form [formGroup]="roleForm" (ngSubmit)="submitNewRole()">
+          <div class="form-group">
+            <label for="newRoleName">Tên Vai Trò</label>
+            <input id="newRoleName" type="text" formControlName="name" placeholder="Ví dụ: Security Auditor" class="input-control" />
+          </div>
+
+          <div class="form-group">
+            <label for="newRoleDesc">Mô Tả Vai Trò</label>
+            <textarea id="newRoleDesc" formControlName="description" rows="2" placeholder="Mô tả phạm vi trách nhiệm..." class="input-control"></textarea>
+          </div>
+
+          <div class="form-group">
+            <span class="modal-label">Gán Quyền Hạn Ban Đầu</span>
+            <div class="perm-picker">
+              @for (p of permissions(); track p.id) {
+                <label class="perm-checkbox-item">
+                  <input type="checkbox" [checked]="newRolePermissions.has(p.code)" (change)="toggleNewRolePerm(p.code)" />
+                  <span>{{ p.name }} (<code>{{ p.code }}</code>)</span>
+                </label>
+              }
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="btn-cancel" (click)="closeRoleModal()">Hủy</button>
+            <button type="submit" class="btn-submit" [disabled]="roleForm.invalid">Tạo Vai Trò</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+</div>

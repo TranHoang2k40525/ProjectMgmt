@@ -1,0 +1,923 @@
+import { apiErrorMessage } from '../../core/http/api-error-message';
+import { CommonModule } from '@angular/common';
+import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import {
+  Board,
+  BoardColumn,
+  CreateBoardColumnRequest,
+  CreateBoardRequest,
+  Project,
+  ProjectManagementService,
+  ProjectStatus
+} from '../../core/services/project-management.service';
+import { ConfirmDialogService } from '../../core/services/confirm-dialog.service';
+import { ToastService } from '../../core/services/toast.service';
+
+@Component({
+  selector: 'app-board-settings-page',
+  standalone: true,
+  imports: [CommonModule, FormsModule, RouterLink],
+  template: `
+    <div class="board-settings-container">
+      <div class="breadcrumb">
+        <a routerLink="/projects">Dự án</a> &gt;
+        @if (project()) {
+          <a [routerLink]="['/projects', projectId, 'settings']">{{ project()?.name }}</a> &gt;
+        }
+        <span>Cấu hình Board</span>
+      </div>
+
+      <div class="page-header">
+        <div>
+          <h1>Cấu hình Board & Cột công việc (WIP Limit)</h1>
+          <p class="subtitle">Quản lý các cột hiển thị trên Kanban/Scrum Board và giới hạn công việc đang xử lý (WIP)</p>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="settings-tabs">
+        <a [routerLink]="['/projects', projectId, 'settings']" class="tab-item">⚙️ Thông tin chung</a>
+        <a [routerLink]="['/projects', projectId, 'settings', 'workflow']" class="tab-item">🔄 Cấu hình Workflow</a>
+        <span class="tab-item active">📋 Cấu hình Board</span>
+      </div>
+
+      @if (alertMessage()) {
+        <div class="alert" [class.alert-success]="alertType() === 'success'" [class.alert-error]="alertType() === 'error'">
+          {{ alertMessage() }}
+        </div>
+      }
+
+      <!-- Board Selector / Creator -->
+      <div class="card board-select-box">
+        <div class="board-header">
+          <div>
+            <h3>Chọn Bảng (Board) để cấu hình</h3>
+            <div class="board-tabs">
+              @for (b of boards(); track b.id) {
+                <button
+                  type="button"
+                  (click)="selectBoard(b)"
+                  class="board-btn"
+                  [class.active]="selectedBoard()?.id === b.id"
+                >
+                  <span class="board-type-tag">{{ b.type }}</span>
+                  <strong>{{ b.name }}</strong>
+                  @if (b.isDefault) {
+                    <span class="default-pill">Mặc định</span>
+                  }
+                </button>
+              }
+            </div>
+          </div>
+          <button (click)="showNewBoardModal.set(!showNewBoardModal())" class="btn btn-secondary btn-sm">
+            + Tạo Board mới
+          </button>
+        </div>
+
+        @if (showNewBoardModal()) {
+          <div class="new-board-form">
+            <h4>Tạo Board mới</h4>
+            <div class="form-row">
+              <input
+                type="text"
+                [(ngModel)]="newBoard.name"
+                maxlength="150"
+                placeholder="Tên board (VD: Sprint Board, Kanban Fast-track)"
+                class="form-control"
+              />
+              <select [(ngModel)]="newBoard.type" class="form-control" style="max-width: 160px;">
+                <option value="Kanban">Kanban</option>
+                <option value="Scrum">Scrum</option>
+              </select>
+              <button [disabled]="savingColumn() || submittingBoard() || !project()" (click)="onCreateBoard()" class="btn btn-primary btn-sm">Tạo</button>
+              <button (click)="showNewBoardModal.set(false)" class="btn btn-secondary btn-sm">Hủy</button>
+            </div>
+          </div>
+        }
+      </div>
+
+      @if (selectedBoard()) {
+        <div class="columns-management-grid">
+          <!-- Columns List -->
+          <div class="card">
+            <div class="columns-header">
+              <div>
+                <h3>Danh sách Cột trên Board: {{ selectedBoard()?.name }}</h3>
+                <p class="hint">Dùng các nút mũi tên ▲ ▼ để sắp xếp lại thứ tự cột từ trái sang phải trên bảng.</p>
+              </div>
+            </div>
+
+            @if (columnsLoading()) {
+              <div class="loading-state">
+                <div class="spinner"></div>
+                <p>Đang tải danh sách cột...</p>
+              </div>
+            } @else if (columns().length === 0) {
+              <div class="empty-columns">
+                <p>Board này chưa có cột nào. Hãy thêm cột đầu tiên bên dưới.</p>
+              </div>
+            } @else {
+              <div class="column-list">
+                @for (col of columns(); track col.id; let i = $index) {
+                  <div class="column-item">
+                    <div class="col-drag-handle">
+                      <button
+                        (click)="moveColumn(i, -1)"
+                        [disabled]="savingColumn() || savingOrder() || columnsLoading() || submittingCol() || i === 0"
+                        class="btn-arrow"
+                        title="Di chuyển sang trái"
+                      >▲</button>
+                      <span class="order-idx">{{ col.orderIndex }}</span>
+                      <button
+                        (click)="moveColumn(i, 1)"
+                        [disabled]="savingColumn() || savingOrder() || columnsLoading() || submittingCol() || i === columns().length - 1"
+                        class="btn-arrow"
+                        title="Di chuyển sang phải"
+                      >▼</button>
+                    </div>
+
+                    <div class="col-info">
+                      <div class="col-title">
+                        <strong>{{ col.name || col.statusName }}</strong>
+                        <span class="status-linked">Map: {{ col.statusName }}</span>
+                      </div>
+                      <div class="col-wip">
+                        @if (col.wipLimit !== null && col.wipLimit !== undefined) {
+                          <span class="wip-badge">WIP Limit: <strong>{{ col.wipLimit }}</strong></span>
+                        } @else {
+                          <span class="wip-badge wip-unlimited">Không giới hạn WIP</span>
+                        }
+                      </div>
+                    </div>
+
+                    <div class="col-actions">
+                      <button type="button" class="btn btn-secondary btn-sm" [disabled]="savingColumn() || savingOrder() || columnsLoading() || submittingCol()" (click)="editColumn(col)">Sửa</button>
+                      <button [disabled]="savingColumn() || savingOrder() || columnsLoading() || submittingCol()" (click)="onDeleteColumn(col)" class="btn-delete" title="Xóa cột">✕</button>
+                    </div>
+                  </div>
+                  @if (editingColumnId() === col.id) {
+                    <form (ngSubmit)="saveColumn()" class="card" aria-label="Sửa cấu hình cột">
+                      <label [for]="'edit-name-' + col.id">Tên hiển thị</label>
+                      <input [id]="'edit-name-' + col.id" name="editName" [(ngModel)]="editName" maxlength="80" class="form-control" [disabled]="savingColumn()" />
+                      <small>Để trống để dùng tên trạng thái {{ col.statusName }}.</small>
+                      <label [for]="'edit-wip-' + col.id">Giới hạn WIP</label>
+                      <input [id]="'edit-wip-' + col.id" name="editWip" type="number" min="1" step="1" [(ngModel)]="editWip" class="form-control" [disabled]="savingColumn()" />
+                      <small>Số nguyên lớn hơn 0; để trống nếu không giới hạn.</small>
+                      <div>
+                        <button type="submit" class="btn btn-primary" [disabled]="savingColumn()">{{ savingColumn() ? 'Đang lưu...' : 'Lưu thay đổi' }}</button>
+                        <button type="button" class="btn btn-secondary" [disabled]="savingColumn()" (click)="cancelEdit()">Hủy</button>
+                      </div>
+                    </form>
+                  }
+                }
+              </div>
+            }
+          </div>
+
+          <!-- Add Column Box -->
+          <div class="card add-col-card">
+            <h3>+ Thêm Cột vào Board</h3>
+            <p class="hint">Liên kết cột với một Trạng thái trong dự án và thiết lập giới hạn WIP.</p>
+
+            <form (ngSubmit)="onCreateColumn()">
+              <div class="form-group">
+                <label for="colName">Tên hiển thị của Cột</label>
+                <input
+                  type="text"
+                  id="colName"
+                  name="colName"
+                  [(ngModel)]="newColumn.name"
+                  maxlength="80"
+                  placeholder="Để trống sẽ lấy tên trạng thái"
+                  class="form-control"
+                />
+              </div>
+
+              <div class="form-group">
+                <label for="statusId">Trạng thái liên kết (Status) <span class="required">*</span></label>
+                <select
+                  id="statusId"
+                  name="statusId"
+                  [(ngModel)]="newColumn.statusId"
+                  required
+                  class="form-control"
+                >
+                  <option value="" disabled>-- Chọn trạng thái map vào cột --</option>
+                  @for (s of statuses(); track s.id) {
+                    <option [value]="s.id" [disabled]="isStatusMapped(s.id)">{{ s.name }} ({{ s.category }})</option>
+                  }
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="wipLimit">Giới hạn công việc (WIP Limit)</label>
+                <input
+                  type="number"
+                  id="wipLimit"
+                  name="wipLimit"
+                  [(ngModel)]="newColumn.wipLimit"
+                  min="1" step="1"
+                  placeholder="VD: 3 hoặc 5 (để trống = vô hạn)"
+                  class="form-control"
+                />
+                <small class="form-hint">Nhập số nguyên lớn hơn 0, hoặc để trống nếu không giới hạn.</small>
+              </div>
+
+              <button
+                type="submit"
+                [disabled]="!project() || savingColumn() || columnsLoading() || savingOrder() || submittingCol() || !newColumn.statusId"
+                class="btn btn-primary btn-block"
+              >
+                {{ submittingCol() ? 'Đang thêm cột...' : '+ Thêm Cột' }}
+              </button>
+            </form>
+          </div>
+        </div>
+      }
+    </div>
+  `,
+  styles: [`
+    .board-settings-container {
+      padding: 2rem;
+      max-width: 1150px;
+      margin: 0 auto;
+    }
+    .breadcrumb {
+      font-size: 0.85rem;
+      color: #64748b;
+      margin-bottom: 1rem;
+    }
+    .breadcrumb a {
+      color: #2563eb;
+      text-decoration: none;
+    }
+    h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: #1e293b;
+      margin: 0;
+    }
+    .subtitle {
+      color: #64748b;
+      font-size: 0.9rem;
+      margin-top: 0.25rem;
+    }
+    .settings-tabs {
+      display: flex;
+      gap: 0.5rem;
+      border-bottom: 2px solid #e2e8f0;
+      margin: 1.5rem 0;
+    }
+    .tab-item {
+      padding: 0.75rem 1.25rem;
+      font-weight: 600;
+      font-size: 0.95rem;
+      color: #64748b;
+      text-decoration: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      cursor: pointer;
+    }
+    .tab-item:hover {
+      color: #2563eb;
+    }
+    .tab-item.active {
+      color: #2563eb;
+      border-bottom-color: #2563eb;
+    }
+    .card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+      margin-bottom: 1.5rem;
+    }
+    .board-select-box {
+      border-left: 4px solid #2563eb;
+    }
+    .board-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+    .board-tabs {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-top: 0.75rem;
+    }
+    .board-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      background: #f8fafc;
+      color: #334155;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: all 0.2s;
+    }
+    .board-btn:hover {
+      background: #f1f5f9;
+      border-color: #94a3b8;
+    }
+    .board-btn.active {
+      background: #eff6ff;
+      border-color: #2563eb;
+      color: #1d4ed8;
+      box-shadow: 0 0 0 2px rgba(37,99,235,0.2);
+    }
+    .board-type-tag {
+      font-size: 0.75rem;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      background: #e2e8f0;
+      font-weight: 600;
+    }
+    .default-pill {
+      font-size: 0.7rem;
+      padding: 0.1rem 0.4rem;
+      border-radius: 10px;
+      background: #dcfce7;
+      color: #15803d;
+      font-weight: 600;
+    }
+    .new-board-form {
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px dashed #e2e8f0;
+    }
+    .new-board-form h4 {
+      margin: 0 0 0.5rem 0;
+      font-size: 0.95rem;
+      color: #1e293b;
+    }
+    .form-row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    .columns-management-grid {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 1.5rem;
+    }
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: #0f172a;
+      margin: 0 0 0.25rem 0;
+    }
+    .hint {
+      color: #64748b;
+      font-size: 0.85rem;
+      margin: 0 0 1rem 0;
+    }
+    .column-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .column-item {
+      display: flex;
+      align-items: center;
+      padding: 0.85rem 1rem;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      gap: 1rem;
+      transition: all 0.2s;
+    }
+    .column-item:hover {
+      border-color: #cbd5e1;
+      background: #ffffff;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+    }
+    .col-drag-handle {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.2rem;
+    }
+    .btn-arrow {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      padding: 0.15rem 0.4rem;
+      font-size: 0.7rem;
+      cursor: pointer;
+      color: #475569;
+    }
+    .btn-arrow:hover:not(:disabled) {
+      background: #e2e8f0;
+      color: #0f172a;
+    }
+    .btn-arrow:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+    .order-idx {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #64748b;
+    }
+    .col-info {
+      flex-grow: 1;
+    }
+    .col-title {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.25rem;
+    }
+    .status-linked {
+      font-size: 0.8rem;
+      background: #f1f5f9;
+      color: #475569;
+      padding: 0.15rem 0.5rem;
+      border-radius: 10px;
+    }
+    .wip-badge {
+      font-size: 0.8rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      background: #fef3c7;
+      color: #92400e;
+    }
+    .wip-unlimited {
+      background: #f1f5f9;
+      color: #94a3b8;
+    }
+    .btn-delete {
+      background: transparent;
+      border: none;
+      color: #ef4444;
+      font-size: 1.1rem;
+      cursor: pointer;
+      padding: 0.3rem 0.5rem;
+      border-radius: 4px;
+    }
+    .btn-delete:hover {
+      background: #fee2e2;
+    }
+    .form-group {
+      margin-bottom: 1rem;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      color: #334155;
+      font-size: 0.85rem;
+      margin-bottom: 0.3rem;
+    }
+    .required {
+      color: #ef4444;
+    }
+    .form-control {
+      width: 100%;
+      padding: 0.6rem 0.8rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      box-sizing: border-box;
+    }
+    .form-control:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37,99,235,0.15);
+    }
+    .form-hint {
+      display: block;
+      color: #64748b;
+      font-size: 0.75rem;
+      margin-top: 0.25rem;
+    }
+    .btn {
+      padding: 0.6rem 1.2rem;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: #2563eb;
+      color: #ffffff;
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: #1d4ed8;
+    }
+    .btn-secondary {
+      background: #f1f5f9;
+      color: #334155;
+      border-color: #cbd5e1;
+    }
+    .btn-sm {
+      padding: 0.35rem 0.75rem;
+      font-size: 0.85rem;
+    }
+    .btn-block {
+      width: 100%;
+      margin-top: 0.5rem;
+    }
+    .alert {
+      padding: 0.85rem 1rem;
+      border-radius: 8px;
+      margin-bottom: 1.25rem;
+      font-size: 0.9rem;
+    }
+    .alert-error {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+    }
+    .alert-success {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      color: #166534;
+    }
+    .spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid #e2e8f0;
+      border-top-color: #2563eb;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 0.75rem auto;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .loading-state, .empty-columns {
+      text-align: center;
+      padding: 2.5rem;
+      color: #64748b;
+    }
+
+    @media (max-width: 1279px) {
+      .board-settings-container {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        padding: 1rem;
+      }
+      .board-settings-container *,
+      .card,
+      .col-info {
+        min-width: 0;
+      }
+      .settings-tabs {
+        overflow-x: auto;
+        overscroll-behavior-inline: contain;
+        scroll-snap-type: x proximity;
+        scrollbar-width: thin;
+      }
+      .tab-item {
+        flex: 0 0 auto;
+        scroll-snap-align: start;
+      }
+      .board-header {
+        gap: 1rem;
+        flex-wrap: wrap;
+      }
+      .board-header > div {
+        flex: 1 1 420px;
+        min-width: 0;
+      }
+      .board-tabs {
+        min-width: 0;
+      }
+      .board-btn {
+        max-width: 100%;
+        white-space: normal;
+      }
+      .form-row {
+        align-items: stretch;
+        flex-wrap: wrap;
+      }
+      .form-row > .form-control:first-of-type {
+        flex: 1 1 360px;
+      }
+      .columns-management-grid {
+        grid-template-columns: minmax(280px, 1fr) minmax(280px, 340px);
+      }
+      .column-item {
+        align-items: flex-start;
+      }
+      .board-settings-container button,
+      .board-settings-container input,
+      .board-settings-container select {
+        min-height: 40px;
+      }
+      .btn-arrow,
+      .btn-delete {
+        min-width: 40px;
+      }
+      .col-title {
+        align-items: flex-start;
+        flex-wrap: wrap;
+      }
+    }
+
+    @media (max-width: 767px), (max-width: 932px) and (orientation: landscape) and (max-height: 520px) {
+      .board-settings-container { padding: 0; }
+      h1 { font-size: 1.35rem; line-height: 1.08; }
+      .subtitle { line-height: 1.45; }
+      .settings-tabs { gap: 0; margin: 1rem 0; }
+      .tab-item { padding: .75rem .9rem; font-size: .875rem; }
+      .card { padding: 1rem; margin-bottom: 1rem; }
+      .board-header {
+        align-items: stretch;
+        flex-direction: column;
+      }
+      .board-header > div {
+        flex: 0 1 auto;
+        width: 100%;
+      }
+      .board-header > .btn { width: 100%; justify-content: center; }
+      .board-tabs { flex-direction: column; }
+      .board-btn { width: 100%; justify-content: flex-start; }
+      .form-row { flex-direction: column; }
+      .form-row > * { width: 100% !important; max-width: none !important; flex-basis: auto !important; }
+      .columns-management-grid { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+      .column-item { gap: .75rem; padding: .75rem; }
+      .btn,
+      .btn-arrow,
+      .btn-delete { min-height: 42px; }
+      .btn-arrow { min-width: 42px; }
+    }
+  `],
+  changeDetection: ChangeDetectionStrategy.OnPush
+})
+export class BoardSettingsPage implements OnInit {
+  private readonly route = inject(ActivatedRoute);
+  private readonly projectService = inject(ProjectManagementService);
+  private readonly confirmService = inject(ConfirmDialogService);
+  private readonly toastService = inject(ToastService);
+
+  projectId = '';
+  readonly project = signal<Project | null>(null);
+  readonly boards = signal<Board[]>([]);
+  readonly selectedBoard = signal<Board | null>(null);
+  readonly columns = signal<BoardColumn[]>([]);
+  readonly statuses = signal<ProjectStatus[]>([]);
+
+  readonly showNewBoardModal = signal<boolean>(false);
+  readonly columnsLoading = signal<boolean>(false);
+  readonly savingOrder = signal(false);
+  readonly savingColumn = signal(false);
+  readonly editingColumnId = signal<string | null>(null);
+  editName = '';
+  editWip: number | null = null;
+  readonly submittingBoard = signal(false);
+  readonly submittingCol = signal<boolean>(false);
+  readonly alertMessage = signal<string | null>(null);
+  readonly alertType = signal<'success' | 'error'>('success');
+
+  newBoard: CreateBoardRequest = {
+    name: '',
+    type: 'Kanban',
+    isDefault: false
+  };
+
+  newColumn: CreateBoardColumnRequest = {
+    statusId: '',
+    name: '',
+    wipLimit: null
+  };
+
+  ngOnInit(): void {
+    this.projectId = this.route.snapshot.paramMap.get('id') || '';
+    if (this.projectId) {
+      this.loadProject();
+      this.loadStatuses();
+      this.loadBoards();
+    }
+  }
+
+  loadProject(): void {
+    this.projectService.getProjectById(this.projectId).subscribe({
+      next: p => this.project.set(p), error: err => this.reportError(err)
+    });
+  }
+
+  loadStatuses(): void {
+    this.projectService.getProjectStatuses(this.projectId).subscribe({
+      next: statuses => this.statuses.set(statuses), error: err => this.reportError(err)
+    });
+  }
+
+  loadBoards(): void {
+    this.projectService.getBoards(this.projectId).subscribe({
+      next: (bList) => {
+        this.boards.set(bList);
+        if (bList.length > 0 && !this.selectedBoard()) {
+          const defaultB = bList.find(x => x.isDefault) || bList[0];
+          this.selectBoard(defaultB);
+        }
+      },
+      error: err => this.reportError(err)
+    });
+  }
+
+  private reportError(err: unknown): void {
+    this.alertType.set('error');
+    this.alertMessage.set(apiErrorMessage(err, 'Không thể tải cấu hình board.'));
+  }
+
+  selectBoard(b: Board): void {
+    if (this.savingColumn() || this.savingOrder() || this.submittingCol()) return;
+    this.cancelEdit();
+    this.selectedBoard.set(b);
+    this.columns.set([]);
+    this.loadColumns(b.id);
+  }
+
+  loadColumns(boardId: string): void {
+    this.columnsLoading.set(true);
+    this.projectService.getBoardColumns(boardId).subscribe({
+      next: (cols) => {
+        if (this.selectedBoard()?.id !== boardId) return;
+        this.columns.set(cols.sort((a, b) => a.orderIndex - b.orderIndex));
+        this.columnsLoading.set(false);
+      },
+      error: err => {
+        if (this.selectedBoard()?.id !== boardId) return;
+        this.columnsLoading.set(false);
+        this.reportError(err);
+      }
+    });
+  }
+
+  onCreateBoard(): void {
+    if (!this.newBoard.name.trim() || this.savingColumn() || this.submittingBoard() || !this.project()) return;
+    this.submittingBoard.set(true);
+    this.projectService.createBoard(this.projectId, this.newBoard).subscribe({
+      next: (b) => {
+        this.submittingBoard.set(false);
+        this.showNewBoardModal.set(false);
+        this.newBoard = { name: '', type: 'Kanban', isDefault: false };
+        this.alertType.set('success');
+        this.alertMessage.set(`Đã tạo Board "${b.name}" thành công!`);
+        this.toastService.success('Tạo Board', `Đã tạo Bảng mới "${b.name}"`);
+        this.loadBoards();
+        this.selectBoard(b);
+      },
+      error: (err) => {
+        this.submittingBoard.set(false);
+        this.alertType.set('error');
+        this.alertMessage.set(apiErrorMessage(err, 'Không thể tạo Board.'));
+        this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể tạo Board.'));
+      }
+    });
+  }
+
+  onCreateColumn(): void {
+    const board = this.selectedBoard();
+    if (!board || this.savingColumn() || !this.project() || this.columnsLoading() || this.submittingCol() || this.savingOrder()) return;
+
+    // WIP must match the database constraint: a positive integer or null.
+    if (this.newColumn.wipLimit !== null && this.newColumn.wipLimit !== undefined && (!Number.isInteger(this.newColumn.wipLimit) || this.newColumn.wipLimit <= 0)) {
+      this.alertType.set('error');
+      this.alertMessage.set('WIP limit phải là số nguyên lớn hơn 0; để trống nếu không giới hạn.');
+      this.toastService.error('Lỗi WIP Limit', 'Giới hạn WIP phải là số nguyên lớn hơn 0.');
+      return;
+    }
+
+    if (!this.newColumn.statusId || this.columns().some(c => c.statusId === this.newColumn.statusId)) {
+      this.reportError({ title: 'Chọn trạng thái chưa được liên kết với cột nào trên board này.' });
+      return;
+    }
+    this.submittingCol.set(true);
+    this.alertMessage.set(null);
+
+    this.projectService.createBoardColumn(board.id, this.newColumn).subscribe({
+      next: (col) => {
+        this.submittingCol.set(false);
+        this.alertType.set('success');
+        this.alertMessage.set(`Đã thêm cột "${col.name}" vào Board!`);
+        this.toastService.success('Thêm Cột Board', `Đã thêm cột "${col.name}"`);
+        this.newColumn = { statusId: '', name: '', wipLimit: null };
+        this.loadColumns(board.id);
+      },
+      error: (err) => {
+        this.submittingCol.set(false);
+        this.alertType.set('error');
+        this.alertMessage.set(apiErrorMessage(err, 'Không thể thêm cột.'));
+        this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể thêm cột.'));
+      }
+    });
+  }
+
+  moveColumn(index: number, direction: -1 | 1): void {
+    if (this.savingColumn() || this.savingOrder() || this.columnsLoading() || this.submittingCol()) return;
+    const cols = [...this.columns()];
+    const targetIdx = index + direction;
+    if (targetIdx < 0 || targetIdx >= cols.length) return;
+
+    // Swap
+    const temp = cols[index];
+    cols[index] = cols[targetIdx];
+    cols[targetIdx] = temp;
+
+    // Update locally
+    // Keep the persisted order visible until the request succeeds.
+
+    // Save order to server
+    const orderedIds = cols.map(c => c.id);
+    const board = this.selectedBoard();
+    if (board) {
+      this.savingOrder.set(true);
+      this.projectService.reorderBoardColumns(board.id, orderedIds).subscribe({
+        next: () => {
+          this.savingOrder.set(false);
+          this.alertType.set('success');
+          this.alertMessage.set('Đã lưu thứ tự cột thành công!');
+          this.toastService.success('Cập Nhật Thứ Tự', 'Đã sắp xếp lại thứ tự cột trên bảng');
+          this.loadColumns(board.id);
+        },
+        error: (err) => {
+          this.savingOrder.set(false);
+          this.alertType.set('error');
+          this.alertMessage.set(apiErrorMessage(err, 'Không thể lưu thứ tự cột.'));
+        }
+      });
+    }
+  }
+
+  isStatusMapped(statusId: string): boolean {
+    return this.columns().some(c => c.statusId === statusId);
+  }
+
+  editColumn(column: BoardColumn): void {
+    if (this.savingColumn() || this.savingOrder() || this.submittingCol() || this.columnsLoading()) return;
+    this.editingColumnId.set(column.id);
+    this.editName = column.name ?? '';
+    this.editWip = column.wipLimit ?? null;
+  }
+
+  cancelEdit(): void {
+    if (this.savingColumn()) return;
+    this.editingColumnId.set(null);
+    this.editName = '';
+    this.editWip = null;
+  }
+
+  saveColumn(): void {
+    const id = this.editingColumnId();
+    if (!id || this.savingColumn() || this.savingOrder() || this.submittingCol() || this.columnsLoading()) return;
+    if (this.editName.trim().length > 80 ||
+        (this.editWip !== null && (!Number.isInteger(this.editWip) || this.editWip <= 0))) {
+      this.reportError({ detail: 'Tên cột tối đa 80 ký tự. WIP phải là số nguyên lớn hơn 0 hoặc để trống.' });
+      return;
+    }
+    this.savingColumn.set(true);
+    this.projectService.updateBoardColumn(id, { name: this.editName.trim() || null, wipLimit: this.editWip }).subscribe({
+      next: saved => {
+        this.columns.update(columns => columns.map(column => column.id === saved.id ? saved : column));
+        this.savingColumn.set(false);
+        this.cancelEdit();
+        this.alertType.set('success');
+        this.alertMessage.set('Đã lưu cấu hình cột.');
+      },
+      error: err => {
+        this.savingColumn.set(false);
+        this.reportError(err);
+      }
+    });
+  }
+
+  onDeleteColumn(col: BoardColumn): void {
+    if (this.savingColumn()) return;
+    this.confirmService.confirm({
+      title: 'Xóa Cột Board',
+      message: `Bạn có chắc chắn muốn xóa cột "${col.name || col.statusName}" khỏi Bảng không?`,
+      type: 'warning',
+      confirmText: 'Xóa cột ngay',
+      cancelText: 'Hủy bỏ',
+      onConfirm: () => {
+        this.projectService.deleteBoardColumn(col.id).subscribe({
+          next: () => {
+            this.alertType.set('success');
+            this.alertMessage.set(`Đã xóa cột "${col.name}".`);
+            this.toastService.warning('Đã Xóa Cột', `Đã loại bỏ cột "${col.name}" khỏi bảng`);
+            if (this.selectedBoard()) {
+              this.loadColumns(this.selectedBoard()!.id);
+            }
+          },
+          error: (err) => {
+            this.alertType.set('error');
+            this.alertMessage.set(apiErrorMessage(err, 'Không thể xóa cột.'));
+            this.toastService.error('Lỗi Xóa Cột', apiErrorMessage(err, 'Không thể xóa cột.'));
+          }
+        });
+      }
+    });
+  }
+}

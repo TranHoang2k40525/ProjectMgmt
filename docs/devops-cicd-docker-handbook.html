@@ -1,0 +1,1132 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ProjectMgmt - Sổ tay Docker, DevOps và CI/CD</title>
+  <style>
+    :root {
+      --ink: #172033;
+      --muted: #5c687d;
+      --paper: #ffffff;
+      --canvas: #f4f7fb;
+      --line: #dbe3ef;
+      --brand: #175cd3;
+      --brand-soft: #eaf2ff;
+      --good: #087a55;
+      --good-soft: #e8f8f1;
+      --warn: #a15c00;
+      --warn-soft: #fff6df;
+      --bad: #b42318;
+      --bad-soft: #fff0ee;
+      --code: #111827;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--canvas);
+      font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
+      line-height: 1.65;
+    }
+    a { color: var(--brand); }
+    code, pre { font-family: "Cascadia Code", Consolas, monospace; }
+    code {
+      background: #eef2f7;
+      border-radius: 5px;
+      padding: 0.12rem 0.35rem;
+    }
+    pre {
+      margin: 0.8rem 0 1.2rem;
+      padding: 1rem;
+      overflow: auto;
+      color: #e5edf8;
+      background: var(--code);
+      border-radius: 10px;
+      line-height: 1.5;
+    }
+    pre code { padding: 0; color: inherit; background: transparent; }
+    h1, h2, h3, h4 { line-height: 1.25; scroll-margin-top: 1rem; }
+    h1 { margin: 0 0 0.7rem; font-size: clamp(2rem, 5vw, 3.6rem); }
+    h2 { margin-top: 2.8rem; padding-bottom: 0.55rem; border-bottom: 2px solid var(--line); }
+    h3 { margin-top: 2rem; }
+    h4 { margin-top: 1.5rem; }
+    p { margin: 0.65rem 0 1rem; }
+    ul, ol { padding-left: 1.5rem; }
+    li + li { margin-top: 0.35rem; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.4rem; }
+    th, td { padding: 0.72rem; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: #eef3f9; }
+
+    .hero {
+      color: white;
+      background: linear-gradient(130deg, #0b1f45, #175cd3 62%, #2e90fa);
+      padding: 4.5rem max(1.25rem, calc((100vw - 1180px) / 2));
+    }
+    .hero p { max-width: 850px; color: #dfeaff; font-size: 1.08rem; }
+    .hero .meta { color: #bed4ff; font-size: 0.92rem; }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(220px, 285px) minmax(0, 1fr);
+      gap: 1.5rem;
+      width: min(1240px, calc(100% - 2rem));
+      margin: 1.5rem auto 4rem;
+    }
+    .toc {
+      position: sticky;
+      top: 1rem;
+      align-self: start;
+      max-height: calc(100vh - 2rem);
+      overflow: auto;
+      padding: 1rem;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    .toc strong { display: block; margin-bottom: 0.55rem; }
+    .toc a { display: block; padding: 0.27rem 0; color: #31415f; text-decoration: none; }
+    .toc a:hover { color: var(--brand); }
+    main {
+      min-width: 0;
+      padding: clamp(1.2rem, 3vw, 2.6rem);
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(235px, 1fr)); gap: 1rem; }
+    .card, .note {
+      padding: 1rem 1.1rem;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fbfcfe;
+    }
+    .card h3, .card h4 { margin-top: 0; }
+    .note { margin: 1rem 0; border-left: 5px solid var(--brand); }
+    .note.good { border-left-color: var(--good); background: var(--good-soft); }
+    .note.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+    .note.bad { border-left-color: var(--bad); background: var(--bad-soft); }
+    .badge {
+      display: inline-block;
+      margin: 0.15rem 0.25rem 0.15rem 0;
+      padding: 0.18rem 0.55rem;
+      border-radius: 999px;
+      color: #134e3a;
+      background: #d9f4e8;
+      font-size: 0.86rem;
+      font-weight: 650;
+    }
+    .flow {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: stretch;
+      gap: 0.55rem;
+      margin: 1.2rem 0;
+    }
+    .flow > div {
+      flex: 1 1 145px;
+      padding: 0.85rem;
+      border: 1px solid #b8cdf0;
+      border-radius: 9px;
+      background: var(--brand-soft);
+      text-align: center;
+    }
+    .flow .arrow { flex: 0 0 auto; border: 0; background: transparent; align-self: center; font-weight: 800; }
+    .path { overflow-wrap: anywhere; }
+    .checklist { list-style: none; padding-left: 0; }
+    .checklist li::before { content: "□"; margin-right: 0.55rem; color: var(--brand); font-weight: 800; }
+    .status-ok { color: var(--good); font-weight: 700; }
+    .status-warn { color: var(--warn); font-weight: 700; }
+    .small { color: var(--muted); font-size: 0.92rem; }
+    footer { margin-top: 3rem; padding-top: 1.2rem; color: var(--muted); border-top: 1px solid var(--line); }
+    @media (max-width: 900px) {
+      .layout { display: block; }
+      .toc { position: static; max-height: none; margin-bottom: 1rem; }
+      main { padding: 1.1rem; }
+      th, td { min-width: 150px; }
+      .table-wrap { overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="meta">PROJECTMGMT · TÀI LIỆU HỌC VÀ VẬN HÀNH · CẬP NHẬT 12/09/2026</div>
+    <h1>Docker, DevOps và CI/CD từ cơ bản đến vận hành</h1>
+    <p>
+      Tài liệu này giải thích hệ thống bằng ngôn ngữ thực tế: mỗi file dùng để làm gì, vì sao cần nó,
+      cách chạy local, cách đưa thay đổi qua CI, cách CD triển khai lên IIS, cách xử lý lỗi và cách nâng cấp lâu dài.
+      Nội dung bám trực tiếp vào repository ProjectMgmt, không phải một ví dụ chung chung.
+    </p>
+    <div>
+      <span class="badge">.NET 10</span>
+      <span class="badge">Angular 21</span>
+      <span class="badge">MySQL</span>
+      <span class="badge">Docker Compose</span>
+      <span class="badge">GitHub Actions</span>
+      <span class="badge">IIS TEST</span>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="toc" aria-label="Mục lục">
+      <strong>Mục lục</strong>
+      <a href="#quick-answer">1. Trả lời nhanh và trạng thái</a>
+      <a href="#mental-model">2. Mô hình dễ nhớ</a>
+      <a href="#vocabulary">3. Từ vựng nền tảng</a>
+      <a href="#files">4. Bản đồ file</a>
+      <a href="#configuration">5. Appsettings và secret</a>
+      <a href="#docker">6. Docker và Compose</a>
+      <a href="#docker-local">7. Chạy Docker local</a>
+      <a href="#docker-test">8. Chạy Docker TEST</a>
+      <a href="#ci">9. Hiểu CI</a>
+      <a href="#cd">10. Hiểu CD trên IIS</a>
+      <a href="#workflow">11. Quy trình làm việc hằng ngày</a>
+      <a href="#migrations">12. Database và migration</a>
+      <a href="#change">13. Viết, sửa và mở rộng</a>
+      <a href="#maintenance">14. Bảo trì và nâng cấp</a>
+      <a href="#operations">15. Vận hành và sự cố</a>
+      <a href="#advanced">16. Lộ trình nâng cao</a>
+      <a href="#report">17. Báo cáo thực hiện</a>
+      <a href="#checklists">18. Checklist</a>
+      <a href="#references">19. Tài liệu chính thức</a>
+    </nav>
+
+    <main>
+      <section id="quick-answer">
+        <h2>1. Trả lời nhanh và trạng thái hiện tại</h2>
+
+        <div class="note good">
+          <strong>PR #1 ở đây:</strong>
+          <a href="https://github.com/TranHoang2k40525/ProjectMgmt/pull/1">github.com/TranHoang2k40525/ProjectMgmt/pull/1</a>.
+          PR đi từ nhánh <code>hoangtv</code> vào nhánh <code>develop</code>.
+        </div>
+
+        <div class="grid">
+          <article class="card">
+            <h3>CI</h3>
+            <p class="status-ok">Đã chạy thành công</p>
+            <p><code>backend-ci</code>, <code>frontend-ci</code> và <code>container-ci</code> đều xanh.</p>
+          </article>
+          <article class="card">
+            <h3>CD</h3>
+            <p class="status-ok">Đã cấu hình</p>
+            <p>Tự chạy khi có commit được merge/push vào <code>develop</code>.</p>
+          </article>
+          <article class="card">
+            <h3>Runner TEST</h3>
+            <p class="status-ok">Online</p>
+            <p><code>MSI-ProjectMgmt-Test</code>, nhãn <code>projectmgmt-test</code>.</p>
+          </article>
+          <article class="card">
+            <h3>Nhánh develop</h3>
+            <p class="status-ok">Được bảo vệ</p>
+            <p>Bắt buộc ba check CI; chặn force-push và chặn xóa nhánh.</p>
+          </article>
+        </div>
+
+        <div class="note warn">
+          <strong>CD chưa được kích hoạt từ PR #1.</strong> Workflow CD chỉ chạy sau khi PR được merge vào
+          <code>develop</code>. Trước khi merge phải chắc chắn file thật
+          <code>C:\Users\hoang\Downloads\Test-ProjectMgmt\Config\appsettings.Staging.json</code> đã có mật khẩu Aiven hợp lệ.
+        </div>
+
+        <p>
+          Docker và IIS là hai cách chạy khác nhau. Docker local/TEST đã được đóng gói để môi trường có thể tái tạo.
+          CD hiện tại vẫn triển khai artifact lên IIS; nó chưa chuyển sang triển khai container. Cách tách này giúp bạn
+          học Docker mà không phá luồng IIS đang có.
+        </p>
+      </section>
+
+      <section id="mental-model">
+        <h2>2. Mô hình dễ nhớ</h2>
+
+        <h3>Luồng thay đổi mã nguồn</h3>
+        <div class="flow" aria-label="Luồng CI CD">
+          <div>Viết code<br><code>hoangtv</code></div>
+          <div class="arrow">→</div>
+          <div>Push và mở PR<br>vào <code>develop</code></div>
+          <div class="arrow">→</div>
+          <div>CI kiểm tra<br>backend/web/container</div>
+          <div class="arrow">→</div>
+          <div>Review và merge</div>
+          <div class="arrow">→</div>
+          <div>CD triển khai<br>IIS TEST</div>
+        </div>
+
+        <p>
+          CI giống như cổng kiểm tra chất lượng: code chưa đạt thì không được đi tiếp. CD giống như người giao hàng:
+          chỉ lấy phiên bản đã vào <code>develop</code>, đóng gói và đưa lên máy TEST theo một quy trình lặp lại được.
+        </p>
+
+        <h3>Luồng chạy Docker local</h3>
+        <div class="flow" aria-label="Luồng Docker local">
+          <div>Trình duyệt<br><code>localhost:4200</code></div>
+          <div class="arrow">→</div>
+          <div>Nginx + Angular<br>proxy <code>/api</code></div>
+          <div class="arrow">→</div>
+          <div>ASP.NET API<br>cổng 8080 nội bộ</div>
+          <div class="arrow">→</div>
+          <div>MySQL<br>volume bền vững</div>
+        </div>
+
+        <p>
+          Trình duyệt chỉ nói chuyện với web container. Nginx chuyển tiếp đường dẫn <code>/api</code> và
+          <code>/hubs</code> sang API. Nhờ cùng origin, bạn tránh phần lớn rắc rối CORS khi chạy cả stack bằng Compose.
+        </p>
+      </section>
+
+      <section id="vocabulary">
+        <h2>3. Từ vựng nền tảng</h2>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Khái niệm</th><th>Hiểu đơn giản</th><th>Trong ProjectMgmt</th></tr></thead>
+            <tbody>
+              <tr><td>Repository</td><td>Kho chứa code và lịch sử thay đổi.</td><td>GitHub repository <code>ProjectMgmt</code>.</td></tr>
+              <tr><td>Branch</td><td>Một dòng phát triển riêng.</td><td>Bạn làm trên <code>hoangtv</code>; tích hợp ở <code>develop</code>.</td></tr>
+              <tr><td>Commit</td><td>Một mốc thay đổi có mô tả.</td><td>Nên nhỏ, rõ mục đích và có thể quay lại.</td></tr>
+              <tr><td>Pull request</td><td>Yêu cầu đưa thay đổi từ nhánh này sang nhánh khác.</td><td>PR #1: <code>hoangtv → develop</code>.</td></tr>
+              <tr><td>CI</td><td>Tự động build và test mỗi thay đổi.</td><td>Ba job backend, frontend và container.</td></tr>
+              <tr><td>CD</td><td>Tự động triển khai phiên bản đã chấp nhận.</td><td>Triển khai <code>develop</code> lên IIS TEST.</td></tr>
+              <tr><td>Workflow</td><td>Tệp YAML mô tả các bước tự động.</td><td><code>.github/workflows/*.yml</code>.</td></tr>
+              <tr><td>Job</td><td>Một nhóm bước chạy trên cùng một runner.</td><td><code>backend-ci</code> là một job.</td></tr>
+              <tr><td>Runner</td><td>Máy thật thực thi job.</td><td>GitHub-hosted Linux cho CI; Windows self-hosted cho CD.</td></tr>
+              <tr><td>Artifact</td><td>Đầu ra đã đóng gói của build.</td><td>DLL publish và Angular <code>dist/browser</code>.</td></tr>
+              <tr><td>Image</td><td>Khuôn bất biến để tạo container.</td><td><code>projectmgmt-api</code>, <code>projectmgmt-web</code>.</td></tr>
+              <tr><td>Container</td><td>Một tiến trình đang chạy từ image.</td><td>API, web hoặc MySQL trong Compose.</td></tr>
+              <tr><td>Volume</td><td>Vùng dữ liệu sống ngoài vòng đời container.</td><td><code>projectmgmt_mysql_data</code> giữ dữ liệu MySQL.</td></tr>
+              <tr><td>Health check</td><td>Câu hỏi tự động: dịch vụ còn sống không?</td><td><code>/health/live</code>, <code>/healthz</code>.</td></tr>
+              <tr><td>Secret</td><td>Thông tin không được commit.</td><td>Mật khẩu và connection string thật.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="files">
+        <h2>4. Bản đồ file: sửa ở đâu và vì sao</h2>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>File</th><th>Vai trò</th><th>Khi nào sửa</th><th>Không được làm</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="path"><a href="../docker-compose.yml">docker-compose.yml</a></td>
+                <td>Stack local gồm MySQL, API và web.</td>
+                <td>Đổi port mặc định, thêm service hoặc volume local.</td>
+                <td>Không ghi mật khẩu thật trực tiếp.</td>
+              </tr>
+              <tr>
+                <td class="path"><a href="../docker-compose.test.yml">docker-compose.test.yml</a></td>
+                <td>Stack container TEST dùng Aiven; không tạo MySQL local.</td>
+                <td>Đổi port TEST, mount config, health check.</td>
+                <td>Không nhúng connection string vào YAML.</td>
+              </tr>
+              <tr>
+                <td class="path"><a href="../.env.example">.env.example</a></td>
+                <td>Mẫu biến local an toàn để commit.</td>
+                <td>Khi Compose local có thêm biến.</td>
+                <td>Không coi giá trị mẫu là mật khẩu thật.</td>
+              </tr>
+              <tr>
+                <td class="path"><a href="../.env.test.example">.env.test.example</a></td>
+                <td>Mẫu chỉ đường dẫn tới config TEST thật.</td>
+                <td>Khi đổi vị trí config hoặc port TEST.</td>
+                <td>Không đưa connection string vào đây.</td>
+              </tr>
+              <tr>
+                <td class="path"><a href="../ProjectMgmt.Solution/Dockerfile">ProjectMgmt.Solution/Dockerfile</a></td>
+                <td>Đóng gói ASP.NET API bằng multi-stage build.</td>
+                <td>Khi thêm project reference, đổi .NET hoặc runtime package.</td>
+                <td>Không COPY secret vào image.</td>
+              </tr>
+              <tr>
+                <td class="path"><a href="../frontend/projectmgmt-web/Dockerfile">frontend/.../Dockerfile</a></td>
+                <td>Build Angular bằng Node rồi phục vụ bằng Nginx.</td>
+                <td>Khi đổi Node, lệnh build hoặc web server.</td>
+                <td>Không chạy dev server Angular trong môi trường vận hành.</td>
+              </tr>
+              <tr>
+                <td class="path"><a href="../frontend/projectmgmt-web/nginx.conf">frontend/.../nginx.conf</a></td>
+                <td>SPA fallback và reverse proxy tới API/SignalR.</td>
+                <td>Khi đổi route backend hoặc timeout WebSocket.</td>
+                <td>Không thêm host DB hay secret.</td>
+              </tr>
+              <tr>
+                <td class="path"><a href="../ProjectMgmt.Solution/appsettings.Staging.example.json">appsettings.Staging.example.json</a></td>
+                <td>Mẫu cấu hình TEST được phép lên Git.</td>
+                <td>Khi ứng dụng cần thêm key cấu hình TEST.</td>
+                <td>Không thay placeholder bằng mật khẩu thật rồi commit.</td>
+              </tr>
+              <tr>
+                <td class="path"><a href="../.github/workflows/ci.yml">.github/workflows/ci.yml</a></td>
+                <td>Build/test backend, frontend và Docker.</td>
+                <td>Khi thêm loại kiểm tra chất lượng.</td>
+                <td>Không đưa bước deploy vào CI của PR.</td>
+              </tr>
+              <tr>
+                <td class="path"><a href="../.github/workflows/deploy-test.yml">deploy-test.yml</a></td>
+                <td>Build artifact và điều phối triển khai IIS TEST.</td>
+                <td>Khi đổi đường dẫn TEST, health URL hoặc artifact.</td>
+                <td>Không cho PR chưa merge kích hoạt deploy.</td>
+              </tr>
+              <tr>
+                <td class="path"><a href="../scripts/deploy-test.ps1">scripts/deploy-test.ps1</a></td>
+                <td>Backup, app_offline, copy, health check và rollback.</td>
+                <td>Khi thay chiến lược release/backup.</td>
+                <td>Không bỏ kiểm tra đường dẫn an toàn.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="configuration">
+        <h2>5. Appsettings, biến môi trường và secret</h2>
+
+        <h3>Nguyên tắc một câu</h3>
+        <div class="note good">
+          Git giữ <strong>cấu trúc và giá trị mẫu</strong>; máy chạy giữ <strong>giá trị thật</strong>.
+        </div>
+
+        <h3>Các môi trường đang dùng</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Môi trường</th><th>File được commit</th><th>Nơi giữ connection string thật</th></tr></thead>
+            <tbody>
+              <tr><td>Development</td><td><code>appsettings.json</code> và <code>appsettings.Development.json</code></td><td>.NET User Secrets hoặc <code>ConnectionStrings__ProjectMgmt</code>.</td></tr>
+              <tr><td>Staging / TEST</td><td><code>appsettings.Staging.example.json</code></td><td><code>C:\Users\hoang\Downloads\Test-ProjectMgmt\Config\appsettings.Staging.json</code>.</td></tr>
+              <tr><td>Production</td><td><code>appsettings.Production.example.json</code></td><td>Secret manager hoặc file ngoài thư mục publish với ACL chặt.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Vì sao không ghi connection string thật trong class library?</h3>
+        <p>
+          Domain, Application và Infrastructure là code có thể được tái sử dụng ở nhiều môi trường. Nếu class library giữ
+          password, DLL nào cũng mang theo secret và mỗi lần đổi database bạn phải build lại code. Host
+          <code>ProjectMgmt.Solution</code> mới là nơi quyết định môi trường và truyền cấu hình cho các DbContext qua DI.
+        </p>
+
+        <h3>Thứ tự ghi đè cần nhớ</h3>
+        <p>
+          ASP.NET Core nạp cấu hình từ file chung, file theo môi trường, User Secrets trong Development, biến môi trường
+          và tham số dòng lệnh. Nguồn đến sau có thể ghi đè nguồn trước. Vì vậy
+          <code>ConnectionStrings__ProjectMgmt</code> có thể ghi đè <code>ConnectionStrings:ProjectMgmt</code> mà không sửa file.
+          Hai dấu gạch dưới được dùng vì dấu hai chấm không thuận tiện trên mọi hệ điều hành.
+        </p>
+
+        <h3>Cấu hình TEST thật</h3>
+        <pre><code>C:\Users\hoang\Downloads\Test-ProjectMgmt\Config\appsettings.Staging.json
+
+{
+  "ConnectionStrings": {
+    "ProjectMgmt": "Server=...;Port=...;Database=...;User=...;Password=...;SslMode=Required;"
+  },
+  "Database": {
+    "ServerVersion": "8.0.46"
+  }
+}</code></pre>
+
+        <ul>
+          <li>File thật bị <code>.gitignore</code> loại khỏi Git.</li>
+          <li>Docker TEST mount file này vào container ở chế độ read-only.</li>
+          <li>CD IIS copy file từ <code>C:\Config</code> vào thư mục publish sau mỗi lần triển khai.</li>
+          <li><code>SslMode=Required</code> bắt buộc cho Aiven TEST hiện tại.</li>
+          <li>Không in connection string vào log và không gửi nó trong chat/issue/PR.</li>
+        </ul>
+
+        <h3>Cách thêm một key cấu hình mới</h3>
+        <ol>
+          <li>Thêm giá trị mặc định không nhạy cảm vào <code>appsettings.json</code>.</li>
+          <li>Thêm giá trị môi trường vào các file <code>*.example.json</code>.</li>
+          <li>Cập nhật file thật ở máy TEST, không commit file thật.</li>
+          <li>Đọc key qua <code>builder.Configuration["Section:Key"]</code> hoặc Options pattern.</li>
+          <li>Thêm kiểm tra fail-fast nếu key là bắt buộc.</li>
+          <li>Cập nhật tài liệu và chạy CI.</li>
+        </ol>
+      </section>
+
+      <section id="docker">
+        <h2>6. Docker và Compose trong dự án này</h2>
+
+        <h3>Vì sao dùng multi-stage build?</h3>
+        <p>
+          Image dùng để build cần SDK, compiler và npm; image chạy thật chỉ cần runtime hoặc Nginx. Multi-stage build
+          tách hai việc này. Kết quả là image cuối nhỏ hơn, ít công cụ thừa hơn và giảm bề mặt tấn công.
+        </p>
+
+        <h3>API Dockerfile làm gì?</h3>
+        <ol>
+          <li>Dùng <code>mcr.microsoft.com/dotnet/sdk:10.0</code> để restore và publish.</li>
+          <li>Copy các <code>*.csproj</code> trước để Docker cache lớp restore.</li>
+          <li>Copy source sau; đổi một file <code>.cs</code> không buộc tải lại toàn bộ NuGet package.</li>
+          <li>Publish Release với <code>UseAppHost=false</code>.</li>
+          <li>Chỉ copy output sang image runtime <code>aspnet:10.0</code>.</li>
+          <li>Chạy bằng user không phải root và nghe cổng nội bộ 8080.</li>
+          <li>Cài <code>curl</code> để health check gọi <code>/health/live</code>.</li>
+        </ol>
+
+        <div class="note warn">
+          Khi thêm một class library mới được API tham chiếu, hãy thêm dòng <code>COPY</code> cho file
+          <code>.csproj</code> đó vào lớp restore của API Dockerfile. Nếu quên, <code>container-ci</code> sẽ báo lỗi restore/build.
+        </div>
+
+        <h3>Web Dockerfile làm gì?</h3>
+        <ol>
+          <li>Dùng Node 24 để chạy <code>npm ci</code> và production build Angular.</li>
+          <li>Chỉ copy thư mục <code>dist/projectmgmt-web/browser</code> sang Nginx.</li>
+          <li>Nginx chạy cổng 8080 không đặc quyền.</li>
+          <li><code>try_files ... /index.html</code> giúp refresh route Angular không bị 404.</li>
+          <li><code>/api</code> và <code>/hubs</code> được proxy sang service có tên <code>api</code>.</li>
+        </ol>
+
+        <h3>Compose local và Compose TEST khác nhau ở đâu?</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Đặc điểm</th><th>Local</th><th>TEST container</th></tr></thead>
+            <tbody>
+              <tr><td>File</td><td><code>docker-compose.yml</code></td><td><code>docker-compose.test.yml</code></td></tr>
+              <tr><td>Database</td><td>MySQL container riêng.</td><td>Aiven bên ngoài.</td></tr>
+              <tr><td>Schema</td><td>Nạp SQL khi volume được tạo lần đầu.</td><td>Không tự nạp hoặc xóa database.</td></tr>
+              <tr><td>Connection</td><td>Dựng từ biến trong <code>.env</code>.</td><td>Đọc file Staging thật mount read-only.</td></tr>
+              <tr><td>Web</td><td><code>localhost:4200</code></td><td><code>localhost:4201</code> mặc định.</td></tr>
+              <tr><td>API trực tiếp</td><td><code>localhost:5083</code></td><td><code>localhost:5084</code> mặc định.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="docker-local">
+        <h2>7. Hướng dẫn chạy Docker local</h2>
+
+        <h3>Điều kiện</h3>
+        <ul>
+          <li>Cài Docker Desktop và chuyển sang Linux containers.</li>
+          <li>Đứng tại thư mục gốc <code>ProjectMgmt</code>.</li>
+          <li>Port 3306, 5083 và 4200 chưa bị chương trình khác chiếm, hoặc đổi chúng trong <code>.env</code>.</li>
+        </ul>
+
+        <h3>Bước 1: tạo file biến local</h3>
+        <pre><code>Copy-Item .env.example .env</code></pre>
+        <p>
+          Mở <code>.env</code> và đổi hai password mẫu. Đây chỉ là database local. File <code>.env</code> đã bị Git bỏ qua.
+        </p>
+
+        <h3>Bước 2: xem cấu hình sau nội suy</h3>
+        <pre><code>docker compose --env-file .env config</code></pre>
+        <p>
+          Lệnh này chưa chạy container. Nó giúp phát hiện biến thiếu, sai YAML hoặc sai đường dẫn. Không chụp/paste đầu ra
+          nếu đầu ra chứa password local thật.
+        </p>
+
+        <h3>Bước 3: build và chạy</h3>
+        <pre><code>docker compose --env-file .env up --build -d</code></pre>
+
+        <h3>Bước 4: kiểm tra</h3>
+        <pre><code>docker compose --env-file .env ps
+docker compose --env-file .env logs --tail 100 api
+docker compose --env-file .env logs --tail 100 mysql</code></pre>
+
+        <ul>
+          <li>Web: <a href="http://localhost:4200">http://localhost:4200</a></li>
+          <li>API live: <a href="http://localhost:5083/health/live">http://localhost:5083/health/live</a></li>
+          <li>Đi qua Nginx: <a href="http://localhost:4200/api/Account">http://localhost:4200/api/Account</a></li>
+        </ul>
+
+        <h3>Dừng nhưng giữ dữ liệu</h3>
+        <pre><code>docker compose --env-file .env down</code></pre>
+
+        <h3>Xóa cả database local và nạp schema lại</h3>
+        <div class="note bad">
+          Lệnh sau xóa volume MySQL local và toàn bộ dữ liệu local trong volume. Không dùng nếu còn dữ liệu cần giữ.
+        </div>
+        <pre><code>docker compose --env-file .env down -v
+docker compose --env-file .env up --build -d</code></pre>
+
+        <p>
+          File SQL trong <code>docker-entrypoint-initdb.d</code> chỉ chạy khi data directory còn trống. Vì vậy sửa schema SQL
+          không tự thay database đang nằm trong volume cũ.
+        </p>
+      </section>
+
+      <section id="docker-test">
+        <h2>8. Hướng dẫn chạy Docker với môi trường TEST</h2>
+
+        <h3>Điểm an toàn quan trọng</h3>
+        <p>
+          TEST Compose không chứa MySQL service. Nó chỉ được phép kết nối Aiven khi bạn chủ động trỏ tới file cấu hình
+          Staging thật. Đây là hàng rào ngăn local Compose vô tình dùng database TEST.
+        </p>
+
+        <h3>Bước 1: kiểm tra file thật</h3>
+        <pre><code>C:\Users\hoang\Downloads\Test-ProjectMgmt\Config\appsettings.Staging.json</code></pre>
+        <p>Đảm bảo không còn placeholder và có <code>SslMode=Required</code>.</p>
+
+        <h3>Bước 2: tạo file điều khiển TEST</h3>
+        <pre><code>Copy-Item .env.test.example .env.test</code></pre>
+        <p>
+          <code>.env.test</code> chỉ nên chứa đường dẫn và port. Connection string vẫn nằm trong appsettings ngoài Git.
+        </p>
+
+        <h3>Bước 3: xác nhận và chạy</h3>
+        <pre><code>docker compose --env-file .env.test -f docker-compose.test.yml config
+docker compose --env-file .env.test -f docker-compose.test.yml up --build -d
+docker compose --env-file .env.test -f docker-compose.test.yml ps</code></pre>
+
+        <h3>Bước 4: xem log mà không lộ secret</h3>
+        <pre><code>docker compose --env-file .env.test -f docker-compose.test.yml logs --tail 100 api</code></pre>
+
+        <p>
+          Không dùng <code>docker inspect</code> rồi chia sẻ nguyên đầu ra nếu sau này bạn chuyển secret sang biến môi trường,
+          vì environment của container có thể hiện trong kết quả inspect. Thiết kế hiện tại dùng bind mount read-only để
+          giảm nguy cơ đó.
+        </p>
+      </section>
+
+      <section id="ci">
+        <h2>9. Hiểu CI của ProjectMgmt</h2>
+
+        <p>
+          CI nằm tại <code>.github/workflows/ci.yml</code>, chạy khi có pull request vào <code>develop</code> hoặc khi bấm
+          <em>Run workflow</em>. Các job độc lập nên GitHub có thể chạy song song.
+        </p>
+
+        <h3>backend-ci</h3>
+        <ol>
+          <li>Checkout đúng commit của PR.</li>
+          <li>Cài .NET SDK 10.</li>
+          <li><code>dotnet restore ProjectMgmt.slnx</code>.</li>
+          <li>Build Release với <code>--no-restore</code>.</li>
+          <li>Chạy project test với <code>--no-build</code>.</li>
+        </ol>
+        <p>
+          Việc tách restore/build/test giúp biết lỗi nằm ở giai đoạn nào và tránh thực hiện cùng một việc nhiều lần.
+        </p>
+
+        <h3>frontend-ci</h3>
+        <ol>
+          <li>Cài Node 24 và dùng cache npm.</li>
+          <li><code>npm ci</code> cài đúng lockfile, không tự ý cập nhật phiên bản.</li>
+          <li>ESLint kiểm tra quy tắc TypeScript/HTML.</li>
+          <li>Vitest chạy unit test không bật watch.</li>
+          <li>Angular production build xác nhận code có thể đóng gói.</li>
+        </ol>
+
+        <h3>container-ci</h3>
+        <ol>
+          <li>Kiểm tra cả local Compose và TEST Compose bằng <code>docker compose config --quiet</code>.</li>
+          <li>Khởi tạo Docker Buildx.</li>
+          <li>Build API image, không push registry.</li>
+          <li>Build web image, không push registry.</li>
+          <li>Dùng GitHub Actions cache riêng cho từng image.</li>
+        </ol>
+
+        <div class="note good">
+          Ba job có tên duy nhất và đều là required checks của <code>develop</code>. Một job đỏ thì PR không được merge.
+        </div>
+
+        <h3>CI không làm gì?</h3>
+        <ul>
+          <li>Không dùng connection string TEST.</li>
+          <li>Không kết nối Aiven.</li>
+          <li>Không sửa IIS.</li>
+          <li>Không deploy.</li>
+          <li>Hiện chưa push image lên GHCR; container-ci mới xác minh khả năng build.</li>
+        </ul>
+      </section>
+
+      <section id="cd">
+        <h2>10. Hiểu CD trên IIS</h2>
+
+        <p>
+          CD nằm tại <code>.github/workflows/deploy-test.yml</code> và chỉ chạy khi có push vào <code>develop</code>, tức là
+          sau merge PR. Nó cũng hỗ trợ chạy tay bằng <code>workflow_dispatch</code> khi cần triển khai lại cùng một commit.
+        </p>
+
+        <h3>Giai đoạn 1: build artifact trên GitHub-hosted Linux</h3>
+        <ul>
+          <li>Publish API Release vào artifact <code>backend-test</code>.</li>
+          <li>Build Angular production vào artifact <code>frontend-test</code>.</li>
+          <li>Artifact chỉ giữ 7 ngày để không tích lũy vô hạn.</li>
+        </ul>
+
+        <h3>Giai đoạn 2: deploy trên Windows self-hosted runner</h3>
+        <ul>
+          <li>Runner phải có nhãn <code>self-hosted, windows, x64, projectmgmt-test</code>.</li>
+          <li>Job gắn GitHub Environment <code>test</code>.</li>
+          <li>API đích: <code>C:\Users\hoang\Downloads\Test-ProjectMgmt\Api</code>.</li>
+          <li>Web đích: <code>C:\Users\hoang\Downloads\Test-ProjectMgmt\Web</code>.</li>
+          <li>Config thật: <code>C:\Users\hoang\Downloads\Test-ProjectMgmt\Config\appsettings.Staging.json</code>.</li>
+        </ul>
+
+        <h3>Bên trong deploy-test.ps1</h3>
+        <ol>
+          <li>Xác minh artifact có DLL, deps, runtimeconfig và <code>web.config</code>.</li>
+          <li>Xác minh các đường dẫn đích không chạm source repository hoặc ổ đĩa gốc.</li>
+          <li>Xác minh Staging JSON, connection string, placeholder và TLS.</li>
+          <li>Backup phiên bản API/Web đang chạy.</li>
+          <li>Tạo <code>app_offline.htm</code> để ANCM dừng ứng dụng sạch.</li>
+          <li>Thay artifact, copy config thật, bỏ app_offline.</li>
+          <li>Gọi <code>http://ProjectMgmt.dev.com/health</code> nhiều lần.</li>
+          <li>Nếu khỏe: hoàn tất và chỉ giữ 5 backup mới nhất.</li>
+          <li>Nếu lỗi: phục hồi backup và kiểm tra sức khỏe lần nữa.</li>
+        </ol>
+
+        <h3>Vì sao cần self-hosted runner?</h3>
+        <p>
+          GitHub-hosted runner ở ngoài máy của bạn nên không thể an toàn ghi trực tiếp vào thư mục IIS local.
+          Self-hosted runner là dịch vụ chạy ngay trên máy TEST, có quyền tối thiểu với thư mục deploy, config, log và backup.
+          Đổi lại, bạn phải tự cập nhật Windows, runtime và bảo vệ máy này.
+        </p>
+
+        <h3>IIS và Docker nên dùng thế nào?</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Tình huống</th><th>Nên dùng</th><th>Lý do</th></tr></thead>
+            <tbody>
+              <tr><td>Luồng TEST hiện tại</td><td>IIS CD</td><td>Đã có site, ANCM V2, runner và rollback.</td></tr>
+              <tr><td>Dev cả nhóm cần giống nhau</td><td>Docker local</td><td>Một lệnh có đủ MySQL/API/web.</td></tr>
+              <tr><td>Thử kết nối Aiven trong container</td><td>Docker TEST</td><td>Không ảnh hưởng IIS; config mount riêng.</td></tr>
+              <tr><td>Production sau này</td><td>Chọn một chiến lược</td><td>Tránh hai bộ deploy cùng sửa một môi trường.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="workflow">
+        <h2>11. Quy trình làm việc hằng ngày</h2>
+
+        <h3>Một thay đổi bình thường</h3>
+        <pre><code>git switch hoangtv
+git pull --ff-only origin hoangtv
+
+# sửa code
+dotnet build ProjectMgmt.slnx -c Release
+dotnet test ProjectMgmt.Tests/ProjectMgmt.Tests.csproj -c Release
+
+cd frontend/projectmgmt-web
+npm ci
+npm run lint
+npm test -- --watch=false
+npm run build
+cd ../..
+
+git status
+git add &lt;đúng-các-file-của-tính-năng&gt;
+git commit -m "mô tả ngắn gọn"
+git push origin hoangtv</code></pre>
+
+        <ol>
+          <li>Mở hoặc cập nhật PR <code>hoangtv → develop</code>.</li>
+          <li>Đọc tab <em>Checks</em>; không chỉ nhìn dấu xanh tổng.</li>
+          <li>Review diff để chắc chắn không có secret, file bin/obj hay thay đổi ngoài ý muốn.</li>
+          <li>Chỉ merge khi backend, frontend và container đều xanh.</li>
+          <li>Sau merge, mở Actions → Deploy TEST và theo dõi đến health check.</li>
+        </ol>
+
+        <h3>Nếu PR đã tồn tại</h3>
+        <p>
+          Không cần tạo PR mới cho mỗi commit trên cùng nhánh. Push thêm vào <code>hoangtv</code> sẽ tự cập nhật PR #1 và
+          CI sẽ chạy lại trên commit mới nhất.
+        </p>
+      </section>
+
+      <section id="migrations">
+        <h2>12. Database, schema và migration</h2>
+
+        <h3>Hai nguồn thay đổi schema</h3>
+        <ul>
+          <li><strong>Database-first:</strong> SQL/database là nguồn đúng; reverse engineering cập nhật entity/configuration.</li>
+          <li><strong>Code-first:</strong> Entity/configuration là nguồn đúng; EF migration cập nhật database.</li>
+        </ul>
+
+        <div class="note warn">
+          Không trộn hai hướng trong cùng một thay đổi mà không so sánh kỹ. Nếu sửa SQL thủ công rồi lại tạo migration
+          từ model cũ, EF có thể cố tạo lại hoặc xóa đối tượng không đúng ý.
+        </div>
+
+        <h3>Ba DbContext của modular monolith</h3>
+        <ul>
+          <li><code>IdentityExperienceDbContext</code></li>
+          <li><code>PlanningDbContext</code></li>
+          <li><code>DeliveryIntelligenceDbContext</code></li>
+        </ul>
+        <p>
+          Mỗi context có migration history table riêng để ba module không tranh cùng một lịch sử. Các module vẫn dùng
+          chung một database vật lý nhưng ownership của model và migration được tách rõ.
+        </p>
+
+        <h3>Quy trình migration an toàn</h3>
+        <ol>
+          <li>Tạo backup database TEST.</li>
+          <li>Chọn đúng DbContext và đúng project migrations.</li>
+          <li>Tạo migration với tên mô tả nghiệp vụ.</li>
+          <li>Đọc cả phương thức <code>Up</code> và <code>Down</code>.</li>
+          <li>Xuất SQL idempotent hoặc migration bundle để review.</li>
+          <li>Thử trên database local/clone TEST.</li>
+          <li>Chỉ áp dụng TEST khi đã kiểm tra dữ liệu.</li>
+          <li>Ứng dụng chạy bằng tài khoản DB ít quyền; tài khoản migration nên tách riêng.</li>
+        </ol>
+
+        <pre><code># Ví dụ khung lệnh; thay &lt;Context&gt; và đường dẫn project đúng module
+dotnet ef migrations add &lt;TenMigration&gt; \
+  --context &lt;Context&gt; \
+  --project &lt;Infrastructure.csproj&gt; \
+  --startup-project ProjectMgmt.Solution/ProjectMgmt.Solution.csproj
+
+dotnet ef migrations script --idempotent \
+  --context &lt;Context&gt; \
+  --project &lt;Infrastructure.csproj&gt; \
+  --startup-project ProjectMgmt.Solution/ProjectMgmt.Solution.csproj</code></pre>
+
+        <p>
+          CD hiện tại cố ý không tự chạy migration. Lý do: migration có thể khóa bảng, mất dữ liệu hoặc cần review SQL.
+          Khi hệ thống trưởng thành, có thể thêm một job migration riêng có approval trước job deploy.
+        </p>
+      </section>
+
+      <section id="change">
+        <h2>13. Cách viết, sửa và mở rộng hệ thống</h2>
+
+        <h3>Thêm một module/project mới</h3>
+        <ol>
+          <li>Tạo Domain, Application và Infrastructure đúng ranh giới module.</li>
+          <li>Thêm project vào solution và khai báo ProjectReference đúng chiều.</li>
+          <li>Thêm DI ở <code>Program.cs</code> theo chủ trương hiện tại.</li>
+          <li>Thêm dòng COPY csproj vào API Dockerfile nếu API tham chiếu project mới.</li>
+          <li>Nếu có DbContext mới, chọn migration history table riêng.</li>
+          <li>Build solution, build Docker và cập nhật tài liệu.</li>
+        </ol>
+
+        <h3>Thêm NuGet package</h3>
+        <ol>
+          <li>Khai báo version một lần trong <code>Directory.Packages.props</code>.</li>
+          <li>Chỉ thêm <code>PackageReference</code> vào project thực sự dùng package.</li>
+          <li>Không thêm cùng package vào Contracts/Core/Test chỉ để “cho chắc”.</li>
+          <li>Restore, build, test và kiểm tra license/security advisory.</li>
+        </ol>
+
+        <h3>Thêm npm package</h3>
+        <pre><code>cd frontend/projectmgmt-web
+npm install &lt;package&gt;
+npm run lint
+npm test -- --watch=false
+npm run build</code></pre>
+        <p>
+          Commit cả <code>package.json</code> và <code>package-lock.json</code>. CI dùng <code>npm ci</code>, nên hai file lệch
+          nhau sẽ làm pipeline dừng ngay.
+        </p>
+
+        <h3>Thêm endpoint</h3>
+        <ol>
+          <li>DTO đầu vào/đầu ra ở Application.</li>
+          <li>Interface service và implementation xử lý use case.</li>
+          <li>Repository interface ở tầng trong; implementation ở Infrastructure.</li>
+          <li>Controller chỉ nhận request, gọi service và trả HTTP response.</li>
+          <li>Đăng ký interface/implementation trong DI.</li>
+          <li>Thêm test ít nhất cho happy path, validation và lỗi.</li>
+        </ol>
+
+        <h3>Thay health check</h3>
+        <p>
+          <code>/health/live</code> chỉ nên trả lời tiến trình còn sống. <code>/health</code> có thể kiểm tra readiness như DB.
+          Không dùng một readiness check quá nặng mỗi vài giây vì chính health check có thể tạo tải cho database.
+        </p>
+      </section>
+
+      <section id="maintenance">
+        <h2>14. Bảo trì và nâng cấp</h2>
+
+        <h3>Hằng tuần</h3>
+        <ul>
+          <li>Xem runner còn online và ổ đĩa còn đủ chỗ.</li>
+          <li>Đọc các workflow thất bại, không rerun mù nhiều lần.</li>
+          <li>Kiểm tra log deploy và backup mới nhất.</li>
+          <li>Kiểm tra package có security advisory.</li>
+        </ul>
+
+        <h3>Hằng tháng</h3>
+        <ul>
+          <li>Cập nhật Windows, IIS Hosting Bundle và Docker Desktop nếu được dùng.</li>
+          <li>Kiểm tra dung lượng <code>C:\DeployBackup\ProjectMgmt-Test</code> và <code>C:\Logs\ProjectMgmt</code>.</li>
+          <li>Thử rollback trong môi trường TEST.</li>
+          <li>Xoay credential Aiven theo chính sách và cập nhật file ngoài Git.</li>
+          <li>Khôi phục thử một bản backup DB, không chỉ kiểm tra việc tạo backup.</li>
+        </ul>
+
+        <h3>Nâng .NET</h3>
+        <ol>
+          <li>Đổi TargetFramework trong <code>Directory.Build.props</code>.</li>
+          <li>Đồng bộ EF Core, Pomelo và các package Microsoft tương thích.</li>
+          <li>Đổi <code>DOTNET_VERSION</code>/tag trong API Dockerfile.</li>
+          <li>Đổi <code>setup-dotnet</code trong workflow.</li>
+          <li>Cài Hosting Bundle tương ứng trên IIS trước khi deploy.</li>
+          <li>Chạy test và smoke test trên TEST trước Production.</li>
+        </ol>
+
+        <h3>Nâng Angular/Node</h3>
+        <ol>
+          <li>Đọc Angular update guide và nâng từng major.</li>
+          <li>Cập nhật Node trong web Dockerfile và <code>setup-node</code> cùng lúc.</li>
+          <li>Tạo lại lockfile bằng npm version đã khai báo.</li>
+          <li>Chạy lint, unit test, build và container-ci.</li>
+        </ol>
+
+        <h3>Nâng MySQL image</h3>
+        <p>
+          Backup volume trước. Đọc release notes, thử trên bản sao dữ liệu và không đổi
+          <code>lower_case_table_names</code> trên data directory đã khởi tạo. Giá trị này cần được quyết định trước lần tạo volume đầu tiên.
+        </p>
+      </section>
+
+      <section id="operations">
+        <h2>15. Vận hành và xử lý sự cố</h2>
+
+        <h3>CI backend đỏ</h3>
+        <ol>
+          <li>Mở job <code>backend-ci</code>, tìm bước đầu tiên đỏ.</li>
+          <li>Nếu restore lỗi: kiểm tra package/version/network.</li>
+          <li>Nếu build lỗi: đọc file, dòng và mã lỗi CSxxxx.</li>
+          <li>Nếu test lỗi: chạy đúng lệnh test ở local, không sửa workflow để bỏ test.</li>
+        </ol>
+
+        <h3>CI frontend đỏ</h3>
+        <ul>
+          <li><code>npm ci</code> lỗi: package.json và lockfile có thể lệch.</li>
+          <li>Lint lỗi: sửa đúng file/dòng ESLint báo.</li>
+          <li>Test lỗi: đọc assertion và chạy test riêng.</li>
+          <li>Build lỗi: kiểm tra TypeScript, budget và environment replacement.</li>
+        </ul>
+
+        <h3>container-ci đỏ</h3>
+        <ul>
+          <li>Compose config lỗi: biến bắt buộc thiếu hoặc YAML sai.</li>
+          <li>API restore lỗi: Dockerfile thiếu COPY cho một csproj mới.</li>
+          <li>Web build lỗi: lockfile hoặc đường dẫn output Angular thay đổi.</li>
+          <li>Pull image lỗi: registry/tag không tồn tại hoặc GitHub bị giới hạn mạng.</li>
+        </ul>
+
+        <h3>CD không bắt đầu</h3>
+        <ul>
+          <li>Xác nhận commit đã vào <code>develop</code>, không chỉ nằm ở <code>hoangtv</code>.</li>
+          <li>Xem runner có online và đủ bốn nhãn.</li>
+          <li>Xem job có đang chờ Environment approval hay concurrency không.</li>
+          <li>Kiểm tra dịch vụ Windows của runner.</li>
+        </ul>
+
+        <h3>CD rollback</h3>
+        <p>
+          Đọc <code>C:\Logs\ProjectMgmt\deploy-test.log</code>. Tìm health attempt đầu tiên và thông báo rollback.
+          Không xóa backup trước khi biết phiên bản cũ đã chạy lại. Backup nằm tại
+          <code>C:\DeployBackup\ProjectMgmt-Test</code>.
+        </p>
+
+        <h3>IIS trả 500</h3>
+        <ol>
+          <li>Kiểm tra Hosting Bundle/ANCM V2 và app pool “No Managed Code”.</li>
+          <li>Kiểm tra <code>ASPNETCORE_ENVIRONMENT=Staging</code>.</li>
+          <li>Kiểm tra file Staging thật có trong thư mục publish và runner đọc được.</li>
+          <li>Xem Windows Event Viewer và stdout log tạm thời nếu cần.</li>
+          <li>Không bật stdout logging lâu dài vì có thể đầy ổ đĩa và lộ dữ liệu.</li>
+        </ol>
+
+        <h3>Không kết nối được Aiven</h3>
+        <ul>
+          <li>Kiểm tra host, port, user, database và password đã xoay.</li>
+          <li>Kiểm tra <code>SslMode=Required</code>.</li>
+          <li>Kiểm tra firewall/network từ chính máy runner.</li>
+          <li>Không in nguyên connection string khi chẩn đoán.</li>
+        </ul>
+
+        <h3>Lệnh Docker thường dùng khi có sự cố</h3>
+        <pre><code>docker compose --env-file .env ps
+docker compose --env-file .env logs --tail 200 api
+docker compose --env-file .env logs --tail 200 web
+docker compose --env-file .env logs --tail 200 mysql
+docker compose --env-file .env restart api</code></pre>
+      </section>
+
+      <section id="advanced">
+        <h2>16. Lộ trình DevOps/CI/CD nâng cao</h2>
+
+        <h3>Cấp 1 - Hiểu và vận hành được hệ thống hiện tại</h3>
+        <ul>
+          <li>Đọc Git diff và biết file nào được stage.</li>
+          <li>Hiểu PR, required checks, artifact và runner.</li>
+          <li>Chạy Compose local, đọc log và phân biệt image/container/volume.</li>
+          <li>Biết secret nằm ở đâu và vì sao không được commit.</li>
+        </ul>
+
+        <h3>Cấp 2 - Tăng chất lượng</h3>
+        <ul>
+          <li>Viết integration test dùng Testcontainers hoặc database tạm.</li>
+          <li>Thêm CodeQL/SAST, dependency review và secret scanning.</li>
+          <li>Quét image bằng Trivy hoặc Docker Scout.</li>
+          <li>Tạo SBOM và ký image/artifact.</li>
+          <li>Dùng Dependabot/Renovate nhưng vẫn review nâng version.</li>
+        </ul>
+
+        <h3>Cấp 3 - Phát hành container</h3>
+        <ul>
+          <li>Đăng nhập GHCR bằng <code>GITHUB_TOKEN</code>.</li>
+          <li>Tag image theo commit SHA và semantic version; không chỉ dùng <code>latest</code>.</li>
+          <li>Push image chỉ sau khi CI xanh.</li>
+          <li>CD kéo đúng digest để bảo đảm image chạy là image đã kiểm tra.</li>
+          <li>Giữ IIS CD hoặc container CD cho một môi trường, không để hai luồng tranh nhau.</li>
+        </ul>
+
+        <h3>Cấp 4 - Triển khai an toàn hơn</h3>
+        <ul>
+          <li>Thêm approval cho Production environment.</li>
+          <li>Blue/green hoặc canary để giảm downtime.</li>
+          <li>Migration job riêng có backup và approval.</li>
+          <li>Centralized logs, metrics, traces và cảnh báo.</li>
+          <li>Định nghĩa SLO: tỷ lệ thành công, latency, thời gian phục hồi.</li>
+        </ul>
+
+        <h3>Cấp 5 - Hạ tầng dưới dạng code</h3>
+        <ul>
+          <li>Dùng Terraform/Bicep/Ansible cho máy, network, IIS hoặc cloud.</li>
+          <li>Dùng secret manager thay file tĩnh khi quy mô tăng.</li>
+          <li>Tạo môi trường tạm cho từng PR.</li>
+          <li>Dùng OIDC thay credential cloud sống lâu.</li>
+        </ul>
+      </section>
+
+      <section id="report">
+        <h2>17. Báo cáo những gì đã thực hiện</h2>
+
+        <h3>Kết quả đóng gói và kiểm tra</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Hạng mục</th><th>Kết quả</th><th>Ghi chú</th></tr></thead>
+            <tbody>
+              <tr><td>Solution Release build</td><td class="status-ok">Đạt</td><td>0 warning, 0 error tại lần kiểm tra trước commit Docker.</td></tr>
+              <tr><td>Backend test command</td><td class="status-warn">Thoát thành công</td><td>Project test hiện chưa phát hiện test backend; cần bổ sung test thực.</td></tr>
+              <tr><td>Frontend lint</td><td class="status-ok">Đạt</td><td>ESLint không báo lỗi.</td></tr>
+              <tr><td>Frontend unit test</td><td class="status-ok">Đạt</td><td>1 test file, 2/2 test pass.</td></tr>
+              <tr><td>Frontend production build</td><td class="status-ok">Đạt</td><td>Output đúng <code>dist/projectmgmt-web/browser</code>.</td></tr>
+              <tr><td>Compose local config</td><td class="status-ok">Đạt</td><td>Xác thực bằng Docker Compose CLI v5.5.1.</td></tr>
+              <tr><td>Compose TEST config</td><td class="status-ok">Đạt</td><td>Mount config ngoài Git ở chế độ read-only.</td></tr>
+              <tr><td>Workflow lint</td><td class="status-ok">Đạt</td><td>Actionlint v1.7.12.</td></tr>
+              <tr><td>GitHub backend-ci</td><td class="status-ok">Đạt</td><td>Commit Docker trên PR #1.</td></tr>
+              <tr><td>GitHub frontend-ci</td><td class="status-ok">Đạt</td><td>Commit Docker trên PR #1.</td></tr>
+              <tr><td>GitHub container-ci</td><td class="status-ok">Đạt</td><td>Hai Docker image build thành công trên Linux.</td></tr>
+              <tr><td>CD IIS TEST</td><td class="status-warn">Chưa kích hoạt</td><td>Chờ merge PR và xác nhận secret TEST.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Thành phần đã tạo hoặc nâng cấp</h3>
+        <ul>
+          <li>Local Compose đầy đủ MySQL/API/web.</li>
+          <li>TEST Compose dùng file Staging bên ngoài Git.</li>
+          <li>API Dockerfile multi-stage .NET 10, non-root và health check.</li>
+          <li>Web Dockerfile Node 24 → Nginx unprivileged.</li>
+          <li>Nginx SPA fallback, API proxy và SignalR/WebSocket proxy.</li>
+          <li>.dockerignore cho backend và frontend.</li>
+          <li>File biến mẫu local và TEST.</li>
+          <li>Appsettings mẫu Staging và Production.</li>
+          <li>Job <code>container-ci</code> và Buildx cache.</li>
+          <li>Branch protection bắt buộc cả ba job.</li>
+        </ul>
+
+        <h3>Giới hạn và việc còn lại</h3>
+        <ul>
+          <li>Máy hiện chưa cài Docker Desktop; image đã được build xác minh trên GitHub Actions.</li>
+          <li>CD IIS chỉ chạy sau merge; không nên merge nếu config Aiven thật chưa sẵn sàng.</li>
+          <li>Backend test project chưa có test được discover, nên dấu xanh hiện mới chủ yếu xác nhận build.</li>
+          <li>CD copy frontend vào thư mục Web; nếu muốn phục vụ web bằng IIS cần có site/binding/rewrite tương ứng hoặc đổi chiến lược phục vụ static file.</li>
+          <li>Các thay đổi logic Identity/Controller trong working tree không thuộc commit Docker và cần được review/commit riêng.</li>
+        </ul>
+
+        <h3>Mẫu báo cáo mỗi lần release</h3>
+        <pre><code>Release: &lt;version hoặc commit SHA&gt;
+Người triển khai: &lt;tên&gt;
+Thời gian bắt đầu/kết thúc: &lt;...&gt;
+PR: &lt;URL&gt;
+CI: backend / frontend / container
+Migration: không có | tên bundle/script
+Backup trước deploy: &lt;đường dẫn hoặc ID&gt;
+Health check sau deploy: &lt;URL, HTTP status&gt;
+Smoke test nghiệp vụ: &lt;kết quả&gt;
+Rollback: không | có, lý do
+Sự cố/phát hiện: &lt;...&gt;
+Hành động tiếp theo: &lt;...&gt;</code></pre>
+      </section>
+
+      <section id="checklists">
+        <h2>18. Checklist thực hành</h2>
+
+        <h3>Trước khi mở/cập nhật PR</h3>
+        <ul class="checklist">
+          <li><code>git status</code> chỉ có file mình định thay đổi.</li>
+          <li>Không có password, token, private key hoặc connection string thật.</li>
+          <li>Solution build thành công.</li>
+          <li>Frontend lint/test/build thành công nếu có ảnh hưởng.</li>
+          <li>Compose config thành công nếu sửa Docker.</li>
+          <li>Migration đã được đọc và thử nếu có.</li>
+          <li>Commit message nói rõ mục đích.</li>
+        </ul>
+
+        <h3>Trước khi merge vào develop</h3>
+        <ul class="checklist">
+          <li>PR diff đã được review.</li>
+          <li><code>backend-ci</code> xanh.</li>
+          <li><code>frontend-ci</code> xanh.</li>
+          <li><code>container-ci</code> xanh.</li>
+          <li>File Staging thật tồn tại và không còn placeholder.</li>
+          <li>Runner TEST online.</li>
+          <li>Đã biết người theo dõi deployment.</li>
+        </ul>
+
+        <h3>Sau khi merge</h3>
+        <ul class="checklist">
+          <li>Workflow Deploy TEST đã bắt đầu.</li>
+          <li>Build artifacts thành công.</li>
+          <li>Self-hosted runner nhận job.</li>
+          <li>Health check HTTP 2xx.</li>
+          <li>Smoke test đăng nhập/API chính.</li>
+          <li>Kiểm tra log không có lỗi mới.</li>
+          <li>Ghi báo cáo release.</li>
+        </ul>
+
+        <h3>Khi rollback</h3>
+        <ul class="checklist">
+          <li>Dừng thay đổi tiếp theo.</li>
+          <li>Giữ log và artifact của lần lỗi.</li>
+          <li>Xác nhận backup nào được phục hồi.</li>
+          <li>Kiểm tra health và nghiệp vụ sau rollback.</li>
+          <li>Viết nguyên nhân gốc, không chỉ ghi “deploy lỗi”.</li>
+          <li>Tạo issue/hành động phòng ngừa tái diễn.</li>
+        </ul>
+      </section>
+
+      <section id="references">
+        <h2>19. Tài liệu chính thức nên học tiếp</h2>
+        <ul>
+          <li><a href="https://docs.github.com/en/actions/get-started/understand-github-actions">GitHub Actions - hiểu workflow, event, job, step và runner</a></li>
+          <li><a href="https://docs.github.com/en/actions/get-started/continuous-deployment">GitHub Actions - Continuous Deployment</a></li>
+          <li><a href="https://docs.github.com/en/actions/concepts/runners/self-hosted-runners">GitHub - Self-hosted runners</a></li>
+          <li><a href="https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches">GitHub - Protected branches và required checks</a></li>
+          <li><a href="https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/">Docker Compose - biến môi trường và thứ tự ưu tiên</a></li>
+          <li><a href="https://docs.docker.com/build/building/multi-stage/">Docker - multi-stage builds</a></li>
+          <li><a href="https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/docker/building-net-docker-images?view=aspnetcore-10.0">Microsoft - chạy ASP.NET Core trong Docker</a></li>
+          <li><a href="https://learn.microsoft.com/en-us/aspnet/core/fundamentals/configuration/?view=aspnetcore-10.0">Microsoft - cấu hình ASP.NET Core</a></li>
+          <li><a href="https://learn.microsoft.com/en-us/aspnet/core/tutorials/publish-to-iis?view=aspnetcore-10.0">Microsoft - publish ASP.NET Core lên IIS</a></li>
+          <li><a href="https://learn.microsoft.com/en-us/ef/core/managing-schemas/">EF Core - chọn Migrations hay Reverse Engineering</a></li>
+          <li><a href="https://learn.microsoft.com/en-us/ef/core/managing-schemas/migrations/applying">EF Core - chiến lược áp dụng migration</a></li>
+        </ul>
+      </section>
+
+      <footer>
+        <p>
+          Tài liệu này mô tả trạng thái repository tại commit Docker <code>768f3f0</code> và PR #1.
+          Khi thay workflow, đường dẫn deploy, port, môi trường hoặc chiến lược database, hãy cập nhật tài liệu trong cùng PR.
+        </p>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

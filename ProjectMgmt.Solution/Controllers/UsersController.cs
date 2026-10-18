@@ -15,6 +15,12 @@ public class UsersController : ApiControllerBase
         _skills = skills;
     }
 
+    [HttpGet]
+    public async Task<ActionResult<IReadOnlyList<UserDisplayInfo>>> GetAllUsers(CancellationToken cancellationToken)
+    {
+        return Ok(await _users.GetAllActiveDisplayInfoAsync(cancellationToken));
+    }
+
     [HttpGet("{userId:guid}/display")]
     public async Task<ActionResult<UserDisplayInfo>> GetDisplay(
         Guid userId,

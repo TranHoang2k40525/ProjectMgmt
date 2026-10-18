@@ -21,7 +21,29 @@ if (-not [IO.File]::Exists($resolvedPath)) {
 $sql = [IO.File]::ReadAllText($resolvedPath, [Text.Encoding]::UTF8)
 $tablePattern = '(?ms)^CREATE TABLE `(?<table>[^`]+)` \((?<body>.*?)^\) ENGINE='
 $columnPattern = '(?m)^\s*.(?<column>[A-Za-z0-9_]+).[^\r\n]*XMOD'
-$keyPattern = '(?m)^\s*(?:PRIMARY KEY|UNIQUE KEY `[^`]+`|KEY `[^`]+`)\s*\((?<columns>[^\r\n\)]*)\)'
+$keyPattern = '(?m)^\s*(?:ADD\s+)?(?:PRIMARY KEY|UNIQUE KEY `[^`]+`|KEY `[^`]+`)\s*\((?<columns>[^\r\n\)]*)\)'
+$alterTablePattern = '(?ims)ALTER\s+TABLE\s+`(?<table>[^`]+)`(?<body>.*?);'
+$createIndexPattern = '(?im)CREATE\s+(?:UNIQUE\s+)?INDEX\s+`[^`]+`\s+ON\s+`(?<table>[^`]+)`\s*\((?<columns>[^\r\n\)]*)\)'
+
+$additionalIndexes = @{}
+foreach ($alterMatch in [regex]::Matches($sql, $alterTablePattern)) {
+    $table = $alterMatch.Groups['table'].Value
+    if (-not $additionalIndexes.ContainsKey($table)) {
+        $additionalIndexes[$table] = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    }
+    foreach ($keyMatch in [regex]::Matches($alterMatch.Groups['body'].Value, $keyPattern)) {
+        $firstColumn = [regex]::Match($keyMatch.Groups['columns'].Value, '`(?<column>[^`]+)`')
+        if ($firstColumn.Success) { [void]$additionalIndexes[$table].Add($firstColumn.Groups['column'].Value) }
+    }
+}
+foreach ($indexMatch in [regex]::Matches($sql, $createIndexPattern)) {
+    $table = $indexMatch.Groups['table'].Value
+    if (-not $additionalIndexes.ContainsKey($table)) {
+        $additionalIndexes[$table] = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    }
+    $firstColumn = [regex]::Match($indexMatch.Groups['columns'].Value, '`(?<column>[^`]+)`')
+    if ($firstColumn.Success) { [void]$additionalIndexes[$table].Add($firstColumn.Groups['column'].Value) }
+}
 
 $results = [Collections.Generic.List[object]]::new()
 foreach ($tableMatch in [regex]::Matches($sql, $tablePattern)) {
@@ -32,6 +54,9 @@ foreach ($tableMatch in [regex]::Matches($sql, $tablePattern)) {
     foreach ($keyMatch in [regex]::Matches($body, $keyPattern)) {
         $firstColumn = [regex]::Match($keyMatch.Groups['columns'].Value, '`(?<column>[^`]+)`')
         if ($firstColumn.Success) { [void]$leftmostIndexedColumns.Add($firstColumn.Groups['column'].Value) }
+    }
+    if ($additionalIndexes.ContainsKey($table)) {
+        $leftmostIndexedColumns.UnionWith($additionalIndexes[$table])
     }
 
     foreach ($columnMatch in [regex]::Matches($body, $columnPattern)) {

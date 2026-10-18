@@ -1,0 +1,77 @@
+{
+  "title": "14 Đăng nhập",
+  "participants": [
+    {
+      "id": "user",
+      "label": "Người dùng",
+      "actor": true
+    },
+    {
+      "id": "web",
+      "label": "Angular SPA"
+    },
+    {
+      "id": "api",
+      "label": "Identity API"
+    },
+    {
+      "id": "db",
+      "label": "Identity DB"
+    },
+    {
+      "id": "policy",
+      "label": "Permission policy"
+    }
+  ],
+  "messages": [
+    {
+      "from": "user",
+      "to": "web",
+      "label": "Nhập email + password"
+    },
+    {
+      "from": "web",
+      "to": "api",
+      "label": "POST /api/auth/login"
+    },
+    {
+      "from": "api",
+      "to": "db",
+      "label": "Đọc user + hash / token state"
+    },
+    {
+      "from": "db",
+      "to": "api",
+      "label": "User + credential",
+      "return": true
+    },
+    {
+      "from": "api",
+      "to": "web",
+      "label": "Access token + refresh cookie",
+      "return": true
+    },
+    {
+      "from": "web",
+      "to": "api",
+      "label": "GET resource + bearer"
+    },
+    {
+      "from": "api",
+      "to": "policy",
+      "label": "Check action + scope"
+    },
+    {
+      "from": "policy",
+      "to": "api",
+      "label": "Allow / Deny",
+      "return": true
+    },
+    {
+      "from": "api",
+      "to": "web",
+      "label": "200 / 401 / 403",
+      "return": true
+    }
+  ]
+}
