@@ -42,6 +42,7 @@ public class TokenService : ITokenService
     {
         var accessTokenExpiresAt = nowUtc.AddMinutes(_options.AccessTokenMinutes);
         var refreshTokenExpiresAt = nowUtc.AddDays(_options.RefreshTokenDays);
+        var refreshToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
@@ -49,7 +50,8 @@ public class TokenService : ITokenService
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(ClaimTypes.Name, profile?.DisplayName ?? user.Email),
-            new("security_stamp", user.SecurityStamp.ToString())
+            new("security_stamp", user.SecurityStamp.ToString()),
+            new("session_hash", HashRefreshToken(refreshToken))
         };
 
         claims.AddRange(systemRoles
@@ -67,7 +69,6 @@ public class TokenService : ITokenService
             expires: accessTokenExpiresAt,
             signingCredentials: credentials);
 
-        var refreshToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
         return new TokenSet
         {
             AccessToken = new JwtSecurityTokenHandler().WriteToken(jwt),
