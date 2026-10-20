@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { DragDropModule, CdkDragDrop } from '@angular/cdk/drag-drop';
+import { DragDropModule, CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
 import { gsap } from 'gsap';
 import { Flip } from 'gsap/Flip';
 import { ProjectManagementService, WorkItem } from '../../core/services/project-management.service';
@@ -89,10 +89,14 @@ export class BoardPage implements OnDestroy {
 
   // CDK Drag & Drop Handler
   onDrop(event: CdkDragDrop<WorkItem[]>, targetStatus: string): void {
+    if (event.previousContainer === event.container) {
+      const ordered = [...event.container.data]; moveItemInArray(ordered, event.previousIndex, event.currentIndex);
+      this.projectService.reorderWorkItems(ordered.map(i => i.id)); return;
+    }
     const item = event.item.data as WorkItem;
     if (item && item.statusName !== targetStatus) {
       this.animateBoardChange(() => this.projectService.updateWorkItemStatus(item.id, targetStatus));
-      this.toastService.success('Kéo Thả Thành Công', `Đã chuyển [${item.issueKey}] sang ${targetStatus}`);
+      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     }
   }
 
@@ -122,14 +126,14 @@ export class BoardPage implements OnDestroy {
           };
           const targetStatus = statusMap[val] || val;
           this.animateBoardChange(() => this.projectService.updateWorkItemStatus(item.id, targetStatus));
-          this.toastService.success('Đã Chuyển Trạng Thái', `Thẻ [${item.issueKey}] -> ${targetStatus}`);
+          this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
         }
         break;
 
       case 'assign': {
         const myName = this.identityService.authState().currentUser?.displayName || 'Tôi';
         this.projectService.updateWorkItemAssignee(item.id, myName);
-        this.toastService.success('Đã Gán Việc', `Công việc [${item.issueKey}] đã gán cho bạn`);
+        this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
         break;
       }
 
@@ -145,7 +149,7 @@ export class BoardPage implements OnDestroy {
 
       case 'copy':
         navigator.clipboard?.writeText?.(`${item.issueKey}: ${item.title}`);
-        this.toastService.success('Đã Sao Chép', `Mã thẻ [${item.issueKey}] đã được lưu vào bộ nhớ tạm`);
+        this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
         break;
 
       case 'delete':
@@ -170,7 +174,7 @@ export class BoardPage implements OnDestroy {
       const item = this.items().find(i => i.id === taskId);
       if (item) {
         this.projectService.updateWorkItem({ ...item, title: newTitle });
-        this.toastService.success('Đã Cập Nhật', 'Tiêu đề công việc đã được lưu');
+        this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
       }
     }
     this.inlineEditingTaskId.set(null);
@@ -201,7 +205,7 @@ export class BoardPage implements OnDestroy {
     if (direction === 'next' && idx < statuses.length - 1) {
       const nextStatus = statuses[idx + 1];
       this.animateBoardChange(() => this.projectService.updateWorkItemStatus(task.id, nextStatus));
-      this.toastService.success('Đã Chuyển Cột', `Công việc [${task.issueKey}] sang ${nextStatus}`);
+      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     } else if (direction === 'prev' && idx > 0) {
       const prevStatus = statuses[idx - 1];
       this.animateBoardChange(() => this.projectService.updateWorkItemStatus(task.id, prevStatus));
@@ -212,7 +216,7 @@ export class BoardPage implements OnDestroy {
   updateInlineStatus(taskId: string, statusName: string, event?: Event): void {
     if (event) event.stopPropagation();
     this.animateBoardChange(() => this.projectService.updateWorkItemStatus(taskId, statusName));
-    this.toastService.success('Cập Nhật Trạng Thái', `Đã chuyển sang ${statusName}`);
+    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
   }
 
   updateInlineAssignee(taskId: string, assigneeName: string, event?: Event): void {
@@ -247,7 +251,7 @@ export class BoardPage implements OnDestroy {
     if (event) event.stopPropagation();
     const myName = this.identityService.authState().currentUser?.displayName || 'Tôi';
     this.projectService.updateWorkItemAssignee(taskId, myName);
-    this.toastService.success('Đã Gán Cho Tôi', 'Công việc đã được đưa vào danh sách của bạn.');
+    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     this.activeMenuTaskId.set(null);
   }
 
@@ -255,7 +259,7 @@ export class BoardPage implements OnDestroy {
     if (event) event.stopPropagation();
     const cloned = this.projectService.cloneWorkItem(taskId);
     if (cloned) {
-      this.toastService.success('Nhân Bản Thành Công', `Đã tạo bản sao [${cloned.issueKey}]`);
+      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     }
     this.activeMenuTaskId.set(null);
   }
