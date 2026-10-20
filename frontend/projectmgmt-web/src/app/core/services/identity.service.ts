@@ -1,4 +1,5 @@
 import { Injectable, inject, signal } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
 import { Observable, map, of, switchMap, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AccountApi } from '../api/account.api';
@@ -34,6 +35,7 @@ export interface AuthState {
   providedIn: 'root'
 })
 export class IdentityService {
+  private readonly http = inject(HttpClient);
   private readonly accountApi = inject(AccountApi);
   private readonly identityApi = inject(IdentityApi);
   private readonly notificationApi = inject(NotificationApi);
@@ -570,15 +572,18 @@ export class IdentityService {
   }
 
   getActiveSessions(): Observable<ActiveSessionModel[]> {
-    return of([]);
+    return this.http.get<ActiveSessionModel[]>(`${environment.apiBaseUrl}/v1/users/me/sessions`);
   }
 
   revokeSession(sessionId: string): Observable<{ success: boolean }> {
-    void sessionId;
-    return throwError(() => ({
-      status: 501,
-      code: 'AUTH_SESSION_MANAGEMENT_NOT_IMPLEMENTED',
-      title: 'Backend chưa cung cấp API liệt kê và thu hồi từng phiên.'
-    }));
+    return this.http.delete<{ success: boolean; isCurrent: boolean }>(`${environment.apiBaseUrl}/v1/users/me/sessions/${sessionId}`).pipe(
+      map(result => {
+        if (result.isCurrent) {
+          this.tokenStore.clear();
+          this.authState.set({ currentUser: null, isAuthenticated: false, token: null });
+        }
+        return result;
+      })
+    );
   }
 }
