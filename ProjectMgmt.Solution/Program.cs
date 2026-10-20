@@ -60,6 +60,7 @@ var serverVersionText = builder.Configuration["Database:ServerVersion"] ?? "8.0.
 var serverVersion = new MySqlServerVersion(Version.Parse(serverVersionText));
 
 builder.Services.AddControllers();
+builder.Services.AddScoped<ProjectAccess>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -149,6 +150,11 @@ builder.Services
                 {
                     context.Fail("Token đã bị thu hồi hoặc tài khoản không còn hợp lệ.");
                 }
+                var sessionHash = context.Principal?.FindFirstValue("session_hash");
+                var identityContext = context.HttpContext.RequestServices.GetRequiredService<IdentityExperienceDbContext>();
+                if (string.IsNullOrEmpty(sessionHash) || !await identityContext.RefreshTokens.AsNoTracking()
+                    .AnyAsync(t => t.UserId == userId && t.TokenHash == sessionHash && !t.IsRevoked && t.ExpiresAt > DateTime.UtcNow))
+                    context.Fail("Phiên đăng nhập đã hết hạn hoặc bị thu hồi.");
             }
         };
     });
