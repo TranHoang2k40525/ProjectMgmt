@@ -4,6 +4,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ProjectMgmt.IdentityAccess.Contracts;
 using ProjectMgmt.ProjectManagement.Contracts;
+using Microsoft.EntityFrameworkCore;
+using IdentityExperience.Infrastructure;
+using System.ComponentModel.DataAnnotations;
 
 namespace ProjectMgmt.Solution.Controllers;
 
@@ -67,6 +70,26 @@ public class ProjectMembersController : ControllerBase
                     : MapWriteFailure(result);
             });
     }
+
+    public sealed class InviteRequest
+    {
+        [Required, EmailAddress] public string Email { get; set; } = "";
+        [Required] public string RoleName { get; set; } = "Developer";
+    }
+
+    [HttpPost("invite")]
+    public Task<IActionResult> Invite(Guid projectId, InviteRequest request) => ExecuteWithPermission(
+        projectId, "member.invite", "invite", async actor =>
+        {
+            var identity = HttpContext.RequestServices.GetRequiredService<IdentityExperienceDbContext>();
+            var normalized = request.Email.Trim().ToUpperInvariant();
+            var user = await identity.Users.AsNoTracking().SingleOrDefaultAsync(u => u.NormalizedEmail == normalized && u.IsActive && u.IsEmailVerified);
+            if (user is null) return NotFound(new { message = "Chưa tìm thấy tài khoản đã xác minh với email này." });
+            var role = await identity.Roles.AsNoTracking().SingleOrDefaultAsync(r => r.Scope == "Project" && r.Name == request.RoleName);
+            if (role is null) return BadRequest(new { message = "Vai trò dự án không hợp lệ." });
+            var result = await _roleServices.AddProjectMemberAsync(actor, projectId, user.Id, role.Id);
+            return result.Success ? StatusCode(201, result) : MapWriteFailure(result);
+        });
 
     [HttpPut("{userId:guid}/role")]
     public async Task<IActionResult> ChangeRole(
