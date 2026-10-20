@@ -238,7 +238,7 @@ export class CreateTaskModalComponent {
   saveCustomIssueType(): void {
     if (!this.customTypeName.trim()) return;
     const newType = this.projectService.addCustomIssueType(this.customTypeName.trim(), this.customTypeIcon, 'indigo');
-    this.toastService.success('Tạo Loại Issue Mới', `Đã tạo loại [${newType.icon} ${newType.name}] thành công!`);
+    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     this.issueType = newType.name;
     this.showNewTypeForm.set(false);
     this.customTypeName = '';
@@ -260,7 +260,7 @@ export class CreateTaskModalComponent {
       assigneeName: this.assigneeName
     });
 
-    this.toastService.success('Tạo Công Việc Thành Công', `Đã khởi tạo công việc "${this.title}" trong ${this.sprintName}`);
+    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     this.dismissed.emit();
   }
 }
