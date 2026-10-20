@@ -8,6 +8,7 @@ import { AccountApi } from '../../core/api/account.api';
 import { IdentityApi } from '../../core/api/identity.api';
 import { TOKEN_STORE } from '../../core/auth/token-store';
 import { of } from 'rxjs';
+import { vi } from 'vitest';
 import { Router } from '@angular/router';
 
 describe('ProfilePageComponent (Unit Tests)', () => {
@@ -55,6 +56,7 @@ describe('ProfilePageComponent (Unit Tests)', () => {
       ]
     });
 
+    vi.spyOn(TestBed.inject(IdentityService), 'getActiveSessions').mockReturnValue(of([]));
     const injector = TestBed.inject(EnvironmentInjector);
     runInInjectionContext(injector, () => {
       component = new ProfilePageComponent();
