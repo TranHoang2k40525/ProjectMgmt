@@ -1,6 +1,7 @@
 import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RbacApi } from '../../core/api/rbac.api';
 import { ProjectManagementService, ProjectMember } from '../../core/services/project-management.service';
 
 @Component({
@@ -10,6 +11,7 @@ import { ProjectManagementService, ProjectMember } from '../../core/services/pro
   template: `
     <div class="project-members-page flex flex-col gap-6 animate-fade-in">
       
+      @if (error) { <p role="alert" class="p-3 rounded bg-red-50 text-red-700">{{ error }}</p> }
       <!-- Top Action Bar -->
       <div class="members-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div class="flex flex-col">
@@ -45,6 +47,7 @@ import { ProjectManagementService, ProjectMember } from '../../core/services/pro
                 {{ member.role }}
               </span>
               <span class="text-[11px] text-slate-400">Tham gia: {{ member.joinedAt }}</span>
+              <button type="button" (click)="removeMember(member.userId)" class="text-red-700 text-xs">Gỡ thành viên</button>
             </div>
           </div>
         } @empty {
@@ -76,9 +79,9 @@ import { ProjectManagementService, ProjectMember } from '../../core/services/pro
               <label for="member-role" class="text-xs font-bold text-slate-500">Vai trò trong dự án</label>
               <select id="member-role" [(ngModel)]="newMemberRole" class="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs focus:outline-none focus:border-primary">
                 <option value="Developer">Developer (Phát triển)</option>
-                <option value="Scrum Master">Scrum Master (Quản trị Sprint)</option>
-                <option value="QA Engineer">QA Engineer (Kiểm thử)</option>
-                <option value="Project Lead">Project Lead (Trưởng dự án)</option>
+                <option value="ScrumMaster">Scrum Master (Quản trị Sprint)</option>
+                <option value="ProductOwner">Product Owner</option>
+                <option value="ProjectManager">Project Manager (Trưởng dự án)</option>
                 <option value="Viewer">Viewer (Xem báo cáo)</option>
               </select>
             </div>
@@ -118,6 +121,9 @@ import { ProjectManagementService, ProjectMember } from '../../core/services/pro
   `]
 })
 export class ProjectMembersPageComponent {
+  private readonly rbac = inject(RbacApi);
+  error = '';
+  saving = false;
   private readonly projectService = inject(ProjectManagementService);
   readonly currentProject = this.projectService.currentProject;
 
@@ -127,15 +133,24 @@ export class ProjectMembersPageComponent {
   newMemberRole: ProjectMember['role'] = 'Developer';
 
   submitInvite(): void {
-    if (this.newMemberName.trim() && this.newMemberEmail.trim()) {
+    if (!this.saving && this.newMemberName.trim() && this.newMemberEmail.trim()) {
+      this.saving = true;
+      this.error = '';
       this.projectService.addProjectMember({
         displayName: this.newMemberName,
         email: this.newMemberEmail,
         role: this.newMemberRole
+      }).subscribe({
+        next: () => { this.saving = false; this.isInviteModalOpen = false; this.newMemberName = ''; this.newMemberEmail = ''; },
+        error: (e: { title?: string; detail?: string }) => { this.saving = false; this.error = e.detail ?? e.title ?? 'Không thể thêm thành viên.'; }
       });
-      this.isInviteModalOpen = false;
-      this.newMemberName = '';
-      this.newMemberEmail = '';
     }
+  }
+
+  removeMember(userId: string): void {
+    this.rbac.removeProjectMember(this.currentProject().id, userId).subscribe({
+      next: () => this.projectService.loadWorkspace(),
+      error: (e: { title?: string }) => this.error = e.title ?? 'Không thể gỡ thành viên.'
+    });
   }
 }
