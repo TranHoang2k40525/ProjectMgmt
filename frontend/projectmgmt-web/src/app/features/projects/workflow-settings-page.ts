@@ -53,6 +53,20 @@ import { ToastService } from '../../core/services/toast.service';
         </div>
       }
 
+      <div class="card">
+        <h3>Áp dụng mẫu workflow</h3>
+        <p class="hint">Bổ sung trạng thái, các bước chuyển tiếp và cột board còn thiếu. Giữ nguyên trạng thái công việc và luật hiện có.</p>
+        <label for="workflowTemplate">Mẫu quy trình</label>
+        <select id="workflowTemplate" class="form-control" [(ngModel)]="selectedTemplate">
+          <option value="scrum-std">Scrum tiêu chuẩn</option>
+          <option value="agile-qa">Agile có kiểm thử QA</option>
+          <option value="kanban-simple">Kanban đơn giản</option>
+          <option value="enterprise">Quy trình doanh nghiệp</option>
+        </select>
+        <button class="btn btn-primary" [disabled]="loading() || submitting() || !project()" (click)="applyTemplate()">
+          {{ submitting() ? 'Đang lưu...' : 'Áp dụng mẫu' }}
+        </button>
+      </div>
       <!-- 2. Manage Statuses in Project -->
       <div class="card">
         <div class="status-section-header flex items-center justify-between mb-3">
@@ -136,10 +150,9 @@ import { ToastService } from '../../core/services/toast.service';
                 [(ngModel)]="newTransition.requiredPermissionCode"
                 class="form-control"
               >
-                <option value="">(Không yêu cầu - mọi thành viên đều chuyển được)</option>
-                <option value="issue:transition">issue:transition (Quyền chuyển trạng thái chuẩn)</option>
-                <option value="issue:resolve">issue:resolve (Chỉ Lead/Senior được duyệt/Done)</option>
-                <option value="issue:close">issue:close (Quyền đóng Issue)</option>
+                <option value="">(Dùng quyền chuyển trạng thái chuẩn)</option>
+                <option value="issue.transition">issue.transition (Chuyển trạng thái)</option>
+                <option value="project.settings.manage">project.settings.manage (Quản lý cấu hình dự án)</option>
               </select>
               <small class="form-hint">Nếu chọn, chỉ user có quyền này mới thực hiện được transition.</small>
             </div>
@@ -200,7 +213,7 @@ import { ToastService } from '../../core/services/toast.service';
                         @if (t.requiredPermissionCode) {
                           <code class="perm-code">{{ t.requiredPermissionCode }}</code>
                         } @else {
-                          <span class="perm-none">Mọi người</span>
+                          <span class="perm-none">issue.transition</span>
                         }
                       </td>
                       <td>
@@ -595,6 +608,23 @@ export class WorkflowSettingsPage implements OnInit {
   readonly submitting = signal<boolean>(false);
   readonly alertMessage = signal<string | null>(null);
   readonly alertType = signal<'success' | 'error'>('success');
+
+  selectedTemplate = 'scrum-std';
+
+  applyTemplate(): void {
+    if (this.submitting() || this.loading()) return;
+    this.submitting.set(true); this.alertMessage.set(null);
+    this.projectService.applyWorkflowTemplateToProject(this.projectId, this.selectedTemplate).subscribe({
+      next: () => {
+        this.submitting.set(false);
+        this.alertType.set('success');
+        this.alertMessage.set('Đã lưu mẫu workflow vào dự án.');
+        this.newTransition = { fromStatusId: '', toStatusId: '', name: '', requiredPermissionCode: '' };
+        this.loadWorkflowData();
+      },
+      error: err => { this.submitting.set(false); this.reportError(err); }
+    });
+  }
 
   newTransition: CreateWorkflowTransitionRequest = {
     fromStatusId: '',

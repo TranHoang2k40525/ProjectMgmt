@@ -1,6 +1,8 @@
-import { Component, EventEmitter, Input, Output, inject, signal } from '@angular/core';
+import { Component, EventEmitter, Input, Output, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
+import { AiBreakdownApi } from '../../../core/api/ai-breakdown.api';
 import { ProjectManagementService, WorkItem } from '../../../core/services/project-management.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { ConfirmDialogService } from '../../../core/services/confirm-dialog.service';
@@ -8,7 +10,7 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
 @Component({
   selector: 'app-task-detail-drawer',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink],
   template: `
     @if (task) {
       <div class="task-drawer-backdrop fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-xs transition-opacity animate-fade-in font-body text-slate-900 dark:text-slate-100">
@@ -35,7 +37,7 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
               <span class="px-3 py-1 rounded-md text-sm font-mono font-bold bg-primary/10 text-primary border border-primary/20">
                 {{ task.issueKey }}
               </span>
-              <span class="text-sm text-slate-500 font-medium">Dự án {{ task.sprintName || 'HUCE Scrum Platform' }}</span>
+              <span class="text-sm text-slate-500 font-medium">Dự án {{ task.sprintName || 'Hệ thống Quản lý Dự án Scrum tích hợp AI' }}</span>
             </div>
 
             <div class="flex items-center gap-2">
@@ -135,10 +137,10 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
                   (ngModelChange)="onFieldChange()"
                   class="h-9 px-3 rounded-lg text-sm font-semibold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none"
                 >
-                  <option value="Trần Văn Hoàng">Trần Văn Hoàng</option>
-                  <option value="Nguyễn Thanh Hà">Nguyễn Thanh Hà</option>
-                  <option value="Phạm Đức Anh">Phạm Đức Anh</option>
-                  <option value="Lê Minh Khiêm">Lê Minh Khiêm</option>
+                  <option [value]="undefined">Chưa chỉ định</option>
+                  @for (m of projectMembers(); track m.id) {
+                    <option [value]="m.displayName">{{ m.displayName }}</option>
+                  }
                 </select>
               </div>
 
@@ -201,6 +203,8 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
                         <input type="text" [(ngModel)]="sub.title" class="flex-1 bg-transparent text-slate-800 dark:text-slate-200 font-medium focus:outline-none" />
                         <span class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-[10px] font-mono">{{ sub.points }} SP</span>
                       </div>
+                    } @empty {
+                      <p class="text-slate-500 py-3 text-center text-xs">Chưa có đề xuất phân rã Sub-task từ AI Model.</p>
                     }
                   </div>
 
@@ -214,10 +218,12 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
 
                   <div class="flex justify-end gap-2 pt-2 border-t border-purple-100 dark:border-purple-900/50">
                     <button (click)="showAiBreakdownPanel.set(false)" class="px-3 py-1.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium">Hủy</button>
-                    <button (click)="applyAiBreakdown()" class="px-3 py-1.5 rounded bg-purple-600 text-white font-bold hover:bg-purple-700 shadow-sm flex items-center gap-1">
-                      <span class="material-symbols-outlined text-[16px]">check</span>
-                      <span>Áp dụng vào Issue (Idempotent)</span>
-                    </button>
+                    @if (aiSubtaskSuggestions().length > 0) {
+                      <button (click)="applyAiBreakdown()" class="px-3 py-1.5 rounded bg-purple-600 text-white font-bold hover:bg-purple-700 shadow-sm flex items-center gap-1">
+                        <span class="material-symbols-outlined text-[16px]">check</span>
+                        <span>Áp dụng vào Issue (Idempotent)</span>
+                      </button>
+                    }
                   </div>
                 </div>
               }
@@ -259,6 +265,8 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
                           </button>
                         </div>
                       </div>
+                    } @empty {
+                      <p class="text-slate-500 py-4 text-center text-xs">Chưa có dữ liệu xếp hạng ứng viên từ AI Model.</p>
                     }
                   </div>
                 </div>
@@ -334,6 +342,7 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
                 </span>
               </div>
 
+              <a [routerLink]="['/issues', task.id]" (click)="dismissed.emit()" class="text-primary underline">Mở trang chi tiết · Tệp đính kèm · Tiêu chí nghiệm thu</a>
               <!-- Comment Input Box -->
               <div class="flex gap-3">
                 <div class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold shrink-0">
@@ -425,6 +434,7 @@ export class TaskDetailDrawerComponent {
   private readonly projectService = inject(ProjectManagementService);
   private readonly toastService = inject(ToastService);
   private readonly confirmDialog = inject(ConfirmDialogService);
+  private readonly aiApi = inject(AiBreakdownApi, { optional: true });
 
   readonly drawerWidth = signal<number>(640);
   private isResizing = false;
@@ -437,22 +447,37 @@ export class TaskDetailDrawerComponent {
   // AI 1 & AI 2 State Signals
   readonly showAiBreakdownPanel = signal(false);
   readonly showAiAssignmentPanel = signal(false);
+  readonly currentGenerationId = signal<string | null>(null);
 
-  readonly aiSubtaskSuggestions = signal([
-    { title: 'Xây dựng Controller & DTO Validation Endpoint', points: 2, selected: true },
-    { title: 'Cấu hình Middleware kiểm tra JWT & Identity Scope', points: 3, selected: true },
-    { title: 'Viết Unit Test & Integration Test cho Workflow Status', points: 2, selected: true }
-  ]);
+  readonly aiSubtaskSuggestions = signal<Array<{ title: string; points: number; selected: boolean }>>([]);
 
-  readonly candidateScores = signal([
-    { name: 'Trần Văn Hoàng', totalScore: 92, workloadScore: 95, skillScore: 90, historyScore: 88, capacityScore: 94, reason: 'Kỹ năng .NET/Angular cao, capacity Sprint 2 còn trống 18h' },
-    { name: 'Nguyễn Thanh Hà', totalScore: 85, workloadScore: 80, skillScore: 92, historyScore: 85, capacityScore: 82, reason: 'Kỹ năng Database MySQL phù hợp, tải công việc vừa phải' },
-    { name: 'Phạm Đức Anh', totalScore: 78, workloadScore: 75, skillScore: 80, historyScore: 78, capacityScore: 80, reason: 'Có kinh nghiệm với Auth & Security module' }
-  ]);
+  readonly candidateScores = signal<Array<{ name: string; totalScore: number; workloadScore: number; skillScore: number; historyScore: number; capacityScore: number; reason: string }>>([]);
+
+  readonly projectMembers = computed(() => this.projectService.currentProject()?.members ?? []);
 
   toggleAiBreakdownPanel(): void {
     this.showAiAssignmentPanel.set(false);
-    this.showAiBreakdownPanel.update(v => !v);
+    const opening = !this.showAiBreakdownPanel();
+    this.showAiBreakdownPanel.set(opening);
+    if (opening && this.task?.id && this.aiApi) {
+      this.aiApi.generate(this.task.id, this.task.description).subscribe({
+        next: res => {
+          if (res.generationId) {
+            this.currentGenerationId.set(res.generationId);
+          }
+          if (res.suggestedSubTasks && res.suggestedSubTasks.length > 0) {
+            this.aiSubtaskSuggestions.set(
+              res.suggestedSubTasks.map(t => ({
+                title: t.title ?? 'Sub-task',
+                points: Number(t.estimatePoints ?? 2),
+                selected: true
+              }))
+            );
+          }
+        },
+        error: () => undefined
+      });
+    }
   }
 
   toggleAiAssignmentPanel(): void {
@@ -463,6 +488,15 @@ export class TaskDetailDrawerComponent {
   applyAiBreakdown(): void {
     if (!this.task) return;
     const selectedSubs = this.aiSubtaskSuggestions().filter(s => s.selected);
+    const genId = this.currentGenerationId();
+    if (genId && this.aiApi) {
+      this.aiApi.apply(
+        genId,
+        selectedSubs.map(s => ({ title: s.title, estimatePoints: s.points }))
+      ).subscribe({
+        error: () => undefined
+      });
+    }
     selectedSubs.forEach(s => {
       this.projectService.createSubTask(this.task!.id, s.title);
     });
@@ -505,7 +539,7 @@ export class TaskDetailDrawerComponent {
   onFieldChange(): void {
     if (this.task) {
       this.projectService.updateWorkItem(this.task);
-      this.toastService.success('Đã Cập Nhật Công Việc', `Thay đổi thông tin cho công việc [${this.task.issueKey}]`);
+      this.toastService.info('Đang lưu công việc', 'Vui lòng chờ xác nhận từ máy chủ.');
     }
   }
 
@@ -513,8 +547,8 @@ export class TaskDetailDrawerComponent {
     if (!this.task) return;
     const title = this.newSubtaskTitle().trim();
     if (!title) return;
-    const created = this.projectService.createSubTask(this.task.id, title);
-    this.toastService.success('Tạo Sub-task', `Đã tạo công việc con [${created.issueKey}]`);
+    this.projectService.createSubTask(this.task.id, title);
+    this.toastService.info('Đang lưu công việc con', 'Vui lòng chờ xác nhận từ máy chủ.');
     this.cancelSubtaskComposer();
   }
 
@@ -527,7 +561,7 @@ export class TaskDetailDrawerComponent {
     if (!this.task) return;
     const cloned = this.projectService.cloneWorkItem(this.task.id);
     if (cloned) {
-      this.toastService.success('Nhân Bản Thành Công', `Đã tạo bản sao [${cloned.issueKey}]`);
+      this.toastService.info('Đang lưu bản sao', 'Vui lòng chờ xác nhận từ máy chủ.');
     }
   }
 
@@ -543,7 +577,7 @@ export class TaskDetailDrawerComponent {
       cancelText: 'Hủy',
       onConfirm: () => {
         this.projectService.deleteWorkItem(taskId);
-        this.toastService.warning('Đã Xóa Công Việc', `Công việc [${issueKey}] đã được xóa.`);
+        this.toastService.info('Đang xóa công việc', 'Vui lòng chờ xác nhận từ máy chủ.');
         this.dismissed.emit();
       }
     });
@@ -552,7 +586,7 @@ export class TaskDetailDrawerComponent {
   submitComment(): void {
     if (this.task && this.newCommentText.trim()) {
       this.projectService.addCommentToTask(this.task.id, this.newCommentText);
-      this.toastService.info('Đã Gửi Bình Luận', `Đã thêm trao đổi vào [${this.task.issueKey}]`);
+      this.toastService.info('Đang lưu bình luận', 'Vui lòng chờ xác nhận từ máy chủ.');
       this.newCommentText = '';
     }
   }

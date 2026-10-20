@@ -34,8 +34,27 @@ public class ProjectManagementService : IProjectManagementService
         return Result<IReadOnlyList<OrganizationDto>>.Success(dtos);
     }
 
-    public async Task<Result<OrganizationDto>> CreateOrganizationAsync(CreateOrganizationDto request, CancellationToken cancellationToken = default)
+    public Task<Result<OrganizationDto>> CreateOrganizationAsync(
+        CreateOrganizationDto request,
+        CancellationToken cancellationToken = default) =>
+        CreateOrganizationAsync(request, request.OwnerId, cancellationToken);
+
+    public Task<Result<OrganizationDto>> CreateOrganizationAsync(
+        CreateOrganizationDto request,
+        Guid ownerUserId) =>
+        CreateOrganizationAsync(request, ownerUserId, CancellationToken.None);
+
+    public async Task<Result<OrganizationDto>> CreateOrganizationAsync(
+        CreateOrganizationDto request,
+        Guid ownerUserId,
+        CancellationToken cancellationToken)
     {
+        if (ownerUserId == Guid.Empty)
+        {
+            return Result<OrganizationDto>.Failure(
+                Error.Unauthorized("AUTH_UNAUTHENTICATED", "Authenticated owner is required."));
+        }
+
         if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > 200)
         {
             return Result<OrganizationDto>.Failure(Error.Validation("ORG_NAME_REQUIRED", "Organization name must contain 1-200 characters."));
@@ -49,16 +68,13 @@ public class ProjectManagementService : IProjectManagementService
         {
             return Result<OrganizationDto>.Failure(Error.Validation("ORG_SLUG_INVALID", "Slug must contain up to 80 lowercase letters, digits and separating hyphens."));
         }
-        if (request.OwnerId == Guid.Empty)
-        {
-            return Result<OrganizationDto>.Failure(Error.Validation("ORG_OWNER_REQUIRED", "Select an organization owner."));
-        }
+
         var org = new Organization
         {
             Id = Guid.NewGuid(),
             Name = request.Name.Trim(),
             Slug = slug,
-            OwnerId = request.OwnerId,
+            OwnerId = ownerUserId,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
         };
@@ -83,6 +99,7 @@ public class ProjectManagementService : IProjectManagementService
             x.ProjectKey,
             x.Name,
             x.Description,
+            x.CreatedByUserId,
             x.LeadUserId,
             x.IssueCounter,
             x.IsArchived,
@@ -107,6 +124,7 @@ public class ProjectManagementService : IProjectManagementService
             project.ProjectKey,
             project.Name,
             project.Description,
+            project.CreatedByUserId,
             project.LeadUserId,
             project.IssueCounter,
             project.IsArchived,
@@ -117,8 +135,27 @@ public class ProjectManagementService : IProjectManagementService
         return Result<ProjectDto>.Success(dto);
     }
 
-    public async Task<Result<ProjectDto>> CreateProjectAsync(CreateProjectRequestDto request, CancellationToken cancellationToken = default)
+    public Task<Result<ProjectDto>> CreateProjectAsync(
+        CreateProjectRequestDto request,
+        CancellationToken cancellationToken = default) =>
+        CreateProjectAsync(request, request.LeadUserId, cancellationToken);
+
+    public Task<Result<ProjectDto>> CreateProjectAsync(
+        CreateProjectRequestDto request,
+        Guid creatorUserId) =>
+        CreateProjectAsync(request, creatorUserId, CancellationToken.None);
+
+    public async Task<Result<ProjectDto>> CreateProjectAsync(
+        CreateProjectRequestDto request,
+        Guid creatorUserId,
+        CancellationToken cancellationToken)
     {
+        if (creatorUserId == Guid.Empty)
+        {
+            return Result<ProjectDto>.Failure(
+                Error.Unauthorized("AUTH_UNAUTHENTICATED", "Authenticated creator is required."));
+        }
+
         if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > 200)
         {
             return Result<ProjectDto>.Failure(Error.Validation("PROJECT_NAME_REQUIRED", "Project name must contain 1-200 characters."));
@@ -137,10 +174,6 @@ public class ProjectManagementService : IProjectManagementService
         {
             return Result<ProjectDto>.Failure(Error.Validation("PROJECT_ORGANIZATION_INVALID", "Select an active organization."));
         }
-        if (request.LeadUserId == Guid.Empty)
-        {
-            return Result<ProjectDto>.Failure(Error.Validation("PROJECT_LEAD_REQUIRED", "Select a project lead."));
-        }
 
         var existingKey = await _repository.GetByKeyAsync(request.OrgId, projectKey, cancellationToken);
         if (existingKey is not null)
@@ -157,7 +190,8 @@ public class ProjectManagementService : IProjectManagementService
             ProjectKey = projectKey,
             Name = request.Name.Trim(),
             Description = request.Description,
-            LeadUserId = request.LeadUserId,
+            CreatedByUserId = creatorUserId,
+            LeadUserId = creatorUserId,
             IssueCounter = 0,
             IsArchived = false,
             IsDeleted = false,
@@ -233,6 +267,7 @@ public class ProjectManagementService : IProjectManagementService
             project.ProjectKey,
             project.Name,
             project.Description,
+            project.CreatedByUserId,
             project.LeadUserId,
             project.IssueCounter,
             project.IsArchived,
@@ -273,6 +308,7 @@ public class ProjectManagementService : IProjectManagementService
             project.ProjectKey,
             project.Name,
             project.Description,
+            project.CreatedByUserId,
             project.LeadUserId,
             project.IssueCounter,
             project.IsArchived,

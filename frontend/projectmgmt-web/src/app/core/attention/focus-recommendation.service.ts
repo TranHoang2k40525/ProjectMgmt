@@ -35,6 +35,7 @@ export function computeFocusActions(context: FocusContext): FocusAction[] {
   const isProductOwner = role.includes('Product Owner');
   const isViewer = role.includes('Viewer');
   const candidates: FocusAction[] = [];
+  if (!project) return candidates;
   const scopedItems = workItems.filter(item => item.projectId === project.id && item.statusName !== 'Done');
   const assigned = (item: WorkItem): boolean => !!user && (
     item.assigneeId === user.id || normalizeName(item.assigneeName) === normalizeName(user.displayName)

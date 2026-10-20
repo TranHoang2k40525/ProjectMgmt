@@ -4,6 +4,7 @@ using ProjectMgmt.Modules.Planning.ProjectManagement.Application.IServices;
 namespace ProjectMgmt.Solution.Controllers;
 
 [Route("api/workflow")]
+[TypeFilter(typeof(ProjectMgmt.Solution.Security.ProjectAuthorizationFilter))]
 public class WorkflowController : ApiControllerBase
 {
     private readonly IProjectManagementService _service;

@@ -27,7 +27,7 @@ import { ProjectManagementService } from '../../core/services/project-management
         <!-- Month Header Track -->
         <div class="roadmap-controls flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
           <div class="flex items-center gap-2">
-            <span class="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Tháng 8 - Tháng 10 (2026)</span>
+            <span class="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Trục thời gian các Sprint</span>
           </div>
 
           <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-xl text-sm font-semibold">
@@ -65,6 +65,12 @@ import { ProjectManagementService } from '../../core/services/project-management
                   <div class="h-full bg-slate-400 rounded-full w-1/5 flex items-center justify-center text-xs font-bold text-white">Kế hoạch</div>
                 }
               </div>
+            </div>
+          } @empty {
+            <div class="p-8 text-center text-slate-400">
+              <span class="material-symbols-outlined text-[36px] block mb-2 opacity-60">route</span>
+              <p class="text-sm font-medium">Chưa có Sprint nào trong lộ trình</p>
+              <p class="text-xs text-slate-400 mt-1">Các chu kỳ Sprint được tạo sẽ xuất hiện tự động dưới dạng biểu đồ Gantt tại đây.</p>
             </div>
           }
         </div>

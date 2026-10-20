@@ -20,10 +20,10 @@ const docxPath = path.join(docsDir, 'Bao-cao-Dac-ta-API-He-thong-ProjectMgmt.doc
 
 // Complete Spec Meta
 const specMeta = {
-  title: "BÁO CÁO ĐẶC TẢ API CHUẨN MỰC TOÀN DIỆN HỆ THỐNG - DỰ ÁN PROJECTMGMT (HUCE SCRUM PLATFORM)",
+  title: "BÁO CÁO ĐẶC TẢ API — HỆ THỐNG QUẢN LÝ DỰ ÁN SCRUM TÍCH HỢP AI",
   author: "Nhóm 7 — Tran Hoang (IdentityExperience), Thế Hoài (Planning), Huy Hoàng (DeliveryIntelligence)",
-  version: "2.1.0 (Strict Frontend-Backend Alignment Release)",
-  date: "2026-09-22",
+  version: "2.2.0 (Đồng bộ Module 1 IdentityExperience)",
+  date: "2026-09-30",
   totalEndpoints: 128,
   totalTables: 55,
   totalViews: 4,
@@ -115,23 +115,23 @@ const modules = [
       { method: "DELETE", path: "/api/v1/users/{userId}/roles/{userRoleId}", summary: "Gỡ Vai trò khỏi User", requestBody: null, responseBody: { success: true }, dbMapping: "Bảng `UserRole`" },
 
       // 1.4 Project Member Role Assignment (Product Owner, Scrum Master, Dev, Tech Lead, Viewer, PM)
-      { method: "GET", path: "/api/v1/projects/{projectKey}/members", summary: "Danh sách thành viên & Vai trò trong Dự án", requestBody: null, responseBody: { members: [{ userId: "UUID", fullName: "Trần Văn Hoàng", email: "string", avatarUrl: "string", roleId: "UUID", roleName: "ScrumMaster", grantedAt: "ISO 8601" }] }, dbMapping: "Bảng `UserRole` (`ScopeType = 'Project'`, `ScopeId = ProjectId`), `User`, `Role`" },
-      { method: "POST", path: "/api/v1/projects/{projectKey}/members", summary: "Mời / Phân công thành viên mới vào Dự án", requestBody: { userId: "UUID", roleId: "UUID (e.g. ProductOwner, ScrumMaster, Developer)" }, responseBody: { userRoleId: "UUID", roleName: "ProductOwner" }, dbMapping: "Bảng `UserRole`" },
-      { method: "PUT", path: "/api/v1/projects/{projectKey}/members/{userId}/role", summary: "Thay đổi Vai trò chức danh của thành viên trong Dự án", requestBody: { newRoleId: "UUID (Switch Developer -> ScrumMaster)" }, responseBody: { userId: "UUID", newRoleName: "ScrumMaster" }, dbMapping: "Bảng `UserRole`" },
-      { method: "DELETE", path: "/api/v1/projects/{projectKey}/members/{userId}", summary: "Gỡ thành viên khỏi Dự án", requestBody: null, responseBody: { removed: true }, dbMapping: "Bảng `UserRole`" },
+      { method: "GET", path: "/api/v1/projects/{projectId}/members", summary: "Danh sách thành viên & Vai trò trong Dự án", requestBody: null, responseBody: { members: [{ userId: "UUID", fullName: "Trần Văn Hoàng", email: "string", avatarUrl: "string", roleId: "UUID", roleName: "ScrumMaster", grantedAt: "ISO 8601" }] }, dbMapping: "Bảng `UserRole` (`ScopeType = 'Project'`, `ScopeId = ProjectId`), `User`, `Role`" },
+      { method: "POST", path: "/api/v1/projects/{projectId}/members", summary: "Mời / Phân công thành viên mới vào Dự án", requestBody: { userId: "UUID", roleId: "UUID (e.g. ProductOwner, ScrumMaster, Developer)" }, responseBody: { userRoleId: "UUID", roleName: "ProductOwner" }, dbMapping: "Bảng `UserRole`" },
+      { method: "PUT", path: "/api/v1/projects/{projectId}/members/{userId}/role", summary: "Thay đổi Vai trò chức danh của thành viên trong Dự án", requestBody: { newRoleId: "UUID (Switch Developer -> ScrumMaster)" }, responseBody: { userId: "UUID", newRoleName: "ScrumMaster" }, dbMapping: "Bảng `UserRole`" },
+      { method: "DELETE", path: "/api/v1/projects/{projectId}/members/{userId}", summary: "Gỡ thành viên khỏi Dự án", requestBody: null, responseBody: { removed: true }, dbMapping: "Bảng `UserRole`" },
 
       // 1.5 Notifications & Realtime
-      { method: "GET", path: "/api/v1/notifications", summary: "Hộp thư thông báo Inbox (Paged)", queryParams: "isRead=boolean&page=1&pageSize=20", requestBody: null, responseBody: { items: [{ notificationId: "UUID", type: "IssueAssigned", title: "string", content: "string", entityType: "Issue", entityId: "UUID", isRead: false, createdAt: "ISO 8601" }], unreadCount: 5 }, dbMapping: "Bảng `Notification`" },
+      { method: "GET", path: "/api/v1/notifications", summary: "Hộp thư thông báo Inbox (Paged)", queryParams: "isRead=boolean&page=1&pageSize=20", requestBody: null, responseBody: { items: [{ notificationId: "UUID", type: "ProjectInvitation", title: "string", content: "string", entityType: "Project", entityId: "UUID", isRead: false, createdAt: "ISO 8601" }], totalCount: 25, page: 1, pageSize: 20 }, dbMapping: "Bảng `Notification`" },
       { method: "GET", path: "/api/v1/notifications/unread-count", summary: "Lấy số lượng thông báo chưa đọc", requestBody: null, responseBody: { unreadCount: 5 }, dbMapping: "Bảng `Notification`" },
       { method: "PUT", path: "/api/v1/notifications/{id}/read", summary: "Đánh dấu 1 thông báo đã đọc", requestBody: null, responseBody: { notificationId: "UUID", isRead: true }, dbMapping: "Bảng `Notification`" },
-      { method: "PUT", path: "/api/v1/notifications/read-all", summary: "Đánh dấu tất cả thông báo đã đọc", requestBody: null, responseBody: { readCount: 5 }, dbMapping: "Bảng `Notification`" },
-      { method: "WEBSOCKET", path: "/hubs/notifications", summary: "SignalR WebSocket Hub Push Realtime", requestBody: "Header Bearer JWT Token", responseBody: "Event push: ReceiveNotification(NotificationDTO)", dbMapping: "Lớp Transport Realtime SignalR" },
+      { method: "PUT", path: "/api/v1/notifications/read-all", summary: "Đánh dấu tất cả thông báo đã đọc", requestBody: null, responseBody: { unreadCount: 0, totalCount: 5 }, dbMapping: "Bảng `Notification`" },
+      { method: "WEBSOCKET", path: "/hubs/notifications", summary: "SignalR WebSocket Hub Push Realtime", requestBody: "JWT qua accessTokenFactory", responseBody: "Event push: notificationReceived(NotificationDto)", dbMapping: "Lớp Transport Realtime SignalR" },
 
       // 1.6 AI 1 Sub-task Breakdown Engine & Governance
-      { method: "POST", path: "/api/v1/ai/breakdown/generate", summary: "AI 1: Đề xuất phân rã User Story thành Sub-tasks", requestBody: { issueId: "UUID", storyTitle: "string", storyDescription: "string", projectContext: "string" }, responseBody: { generationId: "UUID", status: "Completed | Processing", suggestedSubTasks: [{ tempId: "temp_1", title: "string", description: "string", estimatedHours: 3, acceptanceCriteria: ["string"] }] }, dbMapping: "Bảng `AiGenerationLog`, `AiSuggestedTask`" },
-      { method: "GET", path: "/api/v1/ai/breakdown/{generationId}", summary: "Lấy chi tiết kết quả đề xuất AI 1", requestBody: null, responseBody: { generationId: "UUID", modelVersion: "qwen2.5:3b-instruct", promptVersion: "v1.0", suggestedSubTasks: ["array of TaskDTO"] }, dbMapping: "Bảng `AiGenerationLog`, `AiSuggestedTask`" },
-      { method: "POST", path: "/api/v1/ai/breakdown/apply", summary: "AI 1: Chấp nhận & tạo Sub-tasks thật", requestBody: { generationId: "UUID", parentIssueId: "UUID", selectedSubTasks: [{ title: "string", description: "string", estimatedHours: 4, acceptanceCriteria: ["string"] }] }, responseBody: { createdSubTasks: [{ issueId: "UUID", issueKey: "CRM-105", title: "string" }] }, dbMapping: "Gửi UseCase sang DeliveryIntelligence (`Issue`, `AcceptanceCriteria`)" },
-      { method: "POST", path: "/api/v1/ai/breakdown/feedback", summary: "AI 1: Ghi nhận phản hồi đánh giá gợi ý", requestBody: { generationId: "UUID", suggestedTaskId: "UUID", userAction: "Kept | Edited | Rejected", finalSummary: "string", editDistanceRatio: 0.15 }, responseBody: { feedbackLogged: true }, dbMapping: "Bảng `AiSuggestedTask` (UserAction, EditDistanceRatio)" },
+      { method: "POST", path: "/api/v1/ai/breakdown/generate", summary: "AI 1: Đề xuất phân rã User Story thành Sub-tasks", requestBody: { issueId: "UUID", projectContext: "string" }, responseBody: { generationId: "UUID", status: "Completed", modelVersion: "fake:deterministic-breakdown-v1", suggestedSubTasks: [{ suggestedTaskId: "UUID", tempId: "temp_1", title: "string", description: "string", estimatedHours: 3, acceptanceCriteria: ["string"] }] }, dbMapping: "Bảng `AiGenerationLog`, `AiSuggestedTask`" },
+      { method: "GET", path: "/api/v1/ai/breakdown/{generationId}", summary: "Lấy chi tiết kết quả đề xuất AI 1", requestBody: null, responseBody: { generationId: "UUID", modelVersion: "fake:deterministic-breakdown-v1", promptVersion: "breakdown.system.v1", suggestedSubTasks: ["array of AiBreakdownDto"] }, dbMapping: "Bảng `AiGenerationLog`, `AiSuggestedTask`" },
+      { method: "POST", path: "/api/v1/ai/breakdown/{generationId}/apply", summary: "AI 1: Chấp nhận & tạo Sub-tasks thật", requestBody: { parentIssueId: "UUID", selectedSubTasks: [{ suggestedTaskId: "UUID", finalSummary: "string", finalDescription: "string", estimatedHours: 4, finalAcceptanceCriteria: ["string"] }] }, responseBody: { createdSubTasks: [{ createdIssueId: "UUID", issueKey: "CRM-105", title: "string" }] }, dbMapping: "Gửi UseCase sang DeliveryIntelligence (`Issue`, `AcceptanceCriteria`)" },
+      { method: "POST", path: "/api/v1/ai/breakdown/{generationId}/feedback", summary: "AI 1: Ghi nhận phản hồi đánh giá gợi ý", requestBody: { suggestedTaskId: "UUID", userAction: "Kept | Edited | Rejected", finalSummary: "string", rejectReason: "string khi Rejected" }, responseBody: { feedbackLogged: true, editDistanceRatio: "backend tự tính" }, dbMapping: "Bảng `AiSuggestedTask` (UserAction, EditDistanceRatio)" },
       { method: "GET", path: "/api/v1/ai/prompt-templates", summary: "Danh sách Prompt Templates", queryParams: "taskType=Breakdown|Assignment", requestBody: null, responseBody: { items: [{ promptId: "UUID", code: "breakdown.system", version: 1, isActive: true, jsonSchema: "Object" }] }, dbMapping: "Bảng `AiPromptTemplate`" },
       { method: "POST", path: "/api/v1/ai/prompt-templates", summary: "Tạo mới Prompt Template kèm JSON Schema", requestBody: { code: "string", taskType: "Breakdown", systemPrompt: "string", userTemplate: "string", jsonSchema: "Object" }, responseBody: { promptId: "UUID", version: 1 }, dbMapping: "Bảng `AiPromptTemplate`" },
       { method: "PUT", path: "/api/v1/ai/prompt-templates/{id}/activate", summary: "Kích hoạt phiên bản Prompt Template", requestBody: null, responseBody: { isActive: true }, dbMapping: "Bảng `AiPromptTemplate`" }
@@ -455,7 +455,7 @@ async function buildDocx() {
             children: [
               new Paragraph({
                 alignment: AlignmentType.RIGHT,
-                children: [new TextRun({ text: "PROJECTMGMT - BÁO CÁO ĐẶC TẢ API CHUẨN MỰC (128 ENDPOINTS)", size: 18, color: "94A3B8", italic: true })]
+                children: [new TextRun({ text: "HỆ THỐNG QUẢN LÝ DỰ ÁN SCRUM TÍCH HỢP AI — ĐẶC TẢ API", size: 18, color: "94A3B8", italic: true })]
               })
             ]
           })

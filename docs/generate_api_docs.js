@@ -21,10 +21,10 @@ const docxPath = path.join(docsDir, 'Bao-cao-Dac-ta-API-He-thong-ProjectMgmt.doc
 
 // Complete Spec Data Structure
 const apiData = {
-  title: "BÁO CÁO ĐẶC TẢ HỆ THỐNG API - DỰ ÁN PROJECTMGMT (HUCE SCRUM PLATFORM)",
+  title: "BÁO CÁO ĐẶC TẢ API — HỆ THỐNG QUẢN LÝ DỰ ÁN SCRUM TÍCH HỢP AI",
   author: "Nhóm 7 — Tran Hoang (IdentityExperience), Thế Hoài (Planning), Huy Hoàng (DeliveryIntelligence)",
-  version: "1.0.0 (Production Release ready)",
-  date: "2026-09-22",
+  version: "1.1.0 (Đồng bộ Module 1 IdentityExperience)",
+  date: "2026-09-30",
   conventions: {
     baseUrl: "https://api.projectmgmt.huce.edu.vn/api/v1",
     authHeader: "Authorization: Bearer <jwt_access_token>",
@@ -199,7 +199,8 @@ const apiData = {
               }
             ],
             totalCount: "number",
-            unreadCount: "number"
+            page: "number",
+            pageSize: "number"
           },
           dbMapping: "Bảng `Notification`"
         },
@@ -207,18 +208,16 @@ const apiData = {
           method: "POST",
           path: "/api/v1/ai/breakdown/generate",
           summary: "AI 1: Đề xuất phân rã User Story thành Sub-tasks",
-          desc: "Gửi request phân rã User Story. AI kiểm tra bối cảnh dự án, tạo job xử lý bất đồng bộ và trả về kết quả gợi ý nháp.",
+          desc: "Gửi request phân rã User Story. Backend đọc Story thật từ DB; bộ fake inference sinh kết quả đồng bộ nhưng log/gợi ý được lưu thật.",
           requestBody: {
             issueId: "string (UUID, required)",
-            storyTitle: "string (required)",
-            storyDescription: "string (required)",
             projectContext: "string (optional, bối cảnh kỹ thuật dự án)"
           },
           responseBody: {
             generationId: "string (UUID)",
             issueId: "string (UUID)",
-            modelVersion: "string (e.g. gpt-4o-mini-v1)",
-            promptVersion: "string (e.g. v2.1-scrum-agile)",
+            modelVersion: "string (fake:deterministic-breakdown-v1)",
+            promptVersion: "string (e.g. breakdown.system.v1)",
             suggestedSubTasks: [
               {
                 tempId: "string (temp_1)",
@@ -238,19 +237,19 @@ const apiData = {
         },
         {
           method: "POST",
-          path: "/api/v1/ai/breakdown/apply",
+          path: "/api/v1/ai/breakdown/{generationId}/apply",
           summary: "AI 1: Chấp nhận & chuyển gợi ý thành Issue thật",
           desc: "Người dùng (PO/Tech Lead) chỉnh sửa, giữ/bỏ gợi ý và xác nhận tạo Sub-tasks chính thức trong hệ thống qua contract của DeliveryIntelligence. Idempotent.",
           requestBody: {
-            generationId: "string (UUID, required)",
             parentIssueId: "string (UUID, required)",
             selectedSubTasks: [
               {
-                title: "string (required)",
-                description: "string",
+                suggestedTaskId: "string (UUID, required)",
+                finalSummary: "string",
+                finalDescription: "string",
                 estimatedHours: "number",
-                requiredSkillIds: ["array of UUID"],
-                acceptanceCriteria: ["array of string"]
+                finalEstimatePoints: "number",
+                finalAcceptanceCriteria: ["array of string"]
               }
             ]
           },
@@ -264,7 +263,7 @@ const apiData = {
                 status: "string (To Do)"
               }
             ],
-            totalCreated: "number"
+            appliedCount: "number"
           },
           dbMapping: "Gửi request sang DeliveryIntelligence (`Issue`, `AcceptanceCriteria`)"
         }
@@ -867,7 +866,7 @@ async function buildDocxReport() {
               new Paragraph({
                 alignment: AlignmentType.RIGHT,
                 children: [
-                  new TextRun({ text: "PROJECTMGMT - BÁO CÁO ĐẶC TẢ API HỆ THỐNG", size: 18, color: "94A3B8", italic: true })
+                  new TextRun({ text: "HỆ THỐNG QUẢN LÝ DỰ ÁN SCRUM TÍCH HỢP AI — ĐẶC TẢ API", size: 18, color: "94A3B8", italic: true })
                 ]
               })
             ]

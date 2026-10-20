@@ -54,6 +54,7 @@ public class ProjectDto
         string projectKey,
         string name,
         string? description,
+        Guid createdByUserId,
         Guid leadUserId,
         int issueCounter,
         bool isArchived,
@@ -66,6 +67,7 @@ public class ProjectDto
         ProjectKey = projectKey;
         Name = name;
         Description = description;
+        CreatedByUserId = createdByUserId;
         LeadUserId = leadUserId;
         IssueCounter = issueCounter;
         IsArchived = isArchived;
@@ -79,6 +81,7 @@ public class ProjectDto
     public string ProjectKey { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
+    public Guid CreatedByUserId { get; set; }
     public Guid LeadUserId { get; set; }
     public int IssueCounter { get; set; }
     public bool IsArchived { get; set; }

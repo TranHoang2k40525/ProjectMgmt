@@ -711,6 +711,14 @@ namespace Planning.Infrastructure.Migrations
                         .HasColumnName("CreatedAt")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
 
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("CreatedByUserId")
+                        .HasComment("XMOD -> User.Id; người khởi tạo dự án, không đổi theo Lead")
+                        .UseCollation("utf8mb4_0900_ai_ci");
+
+                    MySqlPropertyBuilderExtensions.HasCharSet(b.Property<Guid>("CreatedByUserId"), "utf8mb4");
+
                     b.Property<string>("Description")
                         .HasColumnType("text")
                         .HasColumnName("Description");
@@ -771,6 +779,8 @@ namespace Planning.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "Name", "Description" }, "FT_Project_Search")
                         .HasAnnotation("MySql:FullTextIndex", true);
+
+                    b.HasIndex(new[] { "CreatedByUserId" }, "IX_Project_CreatedByUserId");
 
                     b.HasIndex(new[] { "LeadUserId" }, "IX_Project_LeadUserId");
 

@@ -1,4 +1,5 @@
 import { Routes } from '@angular/router';
+import { authGuard } from './core/guards/auth.guard';
 
 export const routes: Routes = [
   // 1. Standalone Auth Route
@@ -10,6 +11,7 @@ export const routes: Routes = [
   // 2. Authenticated AppShell Layout Group
   {
     path: '',
+    canActivate: [authGuard],
     loadComponent: () => import('./layouts/app-shell/app-shell').then(m => m.AppShellComponent),
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'for-you' },

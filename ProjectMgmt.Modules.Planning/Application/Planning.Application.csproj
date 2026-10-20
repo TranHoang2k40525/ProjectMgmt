@@ -5,6 +5,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+    <PackageReference Include="libphonenumber-csharp" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\ProjectManagement\Application\**\*.cs" />

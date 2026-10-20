@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BÁO CÁO ĐẶC TẢ API CHUẨN MỰC TOÀN DIỆN HỆ THỐNG - DỰ ÁN PROJECTMGMT (HUCE SCRUM PLATFORM)</title>
+  <title>BÁO CÁO ĐẶC TẢ API — HỆ THỐNG QUẢN LÝ DỰ ÁN SCRUM TÍCH HỢP AI</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
   <style>
     :root {
@@ -66,11 +66,11 @@
     </div>
     <div class="main-content">
       <div class="header-banner">
-        <h1>BÁO CÁO ĐẶC TẢ API CHUẨN MỰC TOÀN DIỆN HỆ THỐNG - DỰ ÁN PROJECTMGMT (HUCE SCRUM PLATFORM)</h1>
+        <h1>BÁO CÁO ĐẶC TẢ API — HỆ THỐNG QUẢN LÝ DỰ ÁN SCRUM TÍCH HỢP AI</h1>
         <p>Báo cáo đặc tả kỹ thuật chi tiết chuyên sâu toàn bộ 128 API Endpoints bao phủ 100% các mục nhỏ trên giao diện Frontend và 55 bảng MySQL trong Cẩm nang kỹ thuật.</p>
         <div class="meta-pills">
           <span class="pill">Tác giả: Nhóm 7 — Tran Hoang (IdentityExperience), Thế Hoài (Planning), Huy Hoàng (DeliveryIntelligence)</span>
-          <span class="pill">Phiên bản: 2.1.0 (Strict Frontend-Backend Alignment Release)</span>
+          <span class="pill">Phiên bản: 2.2.0 (Đồng bộ Module 1 IdentityExperience)</span>
           <span class="pill">Tổng Endpoints: 128</span>
           <span class="pill">Số bảng DB: 55</span>
         </div>
@@ -944,7 +944,7 @@
             <div class="endpoint-card">
               <div class="endpoint-header">
                 <span class="method-badge method-GET">GET</span>
-                <span class="endpoint-path">/api/v1/projects/{projectKey}/members</span>
+                <span class="endpoint-path">/api/v1/projects/{projectId}/members</span>
               </div>
               <div class="endpoint-summary">Danh sách thành viên & Vai trò trong Dự án</div>
               
@@ -977,7 +977,7 @@
             <div class="endpoint-card">
               <div class="endpoint-header">
                 <span class="method-badge method-POST">POST</span>
-                <span class="endpoint-path">/api/v1/projects/{projectKey}/members</span>
+                <span class="endpoint-path">/api/v1/projects/{projectId}/members</span>
               </div>
               <div class="endpoint-summary">Mời / Phân công thành viên mới vào Dự án</div>
               
@@ -1004,7 +1004,7 @@
             <div class="endpoint-card">
               <div class="endpoint-header">
                 <span class="method-badge method-PUT">PUT</span>
-                <span class="endpoint-path">/api/v1/projects/{projectKey}/members/{userId}/role</span>
+                <span class="endpoint-path">/api/v1/projects/{projectId}/members/{userId}/role</span>
               </div>
               <div class="endpoint-summary">Thay đổi Vai trò chức danh của thành viên trong Dự án</div>
               
@@ -1030,7 +1030,7 @@
             <div class="endpoint-card">
               <div class="endpoint-header">
                 <span class="method-badge method-DELETE">DELETE</span>
-                <span class="endpoint-path">/api/v1/projects/{projectKey}/members/{userId}</span>
+                <span class="endpoint-path">/api/v1/projects/{projectId}/members/{userId}</span>
               </div>
               <div class="endpoint-summary">Gỡ thành viên khỏi Dự án</div>
               
@@ -1069,16 +1069,18 @@
   "items": [
     {
       "notificationId": "UUID",
-      "type": "IssueAssigned",
+      "type": "ProjectInvitation",
       "title": "string",
       "content": "string",
-      "entityType": "Issue",
+      "entityType": "Project",
       "entityId": "UUID",
       "isRead": false,
       "createdAt": "ISO 8601"
     }
   ],
-  "unreadCount": 5
+  "totalCount": 25,
+  "page": 1,
+  "pageSize": 20
 }</pre>
                 </div>
               </div>
@@ -1148,7 +1150,8 @@
                 <div>
                   <strong>Dữ liệu trả về cho FE (Response Data):</strong>
                   <pre class="code-block">{
-  "readCount": 5
+  "unreadCount": 0,
+  "totalCount": 5
 }</pre>
                 </div>
               </div>
@@ -1166,11 +1169,11 @@
               <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:0.8rem;">
                 <div>
                   <strong>Dữ liệu truyền từ FE (Request):</strong>
-                  <pre class="code-block">Header Bearer JWT Token</pre>
+                  <pre class="code-block">JWT qua accessTokenFactory</pre>
                 </div>
                 <div>
                   <strong>Dữ liệu trả về cho FE (Response Data):</strong>
-                  <pre class="code-block">"Event push: ReceiveNotification(NotificationDTO)"</pre>
+                  <pre class="code-block">"Event push: notificationReceived(NotificationDto)"</pre>
                 </div>
               </div>
               <div class="db-tag">Bảng / View MySQL tương ứng: Lớp Transport Realtime SignalR</div>
@@ -1189,8 +1192,6 @@
                   <strong>Dữ liệu truyền từ FE (Request):</strong>
                   <pre class="code-block">{
   "issueId": "UUID",
-  "storyTitle": "string",
-  "storyDescription": "string",
   "projectContext": "string"
 }</pre>
                 </div>
@@ -1198,9 +1199,11 @@
                   <strong>Dữ liệu trả về cho FE (Response Data):</strong>
                   <pre class="code-block">{
   "generationId": "UUID",
-  "status": "Completed | Processing",
+  "status": "Completed",
+  "modelVersion": "fake:deterministic-breakdown-v1",
   "suggestedSubTasks": [
     {
+      "suggestedTaskId": "UUID",
       "tempId": "temp_1",
       "title": "string",
       "description": "string",
@@ -1233,10 +1236,10 @@
                   <strong>Dữ liệu trả về cho FE (Response Data):</strong>
                   <pre class="code-block">{
   "generationId": "UUID",
-  "modelVersion": "qwen2.5:3b-instruct",
-  "promptVersion": "v1.0",
+  "modelVersion": "fake:deterministic-breakdown-v1",
+  "promptVersion": "breakdown.system.v1",
   "suggestedSubTasks": [
-    "array of TaskDTO"
+    "array of AiBreakdownDto"
   ]
 }</pre>
                 </div>
@@ -1247,7 +1250,7 @@
             <div class="endpoint-card">
               <div class="endpoint-header">
                 <span class="method-badge method-POST">POST</span>
-                <span class="endpoint-path">/api/v1/ai/breakdown/apply</span>
+                <span class="endpoint-path">/api/v1/ai/breakdown/{generationId}/apply</span>
               </div>
               <div class="endpoint-summary">AI 1: Chấp nhận & tạo Sub-tasks thật</div>
               
@@ -1256,14 +1259,14 @@
                 <div>
                   <strong>Dữ liệu truyền từ FE (Request):</strong>
                   <pre class="code-block">{
-  "generationId": "UUID",
   "parentIssueId": "UUID",
   "selectedSubTasks": [
     {
-      "title": "string",
-      "description": "string",
+      "suggestedTaskId": "UUID",
+      "finalSummary": "string",
+      "finalDescription": "string",
       "estimatedHours": 4,
-      "acceptanceCriteria": [
+      "finalAcceptanceCriteria": [
         "string"
       ]
     }
@@ -1275,7 +1278,7 @@
                   <pre class="code-block">{
   "createdSubTasks": [
     {
-      "issueId": "UUID",
+      "createdIssueId": "UUID",
       "issueKey": "CRM-105",
       "title": "string"
     }
@@ -1289,7 +1292,7 @@
             <div class="endpoint-card">
               <div class="endpoint-header">
                 <span class="method-badge method-POST">POST</span>
-                <span class="endpoint-path">/api/v1/ai/breakdown/feedback</span>
+                <span class="endpoint-path">/api/v1/ai/breakdown/{generationId}/feedback</span>
               </div>
               <div class="endpoint-summary">AI 1: Ghi nhận phản hồi đánh giá gợi ý</div>
               
@@ -1298,17 +1301,17 @@
                 <div>
                   <strong>Dữ liệu truyền từ FE (Request):</strong>
                   <pre class="code-block">{
-  "generationId": "UUID",
   "suggestedTaskId": "UUID",
   "userAction": "Kept | Edited | Rejected",
   "finalSummary": "string",
-  "editDistanceRatio": 0.15
+  "rejectReason": "string khi Rejected"
 }</pre>
                 </div>
                 <div>
                   <strong>Dữ liệu trả về cho FE (Response Data):</strong>
                   <pre class="code-block">{
-  "feedbackLogged": true
+  "feedbackLogged": true,
+  "editDistanceRatio": "backend tự tính"
 }</pre>
                 </div>
               </div>

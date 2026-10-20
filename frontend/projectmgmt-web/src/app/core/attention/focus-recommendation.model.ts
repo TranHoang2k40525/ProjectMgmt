@@ -15,7 +15,7 @@ export interface FocusAction {
 
 export interface FocusContext {
   user: UserProfileModel | null;
-  project: Project;
+  project: Project | null;
   workItems: WorkItem[];
   notifications: NotificationModel[];
   lastTaskId: string | null;

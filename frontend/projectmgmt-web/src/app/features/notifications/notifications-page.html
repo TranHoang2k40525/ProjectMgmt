@@ -6,7 +6,7 @@
       <nav aria-label="Breadcrumb" class="flex items-center gap-2 text-on-surface-variant font-label-sm text-label-sm">
         <span class="hover:text-primary cursor-pointer transition-colors">Dự án</span>
         <span class="material-symbols-outlined text-[14px]">chevron_right</span>
-        <span class="px-2 py-0.5 rounded bg-surface-container font-mono text-primary font-bold">SCRUMAI-2025</span>
+        <span class="px-2 py-0.5 rounded bg-surface-container font-mono text-primary font-bold">{{ currentProject()?.name || 'Dự án' }}</span>
         <span class="material-symbols-outlined text-[14px]">chevron_right</span>
         <span class="text-on-surface font-semibold">Trung tâm Thông báo & Giám sát</span>
       </nav>
@@ -182,27 +182,19 @@
           <div class="p-4 rounded-xl bg-surface-container-low flex flex-col gap-2">
             <span class="font-label-md text-label-md font-bold text-on-surface flex items-center gap-2">
               <span class="material-symbols-outlined text-emerald-600 text-[18px]">group</span>
-              Đang trực tuyến trong đồ án (5)
+              Thành viên trong dự án ({{ onlineMembers().length }})
             </span>
             <div class="flex flex-col gap-1.5 pt-1">
-              <div class="flex items-center justify-between text-body-sm text-on-surface">
-                <span class="flex items-center gap-2">
-                  <span class="h-2 w-2 rounded-full bg-emerald-500"></span> PGS.TS. Đặng Tiến Dũng
-                </span>
-                <span class="font-label-sm text-[10px] text-outline font-semibold">Giảng viên HD</span>
-              </div>
-              <div class="flex items-center justify-between text-body-sm text-on-surface">
-                <span class="flex items-center gap-2">
-                  <span class="h-2 w-2 rounded-full bg-emerald-500"></span> ThS. Phạm Quang Thắng
-                </span>
-                <span class="font-label-sm text-[10px] text-outline font-semibold">Hội đồng</span>
-              </div>
-              <div class="flex items-center justify-between text-body-sm text-on-surface">
-                <span class="flex items-center gap-2">
-                  <span class="h-2 w-2 rounded-full bg-emerald-500"></span> Trần Văn Hoàng
-                </span>
-                <span class="font-label-sm text-[10px] text-primary font-bold">Scrum Master</span>
-              </div>
+              @for (m of onlineMembers(); track m.id) {
+                <div class="flex items-center justify-between text-body-sm text-on-surface">
+                  <span class="flex items-center gap-2">
+                    <span class="h-2 w-2 rounded-full bg-emerald-500"></span> {{ m.displayName }}
+                  </span>
+                  <span class="font-label-sm text-[10px] text-primary font-bold">{{ m.role }}</span>
+                </div>
+              } @empty {
+                <p class="text-xs text-outline py-2">Chưa có thành viên nào</p>
+              }
             </div>
           </div>
         </div>

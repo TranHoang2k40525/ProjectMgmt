@@ -1,6 +1,7 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IdentityService } from '../../core/services/identity.service';
+import { ProjectManagementService } from '../../core/services/project-management.service';
 import { NotificationModel } from '../../core/mocks/identity-mock-db';
 
 @Component({
@@ -12,10 +13,13 @@ import { NotificationModel } from '../../core/mocks/identity-mock-db';
 })
 export class NotificationsPageComponent implements OnInit {
   private identityService = inject(IdentityService);
+  private projectService = inject(ProjectManagementService);
 
   readonly notifications = this.identityService.notifications;
   readonly unreadCount = this.identityService.unreadCount;
   readonly filterUnreadOnly = signal<boolean>(false);
+  readonly currentProject = this.projectService.currentProject;
+  readonly onlineMembers = computed(() => this.projectService.currentProject()?.members ?? []);
 
   ngOnInit(): void {
     this.identityService.getNotifications().subscribe();

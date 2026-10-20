@@ -1,14 +1,44 @@
-using System;
-using System.Collections.Generic;
-using System.Text;
 using IdentityExperience.Application.Dto;
 
-namespace IdentityExperience.Application.IServices
+namespace IdentityExperience.Application.IServices;
+
+public interface IAccountServices
 {
-    public interface IAccountServices
-    {
-        Task<ResultLogin> LoginAsync(string username, string password);
-        Task<Result> RegisterAsync (AccountDto.Register registerDto);
-        Task<Result> VerifyAsync<TEntity,T>(TEntity entity, T m);
-    }
+    Task<RegisterResult> RegisterAsync(
+        string? email,
+        string? password,
+        string? fullName,
+        string? phoneNumber);
+
+    Task<ResultLogin> LoginAsync(
+        string? email,
+        string? password,
+        string? ipAddress,
+        string? userAgent);
+
+    Task<OtpResult> SendOtpAsync(string? email, string? purpose);
+
+    Task<OtpResult> VerifyOtpAsync(
+        string? email,
+        string? code,
+        string? purpose);
+
+    Task<ResultLogin> RefreshTokenAsync(
+        string? refreshToken,
+        string? ipAddress,
+        string? userAgent);
+
+    Task<Result> LogoutAsync(string? refreshToken);
+
+    Task<Result> ForgotPasswordAsync(string? email);
+
+    Task<OtpResult> ResetPasswordAsync(
+        string? email,
+        string? code,
+        string? newPassword);
+
+    Task<Result> ChangePasswordAsync(
+        Guid userId,
+        string? currentPassword,
+        string? newPassword);
 }

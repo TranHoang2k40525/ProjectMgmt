@@ -23,4 +23,17 @@ public class ProjectLookupService : IProjectLookupService
         var statuses = await _repository.GetStatusesAsync(projectId, cancellationToken);
         return statuses.Select(x => new ProjectStatusDto(x.Id, x.ProjectId, x.Name, x.Category, x.ColorHex, x.OrderIndex, x.IsInitial)).ToList();
     }
+
+    public async Task<ProjectScopeInfo?> GetProjectScopeAsync(Guid projectId)
+    {
+        var project = await _repository.GetByIdAsync(projectId);
+        return project is null
+            ? null
+            : new ProjectScopeInfo
+            {
+                ProjectId = project.Id,
+                OrganizationId = project.OrgId,
+                IsArchived = project.IsArchived
+            };
+    }
 }

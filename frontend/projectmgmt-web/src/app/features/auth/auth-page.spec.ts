@@ -11,7 +11,11 @@ describe('AuthPageComponent (Unit Tests)', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [IdentityService, FormBuilder, { provide: Router, useValue: { navigateByUrl: () => Promise.resolve(true) } }]
+      providers: [
+        { provide: IdentityService, useValue: {} },
+        FormBuilder,
+        { provide: Router, useValue: { navigate: () => Promise.resolve(true) } }
+      ]
     });
 
     const injector = TestBed.inject(EnvironmentInjector);

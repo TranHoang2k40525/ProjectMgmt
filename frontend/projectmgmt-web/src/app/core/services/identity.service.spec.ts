@@ -1,72 +1,258 @@
 import { TestBed } from '@angular/core/testing';
-import { describe, beforeEach, it, expect } from 'vitest';
-import { firstValueFrom } from 'rxjs';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { firstValueFrom, of } from 'rxjs';
+import { AccountApi } from '../api/account.api';
+import { LoginResult } from '../api/account-api.models';
+import { IdentityApi } from '../api/identity.api';
+import { NotificationApi } from '../api/notification.api';
+import { RbacApi } from '../api/rbac.api';
+import { AuthSession, TOKEN_STORE, TokenStore } from '../auth/token-store';
 import { IdentityService } from './identity.service';
-import { IdentityMockDb } from '../mocks/identity-mock-db';
 
-describe('IdentityService (Mock Unit Tests)', () => {
+class MemoryTokenStore implements TokenStore {
+  session: AuthSession | null = null;
+
+  getAccessToken(): string | null { return this.session?.accessToken ?? null; }
+  getRefreshToken(): string | null { return this.session?.refreshToken ?? null; }
+  getSession(): AuthSession | null { return this.session; }
+  setSession(session: AuthSession): void { this.session = session; }
+  clear(): void { this.session = null; }
+}
+
+describe('IdentityService', () => {
   let service: IdentityService;
+  let tokenStore: MemoryTokenStore;
+  const loginResult: LoginResult = {
+    success: true,
+    accessToken: 'access-token',
+    refreshToken: 'refresh-token',
+    userId: '8ea9699e-2cf2-45b2-956e-90e2cdfdb221',
+    email: 'hoang@huce.edu.vn',
+    fullName: 'Trần Văn Hoàng',
+    roles: ['SystemAdmin']
+  };
+
+  const accountApi = {
+    login: vi.fn(() => of(loginResult)),
+    register: vi.fn(() => of({
+      success: true,
+      email: 'new@huce.edu.vn',
+      message: 'Vui lòng kiểm tra email.',
+      resendAfterSeconds: 60
+    })),
+    sendOtp: vi.fn(() => of({ success: true, message: 'Đã gửi OTP.' })),
+    verifyOtp: vi.fn(() => of({ success: true, status: 'Verified' })),
+    forgotPassword: vi.fn(() => of({ success: true, message: 'Nếu tài khoản hợp lệ, OTP sẽ được gửi.' })),
+    resetPassword: vi.fn(() => of({ success: true, status: 'PasswordChanged' })),
+    logout: vi.fn(() => of({ success: true }))
+  };
+
+  const identityApi = {
+    getMyProfile: vi.fn(() => of({
+      success: true,
+      userId: '8ea9699e-2cf2-45b2-956e-90e2cdfdb221',
+      email: 'hoang@huce.edu.vn',
+      fullName: 'Trần Văn Hoàng',
+      jobTitle: 'Backend Developer',
+      timezone: 'Asia/Ho_Chi_Minh'
+    })),
+    updateMyProfile: vi.fn((request: { jobTitle?: string }) => of({
+      success: true,
+      userId: '8ea9699e-2cf2-45b2-956e-90e2cdfdb221',
+      email: 'hoang@huce.edu.vn',
+      fullName: 'Trần Văn Hoàng',
+      jobTitle: request.jobTitle,
+      timezone: 'Asia/Ho_Chi_Minh'
+    })),
+    uploadAvatar: vi.fn(() => of({ success: true, avatarUrl: '/assets/avatars/avatar.png' })),
+    changePassword: vi.fn(() => of({ success: true })),
+    getSkillCatalog: vi.fn(() => of({
+      success: true,
+      items: [{ skillId: 'sk-1', name: 'ASP.NET Core', category: 'Backend' }]
+    })),
+    getUserSkills: vi.fn(() => of({ success: true, skills: [] })),
+    updateMySkills: vi.fn(() => of({ success: true, updatedCount: 1 }))
+  };
+
+  const notificationApi = {
+    getInbox: vi.fn(() => of({
+      success: true,
+      unreadCount: 1,
+      totalCount: 1,
+      items: [{
+        notificationId: 'notif-1',
+        userId: '8ea9699e-2cf2-45b2-956e-90e2cdfdb221',
+        title: 'Chào mừng bạn',
+        content: 'Tài khoản đã sẵn sàng',
+        type: 'SYSTEM',
+        isRead: false,
+        createdAt: '2026-09-30T00:00:00Z'
+      }]
+    })),
+    getUnreadCount: vi.fn(() => of({ success: true, unreadCount: 1 })),
+    markRead: vi.fn(() => of({ success: true })),
+    markReadAll: vi.fn(() => of({ success: true }))
+  };
+
+  const rbacApi = {
+    getRoles: vi.fn(() => of({
+      success: true,
+      items: [{ roleId: 'role-dev', name: 'Developer', isSystem: true, description: 'Dev' }]
+    })),
+    getPermissions: vi.fn(() => of({
+      success: true,
+      items: [{ permissionId: 'p-1', code: 'member.read', grouping: 'Identity' }]
+    })),
+    createRole: vi.fn((req: { name?: string; description?: string }) => of({
+      success: true,
+      roleId: 'role-new',
+      name: req.name,
+      description: req.description
+    })),
+    updateRolePermissions: vi.fn(() => of({ success: true })),
+    getProjectMembers: vi.fn(() => of({
+      success: true,
+      members: [{ userId: 'u-1', fullName: 'Trần Văn Hoàng', roleName: 'ProjectManager' }]
+    })),
+    addProjectMember: vi.fn(() => of({ success: true })),
+    changeProjectMemberRole: vi.fn(() => of({ success: true })),
+    removeProjectMember: vi.fn(() => of({ success: true }))
+  };
 
   beforeEach(() => {
-    TestBed.configureTestingModule({});
+    tokenStore = new MemoryTokenStore();
+    Object.values(accountApi).forEach(mock => mock.mockClear());
+    Object.values(identityApi).forEach(mock => mock.mockClear());
+    Object.values(notificationApi).forEach(mock => mock.mockClear());
+    Object.values(rbacApi).forEach(mock => mock.mockClear());
+    TestBed.configureTestingModule({
+      providers: [
+        IdentityService,
+        { provide: AccountApi, useValue: accountApi },
+        { provide: IdentityApi, useValue: identityApi },
+        { provide: NotificationApi, useValue: notificationApi },
+        { provide: RbacApi, useValue: rbacApi },
+        { provide: TOKEN_STORE, useValue: tokenStore }
+      ]
+    });
     service = TestBed.inject(IdentityService);
   });
 
-  it('should be created', () => {
-    expect(service).toBeTruthy();
+  it('khởi tạo ở trạng thái chưa đăng nhập khi không có session', () => {
+    expect(service.authState().isAuthenticated).toBe(false);
+    expect(service.authState().currentUser).toBeNull();
   });
 
-  it('should initialize with active mock user state', () => {
-    const state = service.authState();
-    expect(state.isAuthenticated).toBe(true);
-    expect(state.currentUser).not.toBeNull();
+  it('đăng nhập qua API thật và lưu trọn bộ session', async () => {
+    const result = await firstValueFrom(service.login('hoang@huce.edu.vn', 'StrongPassword@123'));
+
+    expect(accountApi.login).toHaveBeenCalledWith({
+      email: 'hoang@huce.edu.vn',
+      password: 'StrongPassword@123'
+    });
+    expect(result.user.displayName).toBe('Trần Văn Hoàng');
+    expect(tokenStore.getRefreshToken()).toBe('refresh-token');
+    expect(service.authState().isAuthenticated).toBe(true);
   });
 
-  it('should handle user login successfully for valid user', async () => {
-    const res = await firstValueFrom(service.login('admin@scrumai.internal', 'password123'));
-    expect(res.user.email).toBe('admin@scrumai.internal');
-    expect(res.token).toBeDefined();
+  it('đăng ký rồi xác minh email với purpose đúng contract backend', async () => {
+    await firstValueFrom(service.signup(
+      'Nguyễn Văn A',
+      'new@huce.edu.vn',
+      'StrongPassword@123',
+      '+84901234567'
+    ));
+    await firstValueFrom(service.verifyOtp('new@huce.edu.vn', '123456', 'REGISTER'));
+
+    expect(accountApi.register).toHaveBeenCalledWith({
+      fullName: 'Nguyễn Văn A',
+      email: 'new@huce.edu.vn',
+      password: 'StrongPassword@123',
+      phoneNumber: '+84901234567'
+    });
+    expect(accountApi.verifyOtp).toHaveBeenCalledWith({
+      email: 'new@huce.edu.vn',
+      code: '123456',
+      purpose: 'VerifyEmail'
+    });
   });
 
-  it('should reject login for non-existent user', async () => {
-    try {
-      await firstValueFrom(service.login('nonexistent@test.com', 'pass'));
-    } catch (err: unknown) {
-      const errorResponse = err as { error: { title: string } };
-      expect(errorResponse.error.title).toContain('không tồn tại');
-    }
+  it('quên mật khẩu dùng endpoint chống dò tài khoản', async () => {
+    await firstValueFrom(service.sendOtp('member@huce.edu.vn', 'FORGOT_PASSWORD'));
+    expect(accountApi.forgotPassword).toHaveBeenCalledWith('member@huce.edu.vn');
+    expect(accountApi.sendOtp).not.toHaveBeenCalled();
   });
 
-  it('should send and verify OTP correctly', async () => {
-    const email = 'newuser@scrumai.internal';
-    const sendRes = await firstValueFrom(service.sendOtp(email, 'REGISTER'));
-    expect(sendRes.success).toBe(true);
+  it('đăng xuất thu hồi refresh token và xóa session cục bộ', () => {
+    tokenStore.session = {
+      accessToken: 'access-token', refreshToken: 'refresh-token', userId: 'u1',
+      email: 'member@huce.edu.vn', fullName: 'Member', roles: []
+    };
+    service.logout();
 
-    const verifyRes = await firstValueFrom(service.verifyOtp(email, '123456', 'REGISTER'));
-    expect(verifyRes.success).toBe(true);
-    expect(service.authState().currentUser?.email).toBe(email);
+    expect(accountApi.logout).toHaveBeenCalledWith('refresh-token');
+    expect(tokenStore.getSession()).toBeNull();
+    expect(service.authState().isAuthenticated).toBe(false);
   });
 
-  it('should update profile correctly', async () => {
-    const userId = IdentityMockDb.users[0].id;
+  it('cập nhật hồ sơ qua API và đồng bộ auth state', async () => {
+    const userId = '8ea9699e-2cf2-45b2-956e-90e2cdfdb221';
     const updated = await firstValueFrom(service.updateProfile(userId, { jobTitle: 'Principal Lead Architect' }));
     expect(updated.jobTitle).toBe('Principal Lead Architect');
-    expect(service.authState().currentUser?.jobTitle).toBe('Principal Lead Architect');
+    expect(identityApi.updateMyProfile).toHaveBeenCalled();
   });
 
-  it('should add and remove user skills', async () => {
-    const userId = IdentityMockDb.users[0].id;
+  it('thay danh sách kỹ năng qua API với thang mức 1-5', async () => {
+    const userId = '8ea9699e-2cf2-45b2-956e-90e2cdfdb221';
+    await firstValueFrom(service.getSkillCatalog());
     const added = await firstValueFrom(service.addUserSkill(userId, 'sk-1', 95));
-    expect(added.proficiencyLevel).toBe(95);
-
-    const res = await firstValueFrom(service.removeUserSkill(added.id));
-    expect(res.success).toBe(true);
+    expect(added.proficiencyLevel).toBe(100);
+    expect(identityApi.updateMySkills).toHaveBeenCalledWith([
+      expect.objectContaining({ skillId: 'sk-1', proficiencyLevel: 5 })
+    ]);
   });
 
-  it('should toggle user active status', async () => {
-    const user = IdentityMockDb.users[1];
-    const initialStatus = user.isActive;
-    const updated = await firstValueFrom(service.toggleUserActive(user.id));
-    expect(updated.isActive).toBe(!initialStatus);
+  it('tải danh sách thông báo và cập nhật unreadCount', async () => {
+    const items = await firstValueFrom(service.getNotifications());
+    expect(notificationApi.getInbox).toHaveBeenCalledWith(undefined, 1, 50);
+    expect(items.length).toBe(1);
+    expect(service.unreadCount()).toBe(1);
+  });
+
+  it('đánh dấu đọc một thông báo và tất cả thông báo qua API', async () => {
+    await firstValueFrom(service.getNotifications());
+    await firstValueFrom(service.markNotificationAsRead('notif-1'));
+    expect(notificationApi.markRead).toHaveBeenCalledWith('notif-1');
+    expect(service.unreadCount()).toBe(0);
+
+    await firstValueFrom(service.markAllNotificationsAsRead());
+    expect(notificationApi.markReadAll).toHaveBeenCalled();
+  });
+
+  it('lấy danh sách roles và permissions qua RbacApi', async () => {
+    const roles = await firstValueFrom(service.getRoles('Project'));
+    expect(rbacApi.getRoles).toHaveBeenCalledWith('Project');
+    expect(roles.length).toBe(1);
+    expect(roles[0].name).toBe('Developer');
+
+    const perms = await firstValueFrom(service.getPermissions());
+    expect(rbacApi.getPermissions).toHaveBeenCalled();
+    expect(perms.length).toBe(1);
+    expect(perms[0].code).toBe('member.read');
+  });
+
+  it('quản lý thành viên dự án qua RbacApi', async () => {
+    const members = await firstValueFrom(service.getProjectMembers('proj-1'));
+    expect(rbacApi.getProjectMembers).toHaveBeenCalledWith('proj-1');
+    expect(members.length).toBe(1);
+
+    await firstValueFrom(service.addProjectMember('proj-1', 'user-2', 'role-dev'));
+    expect(rbacApi.addProjectMember).toHaveBeenCalledWith('proj-1', 'user-2', 'role-dev');
+
+    await firstValueFrom(service.changeProjectMemberRole('proj-1', 'user-2', 'role-lead'));
+    expect(rbacApi.changeProjectMemberRole).toHaveBeenCalledWith('proj-1', 'user-2', 'role-lead');
+
+    await firstValueFrom(service.removeProjectMember('proj-1', 'user-2'));
+    expect(rbacApi.removeProjectMember).toHaveBeenCalledWith('proj-1', 'user-2');
   });
 });
