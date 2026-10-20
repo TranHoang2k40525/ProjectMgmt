@@ -1,0 +1,42 @@
+<section class="issue-detail">
+  <a routerLink="/backlog">← Quay về Backlog</a>
+  @if (error()) { <p role="alert" class="error">{{ error() }}</p> }
+  @if (message()) { <p role="status">{{ message() }}</p> }
+  @if (loading()) { <p>Đang tải công việc…</p> }
+  @if (item; as task) {
+    <header><h1>{{ task.issueKey }} · Chi tiết công việc</h1><span>{{ task.issueType }}</span></header>
+    <form (ngSubmit)="save()">
+      <label>Tiêu đề<input name="title" [(ngModel)]="task.title" required maxlength="500" /></label>
+      <label>Mô tả<textarea name="description" [(ngModel)]="task.description" rows="5"></textarea></label>
+      <div class="fields">
+        <label>Trạng thái<select name="status" [(ngModel)]="task.statusName">@for (s of service.projectStatuses(); track s.id) { <option [value]="s.name">{{ s.name }}</option> }</select></label>
+        <label>Ưu tiên<select name="priority" [(ngModel)]="task.priority">@for (p of priorities; track p) { <option [value]="p">{{ p }}</option> }</select></label>
+        <label>Story points<input name="points" type="number" min="0" max="9999" [(ngModel)]="task.storyPoints" /></label>
+        <label>Người xử lý<select name="assignee" [(ngModel)]="task.assigneeName"><option value="">Chưa phân công</option>@for (m of service.currentProject().members ?? []; track m.userId) { <option [value]="m.displayName">{{ m.displayName }}</option> }</select></label>
+        <label>Sprint<select name="sprint" [(ngModel)]="task.sprintId"><option value="">Backlog</option>@for (s of service.sprints(); track s.id) { <option [value]="s.id">{{ s.name }}</option> }</select></label>
+      </div>
+      <button type="submit" [disabled]="busy() || !task.title.trim()">{{ busy() ? 'Đang lưu…' : 'Lưu thay đổi' }}</button>
+    </form>
+    <section><h2>Tiêu chí nghiệm thu</h2>
+      @for (criterion of task.criteria ?? []; track criterion.id) {
+        <label class="row"><input type="checkbox" [checked]="criterion.isMet" (change)="toggleCriterion(criterion)" [disabled]="busy()" />{{ criterion.content }}</label>
+      } @empty { <p>Chưa có tiêu chí nghiệm thu.</p> }
+      <div class="row"><input aria-label="Tiêu chí mới" [(ngModel)]="newCriterion" maxlength="4000" /><button type="button" (click)="addCriterion()" [disabled]="busy() || !newCriterion.trim()">Thêm tiêu chí</button></div>
+    </section>
+    <section><h2>Tệp đính kèm</h2><p>PDF, ảnh, TXT, CSV, DOCX, XLSX, ZIP · tối đa 10 MB.</p>
+      <input type="file" aria-label="Tải tệp đính kèm" (change)="upload($event)" [disabled]="busy()" accept=".pdf,.png,.jpg,.jpeg,.txt,.csv,.docx,.xlsx,.zip" />
+      @for (file of task.attachments ?? []; track file.id) {
+        <div class="row"><span>{{ file.fileName }} ({{ file.fileSizeBytes | number }} bytes)</span><button type="button" (click)="download(file.id, file.fileName)">Tải xuống</button><button type="button" (click)="removeAttachment(file.id)" [disabled]="busy()">Xóa</button></div>
+      } @empty { <p>Chưa có tệp đính kèm.</p> }
+    </section>
+    <section><h2>Công việc con</h2>
+      @for (child of service.workItems(); track child.id) { @if (child.parentId === task.id) { <p><a [routerLink]="['/issues', child.id]">{{ child.issueKey }} · {{ child.title }}</a></p> } }
+      @if (!task.parentId && task.issueType !== 'Epic') { <div class="row"><input aria-label="Tên công việc con" [(ngModel)]="subtaskTitle" maxlength="500" /><button type="button" (click)="addSubtask()" [disabled]="busy() || !subtaskTitle.trim()">Thêm subtask</button></div> }
+    </section>
+    <section><h2>Bình luận</h2>
+      <textarea aria-label="Bình luận mới" [(ngModel)]="newComment" rows="3" maxlength="20000"></textarea><button type="button" (click)="comment()" [disabled]="busy() || !newComment.trim()">Gửi bình luận</button>
+      @for (entry of task.comments ?? []; track entry.id) { <article><strong>{{ entry.authorName }}</strong><small>{{ entry.createdAt | date:'dd/MM/yyyy HH:mm' }}</small><p class="preserve">{{ entry.content }}</p></article> }
+    </section>
+    <section><h2>Lịch sử thay đổi</h2>@for (activity of task.activities ?? []; track activity.id) { <p>{{ activity.actorName }} · {{ activity.action }} · {{ activity.timestamp | date:'dd/MM/yyyy HH:mm' }}</p> } @empty { <p>Chưa có thay đổi.</p> }</section>
+  }
+</section>
