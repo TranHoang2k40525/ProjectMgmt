@@ -51,8 +51,8 @@ import { ToastService } from '../../../core/services/toast.service';
 
               @if (showNewTypeForm()) {
                 <div class="flex items-center gap-2 p-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                  <input type="text" [(ngModel)]="customTypeName" placeholder="Tên loại mới..." class="h-8 px-2 text-xs rounded border border-slate-300 w-full" />
-                  <select [(ngModel)]="customTypeIcon" class="h-8 text-xs rounded border border-slate-300">
+                  <input type="text" [(ngModel)]="customTypeName" maxlength="60" [disabled]="savingType()" aria-label="Tên loại công việc mới" placeholder="Tên loại mới..." class="h-8 px-2 text-xs rounded border border-slate-300 w-full" />
+                  <select [(ngModel)]="customTypeIcon" aria-label="Biểu tượng loại công việc" [disabled]="savingType()" class="h-8 text-xs rounded border border-slate-300">
                     <option value="⚡">⚡ Epic</option>
                     <option value="🛡️">🛡️ Security</option>
                     <option value="🎨">🎨 Design</option>
@@ -60,7 +60,7 @@ import { ToastService } from '../../../core/services/toast.service';
                     <option value="📋">📋 Research</option>
                     <option value="🧪">🧪 Test</option>
                   </select>
-                  <button (click)="saveCustomIssueType()" class="px-2 py-1 text-xs bg-primary text-white rounded font-bold shrink-0">Tạo</button>
+                  <button (click)="saveCustomIssueType()" [disabled]="savingType() || !customTypeName.trim()" class="px-2 py-1 text-xs bg-primary text-white rounded font-bold shrink-0">{{ savingType() ? 'Đang lưu...' : 'Tạo' }}</button>
                 </div>
               } @else {
                 <select
@@ -235,17 +235,27 @@ export class CreateTaskModalComponent {
     this.showNewTypeForm.update(v => !v);
   }
 
+  readonly savingType = signal(false);
   saveCustomIssueType(): void {
-    if (!this.customTypeName.trim()) return;
-    const newType = this.projectService.addCustomIssueType(this.customTypeName.trim(), this.customTypeIcon, 'indigo');
-    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
-    this.issueType = newType.name;
-    this.showNewTypeForm.set(false);
-    this.customTypeName = '';
+    if (!this.customTypeName.trim() || this.savingType()) return;
+    this.savingType.set(true);
+    this.projectService.addCustomIssueType(this.customTypeName.trim(), this.customTypeIcon, '#6366F1').subscribe({
+      next: type => {
+        this.issueType = type.name;
+        this.showNewTypeForm.set(false);
+        this.customTypeName = '';
+        this.savingType.set(false);
+        this.toastService.success('Đã lưu', 'Loại công việc đã được lưu vào dự án.');
+      },
+      error: () => {
+        this.savingType.set(false);
+        this.toastService.error('Không thể lưu loại công việc', 'Kiểm tra quyền cấu hình dự án và tên không trùng.');
+      }
+    });
   }
 
   submitTask(): void {
-    if (!this.title.trim()) return;
+    if (!this.title.trim() || this.savingType()) return;
 
     this.projectService.addWorkItem({
       title: this.title,
