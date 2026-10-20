@@ -1,4 +1,6 @@
 export interface UserProfileModel {
+  isEmailVerified?: boolean;
+  roles?: { roleId: string; roleName: string; scopeType: string; scopeId: string | null }[];
   id: string;
   email: string;
   displayName: string;
@@ -18,6 +20,7 @@ export interface UserProfileModel {
 }
 
 export interface RoleModel {
+  scope?: string;
   id: string;
   name: string;
   code: string;
