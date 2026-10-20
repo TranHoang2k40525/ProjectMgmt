@@ -25,13 +25,44 @@ describe('Project API integration and state', () => {
   });
   afterEach(() => http.verify());
 
+  it('serializes dependent writes and reloads the persisted workspace after saving', () => {
+    service.currentProject.set(project('aa'));
+    const task = service.addWorkItem({ title: 'First title' });
+    const create = http.expectOne(`${api}/v1/projects/aa/issues`);
+    service.updateWorkItem({ ...task, title: 'Edited while creating' });
+    expect(service.pendingSaves()).toBe(2);
+    http.expectNone(`${api}/v1/issues/${task.id}`);
+    create.flush({ ...task, issueKey: 'AA-1' });
+    const update = http.expectOne(`${api}/v1/issues/${task.id}`);
+    expect(update.request.body.title).toBe('Edited while creating');
+    update.flush({ ...task, title: 'Edited while creating', issueKey: 'AA-1' });
+    expect(service.pendingSaves()).toBe(0);
+    http.expectOne(`${api}/v1/projects/aa/workspace`).flush({ workItems: [{ ...task, title: 'Edited while creating', issueKey: 'AA-1' }], sprints: [], epics: [], statuses: [] });
+    http.expectOne(`${api}/v1/projects/aa/members`).flush({ members: [] });
+    expect(service.workItems()[0].issueKey).toBe('AA-1');
+    expect(service.workItems()[0].title).toBe('Edited while creating');
+  });
+
+  it('discards dependent writes on failure and restores server state', () => {
+    service.currentProject.set(project('aa'));
+    const task = service.addWorkItem({ title: 'Unsaved' });
+    service.updateWorkItem({ ...task, title: 'Dependent edit' });
+    http.expectOne(`${api}/v1/projects/aa/issues`).flush({ message: 'Permission denied' }, { status: 403, statusText: 'Forbidden' });
+    http.expectNone(`${api}/v1/issues/${task.id}`);
+    http.expectOne(`${api}/v1/projects/aa/workspace`).flush({ workItems: [], sprints: [], epics: [], statuses: [] });
+    http.expectOne(`${api}/v1/projects/aa/members`).flush({ members: [] });
+    expect(service.pendingSaves()).toBe(0);
+    expect(service.saveError()).toBeTruthy();
+    expect(service.workItems()).toEqual([]);
+  });
+
   it('starts without fabricated projects and reloads persisted data', () => {
     expect(service.allProjectsList()).toEqual([]);
     service.getProjects().subscribe();
-    http.expectOne(`${api}/projects`).flush([project('aa'), project('bb')]);
+    http.expectOne(`${api}/v1/projects`).flush([project('aa'), project('bb')]);
     service.currentProject.set(project('bb'));
     service.getProjects().subscribe();
-    http.expectOne(`${api}/projects`).flush([project('aa'), { ...project('bb'), name: 'Persisted' }]);
+    http.expectOne(`${api}/v1/projects`).flush([project('aa'), { ...project('bb'), name: 'Persisted' }]);
     expect(service.currentProject().name).toBe('Persisted');
   });
 
@@ -39,7 +70,7 @@ describe('Project API integration and state', () => {
     service.allProjectsList.set([project('aa'), project('bb')]);
     service.currentProject.set(project('aa'));
     service.updateProject('bb', { name: 'Updated B', leadUserId: 'lead' }).subscribe();
-    const request = http.expectOne(`${api}/projects/bb`);
+    const request = http.expectOne(`${api}/v1/projects/bb`);
     expect(request.request.method).toBe('PUT');
     request.flush({ ...project('bb'), name: 'Updated B' });
     expect(service.allProjectsList().map(p => p.id)).toEqual(['aa', 'bb']);
@@ -51,7 +82,7 @@ describe('Project API integration and state', () => {
     service.currentProject.set(project('aa'));
     let status = 0;
     service.getProjectById('missing').subscribe({ error: err => status = err.status });
-    http.expectOne(`${api}/projects/missing`).flush({ title: 'Not Found' }, { status: 404, statusText: 'Not Found' });
+    http.expectOne(`${api}/v1/projects/missing`).flush({ title: 'Not Found' }, { status: 404, statusText: 'Not Found' });
     expect(status).toBe(404);
     expect(service.currentProject().id).toBe('aa');
   });
@@ -59,7 +90,7 @@ describe('Project API integration and state', () => {
   it('waits for server success before adding a created project', () => {
     service.createProject({ orgId: 'org', name: 'New', projectKey: 'NEW', leadUserId: 'lead' }).subscribe();
     expect(service.allProjectsList()).toEqual([]);
-    const request = http.expectOne(`${api}/projects`);
+    const request = http.expectOne(`${api}/v1/projects`);
     expect(request.request.method).toBe('POST');
     expect(request.request.body.orgId).toBe('org');
     request.flush(project('new'));
@@ -70,10 +101,10 @@ describe('Project API integration and state', () => {
     service.allProjectsList.set([project('aa'), project('bb')]);
     service.currentProject.set(project('aa'));
     service.deleteProject('aa').subscribe({ error: () => {} });
-    http.expectOne(`${api}/projects/aa`).flush({}, { status: 409, statusText: 'Conflict' });
+    http.expectOne(`${api}/v1/projects/aa`).flush({}, { status: 409, statusText: 'Conflict' });
     expect(service.allProjectsList()).toHaveLength(2);
     service.deleteProject('aa').subscribe();
-    http.expectOne(`${api}/projects/aa`).flush(null);
+    http.expectOne(`${api}/v1/projects/aa`).flush(null);
     expect(service.allProjectsList().map(p => p.id)).toEqual(['bb']);
     expect(service.currentProject().id).toBe('bb');
   });
@@ -89,11 +120,11 @@ describe('Project API integration and state', () => {
   });
 
   it('loads organizations, users and settings from their API routes', () => {
-    service.getOrganizations().subscribe(); http.expectOne(`${api}/organizations`).flush([]);
+    service.getOrganizations().subscribe(); http.expectOne(`${api}/v1/organizations`).flush([]);
     service.getUsers().subscribe(); http.expectOne(`${api}/users`).flush([]);
-    service.getProjectStatuses('aa').subscribe(); http.expectOne(`${api}/projects/aa/statuses`).flush([]);
-    service.getWorkflowTransitions('aa').subscribe(); http.expectOne(`${api}/projects/aa/workflow/transitions`).flush([]);
-    service.getBoards('aa').subscribe(); http.expectOne(`${api}/projects/aa/boards`).flush([]);
+    service.getProjectStatuses('aa').subscribe(); http.expectOne(`${api}/v1/projects/aa/statuses`).flush([]);
+    service.getWorkflowTransitions('aa').subscribe(); http.expectOne(`${api}/v1/projects/aa/workflow/transitions`).flush([]);
+    service.getBoards('aa').subscribe(); http.expectOne(`${api}/v1/projects/aa/boards`).flush([]);
     service.getBoardColumns('board').subscribe(); http.expectOne(`${api}/boards/board/columns`).flush([]);
   });
 
@@ -108,7 +139,7 @@ describe('Project API integration and state', () => {
   it('persists transition and column mutations through HTTP', () => {
     const transition = { fromStatusId: 'todo', toStatusId: 'done' };
     service.createWorkflowTransition('aa', transition).subscribe();
-    const createdTransition = http.expectOne(`${api}/projects/aa/workflow/transitions`);
+    const createdTransition = http.expectOne(`${api}/v1/projects/aa/workflow/transitions`);
     expect(createdTransition.request.body).toEqual(transition); createdTransition.flush({ id: 'transition' });
     service.deleteWorkflowTransition('transition').subscribe();
     const deletedTransition = http.expectOne(`${api}/workflow/transitions/transition`);
