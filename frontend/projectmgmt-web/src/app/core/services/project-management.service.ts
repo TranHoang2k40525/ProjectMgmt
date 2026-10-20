@@ -1,6 +1,8 @@
 import { HttpClient } from '@angular/common/http';
-import { Injectable, inject, signal } from '@angular/core';
-import { Observable, map, of, tap, throwError } from 'rxjs';
+import { Injectable, effect, inject, signal, untracked } from '@angular/core';
+import { EMPTY, Observable, Subject, catchError, concatMap, defer, finalize, forkJoin, map, tap } from 'rxjs';
+import { ToastService } from './toast.service';
+import { RbacApi } from '../api/rbac.api';
 import { environment } from '../../../environments/environment';
 
 export interface Organization {
@@ -24,7 +26,7 @@ export interface ProjectMember {
   displayName: string;
   email: string;
   avatarUrl?: string;
-  role: 'Project Lead' | 'Scrum Master' | 'Developer' | 'QA Engineer' | 'Viewer';
+  role: 'Project Lead' | 'Scrum Master' | 'Developer' | 'QA Engineer' | 'Viewer' | 'ProjectManager' | 'ScrumMaster' | 'ProductOwner';
   joinedAt: string;
 }
 
@@ -183,7 +185,8 @@ export interface WorkItem {
   id: string;
   issueKey: string;
   projectId: string;
-  parentId?: string; // Parent Task ID if this is a Sub-task
+  parentId?: string;
+  epicId?: string; // Parent Task ID if this is a Sub-task
   title: string;
   description?: string;
   statusId: string;
@@ -204,6 +207,8 @@ export interface WorkItem {
   updatedAt?: string;
   comments?: TaskComment[];
   activities?: TaskActivity[];
+  attachments?: { id: string; fileName: string; fileSizeBytes: number }[];
+  criteria?: { id: string; content: string; isMet: boolean }[];
 }
 
 @Injectable({ providedIn: 'root' })
@@ -250,374 +255,197 @@ export class ProjectManagementService {
   // Selected Drawer Task State
   readonly activeDrawerTask = signal<WorkItem | null>(null);
 
-  // --- Epic Management ---
+  private readonly toast = inject(ToastService);
+  private readonly rbac = inject(RbacApi);
+  readonly pendingSaves = signal(0);
+  readonly saveError = signal<string | null>(null);
+  readonly workspaceLoading = signal(false);
+  private selectedProjectId = '';
+  private queueEpoch = 0;
+  private readonly writes = new Subject<{ epoch: number; request: () => Observable<unknown> }>();
+
+  constructor() {
+    this.writes.pipe(concatMap(job => defer(() => job.epoch === this.queueEpoch ? job.request() : EMPTY).pipe(
+      catchError((error: { title?: string; message?: string; detail?: string }) => {
+        this.queueEpoch++;
+        const message = error.detail ?? error.title ?? error.message ?? 'Không thể lưu thay đổi.';
+        this.saveError.set(message);
+        this.toast.error('Chưa lưu được thay đổi', message);
+        return EMPTY;
+      }),
+      finalize(() => {
+        this.pendingSaves.update(n => n - 1);
+        if (this.pendingSaves() === 0 && this.currentProject().id) {
+          if (!this.saveError()) this.toast.success('Đã lưu thay đổi');
+          this.loadWorkspace(this.currentProject().id);
+        }
+      })
+    ))).subscribe();
+    effect(() => {
+      const id = this.currentProject().id;
+      if (id === this.selectedProjectId) return;
+      this.selectedProjectId = id;
+      untracked(() => {
+        if (typeof sessionStorage !== 'undefined' && id) sessionStorage.setItem('projectmgmt.selected-project', id);
+        this.workItems.set([]); this.sprints.set([]); this.epics.set([]); this.activeDrawerTask.set(null);
+        if (id) this.loadWorkspace(id);
+      });
+    });
+  }
+
+  private enqueue(request: () => Observable<unknown>): void {
+    this.saveError.set(null); this.pendingSaves.update(n => n + 1);
+    this.writes.next({ epoch: this.queueEpoch, request });
+  }
+
+  loadWorkspace(projectId = this.currentProject().id): void {
+    if (!projectId) return;
+    this.workspaceLoading.set(true);
+    forkJoin({
+      data: this.http.get<{ workItems: WorkItem[]; sprints: Sprint[]; epics: EpicItem[]; statuses: ProjectStatus[] }>(`${this.baseUrl}/v1/projects/${projectId}/workspace`),
+      members: this.rbac.getProjectMembers(projectId)
+    }).subscribe({
+      next: ({data, members}) => {
+        if (this.currentProject().id !== projectId) return;
+        if (this.pendingSaves() === 0) {
+          this.workItems.set(data.workItems); this.sprints.set(data.sprints); this.epics.set(data.epics); this.projectStatuses.set(data.statuses);
+          const openId = this.activeDrawerTask()?.id;
+          if (openId) this.activeDrawerTask.set(data.workItems.find(i => i.id === openId) ?? null);
+        }
+        this.currentProject.update(p => ({ ...p, members: (members.members ?? []).map(m => ({ id: m.userId ?? '', userId: m.userId ?? '', displayName: m.fullName ?? m.email ?? '', email: m.email ?? '', role: (m.roleName ?? 'Developer') as ProjectMember['role'], joinedAt: m.grantedAt ?? '', avatarUrl: m.avatarUrl ?? undefined })) }));
+      },
+      error: (e: { title?: string }) => { if (this.currentProject().id === projectId) this.saveError.set(e.title ?? 'Không thể tải công việc.'); this.workspaceLoading.set(false); },
+      complete: () => this.workspaceLoading.set(false)
+    });
+  }
+
+  private persist(item: WorkItem, create = false): void {
+    const body = { ...item, parentId: item.parentId || null, epicId: item.epicId || null, assigneeId: item.assigneeId || null, sprintId: item.sprintId || null, labels: item.labels ?? [] };
+    const url = create ? `${this.baseUrl}/v1/projects/${item.projectId}/issues` : `${this.baseUrl}/v1/issues/${item.id}`;
+    this.enqueue(() => create ? this.http.post(url, body) : this.http.put(url, body));
+  }
+
   addEpic(name: string, color = 'indigo', description = ''): EpicItem {
-    const key = `E-${this.epics().length + 1}`;
-    const newEpic: EpicItem = {
-      id: `epic-${Date.now()}`,
-      key,
-      name,
-      color,
-      description,
-      status: 'In Progress'
-    };
-    this.epics.update(list => [...list, newEpic]);
-    return newEpic;
+    const item = this.addWorkItem({ title: name, issueType: 'Epic', description });
+    const epic: EpicItem = { id: item.id, key: item.issueKey, name, color, description, status: 'To Do' };
+    this.epics.update(items => [...items, epic]); return epic;
   }
-
-  // --- Sub-task Creation ---
   createSubTask(parentId: string, title: string): WorkItem {
-    const parent = this.workItems().find(w => w.id === parentId);
-    const subCounter = this.workItems().filter(w => w.parentId === parentId).length + 1;
-    const issueKey = parent ? `${parent.issueKey}-${subCounter}` : `SUB-${Date.now()}`;
-
-    const newSub: WorkItem = {
-      id: `wi-sub-${Date.now()}`,
-      issueKey,
-      projectId: this.currentProject()?.id ?? '',
-      parentId,
-      title: title || 'Sub-task mới',
-      statusId: 'st-1',
-      statusName: 'To Do',
-      issueType: 'Sub-task',
-      priority: 'Medium',
-      storyPoints: 1,
-      assigneeName: parent?.assigneeName || '',
-      reporterName: parent?.reporterName || 'Tôi',
-      sprintId: parent?.sprintId || '',
-      sprintName: parent?.sprintName || '',
-      epicName: parent?.epicName,
-      epicColor: parent?.epicColor,
-      createdAt: new Date().toISOString().split('T')[0]
-    };
-
-    this.workItems.update(list => [...list, newSub]);
-    return newSub;
+    const parent = this.workItems().find(i => i.id === parentId);
+    return this.addWorkItem({ title, parentId, issueType: 'Sub-task', sprintId: parent?.sprintId, assigneeId: parent?.assigneeId, assigneeName: parent?.assigneeName, epicId: parent?.epicId, epicName: parent?.epicName });
   }
-
-  // --- WorkItem Helper Mutations ---
-  updateWorkItem(updatedItem: WorkItem): void {
-    this.workItems.update(items =>
-      items.map(item => item.id === updatedItem.id ? { ...updatedItem, updatedAt: new Date().toISOString().split('T')[0] } : item)
-    );
-    if (this.activeDrawerTask()?.id === updatedItem.id) {
-      this.activeDrawerTask.set({ ...updatedItem });
-    }
+  updateWorkItem(item: WorkItem): void {
+    const updated = { ...item, updatedAt: new Date().toISOString() };
+    this.workItems.update(items => items.map(i => i.id === item.id ? updated : i));
+    if (this.activeDrawerTask()?.id === item.id) this.activeDrawerTask.set(updated);
+    this.persist(updated);
   }
-
-  updateWorkItemStatus(id: string, newStatus: string): void {
-    this.workItems.update(items =>
-      items.map(item => {
-        if (item.id === id) {
-          const updated = {
-            ...item,
-            statusName: newStatus,
-            updatedAt: new Date().toISOString().split('T')[0],
-            activities: [
-              ...(item.activities || []),
-              {
-                id: `act-${Date.now()}`,
-                actorName: 'Bạn',
-                action: `Đã chuyển trạng thái sang ${newStatus}`,
-                timestamp: 'Vừa xong'
-              }
-            ]
-          };
-          if (this.activeDrawerTask()?.id === id) {
-            this.activeDrawerTask.set(updated);
-          }
-          return updated;
-        }
-        return item;
-      })
-    );
+  private patch(id: string, changes: Partial<WorkItem>): void {
+    const item = this.workItems().find(i => i.id === id);
+    if (item) this.updateWorkItem({ ...item, ...changes });
   }
-
-  updateWorkItemAssignee(taskId: string, assigneeName: string): void {
-    this.workItems.update(items =>
-      items.map(item => {
-        if (item.id === taskId) {
-          const updated = { ...item, assigneeName, updatedAt: new Date().toISOString().split('T')[0] };
-          if (this.activeDrawerTask()?.id === taskId) {
-            this.activeDrawerTask.set(updated);
-          }
-          return updated;
-        }
-        return item;
-      })
-    );
+  updateWorkItemStatus(id: string, statusName: string): void { this.patch(id, { statusName }); }
+  updateWorkItemAssignee(id: string, assigneeName: string): void {
+    const member = this.currentProject().members?.find(m => m.displayName === assigneeName);
+    this.patch(id, { assigneeName, assigneeId: member?.userId });
   }
-
-  updateWorkItemPriority(taskId: string, priority: 'Low' | 'Medium' | 'High' | 'Urgent'): void {
-    this.workItems.update(items =>
-      items.map(item => {
-        if (item.id === taskId) {
-          const updated = { ...item, priority, updatedAt: new Date().toISOString().split('T')[0] };
-          if (this.activeDrawerTask()?.id === taskId) {
-            this.activeDrawerTask.set(updated);
-          }
-          return updated;
-        }
-        return item;
-      })
-    );
+  updateWorkItemPriority(id: string, priority: WorkItem['priority']): void { this.patch(id, { priority }); }
+  updateWorkItemEpic(id: string, epicName: string, epicColor = 'indigo'): void { this.patch(id, { epicName, epicColor, epicId: this.epics().find(e => e.name === epicName)?.id }); }
+  updateWorkItemIssueType(id: string, issueType: string): void { this.patch(id, { issueType }); }
+  updateWorkItemStoryPoints(id: string, storyPoints: number): void { this.patch(id, { storyPoints }); }
+  updateWorkItemSprint(id: string, sprintId: string, sprintName: string): void { this.patch(id, { sprintId: sprintId === 'sp-backlog' ? '' : sprintId, sprintName }); }
+  cloneWorkItem(id: string): WorkItem | null {
+    const item = this.workItems().find(i => i.id === id);
+    return item ? this.addWorkItem({ ...item, title: `${item.title} (Bản sao)`, comments: [], activities: [] }) : null;
   }
-
-  updateWorkItemEpic(taskId: string, epicName: string, epicColor = 'indigo'): void {
-    this.workItems.update(items =>
-      items.map(item => {
-        if (item.id === taskId) {
-          const updated = { ...item, epicName, epicColor, updatedAt: new Date().toISOString().split('T')[0] };
-          if (this.activeDrawerTask()?.id === taskId) {
-            this.activeDrawerTask.set(updated);
-          }
-          return updated;
-        }
-        return item;
-      })
-    );
+  deleteWorkItem(id: string): void {
+    this.workItems.update(items => items.filter(i => i.id !== id && i.parentId !== id));
+    if (this.activeDrawerTask()?.id === id) this.activeDrawerTask.set(null);
+    this.enqueue(() => this.http.delete(`${this.baseUrl}/v1/issues/${id}`));
   }
-
-  updateWorkItemIssueType(taskId: string, issueType: WorkItem['issueType']): void {
-    this.workItems.update(items =>
-      items.map(item => {
-        if (item.id === taskId) {
-          const updated = { ...item, issueType, updatedAt: new Date().toISOString().split('T')[0] };
-          if (this.activeDrawerTask()?.id === taskId) {
-            this.activeDrawerTask.set(updated);
-          }
-          return updated;
-        }
-        return item;
-      })
-    );
+  bulkUpdateStatus(ids: string[], status: string): void { ids.forEach(id => this.updateWorkItemStatus(id, status)); }
+  bulkUpdateSprint(ids: string[], sprintId: string, sprintName: string): void { ids.forEach(id => this.updateWorkItemSprint(id, sprintId, sprintName)); }
+  bulkDelete(ids: string[]): void { ids.forEach(id => this.deleteWorkItem(id)); }
+  reorderWorkItems(ids: string[]): void {
+    const items = this.workItems(); const byId = new Map(items.map(i => [i.id, i]));
+    const selected = new Set(ids); let cursor = 0;
+    const ordered = items.map(i => selected.has(i.id) ? byId.get(ids[cursor++])! : i);
+    this.workItems.set(ordered);
+    const projectId = this.currentProject().id;
+    const orderedIds = ordered.map(i => i.id);
+    this.enqueue(() => this.http.put(`${this.baseUrl}/v1/projects/${projectId}/issues/order`, { orderedIds }));
   }
-
-  updateWorkItemStoryPoints(taskId: string, storyPoints: number): void {
-    this.workItems.update(items =>
-      items.map(item => {
-        if (item.id === taskId) {
-          const updated = { ...item, storyPoints, updatedAt: new Date().toISOString().split('T')[0] };
-          if (this.activeDrawerTask()?.id === taskId) {
-            this.activeDrawerTask.set(updated);
-          }
-          return updated;
-        }
-        return item;
-      })
-    );
-  }
-
-  updateWorkItemSprint(taskId: string, newSprintId: string, newSprintName: string): void {
-    this.workItems.update(items =>
-      items.map(item => {
-        if (item.id === taskId) {
-          const updated = { ...item, sprintId: newSprintId, sprintName: newSprintName, updatedAt: new Date().toISOString().split('T')[0] };
-          if (this.activeDrawerTask()?.id === taskId) {
-            this.activeDrawerTask.set(updated);
-          }
-          return updated;
-        }
-        return item;
-      })
-    );
-  }
-
-  cloneWorkItem(taskId: string): WorkItem | null {
-    const item = this.workItems().find(w => w.id === taskId);
-    if (!item) return null;
-
-    const proj = this.currentProject();
-    const counter = (proj?.issueCounter ?? 0) + 1;
-    const issueKey = proj ? `${proj.projectKey}-${counter}` : `TASK-${counter}`;
-    const cloned: WorkItem = {
-      ...item,
-      id: `wi-${Date.now()}`,
-      issueKey,
-      title: `${item.title} (Bản sao)`,
-      createdAt: new Date().toISOString().split('T')[0],
-      comments: [],
-      activities: []
-    };
-
-    this.workItems.update(list => [cloned, ...list]);
-    return cloned;
-  }
-
-  deleteWorkItem(taskId: string): void {
-    this.workItems.update(items => items.filter(item => item.id !== taskId && item.parentId !== taskId));
-    if (this.activeDrawerTask()?.id === taskId) {
-      this.activeDrawerTask.set(null);
-    }
-  }
-
-  // --- Bulk Operations ---
-  bulkUpdateStatus(ids: string[], newStatus: WorkItem['statusName']): void {
-    this.workItems.update(items =>
-      items.map(item => ids.includes(item.id) ? { ...item, statusName: newStatus } : item)
-    );
-  }
-
-  bulkUpdateSprint(ids: string[], sprintId: string, sprintName: string): void {
-    this.workItems.update(items =>
-      items.map(item => ids.includes(item.id) ? { ...item, sprintId, sprintName } : item)
-    );
-  }
-
-  bulkDelete(ids: string[]): void {
-    this.workItems.update(items => items.filter(item => !ids.includes(item.id)));
-  }
-
-  // --- Sprint Management ---
   addNewSprint(): Sprint {
-    const proj = this.currentProject();
-    const nextIdx = this.sprints().length + 1;
-    const name = proj ? `${proj.projectKey} Sprint ${nextIdx}` : `Sprint ${nextIdx}`;
-    const newSp: Sprint = {
-      id: `sp-${Date.now()}`,
-      projectId: proj?.id ?? '',
-      name,
-      goal: `Mục tiêu Sprint ${nextIdx}`,
-      status: 'future',
-      startDate: new Date().toISOString().split('T')[0],
-      endDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
-      workItemsCount: 0,
-      totalStoryPoints: 0
-    };
-    this.sprints.update(list => [...list, newSp]);
-    return newSp;
+    const sprint: Sprint = { id: crypto.randomUUID(), projectId: this.currentProject().id, name: `${this.currentProject().projectKey} Sprint ${this.sprints().length + 1}`, status: 'future', startDate: new Date().toISOString().slice(0, 10), endDate: new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10), workItemsCount: 0, totalStoryPoints: 0 };
+    this.sprints.update(items => [...items, sprint]);
+    this.enqueue(() => this.http.post(`${this.baseUrl}/v1/projects/${sprint.projectId}/sprints`, sprint)); return sprint;
   }
-
-  updateSprintStatus(sprintId: string, status: 'active' | 'future' | 'completed'): void {
-    this.sprints.update(list =>
-      list.map(sp => sp.id === sprintId ? { ...sp, status } : sp)
-    );
+  private patchSprint(id: string, changes: Partial<Sprint>): void {
+    const sprint = this.sprints().find(s => s.id === id); if (!sprint) return;
+    const updated = { ...sprint, ...changes };
+    this.sprints.update(items => items.map(s => s.id === id ? updated : s));
+    this.enqueue(() => this.http.put(`${this.baseUrl}/v1/sprints/${id}`, updated));
   }
-
-  updateSprintGoal(sprintId: string, goal: string): void {
-    this.sprints.update(list =>
-      list.map(sp => sp.id === sprintId ? { ...sp, goal } : sp)
-    );
+  updateSprintStatus(id: string, status: Sprint['status']): void { this.patchSprint(id, { status }); }
+  updateSprintGoal(id: string, goal: string): void { this.patchSprint(id, { goal }); }
+  updateSprintInfo(id: string, name: string, startDate?: string, endDate?: string): void {
+    this.patchSprint(id, { name, ...(startDate ? {startDate} : {}), ...(endDate ? {endDate} : {}) });
   }
-
-  updateSprintInfo(sprintId: string, name: string, startDate?: string, endDate?: string): void {
-    this.sprints.update(list =>
-      list.map(sp => sp.id === sprintId ? { ...sp, name, startDate: startDate ?? sp.startDate, endDate: endDate ?? sp.endDate } : sp)
-    );
+  moveSprintItemsToBacklog(id: string): void { this.workItems().filter(i => i.sprintId === id).forEach(i => this.updateWorkItemSprint(i.id, '', 'Backlog')); }
+  addNewProject(request: { name: string; projectKey: string; type?: string; description?: string }): Project {
+    // Retained for callers that stage a project locally; real creation uses createProject().
+    return { ...this.emptyProject, ...request, id: crypto.randomUUID() };
   }
-
-  moveSprintItemsToBacklog(sprintId: string): void {
-    this.workItems.update(items =>
-      items.map(item => item.sprintId === sprintId ? { ...item, sprintId: 'sp-backlog', sprintName: 'Backlog Pool' } : item)
-    );
+  addWorkItem(request: Partial<WorkItem>): WorkItem {
+    if (!this.currentProject().id) throw new Error('Hãy chọn hoặc tạo dự án trước.');
+    if (!request.sprintId && request.sprintName) request = { ...request, sprintId: this.sprints().find(s => s.name === request.sprintName)?.id };
+    const initial = this.projectStatuses().find(s => s.isInitial) ?? this.projectStatuses()[0];
+    const item: WorkItem = { ...request, id: crypto.randomUUID(), projectId: this.currentProject().id, issueKey: 'Đang lưu…', title: request.title || 'Công việc mới', statusId: initial?.id ?? '', statusName: request.statusName ?? initial?.name ?? 'To Do', issueType: request.issueType ?? 'Task', priority: request.priority ?? 'Medium', storyPoints: request.storyPoints ?? 0, reporterName: 'Tôi', createdAt: new Date().toISOString(), comments: [], activities: [] };
+    this.workItems.update(items => [item, ...items]); this.persist(item, true); return item;
   }
-
-  // --- Project Management Methods ---
-  addNewProject(newProj: { name: string; projectKey: string; type?: string; description?: string }): Project {
-    const created: Project = {
-      id: `proj-${Date.now()}`,
-      orgId: '',
-      projectKey: newProj.projectKey.toUpperCase(),
-      name: newProj.name,
-      type: newProj.type || 'Software space',
-      description: newProj.description || '',
-      leadUserId: '',
-      leadName: '',
-      issueCounter: 0,
-      isArchived: false,
-      isDeleted: false,
-      createdAt: new Date().toISOString()
-    };
-
-    this.allProjectsList.update(list => [created, ...list]);
-    this.currentProject.set(created);
-    return created;
+  addCommentToTask(id: string, content: string): void {
+    this.enqueue(() => this.http.post(`${this.baseUrl}/v1/issues/${id}/comments`, { content }));
   }
-
-  // --- WorkItem CRUD Methods ---
-  addWorkItem(newItem: Partial<WorkItem>): WorkItem {
-    const proj = this.currentProject();
-    const counter = (proj?.issueCounter ?? 0) + 1;
-    const key = proj ? `${proj.projectKey}-${counter}` : `TASK-${counter}`;
-    
-    const createdItem: WorkItem = {
-      id: `wi-${Date.now()}`,
-      issueKey: key,
-      projectId: proj?.id ?? '',
-      parentId: newItem.parentId,
-      title: newItem.title || 'Công việc mới',
-      description: newItem.description || '',
-      statusId: 'st-1',
-      statusName: newItem.statusName || 'To Do',
-      issueType: newItem.issueType || 'Task',
-      priority: newItem.priority || 'Medium',
-      storyPoints: newItem.storyPoints || 3,
-      assigneeName: newItem.assigneeName || '',
-      reporterName: newItem.reporterName || 'Tôi',
-      sprintId: newItem.sprintId || '',
-      sprintName: newItem.sprintName || '',
-      epicName: newItem.epicName || '',
-      epicColor: newItem.epicColor || 'blue',
-      labels: newItem.labels || ['task'],
-      createdAt: new Date().toISOString().split('T')[0],
-      updatedAt: new Date().toISOString().split('T')[0]
-    };
-
-    this.workItems.update(list => [createdItem, ...list]);
-    return createdItem;
+  getIssue(id: string): Observable<WorkItem> { return this.http.get<WorkItem>(`${this.baseUrl}/v1/issues/${id}`); }
+  saveIssue(item: WorkItem): Observable<WorkItem> { return this.http.put<WorkItem>(`${this.baseUrl}/v1/issues/${item.id}`, { ...item, parentId: item.parentId || null, assigneeId: item.assigneeId || null, epicId: item.epicId || null, sprintId: item.sprintId || null, labels: item.labels ?? [] }); }
+  createIssue(projectId: string, item: Partial<WorkItem>): Observable<WorkItem> { return this.http.post<WorkItem>(`${this.baseUrl}/v1/projects/${projectId}/issues`, item); }
+  postComment(id: string, content: string): Observable<WorkItem> { return this.http.post<WorkItem>(`${this.baseUrl}/v1/issues/${id}/comments`, { content }); }
+  uploadAttachment(id: string, file: File): Observable<unknown> {
+    const body = new FormData(); body.append('file', file); return this.http.post(`${this.baseUrl}/v1/issues/${id}/attachments`, body);
   }
-
-  addCommentToTask(taskId: string, commentText: string): void {
-    const newComment: TaskComment = {
-      id: `comment-${Date.now()}`,
-      authorName: 'Tôi',
-      content: commentText,
-      createdAt: new Date().toLocaleString()
-    };
-
-    this.workItems.update(items =>
-      items.map(item => {
-        if (item.id === taskId) {
-          const updated = {
-            ...item,
-            comments: [...(item.comments || []), newComment]
-          };
-          if (this.activeDrawerTask()?.id === taskId) {
-            this.activeDrawerTask.set(updated);
-          }
-          return updated;
-        }
-        return item;
-      })
-    );
-  }
+  downloadAttachment(id: string): Observable<Blob> { return this.http.get(`${this.baseUrl}/v1/attachments/${id}`, { responseType: 'blob' }); }
+  deleteAttachment(id: string): Observable<void> { return this.http.delete<void>(`${this.baseUrl}/v1/attachments/${id}`); }
+  addCriterion(id: string, content: string): Observable<unknown> { return this.http.post(`${this.baseUrl}/v1/issues/${id}/criteria`, { content }); }
+  updateCriterion(id: string, content: string, isMet: boolean): Observable<unknown> { return this.http.put(`${this.baseUrl}/v1/criteria/${id}`, { content, isMet }); }
 
   // HTTP API Operations
   getOrganizations(): Observable<Organization[]> {
-    return this.http.get<Organization[]>(`${this.baseUrl}/organizations`);
+    return this.http.get<Organization[]>(`${this.baseUrl}/v1/organizations`);
   }
 
   createOrganization(req: CreateOrganizationRequest): Observable<Organization> {
-    return this.http.post<Organization>(`${this.baseUrl}/organizations`, req);
+    return this.http.post<Organization>(`${this.baseUrl}/v1/organizations`, req);
   }
 
   getProjects(): Observable<Project[]> {
-    return this.http.get<Project[]>(`${this.baseUrl}/projects`).pipe(tap(projects => {
+    return this.http.get<Project[]>(`${this.baseUrl}/v1/projects`).pipe(tap(projects => {
       this.allProjectsList.set(projects);
-      this.currentProject.set(projects.find(p => p.id === this.currentProject().id) ?? projects[0] ?? this.emptyProject);
+      const selected = this.currentProject().id || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('projectmgmt.selected-project') : null);
+      const next = projects.find(p => p.id === selected) ?? projects[0] ?? this.emptyProject;
+      this.currentProject.set(next.id === this.currentProject().id ? { ...this.currentProject(), ...next } : next);
     }));
   }
 
   createProject(req: CreateProjectRequest): Observable<Project> {
-    return this.http.post<Project>(`${this.baseUrl}/projects`, req).pipe(tap(project => {
+    return this.http.post<Project>(`${this.baseUrl}/v1/projects`, req).pipe(tap(project => {
       this.cacheProject(project);
       this.currentProject.set(project);
     }));
   }
 
   addProjectMember(memberReq: Pick<ProjectMember, 'displayName' | 'email' | 'role'>): Observable<boolean> {
-    void memberReq;
-    return throwError(() => ({ title: 'Chức năng thêm thành viên chưa được tích hợp.' }));
+    const projectId = this.currentProject().id;
+    return this.http.post(`${this.baseUrl}/v1/projects/${projectId}/members/invite`, { email: memberReq.email, roleName: memberReq.role }).pipe(tap(() => this.loadWorkspace(projectId)), map(() => true));
   }
 
   getUsers(): Observable<UserDisplayInfo[]> {
@@ -625,15 +453,15 @@ export class ProjectManagementService {
   }
 
   getProjectById(id: string): Observable<Project> {
-    return this.http.get<Project>(`${this.baseUrl}/projects/${id}`).pipe(tap(project => this.cacheProject(project)));
+    return this.http.get<Project>(`${this.baseUrl}/v1/projects/${id}`).pipe(tap(project => this.cacheProject(project)));
   }
 
   updateProject(id: string, req: UpdateProjectRequest): Observable<Project> {
-    return this.http.put<Project>(`${this.baseUrl}/projects/${id}`, req).pipe(tap(project => this.cacheProject(project)));
+    return this.http.put<Project>(`${this.baseUrl}/v1/projects/${id}`, req).pipe(tap(project => this.cacheProject(project)));
   }
 
   deleteProject(id: string): Observable<boolean> {
-    return this.http.delete<void>(`${this.baseUrl}/projects/${id}`).pipe(tap(() => {
+    return this.http.delete<void>(`${this.baseUrl}/v1/projects/${id}`).pipe(tap(() => {
       this.allProjectsList.update(projects => projects.filter(p => p.id !== id));
       if (this.currentProject().id === id) this.currentProject.set(this.allProjectsList()[0] ?? this.emptyProject);
     }), map(() => true));
@@ -644,7 +472,7 @@ export class ProjectManagementService {
       const exists = projects.some(p => p.id === project.id);
       return exists ? projects.map(p => p.id === project.id ? project : p) : [...projects, project];
     });
-    if (this.currentProject().id === project.id) this.currentProject.set(project);
+    if (this.currentProject().id === project.id) this.currentProject.update(current => ({ ...current, ...project }));
   }
 
   // Custom Issue Type Creation
@@ -663,7 +491,7 @@ export class ProjectManagementService {
 
   // Workflow Status Management
   getProjectStatuses(projectId: string): Observable<ProjectStatus[]> {
-    return this.http.get<ProjectStatus[]>(`${this.baseUrl}/projects/${projectId}/statuses`);
+    return this.http.get<ProjectStatus[]>(`${this.baseUrl}/v1/projects/${projectId}/statuses`);
   }
 
   addProjectStatus(name: string, category = 'In Progress'): ProjectStatus {
@@ -723,11 +551,11 @@ export class ProjectManagementService {
   }
 
   getWorkflowTransitions(projectId: string): Observable<WorkflowTransition[]> {
-    return this.http.get<WorkflowTransition[]>(`${this.baseUrl}/projects/${projectId}/workflow/transitions`);
+    return this.http.get<WorkflowTransition[]>(`${this.baseUrl}/v1/projects/${projectId}/workflow/transitions`);
   }
 
   createWorkflowTransition(projectId: string, req: CreateWorkflowTransitionRequest): Observable<WorkflowTransition> {
-    return this.http.post<WorkflowTransition>(`${this.baseUrl}/projects/${projectId}/workflow/transitions`, req);
+    return this.http.post<WorkflowTransition>(`${this.baseUrl}/v1/projects/${projectId}/workflow/transitions`, req);
   }
 
   deleteWorkflowTransition(id: string): Observable<boolean> {
@@ -735,11 +563,11 @@ export class ProjectManagementService {
   }
 
   getBoards(projectId: string): Observable<Board[]> {
-    return this.http.get<Board[]>(`${this.baseUrl}/projects/${projectId}/boards`);
+    return this.http.get<Board[]>(`${this.baseUrl}/v1/projects/${projectId}/boards`);
   }
 
   createBoard(projectId: string, req: CreateBoardRequest): Observable<Board> {
-    return this.http.post<Board>(`${this.baseUrl}/projects/${projectId}/boards`, req);
+    return this.http.post<Board>(`${this.baseUrl}/v1/projects/${projectId}/boards`, req);
   }
 
   getBoardColumns(boardId: string): Observable<BoardColumn[]> {
