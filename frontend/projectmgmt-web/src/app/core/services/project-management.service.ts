@@ -226,14 +226,7 @@ export class ProjectManagementService {
   readonly currentProject = signal<Project>(this.emptyProject);
 
   // Issue Types Signal (Standard Scrum Types)
-  readonly customIssueTypes = signal<CustomIssueType[]>([
-    { id: 'it-1', name: 'Task', icon: '📘', color: 'blue', description: 'Công việc phát triển' },
-    { id: 'it-2', name: 'Story', icon: '📗', color: 'emerald', description: 'Yêu cầu tính năng người dùng' },
-    { id: 'it-3', name: 'Bug', icon: '📕', color: 'red', description: 'Lỗi phát sinh cần sửa' },
-    { id: 'it-4', name: 'Use-Case', icon: '🩵', color: 'cyan', description: 'Kịch bản kiểm thử / sử dụng' },
-    { id: 'it-5', name: 'Epic', icon: '⚡', color: 'purple', description: 'Hạng mục dự án lớn' },
-    { id: 'it-6', name: 'Sub-task', icon: '📙', color: 'amber', description: 'Nhiệm vụ con phân rã' }
-  ]);
+  readonly customIssueTypes = signal<CustomIssueType[]>([]);
 
   // Active Project Statuses Signal (Default Scrum workflow)
   readonly projectStatuses = signal<ProjectStatus[]>([
@@ -287,7 +280,7 @@ export class ProjectManagementService {
       this.selectedProjectId = id;
       untracked(() => {
         if (typeof sessionStorage !== 'undefined' && id) sessionStorage.setItem('projectmgmt.selected-project', id);
-        this.workItems.set([]); this.sprints.set([]); this.epics.set([]); this.activeDrawerTask.set(null);
+        this.customIssueTypes.set([]); this.workItems.set([]); this.sprints.set([]); this.epics.set([]); this.activeDrawerTask.set(null);
         if (id) this.loadWorkspace(id);
       });
     });
@@ -303,12 +296,13 @@ export class ProjectManagementService {
     this.workspaceLoading.set(true);
     forkJoin({
       data: this.http.get<{ workItems: WorkItem[]; sprints: Sprint[]; epics: EpicItem[]; statuses: ProjectStatus[] }>(`${this.baseUrl}/v1/projects/${projectId}/workspace`),
+      types: this.getIssueTypes(projectId),
       members: this.rbac.getProjectMembers(projectId)
     }).subscribe({
-      next: ({data, members}) => {
+      next: ({data, members, types}) => {
         if (this.currentProject().id !== projectId) return;
         if (this.pendingSaves() === 0) {
-          this.workItems.set(data.workItems); this.sprints.set(data.sprints); this.epics.set(data.epics); this.projectStatuses.set(data.statuses);
+          this.customIssueTypes.set(types); this.workItems.set(data.workItems); this.sprints.set(data.sprints); this.epics.set(data.epics); this.projectStatuses.set(data.statuses);
           const openId = this.activeDrawerTask()?.id;
           if (openId) this.activeDrawerTask.set(data.workItems.find(i => i.id === openId) ?? null);
         }
@@ -475,79 +469,27 @@ export class ProjectManagementService {
     if (this.currentProject().id === project.id) this.currentProject.update(current => ({ ...current, ...project }));
   }
 
-  // Custom Issue Type Creation
-  addCustomIssueType(name: string, icon: string, color: string, description?: string): CustomIssueType {
-    const newType: CustomIssueType = {
-      id: `it-${Date.now()}`,
-      name,
-      icon,
-      color,
-      description,
-      isCustom: true
-    };
-    this.customIssueTypes.update(types => [...types, newType]);
-    return newType;
+  getIssueTypes(projectId: string): Observable<CustomIssueType[]> {
+    return this.http.get<{ id: string; name: string; iconKey?: string; colorHex: string }[]>(`${this.baseUrl}/v1/projects/${projectId}/issue-types`).pipe(
+      map(types => types.map(t => ({ id: t.id, name: t.name, icon: t.iconKey ?? '📘', color: t.colorHex })))
+    );
   }
 
-  // Workflow Status Management
+  addCustomIssueType(name: string, icon: string, color: string): Observable<CustomIssueType> {
+    const projectId = this.currentProject().id;
+    return this.http.post<CustomIssueType>(`${this.baseUrl}/v1/projects/${projectId}/issue-types`, { name, icon, color }).pipe(
+      tap(type => { if (this.currentProject().id === projectId) this.customIssueTypes.update(types => [...types, type]); })
+    );
+  }
+
   getProjectStatuses(projectId: string): Observable<ProjectStatus[]> {
     return this.http.get<ProjectStatus[]>(`${this.baseUrl}/v1/projects/${projectId}/statuses`);
   }
 
-  addProjectStatus(name: string, category = 'In Progress'): ProjectStatus {
-    const newStatus: ProjectStatus = {
-      id: `st-${Date.now()}`,
-      name,
-      category,
-      isInitial: false,
-      orderIndex: this.projectStatuses().length + 1
-    };
-    this.projectStatuses.update(list => [...list, newStatus]);
-    return newStatus;
-  }
-
-  deleteProjectStatus(id: string): void {
-    this.projectStatuses.update(list => list.filter(s => s.id !== id));
-  }
-
-  applyWorkflowTemplateToProject(templateId: string): ProjectStatus[] {
-    let newStatuses: ProjectStatus[];
-    if (templateId === 'scrum-std') {
-      newStatuses = [
-        { id: 'st-1', name: 'To Do', category: 'To Do', isInitial: true, orderIndex: 1 },
-        { id: 'st-2', name: 'In Progress', category: 'In Progress', isInitial: false, orderIndex: 2 },
-        { id: 'st-3', name: 'Code Review', category: 'In Progress', isInitial: false, orderIndex: 3 },
-        { id: 'st-4', name: 'Done', category: 'Done', isInitial: false, orderIndex: 4 }
-      ];
-    } else if (templateId === 'agile-qa') {
-      newStatuses = [
-        { id: 'st-1', name: 'To Do', category: 'To Do', isInitial: true, orderIndex: 1 },
-        { id: 'st-2', name: 'In Progress', category: 'In Progress', isInitial: false, orderIndex: 2 },
-        { id: 'st-3', name: 'Code Review', category: 'In Progress', isInitial: false, orderIndex: 3 },
-        { id: 'st-qa', name: 'QA Testing', category: 'In Progress', isInitial: false, orderIndex: 4 },
-        { id: 'st-4', name: 'Done', category: 'Done', isInitial: false, orderIndex: 5 }
-      ];
-    } else if (templateId === 'kanban-simple') {
-      newStatuses = [
-        { id: 'st-1', name: 'To Do', category: 'To Do', isInitial: true, orderIndex: 1 },
-        { id: 'st-2', name: 'In Progress', category: 'In Progress', isInitial: false, orderIndex: 2 },
-        { id: 'st-4', name: 'Done', category: 'Done', isInitial: false, orderIndex: 3 }
-      ];
-    } else if (templateId === 'enterprise') {
-      newStatuses = [
-        { id: 'st-1', name: 'Backlog', category: 'To Do', isInitial: true, orderIndex: 1 },
-        { id: 'st-spec', name: 'Spec Review', category: 'To Do', isInitial: false, orderIndex: 2 },
-        { id: 'st-2', name: 'In Progress', category: 'In Progress', isInitial: false, orderIndex: 3 },
-        { id: 'st-3', name: 'Code Review', category: 'In Progress', isInitial: false, orderIndex: 4 },
-        { id: 'st-qa', name: 'QA Verification', category: 'In Progress', isInitial: false, orderIndex: 5 },
-        { id: 'st-4', name: 'Done', category: 'Done', isInitial: false, orderIndex: 6 }
-      ];
-    } else {
-      newStatuses = this.projectStatuses();
-    }
-
-    this.projectStatuses.set(newStatuses);
-    return newStatuses;
+  applyWorkflowTemplateToProject(projectId: string, templateId: string): Observable<ProjectStatus[]> {
+    return this.http.post<ProjectStatus[]>(`${this.baseUrl}/v1/projects/${projectId}/workflow/template`, { templateId }).pipe(
+      tap(statuses => { if (this.currentProject().id === projectId) this.projectStatuses.set(statuses); })
+    );
   }
 
   getWorkflowTransitions(projectId: string): Observable<WorkflowTransition[]> {
