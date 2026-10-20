@@ -39,6 +39,7 @@ describe('Project API integration and state', () => {
     expect(service.pendingSaves()).toBe(0);
     http.expectOne(`${api}/v1/projects/aa/workspace`).flush({ workItems: [{ ...task, title: 'Edited while creating', issueKey: 'AA-1' }], sprints: [], epics: [], statuses: [] });
     http.expectOne(`${api}/v1/projects/aa/members`).flush({ members: [] });
+    http.expectOne(`${api}/v1/projects/aa/issue-types`).flush([]);
     expect(service.workItems()[0].issueKey).toBe('AA-1');
     expect(service.workItems()[0].title).toBe('Edited while creating');
   });
@@ -51,6 +52,7 @@ describe('Project API integration and state', () => {
     http.expectNone(`${api}/v1/issues/${task.id}`);
     http.expectOne(`${api}/v1/projects/aa/workspace`).flush({ workItems: [], sprints: [], epics: [], statuses: [] });
     http.expectOne(`${api}/v1/projects/aa/members`).flush({ members: [] });
+    http.expectOne(`${api}/v1/projects/aa/issue-types`).flush([]);
     expect(service.pendingSaves()).toBe(0);
     expect(service.saveError()).toBeTruthy();
     expect(service.workItems()).toEqual([]);
@@ -151,4 +153,29 @@ describe('Project API integration and state', () => {
     const deletedColumn = http.expectOne(`${api}/boards/columns/column`);
     expect(deletedColumn.request.method).toBe('DELETE'); deletedColumn.flush(null);
   });
+  it('adds custom types only after success and keeps them scoped to the project', () => {
+    service.currentProject.set(project('aa'));
+    service.addCustomIssueType('Risk', '!', '#6366F1').subscribe();
+    expect(service.customIssueTypes()).toEqual([]);
+    const req = http.expectOne(`${api}/v1/projects/aa/issue-types`);
+    expect(req.request.body).toEqual({ name: 'Risk', icon: '!', color: '#6366F1' });
+    req.flush({ id: 'risk', name: 'Risk', icon: '!', color: '#6366F1' });
+    expect(service.customIssueTypes()[0].id).toBe('risk');
+    service.addCustomIssueType('Other', '!', '#6366F1').subscribe();
+    const pending = http.expectOne(`${api}/v1/projects/aa/issue-types`);
+    service.currentProject.set(project('bb'));
+    pending.flush({ id: 'other', name: 'Other' });
+    expect(service.customIssueTypes().some(t => t.id === 'other')).toBe(false);
+  });
+
+  it('keeps workflow state unchanged when applying a template fails', () => {
+    service.currentProject.set(project('aa'));
+    const before = service.projectStatuses();
+    service.applyWorkflowTemplateToProject('aa', 'agile-qa').subscribe({ error: () => {} });
+    const req = http.expectOne(`${api}/v1/projects/aa/workflow/template`);
+    expect(req.request.body).toEqual({ templateId: 'agile-qa' });
+    req.flush({}, { status: 403, statusText: 'Forbidden' });
+    expect(service.projectStatuses()).toEqual(before);
+  });
+
 });
