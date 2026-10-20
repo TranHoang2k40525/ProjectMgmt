@@ -1,4 +1,6 @@
 <app-route-transition-layer />
+@if (projectService.pendingSaves() > 0) { <div role="status" class="fixed bottom-4 left-4 z-50 bg-amber-100 text-amber-900 rounded-xl p-3 shadow">Đang lưu {{ projectService.pendingSaves() }} thay đổi…</div> }
+@if (projectService.saveError(); as saveError) { <div role="alert" class="fixed bottom-4 left-4 z-50 bg-red-100 text-red-900 rounded-xl p-3 shadow">Chưa lưu được: {{ saveError }}</div> }
 
 <!-- Global Transparent Backdrop Overlay for Flyouts -->
 @if (isRecentFlyoutOpen() || headerSearchResults().length > 0 || isMobileSearchOpen()) {
