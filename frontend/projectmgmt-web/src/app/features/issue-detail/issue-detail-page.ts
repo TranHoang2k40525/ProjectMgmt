@@ -5,13 +5,15 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Observable } from 'rxjs';
 import { ProjectManagementService, WorkItem } from '../../core/services/project-management.service';
+import { IssueFormComponent } from '../../shared/components/issue-form/issue-form';
 
-@Component({ selector: 'app-issue-detail-page', imports: [CommonModule, FormsModule, RouterLink], templateUrl: './issue-detail-page.html', styleUrl: './issue-detail-page.scss' })
+@Component({ selector: 'app-issue-detail-page', imports: [CommonModule, FormsModule, RouterLink, IssueFormComponent], templateUrl: './issue-detail-page.html', styleUrl: './issue-detail-page.scss' })
 export class IssueDetailPage implements OnInit {
   readonly service = inject(ProjectManagementService);
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
   readonly error = signal(''); readonly message = signal(''); readonly loading = signal(false); readonly busy = signal(false);
+  readonly editing = signal(false);
   readonly priorities = ['Low', 'Medium', 'High', 'Urgent'];
   item: WorkItem | null = null; newComment = ''; newCriterion = ''; subtaskTitle = '';
   ngOnInit(): void { this.route.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(params => this.load(params.get('id') ?? '')); }
@@ -27,6 +29,7 @@ export class IssueDetailPage implements OnInit {
     if (this.busy()) return; this.busy.set(true); this.error.set('');
     request.subscribe({ next: () => { clear?.(); this.busy.set(false); this.message.set(message); this.load(); this.service.loadWorkspace(); }, error: e => this.fail(e) });
   }
+  edited(): void { this.editing.set(false); this.message.set('Đã lưu chi tiết công việc.'); this.load(); this.service.loadWorkspace(); }
   save(): void { if (this.item) this.run(this.service.saveIssue(this.item), 'Đã lưu công việc.'); }
   comment(): void { if (this.item) this.run(this.service.postComment(this.item.id, this.newComment), 'Đã lưu bình luận.', () => this.newComment = ''); }
   addCriterion(): void { if (this.item) this.run(this.service.addCriterion(this.item.id, this.newCriterion), 'Đã thêm tiêu chí.', () => this.newCriterion = ''); }

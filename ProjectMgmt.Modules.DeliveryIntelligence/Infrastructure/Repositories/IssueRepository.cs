@@ -48,6 +48,37 @@ public class IssueRepository : IIssueRepository
             .Where(issue => issue.EpicId == epicId)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<Issue>> GetBySprintAsync(Guid sprintId, CancellationToken cancellationToken = default) =>
+        await _context.Issues
+            .AsNoTracking()
+            .Where(issue => issue.SprintId == sprintId && !issue.IsDeleted)
+            .OrderBy(issue => issue.RankOrder)
+            .ThenBy(issue => issue.IssueNumber)
+            .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<Issue>> GetOpenByAssigneeAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        await _context.Issues
+            .AsNoTracking()
+            .Where(issue => issue.AssigneeId == userId && !issue.IsDeleted && issue.ResolvedAt == null)
+            .OrderBy(issue => issue.DueDate == null)
+            .ThenBy(issue => issue.DueDate)
+            .ThenBy(issue => issue.RankOrder)
+            .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<IssueStatusHistory>> GetStatusHistoryAsync(Guid issueId, CancellationToken cancellationToken = default) =>
+        await _context.IssueStatusHistories
+            .AsNoTracking()
+            .Where(history => history.IssueId == issueId)
+            .OrderBy(history => history.ChangedAt)
+            .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<IssueAssignmentHistory>> GetAssignmentHistoryAsync(Guid issueId, CancellationToken cancellationToken = default) =>
+        await _context.IssueAssignmentHistories
+            .AsNoTracking()
+            .Where(history => history.IssueId == issueId)
+            .OrderBy(history => history.AssignedAt)
+            .ToListAsync(cancellationToken);
+
     public async Task<IssuePage> ListAsync(IssueListFilter filter, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(filter);

@@ -14,6 +14,14 @@ public interface IIssueRepository
 
     Task<IReadOnlyList<Issue>> GetByEpicAsync(Guid epicId, CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<Issue>> GetBySprintAsync(Guid sprintId, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<Issue>> GetOpenByAssigneeAsync(Guid userId, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<IssueStatusHistory>> GetStatusHistoryAsync(Guid issueId, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<IssueAssignmentHistory>> GetAssignmentHistoryAsync(Guid issueId, CancellationToken cancellationToken = default);
+
     Task<IssuePage> ListAsync(IssueListFilter filter, CancellationToken cancellationToken = default);
 
     /// <summary>Toàn bộ Issue còn hiệu lực của Project theo thứ tự rank, có tracking để rebalance.</summary>

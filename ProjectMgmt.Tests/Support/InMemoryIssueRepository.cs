@@ -40,6 +40,38 @@ public class InMemoryIssueRepository : IIssueRepository
         return Task.FromResult(result);
     }
 
+    public List<IssueStatusHistory> StatusHistory { get; } = [];
+    public List<IssueAssignmentHistory> AssignmentHistory { get; } = [];
+
+    public Task<IReadOnlyList<Issue>> GetBySprintAsync(Guid sprintId, CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<Issue> result = Ordered(Issues.Where(issue => issue.SprintId == sprintId && !issue.IsDeleted)).ToList();
+        return Task.FromResult(result);
+    }
+
+    public Task<IReadOnlyList<Issue>> GetOpenByAssigneeAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<Issue> result = Issues
+            .Where(issue => issue.AssigneeId == userId && !issue.IsDeleted && issue.ResolvedAt is null)
+            .OrderBy(issue => issue.DueDate is null)
+            .ThenBy(issue => issue.DueDate)
+            .ThenBy(issue => issue.RankOrder)
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    public Task<IReadOnlyList<IssueStatusHistory>> GetStatusHistoryAsync(Guid issueId, CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<IssueStatusHistory> result = StatusHistory.Where(h => h.IssueId == issueId).OrderBy(h => h.ChangedAt).ToList();
+        return Task.FromResult(result);
+    }
+
+    public Task<IReadOnlyList<IssueAssignmentHistory>> GetAssignmentHistoryAsync(Guid issueId, CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<IssueAssignmentHistory> result = AssignmentHistory.Where(h => h.IssueId == issueId).OrderBy(h => h.AssignedAt).ToList();
+        return Task.FromResult(result);
+    }
+
     public Task<IssuePage> ListAsync(IssueListFilter filter, CancellationToken cancellationToken = default)
     {
         var page = Math.Max(filter.Page, 1);

@@ -7,6 +7,7 @@ Phạm vi: SCRUMAI-168. Bộ hỗ trợ nằm trong `ProjectMgmt.Tests/Support/`
 | `SharedTestData` | Id cố định cho tổ chức, hai Project (`DEMO`, `OTHER`), bốn người dùng (owner, developer, viewer, người ngoài), 5 loại Issue, workflow mặc định 5 trạng thái/7 transition, một Sprint đang chạy và cây Issue mẫu `DEMO-1 … DEMO-5`, `OTHER-1`. |
 | `SharedProjectLookupService`, `SharedUserLookupService`, `SharedPermissionEvaluator` | Fake contract liên module để phát triển song song. Chỉ dùng trong test, không đăng ký vào Host. |
 | `InMemoryIssueRepository` | Fake `IIssueRepository` có cùng thứ tự/lọc/phân trang với repository thật. |
+| `DeliveryApiFactory` | Chạy Host thật trên database tạm; header `X-Test-User: <UserId>` thay cho JWT, RBAC theo Project vẫn là thật. Dùng cho test API (xem `IssueApiMySqlTests`). |
 | `MySqlTestDatabase` + `[MySqlFact]` | Integration test trên MySQL thật: tạo database tạm `projectmgmt_test_<ngẫu nhiên>`, chạy migration Identity → Planning → Delivery, seed `SharedTestData`, xóa database khi chạy xong. |
 
 ## Chạy integration test MySQL

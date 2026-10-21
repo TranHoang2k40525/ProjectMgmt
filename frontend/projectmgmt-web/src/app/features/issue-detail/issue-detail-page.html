@@ -4,7 +4,9 @@
   @if (message()) { <p role="status">{{ message() }}</p> }
   @if (loading()) { <p>Đang tải công việc…</p> }
   @if (item; as task) {
-    <header><h1>{{ task.issueKey }} · Chi tiết công việc</h1><span>{{ task.issueType }}</span></header>
+    <header><h1>{{ task.issueKey }} · Chi tiết công việc</h1><span>{{ task.issueType }}</span>
+      <button type="button" (click)="editing.set(true)" [disabled]="busy()">Sửa chi tiết (hạn, ước lượng, công việc cha…)</button></header>
+    @if (editing()) { <app-issue-form [issueId]="task.id" (saved)="edited()" (dismissed)="editing.set(false)" /> }
     <form (ngSubmit)="save()">
       <label>Tiêu đề<input name="title" [(ngModel)]="task.title" required maxlength="500" /></label>
       <label>Mô tả<textarea name="description" [(ngModel)]="task.description" rows="5"></textarea></label>

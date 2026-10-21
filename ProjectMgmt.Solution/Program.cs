@@ -284,6 +284,9 @@ builder.Services.AddScoped<IIssueRepository, IssueRepository>();
 builder.Services.AddScoped<IIssueTrackingService, IssueTrackingService>();
 builder.Services.AddScoped<IssueHierarchyLoader>();
 builder.Services.AddScoped<IIssueHierarchyService, IssueHierarchyService>();
+builder.Services.AddScoped<IssueContractService>();
+builder.Services.AddScoped<ProjectMgmt.IssueTracking.Contracts.IIssueReadService>(services => services.GetRequiredService<IssueContractService>());
+builder.Services.AddScoped<ProjectMgmt.IssueTracking.Contracts.IIssueSprintService>(services => services.GetRequiredService<IssueContractService>());
 // IIssueCreationService chưa đăng ký: cần IIssueNumberGenerator thật từ Planning.
 
 var app = builder.Build();
