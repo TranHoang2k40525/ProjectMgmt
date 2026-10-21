@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using DeliveryIntelligence.Application.IServices;
 using DeliveryIntelligence.Domain.Entities;
 using DeliveryIntelligence.Infrastructure;
 using IdentityExperience.Infrastructure;
@@ -40,7 +41,7 @@ public sealed class SprintRequest
 [Route("api/v1")]
 public sealed class WorkItemsController(
     DeliveryIntelligenceDbContext delivery, PlanningDbContext planning,
-    IdentityExperienceDbContext identity, ProjectAccess access, IWebHostEnvironment environment) : ApiControllerBase
+    IdentityExperienceDbContext identity, ProjectAccess access) : ApiControllerBase
 {
     private ObjectResult Denied() => StatusCode(403, new { message = "Bạn không có quyền thực hiện thao tác này.", code = "PROJECT_PERMISSION_DENIED" });
     private BadRequestObjectResult Invalid(string message) => BadRequest(new { message });
@@ -88,6 +89,8 @@ public sealed class WorkItemsController(
         return issue is null ? NotFound() : await Save(issue.ProjectId, id, request);
     }
 
+    // TODO(C/B): tạo Issue và đổi trạng thái vẫn chạy luồng cũ cho tới khi Planning bàn giao IIssueNumberGenerator
+    // và IWorkflowValidationService; khi đó chuyển sang IIssueCreationService và use case transition của module C.
     private Task<IActionResult> Save(Guid projectId, Guid? id, WorkItemRequest request) =>
         delivery.Database.CreateExecutionStrategy().ExecuteAsync(() => SaveCore(projectId, id, request));
 
@@ -144,6 +147,7 @@ public sealed class WorkItemsController(
         if (priority is null) return Invalid("Độ ưu tiên không hợp lệ.");
         if (request.Labels.Count > 30 || request.Labels.Any(l => string.IsNullOrWhiteSpace(l) || l.Length > 100)) return Invalid("Nhãn không hợp lệ.");
         var previousStatus = issue.StatusId;
+        var previousAssignee = issue.AssigneeId;
         var previousCategory = changingStatus ? await planning.WorkflowStatuses.Where(s => s.Id == previousStatus).Select(s => s.Category).SingleAsync() : null;
         await using var transaction = await delivery.Database.BeginTransactionAsync();
         if (!id.HasValue)
@@ -156,10 +160,14 @@ public sealed class WorkItemsController(
         issue.Title = request.Title.Trim(); issue.Description = request.Description; issue.StoryPoints = request.StoryPoints;
         issue.StatusId = status.Id; issue.IssueTypeId = type.Id; issue.PriorityId = priority.Id;
         issue.ParentId = request.ParentId; issue.EpicId = epicId; issue.SprintId = sprintId; issue.AssigneeId = assignee; issue.UpdatedAt = DateTime.UtcNow;
-        issue.ResolvedAt = status.Category == "Done" ? issue.ResolvedAt ?? DateTime.UtcNow : null;
-        if (status.Category == "In Progress") issue.StartedAt ??= DateTime.UtcNow;
+        var changedAt = DateTime.UtcNow;
+        // Category thật là ToDo/InProgress/Done (CK_WorkflowStatus_Category); luật mốc thời gian dùng chung với module C.
+        DeliveryIntelligence.Domain.UseCases.IssueStatusRules.Apply(issue, status.Category, changedAt);
         delivery.ActivityLogs.Add(new ActivityLog { Id = Guid.NewGuid(), IssueId = issue.Id, UserId = access.UserId, Action = id.HasValue ? "Updated" : "Created", FieldName = changingStatus ? "Status" : null, OldValue = changingStatus ? previousCategory : null, NewValue = changingStatus ? status.Name : null, Source = "User", CreatedAt = DateTime.UtcNow });
-        if (changingStatus) delivery.IssueStatusHistories.Add(new IssueStatusHistory { Id = Guid.NewGuid(), IssueId = issue.Id, FromStatusId = previousStatus, ToStatusId = status.Id, FromCategory = previousCategory, ToCategory = status.Category, ChangedBy = access.UserId, ChangedAt = DateTime.UtcNow });
+        var history = HttpContext.RequestServices.GetRequiredService<DeliveryIntelligence.Application.Services.IssueHistoryRecorder>();
+        if (!id.HasValue) await history.RecordStatusAsync(issue, null, null, status.Id, status.Category, access.UserId, changedAt);
+        else if (changingStatus) await history.RecordStatusAsync(issue, previousStatus, previousCategory, status.Id, status.Category, access.UserId, changedAt);
+        await history.RecordAssignmentAsync(issue, id.HasValue ? previousAssignee : null, assignee, access.UserId, changedAt);
         await delivery.SaveChangesAsync();
         var links = await delivery.IssueLabels.Where(l => l.IssueId == issue.Id).ToListAsync();
         var requestedLabels = request.Labels.Select(l => l.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -178,29 +186,34 @@ public sealed class WorkItemsController(
     private Task<bool> accessFor(Guid userId, Guid projectId) => HttpContext.RequestServices.GetRequiredService<ProjectMgmt.IdentityAccess.Contracts.IPermissionEvaluator>().IsProjectMemberAsync(userId, projectId);
 
     [HttpDelete("issues/{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id)
+    public async Task<IActionResult> Delete(Guid id, [FromServices] IIssueTrackingService issues)
     {
-        var issue = await delivery.Issues.SingleOrDefaultAsync(i => i.Id == id && !i.IsDeleted);
-        if (issue is null) return NotFound();
-        if (!await access.AllowsAsync(issue.ProjectId, "issue.delete")) return Denied();
-        var children = await delivery.Issues.Where(i => i.ParentId == id && !i.IsDeleted).ToListAsync();
-        foreach (var child in children.Append(issue)) { child.IsDeleted = true; child.UpdatedAt = DateTime.UtcNow; }
-        var epicLinks = await delivery.Issues.Where(i => i.EpicId == id).ToListAsync();
-        foreach (var link in epicLinks) link.EpicId = null;
-        delivery.ActivityLogs.Add(new ActivityLog { Id = Guid.NewGuid(), IssueId = id, UserId = access.UserId, Action = "Deleted", Source = "User", CreatedAt = DateTime.UtcNow });
-        await delivery.SaveChangesAsync(); return NoContent();
+        var issue = await issues.GetAsync(id);
+        if (issue.IsFailure) return NotFound();
+        if (!await access.AllowsAsync(issue.Value.ProjectId, "issue.delete")) return Denied();
+        var deleted = await issues.DeleteAsync(id, access.UserId);
+        return deleted.IsSuccess ? NoContent() : NotFound();
     }
 
-    public sealed class CommentRequest { [Required, StringLength(20000, MinimumLength = 1)] public string Content { get; set; } = ""; }
+    public sealed class CommentRequest
+    {
+        [Required, StringLength(20000, MinimumLength = 1)] public string Content { get; set; } = "";
+        public Guid? ParentCommentId { get; set; }
+        [MaxLength(20)] public List<Guid> MentionedUserIds { get; set; } = [];
+    }
+
     [HttpPost("issues/{id:guid}/comments")]
-    public async Task<IActionResult> AddComment(Guid id, CommentRequest request)
+    public async Task<IActionResult> AddComment(Guid id, CommentRequest request, [FromServices] IIssueCollaborationService collaboration)
     {
         var issue = await delivery.Issues.AsNoTracking().SingleOrDefaultAsync(i => i.Id == id && !i.IsDeleted);
         if (issue is null) return NotFound();
         if (!await access.AllowsAsync(issue.ProjectId, "issue.update")) return Denied();
-        if (string.IsNullOrWhiteSpace(request.Content)) return Invalid("Bình luận không được để trống.");
-        delivery.Comments.Add(new Comment { Id = Guid.NewGuid(), IssueId = id, UserId = access.UserId, Content = request.Content.Trim(), CreatedAt = DateTime.UtcNow });
-        await delivery.SaveChangesAsync(); return Ok((await Views([issue])).Single());
+        var added = await collaboration.AddCommentAsync(id, new DeliveryIntelligence.Application.Dto.CreateCommentDto
+        {
+            Content = request.Content, ParentCommentId = request.ParentCommentId, MentionedUserIds = request.MentionedUserIds
+        }, access.UserId);
+        if (added.IsFailure) return Invalid(added.Error.Description);
+        return Ok((await Views([issue])).Single());
     }
 
     [HttpPost("projects/{projectId:guid}/sprints")]
@@ -233,70 +246,59 @@ public sealed class WorkItemsController(
 
     [HttpPost("issues/{id:guid}/attachments")]
     [RequestSizeLimit(11 * 1024 * 1024)]
-    public async Task<IActionResult> Upload(Guid id, IFormFile file)
+    public async Task<IActionResult> Upload(Guid id, IFormFile file, [FromServices] IIssueCollaborationService collaboration)
     {
         var issue = await delivery.Issues.AsNoTracking().SingleOrDefaultAsync(i => i.Id == id && !i.IsDeleted);
         if (issue is null) return NotFound();
         if (!await access.AllowsAsync(issue.ProjectId, "issue.update")) return Denied();
-        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
-        if (file.Length is <= 0 or > 10 * 1024 * 1024 || !new[] { ".pdf", ".png", ".jpg", ".jpeg", ".txt", ".csv", ".docx", ".xlsx", ".zip" }.Contains(extension)) return Invalid("Chọn PDF, ảnh, TXT, CSV, DOCX, XLSX hoặc ZIP tối đa 10 MB.");
-        var attachment = new Attachment { Id = Guid.NewGuid(), IssueId = id, UploadedBy = access.UserId, FileName = Path.GetFileName(file.FileName), ContentType = "application/octet-stream", FileSizeBytes = file.Length, CreatedAt = DateTime.UtcNow };
-        if (attachment.FileName.Length > 255) return Invalid("Tên file quá dài.");
-        var root = Path.Combine(environment.ContentRootPath, "App_Data", "attachments"); Directory.CreateDirectory(root);
-        attachment.StoredPath = attachment.Id.ToString("N") + extension;
-        var target = Path.Combine(root, attachment.StoredPath);
-        try
-        {
-            await using (var stream = System.IO.File.Create(target)) await file.CopyToAsync(stream);
-            delivery.Attachments.Add(attachment); await delivery.SaveChangesAsync();
-        }
-        catch { System.IO.File.Delete(target); throw; }
+        await using var content = file.OpenReadStream();
+        var uploaded = await collaboration.UploadAttachmentAsync(id, file.FileName, file.Length, content, access.UserId);
+        if (uploaded.IsFailure) return Invalid(uploaded.Error.Description);
+        var attachment = uploaded.Value;
         return Ok(new { attachment.Id, attachment.FileName, attachment.FileSizeBytes, attachment.CreatedAt });
     }
     [HttpGet("attachments/{id:guid}")]
-    public async Task<IActionResult> Download(Guid id)
+    public async Task<IActionResult> Download(Guid id, [FromServices] IIssueCollaborationService collaboration)
     {
-        var attachment = await delivery.Attachments.AsNoTracking().SingleOrDefaultAsync(a => a.Id == id);
-        if (attachment is null) return NotFound();
-        var issue = await delivery.Issues.AsNoTracking().SingleOrDefaultAsync(i => i.Id == attachment.IssueId && !i.IsDeleted);
+        var issueId = await collaboration.GetAttachmentIssueIdAsync(id);
+        if (issueId.IsFailure) return NotFound();
+        var issue = await delivery.Issues.AsNoTracking().SingleOrDefaultAsync(i => i.Id == issueId.Value && !i.IsDeleted);
         if (issue is null) return NotFound();
         if (!await access.AllowsAsync(issue.ProjectId)) return Denied();
-        var file = Path.Combine(environment.ContentRootPath, "App_Data", "attachments", Path.GetFileName(attachment.StoredPath));
-        return System.IO.File.Exists(file) ? PhysicalFile(file, "application/octet-stream", attachment.FileName) : NotFound();
+        var opened = await collaboration.OpenAttachmentAsync(id);
+        return opened.IsSuccess ? File(opened.Value.Content, "application/octet-stream", opened.Value.Metadata.FileName) : NotFound();
     }
     [HttpDelete("attachments/{id:guid}")]
-    public async Task<IActionResult> DeleteAttachment(Guid id)
+    public async Task<IActionResult> DeleteAttachment(Guid id, [FromServices] IIssueCollaborationService collaboration)
     {
-        var attachment = await delivery.Attachments.SingleOrDefaultAsync(a => a.Id == id);
-        if (attachment is null) return NotFound();
-        var issue = await delivery.Issues.AsNoTracking().SingleAsync(i => i.Id == attachment.IssueId);
+        var issueId = await collaboration.GetAttachmentIssueIdAsync(id);
+        if (issueId.IsFailure) return NotFound();
+        var issue = await delivery.Issues.AsNoTracking().SingleAsync(i => i.Id == issueId.Value);
         if (!await access.AllowsAsync(issue.ProjectId, "issue.update")) return Denied();
-        delivery.Attachments.Remove(attachment); await delivery.SaveChangesAsync();
-        System.IO.File.Delete(Path.Combine(environment.ContentRootPath, "App_Data", "attachments", Path.GetFileName(attachment.StoredPath)));
-        return NoContent();
+        var deleted = await collaboration.DeleteAttachmentAsync(id, access.UserId);
+        return deleted.IsSuccess ? NoContent() : NotFound();
     }
 
     public sealed class CriterionRequest { [Required, StringLength(4000)] public string Content { get; set; } = ""; public bool IsMet { get; set; } }
     [HttpPost("issues/{id:guid}/criteria")]
-    public async Task<IActionResult> AddCriterion(Guid id, CriterionRequest request)
+    public async Task<IActionResult> AddCriterion(Guid id, CriterionRequest request, [FromServices] IIssueRequirementService requirements)
     {
         var issue = await delivery.Issues.AsNoTracking().SingleOrDefaultAsync(i => i.Id == id && !i.IsDeleted);
         if (issue is null) return NotFound();
         if (!await access.AllowsAsync(issue.ProjectId, "issue.update")) return Denied();
-        if (string.IsNullOrWhiteSpace(request.Content)) return Invalid("Nhập tiêu chí nghiệm thu.");
-        delivery.AcceptanceCriteria.Add(new AcceptanceCriteria { Id = Guid.NewGuid(), IssueId = id, Content = request.Content.Trim(), Source = "Manual", CreatedAt = DateTime.UtcNow });
-        await delivery.SaveChangesAsync(); return Ok();
+        var added = await requirements.AddCriterionAsync(id, new DeliveryIntelligence.Application.Dto.SaveCriterionDto { Content = request.Content, IsMet = request.IsMet }, access.UserId);
+        return added.IsSuccess ? Ok() : Invalid(added.Error.Description);
     }
     [HttpPut("criteria/{id:guid}")]
-    public async Task<IActionResult> UpdateCriterion(Guid id, CriterionRequest request)
+    public async Task<IActionResult> UpdateCriterion(Guid id, CriterionRequest request, [FromServices] IIssueRequirementService requirements)
     {
-        var criterion = await delivery.AcceptanceCriteria.SingleOrDefaultAsync(c => c.Id == id);
-        if (criterion is null) return NotFound();
-        var issue = await delivery.Issues.AsNoTracking().SingleAsync(i => i.Id == criterion.IssueId);
+        var issueId = await requirements.GetCriterionIssueIdAsync(id);
+        if (issueId.IsFailure) return NotFound();
+        var issue = await delivery.Issues.AsNoTracking().SingleOrDefaultAsync(i => i.Id == issueId.Value && !i.IsDeleted);
+        if (issue is null) return NotFound();
         if (!await access.AllowsAsync(issue.ProjectId, "issue.update")) return Denied();
-        if (string.IsNullOrWhiteSpace(request.Content)) return Invalid("Nhập tiêu chí nghiệm thu.");
-        criterion.Content = request.Content.Trim(); criterion.IsMet = request.IsMet; criterion.MetAt = request.IsMet ? DateTime.UtcNow : null; criterion.MetBy = request.IsMet ? access.UserId : null;
-        await delivery.SaveChangesAsync(); return Ok();
+        var updated = await requirements.UpdateCriterionAsync(id, new DeliveryIntelligence.Application.Dto.SaveCriterionDto { Content = request.Content, IsMet = request.IsMet }, access.UserId);
+        return updated.IsSuccess ? Ok() : Invalid(updated.Error.Description);
     }
 
     private async Task<List<WorkItemView>> Views(List<Issue> issues)

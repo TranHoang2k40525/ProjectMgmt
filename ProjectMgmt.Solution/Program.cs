@@ -1,4 +1,10 @@
+using DeliveryIntelligence.Application.Dto;
+using DeliveryIntelligence.Application.IServices;
+using DeliveryIntelligence.Application.Services;
+using DeliveryIntelligence.Domain.IRepositories;
 using DeliveryIntelligence.Infrastructure;
+using DeliveryIntelligence.Infrastructure.Repositories;
+using FluentValidation;
 using IdentityExperience.Application.IServices;
 using IdentityExperience.Application.Services;
 using IdentityExperience.Domain.IRepositories;
@@ -273,6 +279,38 @@ builder.Services.AddScoped<IProjectManagementService, ProjectManagementService>(
 builder.Services.AddScoped<IProjectLookupService, ProjectLookupService>();
 builder.Services.AddScoped<IUserLookupService, UserLookupService>();
 builder.Services.AddScoped<IUserSkillService, UserLookupService>();
+builder.Services.AddValidatorsFromAssemblyContaining<CreateIssueDtoValidator>();
+builder.Services.AddScoped<IIssueRepository, IssueRepository>();
+builder.Services.AddScoped<IIssueTrackingService, IssueTrackingService>();
+builder.Services.AddScoped<IssueHierarchyLoader>();
+builder.Services.AddScoped<IssueHistoryRecorder>();
+builder.Services.AddScoped<IIssueHistoryService, IssueHistoryService>();
+builder.Services.AddScoped<IIssueHierarchyService, IssueHierarchyService>();
+builder.Services.AddScoped<IssueContractService>();
+builder.Services.AddScoped<ICollaborationRepository, CollaborationRepository>();
+builder.Services.AddScoped<IIssueCollaborationService, IssueCollaborationService>();
+builder.Services.AddScoped<ILabelLinkRepository, LabelLinkRepository>();
+builder.Services.AddScoped<IIssueLabelLinkService, IssueLabelLinkService>();
+builder.Services.AddScoped<IIssueNotifier, IssueNotificationAdapter>();
+builder.Services.AddScoped<ISkillCatalogReader, SkillCatalogAdapter>();
+builder.Services.AddScoped<IRequirementRepository, RequirementRepository>();
+builder.Services.AddScoped<IReleaseLinkRepository, ReleaseLinkRepository>();
+builder.Services.AddScoped<IDataOpsRepository, DataOpsRepository>();
+builder.Services.AddScoped<IDatasetService, DatasetService>();
+builder.Services.AddScoped<IDataCleaningService, DataCleaningService>();
+builder.Services.AddScoped<IDatasetReviewService, DatasetReviewService>();
+// IssueReleaseService không đăng ký: cần IProjectReleaseLookupService thật của Planning; IssueReleaseController tự dựng khi có.
+builder.Services.AddScoped<IssueRequirementService>();
+builder.Services.AddScoped<IIssueRequirementService>(services => services.GetRequiredService<IssueRequirementService>());
+builder.Services.AddScoped<ProjectMgmt.IssueTracking.Contracts.IIssueSkillService>(services => services.GetRequiredService<IssueRequirementService>());
+// IssueTransitionService không đăng ký: cần IWorkflowValidationService thật của Planning (ValidateOnBuild sẽ chặn khởi động).
+// IssuesController tự dựng service khi contract đó có trong DI.
+builder.Services.AddSingleton(builder.Configuration.GetSection(AttachmentOptions.SectionName).Get<AttachmentOptions>() ?? new AttachmentOptions());
+builder.Services.AddSingleton<IAttachmentStorage>(services => new DeliveryIntelligence.Infrastructure.Services.LocalAttachmentStorage(
+    Path.Combine(services.GetRequiredService<IWebHostEnvironment>().ContentRootPath, "App_Data", "attachments")));
+builder.Services.AddScoped<ProjectMgmt.IssueTracking.Contracts.IIssueReadService>(services => services.GetRequiredService<IssueContractService>());
+builder.Services.AddScoped<ProjectMgmt.IssueTracking.Contracts.IIssueSprintService>(services => services.GetRequiredService<IssueContractService>());
+// IIssueCreationService chưa đăng ký: cần IIssueNumberGenerator thật từ Planning.
 
 var app = builder.Build();
 
