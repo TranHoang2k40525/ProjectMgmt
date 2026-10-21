@@ -4,6 +4,7 @@ using DeliveryIntelligence.Domain.Entities;
 using DeliveryIntelligence.Domain.IRepositories;
 using DeliveryIntelligence.Domain.UseCases;
 using ProjectMgmt.BuildingBlocks.Results;
+using ProjectMgmt.IdentityAccess.Contracts;
 using ProjectMgmt.ProjectManagement.Contracts;
 
 namespace DeliveryIntelligence.Application.Services;
@@ -16,6 +17,7 @@ public class IssueTransitionService : IIssueTransitionService
     private readonly IProjectLookupService _projects;
     private readonly IWorkflowValidationService _workflow;
     private readonly IIssueNotifier _notifier;
+    private readonly IPermissionEvaluator _permissions;
     private readonly IssueHistoryRecorder _history;
     private readonly TimeProvider _clock;
 
@@ -25,6 +27,7 @@ public class IssueTransitionService : IIssueTransitionService
         IProjectLookupService projects,
         IWorkflowValidationService workflow,
         IIssueNotifier notifier,
+        IPermissionEvaluator permissions,
         IssueHistoryRecorder history,
         TimeProvider clock)
     {
@@ -33,6 +36,7 @@ public class IssueTransitionService : IIssueTransitionService
         _projects = projects;
         _workflow = workflow;
         _notifier = notifier;
+        _permissions = permissions;
         _history = history;
         _clock = clock;
     }
@@ -163,7 +167,7 @@ public class IssueTransitionService : IIssueTransitionService
             return;
         }
 
-        var recipients = await IssueRecipients.CollectAsync(issue, actorUserId, _collaboration, cancellationToken);
+        var recipients = await IssueRecipients.CollectAsync(issue, actorUserId, _collaboration, _permissions, cancellationToken);
         if (recipients.Count == 0)
         {
             return;
@@ -185,13 +189,17 @@ public class IssueTransitionService : IIssueTransitionService
     };
 }
 
-/// <summary>Người nhận thông báo của một Issue: người xử lý, người tạo, người theo dõi — trừ người thao tác.</summary>
+/// <summary>
+/// Người nhận thông báo của một Issue: người xử lý, người tạo, người theo dõi — trừ người thao tác,
+/// và chỉ giữ người CÒN là thành viên Project (watcher cũ đã bị gỡ khỏi Project không được nhận nội dung Issue).
+/// </summary>
 public static class IssueRecipients
 {
     public static async Task<IReadOnlyCollection<Guid>> CollectAsync(
         Issue issue,
         Guid actorUserId,
         ICollaborationRepository collaboration,
+        IPermissionEvaluator permissions,
         CancellationToken cancellationToken)
     {
         var recipients = new HashSet<Guid> { issue.ReporterId };
@@ -207,7 +215,16 @@ public static class IssueRecipients
 
         recipients.Remove(actorUserId);
         recipients.Remove(Guid.Empty);
-        return recipients;
+        var members = new List<Guid>();
+        foreach (var userId in recipients)
+        {
+            if (await permissions.IsProjectMemberAsync(userId, issue.ProjectId))
+            {
+                members.Add(userId);
+            }
+        }
+
+        return members;
     }
 }
 

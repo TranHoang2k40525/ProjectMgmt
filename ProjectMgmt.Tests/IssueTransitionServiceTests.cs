@@ -19,7 +19,7 @@ public class IssueTransitionServiceTests
     public IssueTransitionServiceTests()
     {
         _service = new IssueTransitionService(_issues, _collaboration, new SharedProjectLookupService(),
-            new SharedWorkflowValidationService(), _notifier, new IssueHistoryRecorder(_issues), new FixedTimeProvider(Now));
+            new SharedWorkflowValidationService(), _notifier, new SharedPermissionEvaluator(), new IssueHistoryRecorder(_issues), new FixedTimeProvider(Now));
     }
 
     private Issue Subtask => _issues.Issues.Single(i => i.Id == SharedTestData.SubtaskIssueId);
@@ -31,6 +31,8 @@ public class IssueTransitionServiceTests
     public async Task StartingWorkSetsStartedAtLogsNamesAndNotifiesOthers()
     {
         _collaboration.Watchers.Add(new IssueWatcher { IssueId = SharedTestData.SubtaskIssueId, UserId = SharedTestData.ViewerUserId });
+        // Người ngoài từng theo dõi (đã bị gỡ khỏi Project) không được nhận thông báo.
+        _collaboration.Watchers.Add(new IssueWatcher { IssueId = SharedTestData.SubtaskIssueId, UserId = SharedTestData.OutsiderUserId });
 
         var result = await Move(SharedTestData.SubtaskIssueId, SharedTestData.InProgressStatusId, SharedTestData.ToDoStatusId, "Bắt đầu làm");
 
