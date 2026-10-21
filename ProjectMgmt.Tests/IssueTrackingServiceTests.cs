@@ -17,6 +17,7 @@ public class IssueTrackingServiceTests
             _repository,
             new SharedPermissionEvaluator(),
             TimeProvider.System,
+            new IssueHistoryRecorder(_repository),
             new CreateIssueDtoValidator(),
             new UpdateIssueDtoValidator(),
             new IssueListQueryDtoValidator());

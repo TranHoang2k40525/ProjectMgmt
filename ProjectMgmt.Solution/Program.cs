@@ -283,6 +283,7 @@ builder.Services.AddValidatorsFromAssemblyContaining<CreateIssueDtoValidator>();
 builder.Services.AddScoped<IIssueRepository, IssueRepository>();
 builder.Services.AddScoped<IIssueTrackingService, IssueTrackingService>();
 builder.Services.AddScoped<IssueHierarchyLoader>();
+builder.Services.AddScoped<IssueHistoryRecorder>();
 builder.Services.AddScoped<IIssueHierarchyService, IssueHierarchyService>();
 builder.Services.AddScoped<IssueContractService>();
 builder.Services.AddScoped<ICollaborationRepository, CollaborationRepository>();

@@ -16,6 +16,7 @@ public class IssueTransitionService : IIssueTransitionService
     private readonly IProjectLookupService _projects;
     private readonly IWorkflowValidationService _workflow;
     private readonly IIssueNotifier _notifier;
+    private readonly IssueHistoryRecorder _history;
     private readonly TimeProvider _clock;
 
     public IssueTransitionService(
@@ -24,6 +25,7 @@ public class IssueTransitionService : IIssueTransitionService
         IProjectLookupService projects,
         IWorkflowValidationService workflow,
         IIssueNotifier notifier,
+        IssueHistoryRecorder history,
         TimeProvider clock)
     {
         _issues = issues;
@@ -31,6 +33,7 @@ public class IssueTransitionService : IIssueTransitionService
         _projects = projects;
         _workflow = workflow;
         _notifier = notifier;
+        _history = history;
         _clock = clock;
     }
 
@@ -127,6 +130,7 @@ public class IssueTransitionService : IIssueTransitionService
 
         var now = _clock.GetUtcNow().UtcDateTime;
         IssueStatusRules.Apply(issue, plan.Target.Category, now);
+        await _history.RecordStatusAsync(issue, plan.FromStatusId, plan.FromCategory, plan.Target.Id, plan.Target.Category, actorUserId, now, cancellationToken);
         issue.StatusId = plan.Target.Id;
         issue.UpdatedAt = now;
         await _issues.AddActivityAsync(

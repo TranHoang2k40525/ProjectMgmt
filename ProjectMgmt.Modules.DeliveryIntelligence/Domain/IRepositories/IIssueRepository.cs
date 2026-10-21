@@ -33,6 +33,13 @@ public interface IIssueRepository
 
     Task AddActivityAsync(ActivityLog activity, CancellationToken cancellationToken = default);
 
+    /// <summary>Lần đổi trạng thái gần nhất của Issue (dùng IX_IssueStatusHistory_Issue).</summary>
+    Task<IssueStatusHistory?> GetLastStatusChangeAsync(Guid issueId, CancellationToken cancellationToken = default);
+
+    Task AddStatusHistoryAsync(IssueStatusHistory history, CancellationToken cancellationToken = default);
+
+    Task AddAssignmentHistoryAsync(IssueAssignmentHistory history, CancellationToken cancellationToken = default);
+
     Task SaveChangesAsync(CancellationToken cancellationToken = default);
 
     /// <summary>

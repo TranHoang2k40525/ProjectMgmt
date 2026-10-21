@@ -19,7 +19,7 @@ public class IssueTransitionServiceTests
     public IssueTransitionServiceTests()
     {
         _service = new IssueTransitionService(_issues, _collaboration, new SharedProjectLookupService(),
-            new SharedWorkflowValidationService(), _notifier, new FixedTimeProvider(Now));
+            new SharedWorkflowValidationService(), _notifier, new IssueHistoryRecorder(_issues), new FixedTimeProvider(Now));
     }
 
     private Issue Subtask => _issues.Issues.Single(i => i.Id == SharedTestData.SubtaskIssueId);

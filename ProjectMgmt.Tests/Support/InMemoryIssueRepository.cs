@@ -135,6 +135,21 @@ public class InMemoryIssueRepository : IIssueRepository
         return Task.CompletedTask;
     }
 
+    public Task<IssueStatusHistory?> GetLastStatusChangeAsync(Guid issueId, CancellationToken cancellationToken = default) =>
+        Task.FromResult(StatusHistory.Where(h => h.IssueId == issueId).MaxBy(h => h.ChangedAt));
+
+    public Task AddStatusHistoryAsync(IssueStatusHistory history, CancellationToken cancellationToken = default)
+    {
+        StatusHistory.Add(history);
+        return Task.CompletedTask;
+    }
+
+    public Task AddAssignmentHistoryAsync(IssueAssignmentHistory history, CancellationToken cancellationToken = default)
+    {
+        AssignmentHistory.Add(history);
+        return Task.CompletedTask;
+    }
+
     public int TransactionCount { get; private set; }
 
     public Task<Issue?> LockForUpdateAsync(Guid issueId, CancellationToken cancellationToken = default) =>

@@ -178,6 +178,34 @@ public class IssueApiMySqlTests(DeliveryApiFixture fixture) : IClassFixture<Deli
     }
 
     [MySqlFact]
+    public async Task LegacyUpdateRouteRecordsStructuredHistoryAndStartedAt()
+    {
+        var epic = SharedTestData.EpicIssueId;
+        var body = new
+        {
+            title = "Quản lý tài khoản người dùng",
+            statusName = "In Progress",
+            issueType = "Epic",
+            priority = "Medium",
+            storyPoints = 0,
+            assigneeId = SharedTestData.DeveloperUserId,
+            assigneeName = "Demo Developer",
+            labels = Array.Empty<string>()
+        };
+        var response = await As(SharedTestData.OwnerUserId).PutAsJsonAsync($"/api/v1/issues/{epic}", body);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        await using var delivery = fixture.Database.CreateDeliveryContext();
+        var issue = await delivery.Issues.AsNoTracking().SingleAsync(i => i.Id == epic);
+        Assert.NotNull(issue.StartedAt);
+        var status = await delivery.IssueStatusHistories.AsNoTracking().SingleAsync(h => h.IssueId == epic);
+        Assert.Equal(("ToDo", "InProgress"), (status.FromCategory, status.ToCategory));
+        Assert.True(status.DurationSeconds > 0);
+        var assignment = await delivery.IssueAssignmentHistories.AsNoTracking().SingleAsync(h => h.IssueId == epic);
+        Assert.Equal((SharedTestData.DeveloperUserId, "Manual"), (assignment.ToAssigneeId!.Value, assignment.AssignmentSource));
+    }
+
+    [MySqlFact]
     public async Task TransitionEndpointReportsMissingWorkflowContract()
     {
         var response = await As(SharedTestData.OwnerUserId).PostAsJsonAsync($"/api/v1/issues/{SharedTestData.BugIssueId}/transition",

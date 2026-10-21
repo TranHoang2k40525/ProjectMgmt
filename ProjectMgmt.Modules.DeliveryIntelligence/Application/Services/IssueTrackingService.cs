@@ -14,6 +14,7 @@ public class IssueTrackingService : IIssueTrackingService
     private readonly IIssueRepository _issues;
     private readonly IPermissionEvaluator _permissions;
     private readonly TimeProvider _clock;
+    private readonly IssueHistoryRecorder _history;
     private readonly IValidator<CreateIssueDto> _createValidator;
     private readonly IValidator<UpdateIssueDto> _updateValidator;
     private readonly IValidator<IssueListQueryDto> _listValidator;
@@ -22,6 +23,7 @@ public class IssueTrackingService : IIssueTrackingService
         IIssueRepository issues,
         IPermissionEvaluator permissions,
         TimeProvider clock,
+        IssueHistoryRecorder history,
         IValidator<CreateIssueDto> createValidator,
         IValidator<UpdateIssueDto> updateValidator,
         IValidator<IssueListQueryDto> listValidator)
@@ -29,6 +31,7 @@ public class IssueTrackingService : IIssueTrackingService
         _issues = issues;
         _permissions = permissions;
         _clock = clock;
+        _history = history;
         _createValidator = createValidator;
         _updateValidator = updateValidator;
         _listValidator = listValidator;
@@ -109,7 +112,9 @@ public class IssueTrackingService : IIssueTrackingService
             return Result.Success(IssueMapper.ToDetail(issue));
         }
 
+        var previousAssignee = issue.AssigneeId;
         IssueMapper.ApplyUpdate(issue, request, now);
+        await _history.RecordAssignmentAsync(issue, previousAssignee, issue.AssigneeId, actorUserId, now, cancellationToken: cancellationToken);
         foreach (var change in changes)
         {
             await _issues.AddActivityAsync(change, cancellationToken);

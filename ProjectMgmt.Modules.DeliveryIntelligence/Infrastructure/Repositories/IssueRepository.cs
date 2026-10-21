@@ -159,6 +159,25 @@ public class IssueRepository : IIssueRepository
     public async Task AddActivityAsync(ActivityLog activity, CancellationToken cancellationToken = default) =>
         await _context.ActivityLogs.AddAsync(activity, cancellationToken);
 
+    public async Task<IssueStatusHistory?> GetLastStatusChangeAsync(Guid issueId, CancellationToken cancellationToken = default)
+    {
+        // Ưu tiên bản ghi chưa lưu trong cùng unit of work (ví dụ lúc vừa tạo Issue rồi đổi trạng thái ngay).
+        var pending = _context.IssueStatusHistories.Local
+            .Where(history => history.IssueId == issueId)
+            .MaxBy(history => history.ChangedAt);
+        return pending ?? await _context.IssueStatusHistories
+            .AsNoTracking()
+            .Where(history => history.IssueId == issueId)
+            .OrderByDescending(history => history.ChangedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task AddStatusHistoryAsync(IssueStatusHistory history, CancellationToken cancellationToken = default) =>
+        await _context.IssueStatusHistories.AddAsync(history, cancellationToken);
+
+    public async Task AddAssignmentHistoryAsync(IssueAssignmentHistory history, CancellationToken cancellationToken = default) =>
+        await _context.IssueAssignmentHistories.AddAsync(history, cancellationToken);
+
     public Task SaveChangesAsync(CancellationToken cancellationToken = default) =>
         _context.SaveChangesAsync(cancellationToken);
 

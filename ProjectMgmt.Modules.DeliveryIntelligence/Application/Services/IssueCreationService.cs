@@ -21,6 +21,7 @@ public class IssueCreationService : IIssueCreationService
     private readonly IssueHierarchyLoader _hierarchy;
     private readonly IValidator<CreateIssueDto> _validator;
     private readonly TimeProvider _clock;
+    private readonly IssueHistoryRecorder _history;
 
     public IssueCreationService(
         IIssueRepository issues,
@@ -29,6 +30,7 @@ public class IssueCreationService : IIssueCreationService
         IIssueNumberGenerator numbers,
         IssueHierarchyLoader hierarchy,
         IValidator<CreateIssueDto> validator,
+        IssueHistoryRecorder history,
         TimeProvider clock)
     {
         _issues = issues;
@@ -38,6 +40,7 @@ public class IssueCreationService : IIssueCreationService
         _hierarchy = hierarchy;
         _validator = validator;
         _clock = clock;
+        _history = history;
     }
 
     public async Task<Result<IssueDetailDto>> CreateAsync(
@@ -99,6 +102,8 @@ public class IssueCreationService : IIssueCreationService
         issue.IssueNumber = await _numbers.ReserveNextAsync(request.ProjectId, cancellationToken);
 
         await _issues.AddAsync(issue, cancellationToken);
+        await _history.RecordStatusAsync(issue, null, null, initial.Id, initial.Category, reporterUserId, now, cancellationToken);
+        await _history.RecordAssignmentAsync(issue, null, issue.AssigneeId, reporterUserId, now, cancellationToken: cancellationToken);
         await _issues.AddActivityAsync(
             IssueActivities.Create(issue.Id, reporterUserId, IssueActivities.Created, now),
             cancellationToken);

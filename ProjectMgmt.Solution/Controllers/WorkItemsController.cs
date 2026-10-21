@@ -147,6 +147,7 @@ public sealed class WorkItemsController(
         if (priority is null) return Invalid("Độ ưu tiên không hợp lệ.");
         if (request.Labels.Count > 30 || request.Labels.Any(l => string.IsNullOrWhiteSpace(l) || l.Length > 100)) return Invalid("Nhãn không hợp lệ.");
         var previousStatus = issue.StatusId;
+        var previousAssignee = issue.AssigneeId;
         var previousCategory = changingStatus ? await planning.WorkflowStatuses.Where(s => s.Id == previousStatus).Select(s => s.Category).SingleAsync() : null;
         await using var transaction = await delivery.Database.BeginTransactionAsync();
         if (!id.HasValue)
@@ -159,10 +160,14 @@ public sealed class WorkItemsController(
         issue.Title = request.Title.Trim(); issue.Description = request.Description; issue.StoryPoints = request.StoryPoints;
         issue.StatusId = status.Id; issue.IssueTypeId = type.Id; issue.PriorityId = priority.Id;
         issue.ParentId = request.ParentId; issue.EpicId = epicId; issue.SprintId = sprintId; issue.AssigneeId = assignee; issue.UpdatedAt = DateTime.UtcNow;
-        issue.ResolvedAt = status.Category == "Done" ? issue.ResolvedAt ?? DateTime.UtcNow : null;
-        if (status.Category == "In Progress") issue.StartedAt ??= DateTime.UtcNow;
+        var changedAt = DateTime.UtcNow;
+        // Category thật là ToDo/InProgress/Done (CK_WorkflowStatus_Category); luật mốc thời gian dùng chung với module C.
+        DeliveryIntelligence.Domain.UseCases.IssueStatusRules.Apply(issue, status.Category, changedAt);
         delivery.ActivityLogs.Add(new ActivityLog { Id = Guid.NewGuid(), IssueId = issue.Id, UserId = access.UserId, Action = id.HasValue ? "Updated" : "Created", FieldName = changingStatus ? "Status" : null, OldValue = changingStatus ? previousCategory : null, NewValue = changingStatus ? status.Name : null, Source = "User", CreatedAt = DateTime.UtcNow });
-        if (changingStatus) delivery.IssueStatusHistories.Add(new IssueStatusHistory { Id = Guid.NewGuid(), IssueId = issue.Id, FromStatusId = previousStatus, ToStatusId = status.Id, FromCategory = previousCategory, ToCategory = status.Category, ChangedBy = access.UserId, ChangedAt = DateTime.UtcNow });
+        var history = HttpContext.RequestServices.GetRequiredService<DeliveryIntelligence.Application.Services.IssueHistoryRecorder>();
+        if (!id.HasValue) await history.RecordStatusAsync(issue, null, null, status.Id, status.Category, access.UserId, changedAt);
+        else if (changingStatus) await history.RecordStatusAsync(issue, previousStatus, previousCategory, status.Id, status.Category, access.UserId, changedAt);
+        await history.RecordAssignmentAsync(issue, id.HasValue ? previousAssignee : null, assignee, access.UserId, changedAt);
         await delivery.SaveChangesAsync();
         var links = await delivery.IssueLabels.Where(l => l.IssueId == issue.Id).ToListAsync();
         var requestedLabels = request.Labels.Select(l => l.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();

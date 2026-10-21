@@ -19,11 +19,11 @@ public class IssueCommandTests
 
     public IssueCommandTests()
     {
-        _tracking = new IssueTrackingService(_repository, _permissions, _clock,
+        _tracking = new IssueTrackingService(_repository, _permissions, _clock, new IssueHistoryRecorder(_repository),
             new CreateIssueDtoValidator(), new UpdateIssueDtoValidator(), new IssueListQueryDtoValidator());
         var projects = new SharedProjectLookupService();
         _creation = new IssueCreationService(_repository, projects, _permissions, _numbers,
-            new IssueHierarchyLoader(_repository, projects), new CreateIssueDtoValidator(), _clock);
+            new IssueHierarchyLoader(_repository, projects), new CreateIssueDtoValidator(), new IssueHistoryRecorder(_repository), _clock);
     }
 
     [Fact]
