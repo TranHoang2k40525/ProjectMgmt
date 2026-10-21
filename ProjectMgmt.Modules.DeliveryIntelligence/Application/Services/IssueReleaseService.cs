@@ -50,7 +50,8 @@ public class IssueReleaseService : IIssueReleaseService
             return Result<IssueReleaseLinksDto>.Failure(IssueErrors.NotFound);
         }
 
-        var component = (await _releases.GetComponentsAsync(issue.ProjectId, cancellationToken)).FirstOrDefault(c => c.Id == componentId);
+        var components = await _releases.GetComponentsAsync(issue.ProjectId, cancellationToken);
+        var component = components.FirstOrDefault(c => c.Id == componentId);
         if (component is null)
         {
             return Result<IssueReleaseLinksDto>.Failure(ReleaseErrors.ComponentNotInProject);
@@ -71,7 +72,7 @@ public class IssueReleaseService : IIssueReleaseService
             await _links.SaveChangesAsync(cancellationToken);
         }
 
-        return Result.Success(await BuildAsync(issue, cancellationToken));
+        return Result.Success(await BuildAsync(issue, cancellationToken, components));
     }
 
     public async Task<Result<IssueReleaseLinksDto>> RemoveComponentAsync(
@@ -119,7 +120,8 @@ public class IssueReleaseService : IIssueReleaseService
             return Result<IssueReleaseLinksDto>.Failure(IssueErrors.NotFound);
         }
 
-        var version = (await _releases.GetVersionsAsync(issue.ProjectId, cancellationToken)).FirstOrDefault(v => v.Id == request.VersionId);
+        var versions = await _releases.GetVersionsAsync(issue.ProjectId, cancellationToken);
+        var version = versions.FirstOrDefault(v => v.Id == request.VersionId);
         if (version is null)
         {
             return Result<IssueReleaseLinksDto>.Failure(ReleaseErrors.VersionNotInProject);
@@ -140,7 +142,7 @@ public class IssueReleaseService : IIssueReleaseService
             await _links.SaveChangesAsync(cancellationToken);
         }
 
-        return Result.Success(await BuildAsync(issue, cancellationToken));
+        return Result.Success(await BuildAsync(issue, cancellationToken, versions: versions));
     }
 
     public async Task<Result<IssueReleaseLinksDto>> RemoveVersionAsync(
@@ -177,10 +179,14 @@ public class IssueReleaseService : IIssueReleaseService
         return Result.Success(await BuildAsync(issue, cancellationToken));
     }
 
-    private async Task<IssueReleaseLinksDto> BuildAsync(Issue issue, CancellationToken cancellationToken)
+    private async Task<IssueReleaseLinksDto> BuildAsync(
+        Issue issue,
+        CancellationToken cancellationToken,
+        IReadOnlyList<ProjectComponentDto>? components = null,
+        IReadOnlyList<ProjectVersionDto>? versions = null)
     {
-        var components = await _releases.GetComponentsAsync(issue.ProjectId, cancellationToken);
-        var versions = await _releases.GetVersionsAsync(issue.ProjectId, cancellationToken);
+        components ??= await _releases.GetComponentsAsync(issue.ProjectId, cancellationToken);
+        versions ??= await _releases.GetVersionsAsync(issue.ProjectId, cancellationToken);
         var componentNames = components.ToDictionary(c => c.Id);
         var versionInfo = versions.ToDictionary(v => v.Id);
         var componentLinks = await _links.GetComponentLinksAsync(issue.Id, cancellationToken);

@@ -49,6 +49,7 @@ export class IssueDetailPage implements OnInit {
   /** Mặc định chỉ đọc cho tới khi biết quyền thật, tránh hiện nút rồi mới khóa. */
   readonly perms = signal<IssuePermissionsDto>(NO_ISSUE_PERMISSIONS);
   readonly permsLoaded = signal(false);
+  private permsFor = '';
   readonly tabs: readonly { id: IssueTab; label: string }[] = [
     { id: 'details', label: 'Chi tiết' }, { id: 'talk', label: 'Trao đổi' }, { id: 'history', label: 'Lịch sử' }
   ];
@@ -56,7 +57,9 @@ export class IssueDetailPage implements OnInit {
   readonly statusCategory = computed(() => this.service.projectStatuses().find(s => s.name === this.item()?.statusName)?.category ?? '');
   readonly isOverdue = computed(() => {
     const due = this.core()?.dueDate;
-    return !!due && this.statusCategory() !== 'Done' && due < new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    return !!due && this.statusCategory() !== 'Done' && due < today;
   });
   /** Mã PROJ-123 đang chờ danh sách Issue của Project tải xong để phân giải. */
   private readonly pendingKey = signal<string | null>(null);
@@ -114,9 +117,13 @@ export class IssueDetailPage implements OnInit {
       error: e => { this.item.set(null); this.loading.set(false); this.fail(e); }
     });
     this.issueApi.getCore(id).subscribe({ next: core => this.core.set(core), error: () => this.core.set(null) });
+    // Quyền chỉ đổi khi sang Issue khác; tải lại nội dung (sau bình luận, nhãn…) không cần hỏi lại.
+    if (this.permsFor === id) return;
+    this.permsFor = id;
+    this.permsLoaded.set(false);
     this.issueApi.permissions(id).subscribe({
       next: perms => { this.perms.set(perms); this.permsLoaded.set(true); },
-      error: () => { this.perms.set(NO_ISSUE_PERMISSIONS); this.permsLoaded.set(true); }
+      error: () => { this.perms.set(NO_ISSUE_PERMISSIONS); this.permsLoaded.set(true); this.permsFor = ''; }
     });
   }
 

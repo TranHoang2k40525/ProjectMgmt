@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, OnChanges, computed, inject, input, output, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 import { Observable } from 'rxjs';
 import { IssueReleaseLinksDto, ReleaseApi, VersionLinkType, isReleaseLookupUnavailable } from '../../../core/api/release.api';
 import { apiErrorMessage } from '../../../core/http/api-error-message';
@@ -8,7 +7,6 @@ import { ISSUE_SECTION_STYLES } from './issue-section.styles';
 /** Components + Fix Versions + Affects Versions (tách riêng) của Issue. */
 @Component({
   selector: 'app-issue-release-links',
-  imports: [FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: [ISSUE_SECTION_STYLES, `
     h3 { font-size: .85rem; font-weight: 600; color: #5e6c84; margin: .6rem 0 .3rem; }
@@ -34,7 +32,7 @@ import { ISSUE_SECTION_STYLES } from './issue-section.styles';
           } @empty { <span class="muted">Không có.</span> }
         </div>
         @if (canWrite() && optionsOf(group.key).length) {
-          <select [ngModel]="''" (ngModelChange)="add(group.key, $event)" [disabled]="busy()" [attr.aria-label]="'Thêm ' + group.label">
+          <select #picker (change)="add(group.key, picker.value); picker.value = ''" [disabled]="busy()" [attr.aria-label]="'Thêm ' + group.label">
             <option value="">+ Thêm…</option>
             @for (o of optionsOf(group.key); track o.id) { <option [value]="o.id">{{ o.name }}</option> }
           </select>

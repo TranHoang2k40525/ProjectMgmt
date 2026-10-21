@@ -22,6 +22,12 @@ public class SkillCatalogAdapter : ISkillCatalogReader
         }
 
         var catalog = await _skills.GetCatalogAsync(null, null);
+        if (!catalog.Success)
+        {
+            // Không biến lỗi danh mục thành "kỹ năng không tồn tại"; không cache để request sau thử lại.
+            throw new InvalidOperationException($"Không đọc được danh mục kỹ năng: {catalog.ErrorCode}");
+        }
+
         _cache = (catalog.Items ?? [])
             .Where(item => item.SkillId.HasValue)
             .Select(item => new SkillCatalogItem(item.SkillId!.Value, item.Name ?? string.Empty, item.Category, item.IsActive ?? true))
