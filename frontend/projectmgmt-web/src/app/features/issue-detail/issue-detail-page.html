@@ -5,6 +5,7 @@
   @if (loading()) { <p>Đang tải công việc…</p> }
   @if (item; as task) {
     <header><h1>{{ task.issueKey }} · Chi tiết công việc</h1><span>{{ task.issueType }}</span>
+      <app-issue-watch-button [issueId]="task.id" />
       <button type="button" (click)="editing.set(true)" [disabled]="busy()">Sửa chi tiết (hạn, ước lượng, công việc cha…)</button></header>
     @if (editing()) { <app-issue-form [issueId]="task.id" (saved)="edited()" (dismissed)="editing.set(false)" /> }
     <form (ngSubmit)="save()">
@@ -25,20 +26,12 @@
       } @empty { <p>Chưa có tiêu chí nghiệm thu.</p> }
       <div class="row"><input aria-label="Tiêu chí mới" [(ngModel)]="newCriterion" maxlength="4000" /><button type="button" (click)="addCriterion()" [disabled]="busy() || !newCriterion.trim()">Thêm tiêu chí</button></div>
     </section>
-    <section><h2>Tệp đính kèm</h2><p>PDF, ảnh, TXT, CSV, DOCX, XLSX, ZIP · tối đa 10 MB.</p>
-      <input type="file" aria-label="Tải tệp đính kèm" (change)="upload($event)" [disabled]="busy()" accept=".pdf,.png,.jpg,.jpeg,.txt,.csv,.docx,.xlsx,.zip" />
-      @for (file of task.attachments ?? []; track file.id) {
-        <div class="row"><span>{{ file.fileName }} ({{ file.fileSizeBytes | number }} bytes)</span><button type="button" (click)="download(file.id, file.fileName)">Tải xuống</button><button type="button" (click)="removeAttachment(file.id)" [disabled]="busy()">Xóa</button></div>
-      } @empty { <p>Chưa có tệp đính kèm.</p> }
-    </section>
+    <section><app-issue-attachments [issueId]="task.id" (changed)="load()" /></section>
     <section><h2>Công việc con</h2>
       @for (child of service.workItems(); track child.id) { @if (child.parentId === task.id) { <p><a [routerLink]="['/issues', child.id]">{{ child.issueKey }} · {{ child.title }}</a></p> } }
       @if (!task.parentId && task.issueType !== 'Epic') { <div class="row"><input aria-label="Tên công việc con" [(ngModel)]="subtaskTitle" maxlength="500" /><button type="button" (click)="addSubtask()" [disabled]="busy() || !subtaskTitle.trim()">Thêm subtask</button></div> }
     </section>
-    <section><h2>Bình luận</h2>
-      <textarea aria-label="Bình luận mới" [(ngModel)]="newComment" rows="3" maxlength="20000"></textarea><button type="button" (click)="comment()" [disabled]="busy() || !newComment.trim()">Gửi bình luận</button>
-      @for (entry of task.comments ?? []; track entry.id) { <article><strong>{{ entry.authorName }}</strong><small>{{ entry.createdAt | date:'dd/MM/yyyy HH:mm' }}</small><p class="preserve">{{ entry.content }}</p></article> }
-    </section>
+    <section><app-issue-comments [issueId]="task.id" (changed)="load()" /></section>
     <section><h2>Lịch sử thay đổi</h2>@for (activity of task.activities ?? []; track activity.id) { <p>{{ activity.actorName }} · {{ activity.action }} · {{ activity.timestamp | date:'dd/MM/yyyy HH:mm' }}</p> } @empty { <p>Chưa có thay đổi.</p> }</section>
   }
 </section>

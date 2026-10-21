@@ -285,6 +285,11 @@ builder.Services.AddScoped<IIssueTrackingService, IssueTrackingService>();
 builder.Services.AddScoped<IssueHierarchyLoader>();
 builder.Services.AddScoped<IIssueHierarchyService, IssueHierarchyService>();
 builder.Services.AddScoped<IssueContractService>();
+builder.Services.AddScoped<ICollaborationRepository, CollaborationRepository>();
+builder.Services.AddScoped<IIssueCollaborationService, IssueCollaborationService>();
+builder.Services.AddSingleton(builder.Configuration.GetSection(AttachmentOptions.SectionName).Get<AttachmentOptions>() ?? new AttachmentOptions());
+builder.Services.AddSingleton<IAttachmentStorage>(services => new DeliveryIntelligence.Infrastructure.Services.LocalAttachmentStorage(
+    Path.Combine(services.GetRequiredService<IWebHostEnvironment>().ContentRootPath, "App_Data", "attachments")));
 builder.Services.AddScoped<ProjectMgmt.IssueTracking.Contracts.IIssueReadService>(services => services.GetRequiredService<IssueContractService>());
 builder.Services.AddScoped<ProjectMgmt.IssueTracking.Contracts.IIssueSprintService>(services => services.GetRequiredService<IssueContractService>());
 // IIssueCreationService chưa đăng ký: cần IIssueNumberGenerator thật từ Planning.

@@ -98,6 +98,60 @@ public class IssueApiMySqlTests(DeliveryApiFixture fixture) : IClassFixture<Deli
     }
 
     [MySqlFact]
+    public async Task CommentsThroughOldAndNewRoutesShareOneStore()
+    {
+        var epic = SharedTestData.EpicIssueId;
+        var posted = await As(SharedTestData.DeveloperUserId).PostAsJsonAsync($"/api/v1/issues/{epic}/comments",
+            new { content = "Nhờ @owner xem", mentionedUserIds = new[] { SharedTestData.OwnerUserId, SharedTestData.OutsiderUserId } });
+        Assert.Equal(HttpStatusCode.OK, posted.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await As(SharedTestData.ViewerUserId).PostAsJsonAsync($"/api/v1/issues/{epic}/comments", new { content = "x" })).StatusCode);
+
+        var comments = await As(SharedTestData.ViewerUserId).GetFromJsonAsync<List<CommentDto>>($"/api/v1/issues/{epic}/comments");
+        var root = Assert.Single(comments!);
+        Assert.Equal([SharedTestData.OwnerUserId], root.MentionedUserIds);
+        Assert.Equal("Demo Developer", root.AuthorName);
+
+        var reply = await As(SharedTestData.OwnerUserId).PostAsJsonAsync($"/api/v1/comments/{root.Id}/replies", new CreateCommentDto { Content = "Đã xem" });
+        Assert.Equal(root.Id, (await reply.Content.ReadFromJsonAsync<CommentDto>())!.ParentCommentId);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await As(SharedTestData.OwnerUserId).PutAsJsonAsync($"/api/v1/comments/{root.Id}", new UpdateCommentDto { Content = "sửa" })).StatusCode);
+
+        var watchers = await As(SharedTestData.ViewerUserId).GetFromJsonAsync<List<WatcherDto>>($"/api/v1/issues/{epic}/watchers");
+        Assert.Contains(watchers!, w => w.UserId == SharedTestData.DeveloperUserId);
+    }
+
+    [MySqlFact]
+    public async Task AttachmentUploadDownloadAndWatchFlow()
+    {
+        var epic = SharedTestData.EpicIssueId;
+        using var form = new MultipartFormDataContent();
+        var file = new ByteArrayContent("hello"u8.ToArray());
+        form.Add(file, "file", "ghi-chu.txt");
+        var upload = await As(SharedTestData.DeveloperUserId).PostAsync($"/api/v1/issues/{epic}/attachments", form);
+        Assert.Equal(HttpStatusCode.OK, upload.StatusCode);
+
+        var listed = await As(SharedTestData.ViewerUserId).GetFromJsonAsync<List<AttachmentDto>>($"/api/v1/issues/{epic}/attachments");
+        var attachment = Assert.Single(listed!, a => a.FileName == "ghi-chu.txt");
+        Assert.Equal("text/plain", attachment.ContentType);
+
+        Assert.Equal("hello", await As(SharedTestData.ViewerUserId).GetStringAsync($"/api/v1/attachments/{attachment.Id}/download"));
+        Assert.Equal("hello", await As(SharedTestData.ViewerUserId).GetStringAsync($"/api/v1/attachments/{attachment.Id}"));
+        Assert.Equal(HttpStatusCode.Forbidden, (await As(SharedTestData.OutsiderUserId).GetAsync($"/api/v1/attachments/{attachment.Id}/download")).StatusCode);
+
+        using var bad = new MultipartFormDataContent { { new ByteArrayContent([1]), "file", "tool.exe" } };
+        Assert.Equal(HttpStatusCode.BadRequest, (await As(SharedTestData.OwnerUserId).PostAsync($"/api/v1/issues/{epic}/attachments", bad)).StatusCode);
+
+        var watch = await As(SharedTestData.ViewerUserId).PostAsync($"/api/v1/issues/{epic}/watchers/me", null);
+        Assert.True((await watch.Content.ReadFromJsonAsync<WatchStateDto>())!.IsWatching);
+        var unwatch = await As(SharedTestData.ViewerUserId).DeleteAsync($"/api/v1/issues/{epic}/watchers/me");
+        Assert.False((await unwatch.Content.ReadFromJsonAsync<WatchStateDto>())!.IsWatching);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await As(SharedTestData.OwnerUserId).DeleteAsync($"/api/v1/attachments/{attachment.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await As(SharedTestData.OwnerUserId).GetAsync($"/api/v1/attachments/{attachment.Id}/download")).StatusCode);
+    }
+
+    [MySqlFact]
     public async Task DeleteThroughExistingRouteIsSoftAndCascades()
     {
         var other = fixture.Database.CreateDeliveryContext();

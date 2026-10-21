@@ -13,6 +13,10 @@ public static class IssueActivities
     public const string ParentChanged = "ParentChanged";
     public const string Ranked = "Ranked";
     public const string SprintChanged = "SprintChanged";
+    public const string CommentAdded = "CommentAdded";
+    public const string CommentDeleted = "CommentDeleted";
+    public const string AttachmentAdded = "AttachmentAdded";
+    public const string AttachmentRemoved = "AttachmentRemoved";
 
     public static ActivityLog Create(
         Guid issueId,

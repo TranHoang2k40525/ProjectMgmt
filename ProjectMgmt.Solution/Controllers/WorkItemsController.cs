@@ -41,7 +41,7 @@ public sealed class SprintRequest
 [Route("api/v1")]
 public sealed class WorkItemsController(
     DeliveryIntelligenceDbContext delivery, PlanningDbContext planning,
-    IdentityExperienceDbContext identity, ProjectAccess access, IWebHostEnvironment environment) : ApiControllerBase
+    IdentityExperienceDbContext identity, ProjectAccess access) : ApiControllerBase
 {
     private ObjectResult Denied() => StatusCode(403, new { message = "Bạn không có quyền thực hiện thao tác này.", code = "PROJECT_PERMISSION_DENIED" });
     private BadRequestObjectResult Invalid(string message) => BadRequest(new { message });
@@ -190,16 +190,25 @@ public sealed class WorkItemsController(
         return deleted.IsSuccess ? NoContent() : NotFound();
     }
 
-    public sealed class CommentRequest { [Required, StringLength(20000, MinimumLength = 1)] public string Content { get; set; } = ""; }
+    public sealed class CommentRequest
+    {
+        [Required, StringLength(20000, MinimumLength = 1)] public string Content { get; set; } = "";
+        public Guid? ParentCommentId { get; set; }
+        [MaxLength(20)] public List<Guid> MentionedUserIds { get; set; } = [];
+    }
+
     [HttpPost("issues/{id:guid}/comments")]
-    public async Task<IActionResult> AddComment(Guid id, CommentRequest request)
+    public async Task<IActionResult> AddComment(Guid id, CommentRequest request, [FromServices] IIssueCollaborationService collaboration)
     {
         var issue = await delivery.Issues.AsNoTracking().SingleOrDefaultAsync(i => i.Id == id && !i.IsDeleted);
         if (issue is null) return NotFound();
         if (!await access.AllowsAsync(issue.ProjectId, "issue.update")) return Denied();
-        if (string.IsNullOrWhiteSpace(request.Content)) return Invalid("Bình luận không được để trống.");
-        delivery.Comments.Add(new Comment { Id = Guid.NewGuid(), IssueId = id, UserId = access.UserId, Content = request.Content.Trim(), CreatedAt = DateTime.UtcNow });
-        await delivery.SaveChangesAsync(); return Ok((await Views([issue])).Single());
+        var added = await collaboration.AddCommentAsync(id, new DeliveryIntelligence.Application.Dto.CreateCommentDto
+        {
+            Content = request.Content, ParentCommentId = request.ParentCommentId, MentionedUserIds = request.MentionedUserIds
+        }, access.UserId);
+        if (added.IsFailure) return Invalid(added.Error.Description);
+        return Ok((await Views([issue])).Single());
     }
 
     [HttpPost("projects/{projectId:guid}/sprints")]
@@ -232,47 +241,37 @@ public sealed class WorkItemsController(
 
     [HttpPost("issues/{id:guid}/attachments")]
     [RequestSizeLimit(11 * 1024 * 1024)]
-    public async Task<IActionResult> Upload(Guid id, IFormFile file)
+    public async Task<IActionResult> Upload(Guid id, IFormFile file, [FromServices] IIssueCollaborationService collaboration)
     {
         var issue = await delivery.Issues.AsNoTracking().SingleOrDefaultAsync(i => i.Id == id && !i.IsDeleted);
         if (issue is null) return NotFound();
         if (!await access.AllowsAsync(issue.ProjectId, "issue.update")) return Denied();
-        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
-        if (file.Length is <= 0 or > 10 * 1024 * 1024 || !new[] { ".pdf", ".png", ".jpg", ".jpeg", ".txt", ".csv", ".docx", ".xlsx", ".zip" }.Contains(extension)) return Invalid("Chọn PDF, ảnh, TXT, CSV, DOCX, XLSX hoặc ZIP tối đa 10 MB.");
-        var attachment = new Attachment { Id = Guid.NewGuid(), IssueId = id, UploadedBy = access.UserId, FileName = Path.GetFileName(file.FileName), ContentType = "application/octet-stream", FileSizeBytes = file.Length, CreatedAt = DateTime.UtcNow };
-        if (attachment.FileName.Length > 255) return Invalid("Tên file quá dài.");
-        var root = Path.Combine(environment.ContentRootPath, "App_Data", "attachments"); Directory.CreateDirectory(root);
-        attachment.StoredPath = attachment.Id.ToString("N") + extension;
-        var target = Path.Combine(root, attachment.StoredPath);
-        try
-        {
-            await using (var stream = System.IO.File.Create(target)) await file.CopyToAsync(stream);
-            delivery.Attachments.Add(attachment); await delivery.SaveChangesAsync();
-        }
-        catch { System.IO.File.Delete(target); throw; }
+        await using var content = file.OpenReadStream();
+        var uploaded = await collaboration.UploadAttachmentAsync(id, file.FileName, file.Length, content, access.UserId);
+        if (uploaded.IsFailure) return Invalid(uploaded.Error.Description);
+        var attachment = uploaded.Value;
         return Ok(new { attachment.Id, attachment.FileName, attachment.FileSizeBytes, attachment.CreatedAt });
     }
     [HttpGet("attachments/{id:guid}")]
-    public async Task<IActionResult> Download(Guid id)
+    public async Task<IActionResult> Download(Guid id, [FromServices] IIssueCollaborationService collaboration)
     {
-        var attachment = await delivery.Attachments.AsNoTracking().SingleOrDefaultAsync(a => a.Id == id);
-        if (attachment is null) return NotFound();
-        var issue = await delivery.Issues.AsNoTracking().SingleOrDefaultAsync(i => i.Id == attachment.IssueId && !i.IsDeleted);
+        var issueId = await collaboration.GetAttachmentIssueIdAsync(id);
+        if (issueId.IsFailure) return NotFound();
+        var issue = await delivery.Issues.AsNoTracking().SingleOrDefaultAsync(i => i.Id == issueId.Value && !i.IsDeleted);
         if (issue is null) return NotFound();
         if (!await access.AllowsAsync(issue.ProjectId)) return Denied();
-        var file = Path.Combine(environment.ContentRootPath, "App_Data", "attachments", Path.GetFileName(attachment.StoredPath));
-        return System.IO.File.Exists(file) ? PhysicalFile(file, "application/octet-stream", attachment.FileName) : NotFound();
+        var opened = await collaboration.OpenAttachmentAsync(id);
+        return opened.IsSuccess ? File(opened.Value.Content, "application/octet-stream", opened.Value.Metadata.FileName) : NotFound();
     }
     [HttpDelete("attachments/{id:guid}")]
-    public async Task<IActionResult> DeleteAttachment(Guid id)
+    public async Task<IActionResult> DeleteAttachment(Guid id, [FromServices] IIssueCollaborationService collaboration)
     {
-        var attachment = await delivery.Attachments.SingleOrDefaultAsync(a => a.Id == id);
-        if (attachment is null) return NotFound();
-        var issue = await delivery.Issues.AsNoTracking().SingleAsync(i => i.Id == attachment.IssueId);
+        var issueId = await collaboration.GetAttachmentIssueIdAsync(id);
+        if (issueId.IsFailure) return NotFound();
+        var issue = await delivery.Issues.AsNoTracking().SingleAsync(i => i.Id == issueId.Value);
         if (!await access.AllowsAsync(issue.ProjectId, "issue.update")) return Denied();
-        delivery.Attachments.Remove(attachment); await delivery.SaveChangesAsync();
-        System.IO.File.Delete(Path.Combine(environment.ContentRootPath, "App_Data", "attachments", Path.GetFileName(attachment.StoredPath)));
-        return NoContent();
+        var deleted = await collaboration.DeleteAttachmentAsync(id, access.UserId);
+        return deleted.IsSuccess ? NoContent() : NotFound();
     }
 
     public sealed class CriterionRequest { [Required, StringLength(4000)] public string Content { get; set; } = ""; public bool IsMet { get; set; } }
