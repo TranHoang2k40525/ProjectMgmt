@@ -75,3 +75,11 @@ public interface IIssueSprintService
         Guid actorUserId,
         CancellationToken cancellationToken = default);
 }
+
+public record IssueRequiredSkillDto(Guid IssueId, Guid SkillId, int MinLevel, decimal Weight, string Source);
+
+/// <summary>Kỹ năng yêu cầu của Issue cho AI phân công (B) — đọc theo lô, không lộ entity.</summary>
+public interface IIssueSkillService
+{
+    Task<IReadOnlyList<IssueRequiredSkillDto>> GetRequiredSkillsAsync(IEnumerable<Guid> issueIds, CancellationToken cancellationToken = default);
+}

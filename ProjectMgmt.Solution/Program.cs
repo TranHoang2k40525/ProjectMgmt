@@ -292,6 +292,11 @@ builder.Services.AddScoped<IIssueCollaborationService, IssueCollaborationService
 builder.Services.AddScoped<ILabelLinkRepository, LabelLinkRepository>();
 builder.Services.AddScoped<IIssueLabelLinkService, IssueLabelLinkService>();
 builder.Services.AddScoped<IIssueNotifier, IssueNotificationAdapter>();
+builder.Services.AddScoped<ISkillCatalogReader, SkillCatalogAdapter>();
+builder.Services.AddScoped<IRequirementRepository, RequirementRepository>();
+builder.Services.AddScoped<IssueRequirementService>();
+builder.Services.AddScoped<IIssueRequirementService>(services => services.GetRequiredService<IssueRequirementService>());
+builder.Services.AddScoped<ProjectMgmt.IssueTracking.Contracts.IIssueSkillService>(services => services.GetRequiredService<IssueRequirementService>());
 // IssueTransitionService không đăng ký: cần IWorkflowValidationService thật của Planning (ValidateOnBuild sẽ chặn khởi động).
 // IssuesController tự dựng service khi contract đó có trong DI.
 builder.Services.AddSingleton(builder.Configuration.GetSection(AttachmentOptions.SectionName).Get<AttachmentOptions>() ?? new AttachmentOptions());

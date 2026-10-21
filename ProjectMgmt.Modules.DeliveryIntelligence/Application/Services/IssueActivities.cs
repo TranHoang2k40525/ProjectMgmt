@@ -23,6 +23,12 @@ public static class IssueActivities
     public const string LinkRemoved = "LinkRemoved";
     public const string StatusChanged = "StatusChanged";
     public const string AssigneeChanged = "AssigneeChanged";
+    public const string CriteriaAdded = "CriteriaAdded";
+    public const string CriteriaMet = "CriteriaMet";
+    public const string CriteriaUnmet = "CriteriaUnmet";
+    public const string CriteriaRemoved = "CriteriaRemoved";
+    public const string SkillRequired = "SkillRequired";
+    public const string SkillUnrequired = "SkillUnrequired";
 
     public static ActivityLog Create(
         Guid issueId,

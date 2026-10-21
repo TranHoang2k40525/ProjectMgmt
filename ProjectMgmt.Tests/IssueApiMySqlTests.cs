@@ -212,6 +212,30 @@ public class IssueApiMySqlTests(DeliveryApiFixture fixture) : IClassFixture<Deli
     }
 
     [MySqlFact]
+    public async Task CriteriaAndRequiredSkillsThroughApi()
+    {
+        var bug = SharedTestData.BugIssueId;
+        var criterion = await As(SharedTestData.DeveloperUserId).PostAsJsonAsync($"/api/v1/issues/{bug}/acceptance-criteria",
+            new SaveCriterionDto { Content = "Avatar hiển thị đúng tỉ lệ" });
+        var created = (await criterion.Content.ReadFromJsonAsync<AcceptanceCriterionDto>())!;
+        Assert.Equal(HttpStatusCode.Forbidden, (await As(SharedTestData.ViewerUserId).PutAsJsonAsync($"/api/v1/acceptance-criteria/{created.Id}",
+            new SaveCriterionDto { Content = created.Content, IsMet = true })).StatusCode);
+
+        // Route cũ của Issue Detail vẫn tick được qua service C.
+        Assert.Equal(HttpStatusCode.OK, (await As(SharedTestData.DeveloperUserId).PutAsJsonAsync($"/api/v1/criteria/{created.Id}",
+            new { content = created.Content, isMet = true })).StatusCode);
+        var listed = await As(SharedTestData.ViewerUserId).GetFromJsonAsync<List<AcceptanceCriterionDto>>($"/api/v1/issues/{bug}/acceptance-criteria");
+        Assert.Equal("Demo Developer", Assert.Single(listed!).MetByName);
+
+        var skill = await As(SharedTestData.DeveloperUserId).PostAsJsonAsync($"/api/v1/issues/{bug}/required-skills",
+            new SaveRequiredSkillDto { SkillId = SharedTestData.AngularSkillId, MinLevel = 3, Weight = 1 });
+        Assert.Equal(HttpStatusCode.OK, skill.StatusCode);
+        var skills = await As(SharedTestData.ViewerUserId).GetFromJsonAsync<List<RequiredSkillDto>>($"/api/v1/issues/{bug}/required-skills");
+        Assert.Equal("Angular / TypeScript", Assert.Single(skills!).SkillName);
+        Assert.Equal(HttpStatusCode.NoContent, (await As(SharedTestData.DeveloperUserId).DeleteAsync($"/api/v1/issue-required-skills/{skills![0].Id}")).StatusCode);
+    }
+
+    [MySqlFact]
     public async Task TransitionEndpointReportsMissingWorkflowContract()
     {
         var response = await As(SharedTestData.OwnerUserId).PostAsJsonAsync($"/api/v1/issues/{SharedTestData.BugIssueId}/transition",

@@ -133,6 +133,6 @@ public class IssueHistoryService : IIssueHistoryService
     private static IEnumerable<Guid> ParseIds(params string?[] values) =>
         values.Select(value => Guid.TryParse(value, out var id) ? id : (Guid?)null).Where(id => id.HasValue).Select(id => id!.Value);
 
-    private static string? NameOf(string? value, IReadOnlyDictionary<Guid, string> names) =>
+    private static string? NameOf(string? value, Dictionary<Guid, string> names) =>
         Guid.TryParse(value, out var id) && names.TryGetValue(id, out var name) ? name : value;
 }

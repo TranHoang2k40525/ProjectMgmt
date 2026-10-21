@@ -51,6 +51,11 @@ public static class SharedTestData
     public static readonly Guid BugIssueId = Id(7, 5);
     public static readonly Guid OtherProjectIssueId = Id(7, 6);
 
+    /// <summary>Kỹ năng do migration SeedIdentityReferenceData tạo sẵn.</summary>
+    public static readonly Guid DotnetSkillId = Guid.Parse("44444444-0000-0000-0000-000000000001");
+    public static readonly Guid AngularSkillId = Guid.Parse("44444444-0000-0000-0000-000000000002");
+    public static readonly Guid SqlSkillId = Guid.Parse("44444444-0000-0000-0000-000000000003");
+
     public static readonly Guid ProjectManagerRoleId = Guid.Parse("11111111-0000-0000-0000-000000000003");
     public static readonly Guid DeveloperRoleId = Guid.Parse("11111111-0000-0000-0000-000000000006");
     public static readonly Guid ViewerRoleId = Guid.Parse("11111111-0000-0000-0000-000000000007");

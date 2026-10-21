@@ -41,13 +41,7 @@
           @if (task.description) { <p class="preserve">{{ task.description }}</p> } @else { <p class="muted">Chưa có mô tả. Bấm "Sửa" để thêm.</p> }
         </section>
 
-        <section class="card">
-          <h2>Tiêu chí nghiệm thu <span class="muted">({{ metCount() }}/{{ (task.criteria ?? []).length }})</span></h2>
-          @for (criterion of task.criteria ?? []; track criterion.id) {
-            <label class="check"><input type="checkbox" [checked]="criterion.isMet" (change)="toggleCriterion(criterion)" [disabled]="busy()" />{{ criterion.content }}</label>
-          } @empty { <p class="muted">Chưa có tiêu chí nghiệm thu.</p> }
-          <div class="row"><input aria-label="Tiêu chí mới" [(ngModel)]="newCriterion" maxlength="4000" placeholder="Thêm tiêu chí…" /><button type="button" (click)="addCriterion()" [disabled]="busy() || !newCriterion.trim()">Thêm</button></div>
-        </section>
+        <section class="card"><app-issue-criteria [issueId]="task.id" (changed)="load()" /></section>
 
         <section class="card">
           <h2>Công việc con <span class="muted">({{ subtasks().length }})</span></h2>
@@ -89,6 +83,7 @@
           <dt>Cập nhật</dt><dd>{{ task.updatedAt ? (task.updatedAt | date:'dd/MM/yyyy HH:mm') : '—' }}</dd>
         </dl>
         <app-issue-labels [issueId]="task.id" [projectId]="task.projectId" (changed)="load()" />
+        <app-issue-required-skills [issueId]="task.id" (changed)="historyVersion.update(v => v + 1)" />
       </aside>
     </div>
   }

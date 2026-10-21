@@ -281,25 +281,24 @@ public sealed class WorkItemsController(
 
     public sealed class CriterionRequest { [Required, StringLength(4000)] public string Content { get; set; } = ""; public bool IsMet { get; set; } }
     [HttpPost("issues/{id:guid}/criteria")]
-    public async Task<IActionResult> AddCriterion(Guid id, CriterionRequest request)
+    public async Task<IActionResult> AddCriterion(Guid id, CriterionRequest request, [FromServices] IIssueRequirementService requirements)
     {
         var issue = await delivery.Issues.AsNoTracking().SingleOrDefaultAsync(i => i.Id == id && !i.IsDeleted);
         if (issue is null) return NotFound();
         if (!await access.AllowsAsync(issue.ProjectId, "issue.update")) return Denied();
-        if (string.IsNullOrWhiteSpace(request.Content)) return Invalid("Nhập tiêu chí nghiệm thu.");
-        delivery.AcceptanceCriteria.Add(new AcceptanceCriteria { Id = Guid.NewGuid(), IssueId = id, Content = request.Content.Trim(), Source = "Manual", CreatedAt = DateTime.UtcNow });
-        await delivery.SaveChangesAsync(); return Ok();
+        var added = await requirements.AddCriterionAsync(id, new DeliveryIntelligence.Application.Dto.SaveCriterionDto { Content = request.Content, IsMet = request.IsMet }, access.UserId);
+        return added.IsSuccess ? Ok() : Invalid(added.Error.Description);
     }
     [HttpPut("criteria/{id:guid}")]
-    public async Task<IActionResult> UpdateCriterion(Guid id, CriterionRequest request)
+    public async Task<IActionResult> UpdateCriterion(Guid id, CriterionRequest request, [FromServices] IIssueRequirementService requirements)
     {
-        var criterion = await delivery.AcceptanceCriteria.SingleOrDefaultAsync(c => c.Id == id);
-        if (criterion is null) return NotFound();
-        var issue = await delivery.Issues.AsNoTracking().SingleAsync(i => i.Id == criterion.IssueId);
+        var issueId = await requirements.GetCriterionIssueIdAsync(id);
+        if (issueId.IsFailure) return NotFound();
+        var issue = await delivery.Issues.AsNoTracking().SingleOrDefaultAsync(i => i.Id == issueId.Value && !i.IsDeleted);
+        if (issue is null) return NotFound();
         if (!await access.AllowsAsync(issue.ProjectId, "issue.update")) return Denied();
-        if (string.IsNullOrWhiteSpace(request.Content)) return Invalid("Nhập tiêu chí nghiệm thu.");
-        criterion.Content = request.Content.Trim(); criterion.IsMet = request.IsMet; criterion.MetAt = request.IsMet ? DateTime.UtcNow : null; criterion.MetBy = request.IsMet ? access.UserId : null;
-        await delivery.SaveChangesAsync(); return Ok();
+        var updated = await requirements.UpdateCriterionAsync(id, new DeliveryIntelligence.Application.Dto.SaveCriterionDto { Content = request.Content, IsMet = request.IsMet }, access.UserId);
+        return updated.IsSuccess ? Ok() : Invalid(updated.Error.Description);
     }
 
     private async Task<List<WorkItemView>> Views(List<Issue> issues)

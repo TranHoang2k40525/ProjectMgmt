@@ -13,6 +13,8 @@ import { IssueFormComponent } from '../../shared/components/issue-form/issue-for
 import { resolveIssueRoute } from './issue-route';
 import { IssueAttachmentsComponent } from './sections/issue-attachments';
 import { IssueCommentsComponent } from './sections/issue-comments';
+import { IssueCriteriaComponent } from './sections/issue-criteria';
+import { IssueRequiredSkillsComponent } from './sections/issue-required-skills';
 import { IssueHistoryComponent } from './sections/issue-history';
 import { IssueLabelsComponent } from './sections/issue-labels';
 import { IssueLinksComponent } from './sections/issue-links';
@@ -21,7 +23,7 @@ import { IssueWatchButtonComponent } from './sections/issue-watch-button';
 @Component({
   selector: 'app-issue-detail-page',
   imports: [CommonModule, FormsModule, RouterLink, IssueFormComponent, IssueAttachmentsComponent, IssueCommentsComponent,
-    IssueWatchButtonComponent, IssueLabelsComponent, IssueLinksComponent, IssueHistoryComponent],
+    IssueWatchButtonComponent, IssueLabelsComponent, IssueLinksComponent, IssueHistoryComponent, IssueCriteriaComponent, IssueRequiredSkillsComponent],
   templateUrl: './issue-detail-page.html',
   styleUrl: './issue-detail-page.scss'
 })
@@ -50,8 +52,6 @@ export class IssueDetailPage implements OnInit {
     const minutes = this.core()?.originalEstimateMinutes;
     return minutes == null ? null : Math.round(minutes / 6) / 10;
   });
-  readonly metCount = computed(() => (this.item()?.criteria ?? []).filter(c => c.isMet).length);
-  newCriterion = '';
   subtaskTitle = '';
 
   constructor() {
@@ -113,15 +113,6 @@ export class IssueDetailPage implements OnInit {
   changeSprint(sprintId: string): void {
     const task = this.item();
     if (task && sprintId !== (task.sprintId ?? '')) this.run(this.service.saveIssue({ ...task, sprintId }), 'Đã chuyển Sprint.');
-  }
-
-  addCriterion(): void {
-    const task = this.item();
-    if (task) this.run(this.service.addCriterion(task.id, this.newCriterion), 'Đã thêm tiêu chí.', () => this.newCriterion = '');
-  }
-
-  toggleCriterion(c: { id: string; content: string; isMet: boolean }): void {
-    this.run(this.service.updateCriterion(c.id, c.content, !c.isMet), 'Đã lưu tiêu chí.');
   }
 
   addSubtask(): void {
