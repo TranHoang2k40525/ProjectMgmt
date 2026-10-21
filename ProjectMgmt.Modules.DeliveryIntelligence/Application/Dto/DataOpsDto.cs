@@ -145,3 +145,22 @@ public class CleaningRunSummaryDto
     public int Rejected { get; set; }
     public Dictionary<string, int> FlagsBySeverity { get; set; } = [];
 }
+
+public class ApproveSampleDto
+{
+    /// <summary>Người duyệt xác nhận mẫu không còn dữ liệu cá nhân/bí mật (bắt buộc trước khi Approved).</summary>
+    public bool PiiChecked { get; set; }
+    public decimal? QualityScore { get; set; }
+    public string? Note { get; set; }
+}
+
+public class RejectSampleDto
+{
+    public string Note { get; set; } = string.Empty;
+}
+
+public class FreezeVersionDto
+{
+    /// <summary>Seed chia split; để trống thì hệ thống sinh và lưu lại để tái lập.</summary>
+    public int? SplitSeed { get; set; }
+}

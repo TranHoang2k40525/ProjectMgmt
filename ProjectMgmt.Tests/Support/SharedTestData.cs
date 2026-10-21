@@ -25,6 +25,10 @@ public static class SharedTestData
     public static readonly Guid ViewerUserId = Id(2, 3);
     public static readonly Guid OutsiderUserId = Id(2, 4);
 
+    /// <summary>Quản trị hệ thống (role Admin, phạm vi System) — có ai.dataset.manage; không là thành viên Project nào.</summary>
+    public static readonly Guid SystemAdminUserId = Id(2, 5);
+    public static readonly Guid AdminRoleId = Guid.Parse("11111111-0000-0000-0000-000000000001");
+
     public static readonly Guid EpicTypeId = Id(3, 1);
     public static readonly Guid StoryTypeId = Id(3, 2);
     public static readonly Guid TaskTypeId = Id(3, 3);
@@ -65,7 +69,8 @@ public static class SharedTestData
         new() { UserId = OwnerUserId, DisplayName = "Demo Owner" },
         new() { UserId = DeveloperUserId, DisplayName = "Demo Developer" },
         new() { UserId = ViewerUserId, DisplayName = "Demo Viewer" },
-        new() { UserId = OutsiderUserId, DisplayName = "Outside User" }
+        new() { UserId = OutsiderUserId, DisplayName = "Outside User" },
+        new() { UserId = SystemAdminUserId, DisplayName = "System Admin" }
     ];
 
     /// <summary>Thành viên Project DEMO và vai trò; OutsiderUserId không thuộc Project nào.</summary>

@@ -159,6 +159,15 @@ public class MySqlTestDatabase : IAsyncLifetime
                 });
             }
 
+            identity.UserRoles.Add(new UserRole
+            {
+                Id = Guid.NewGuid(),
+                UserId = SharedTestData.SystemAdminUserId,
+                RoleId = SharedTestData.AdminRoleId,
+                ScopeType = "System",
+                ScopeId = null,
+                CreatedAt = now
+            });
             await identity.SaveChangesAsync();
         }
 
