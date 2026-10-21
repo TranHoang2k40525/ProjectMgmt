@@ -12,11 +12,15 @@ public interface IIssueRepository
 
     Task<IReadOnlyList<Issue>> GetChildrenAsync(Guid parentId, CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<Issue>> GetByEpicAsync(Guid epicId, CancellationToken cancellationToken = default);
+
     Task<IssuePage> ListAsync(IssueListFilter filter, CancellationToken cancellationToken = default);
 
     Task<decimal?> GetMaxRankAsync(Guid projectId, CancellationToken cancellationToken = default);
 
     Task AddAsync(Issue issue, CancellationToken cancellationToken = default);
+
+    Task AddActivityAsync(ActivityLog activity, CancellationToken cancellationToken = default);
 
     Task SaveChangesAsync(CancellationToken cancellationToken = default);
 }

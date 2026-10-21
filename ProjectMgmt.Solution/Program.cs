@@ -282,6 +282,8 @@ builder.Services.AddScoped<IUserSkillService, UserLookupService>();
 builder.Services.AddValidatorsFromAssemblyContaining<CreateIssueDtoValidator>();
 builder.Services.AddScoped<IIssueRepository, IssueRepository>();
 builder.Services.AddScoped<IIssueTrackingService, IssueTrackingService>();
+builder.Services.AddScoped<IssueHierarchyLoader>();
+// IIssueCreationService chưa đăng ký: cần IIssueNumberGenerator thật từ Planning.
 
 var app = builder.Build();
 

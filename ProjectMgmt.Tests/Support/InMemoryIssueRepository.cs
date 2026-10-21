@@ -34,6 +34,12 @@ public class InMemoryIssueRepository : IIssueRepository
         return Task.FromResult(result);
     }
 
+    public Task<IReadOnlyList<Issue>> GetByEpicAsync(Guid epicId, CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<Issue> result = Issues.Where(issue => issue.EpicId == epicId).ToList();
+        return Task.FromResult(result);
+    }
+
     public Task<IssuePage> ListAsync(IssueListFilter filter, CancellationToken cancellationToken = default)
     {
         var page = Math.Max(filter.Page, 1);
@@ -74,6 +80,14 @@ public class InMemoryIssueRepository : IIssueRepository
     public Task AddAsync(Issue issue, CancellationToken cancellationToken = default)
     {
         Issues.Add(issue);
+        return Task.CompletedTask;
+    }
+
+    public List<ActivityLog> Activities { get; } = [];
+
+    public Task AddActivityAsync(ActivityLog activity, CancellationToken cancellationToken = default)
+    {
+        Activities.Add(activity);
         return Task.CompletedTask;
     }
 

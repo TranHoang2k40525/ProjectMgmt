@@ -7,7 +7,7 @@ namespace ProjectMgmt.Tests.Support;
 /// Fake contract liên module dựng trên <see cref="SharedTestData"/>: consumer phát triển song song mà không cần
 /// module provider thật. Fake chỉ dùng trong test, không đăng ký vào Host.
 /// </summary>
-public class FakeProjectLookupService : IProjectLookupService
+public class SharedProjectLookupService : IProjectLookupService
 {
     public Task<IReadOnlyList<ProjectIssueTypeDto>> GetIssueTypesAsync(Guid projectId, CancellationToken cancellationToken = default)
     {
@@ -30,7 +30,7 @@ public class FakeProjectLookupService : IProjectLookupService
     }
 }
 
-public class FakeUserLookupService : IUserLookupService
+public class SharedUserLookupService : IUserLookupService
 {
     public Task<IReadOnlyList<UserDisplayInfo>> GetAllActiveDisplayInfoAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult(SharedTestData.Users);
@@ -46,12 +46,31 @@ public class FakeUserLookupService : IUserLookupService
         Task.FromResult(SharedTestData.Users.SingleOrDefault(user => user.UserId == userId));
 }
 
+/// <summary>Fake cấp số: tiếp nối IssueCounter của seed, an toàn khi gọi song song trong một test.</summary>
+public class SharedIssueNumberGenerator : IIssueNumberGenerator
+{
+    private readonly Dictionary<Guid, int> _counters = new()
+    {
+        [SharedTestData.ProjectId] = SharedTestData.IssueCounter(SharedTestData.ProjectId),
+        [SharedTestData.OtherProjectId] = SharedTestData.IssueCounter(SharedTestData.OtherProjectId)
+    };
+
+    public Task<int> ReserveNextAsync(Guid projectId, CancellationToken cancellationToken = default)
+    {
+        lock (_counters)
+        {
+            _counters[projectId] = _counters.GetValueOrDefault(projectId) + 1;
+            return Task.FromResult(_counters[projectId]);
+        }
+    }
+}
+
 /// <summary>Quyền mặc định: thành viên DEMO đọc được; chỉ những mã quyền được Grant mới trả true.</summary>
-public class FakePermissionEvaluator : IPermissionEvaluator
+public class SharedPermissionEvaluator : IPermissionEvaluator
 {
     private readonly HashSet<(Guid UserId, string Code)> _grants = [];
 
-    public FakePermissionEvaluator Grant(Guid userId, params string[] permissionCodes)
+    public SharedPermissionEvaluator Grant(Guid userId, params string[] permissionCodes)
     {
         foreach (var code in permissionCodes)
         {

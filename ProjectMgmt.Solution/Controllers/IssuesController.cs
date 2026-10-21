@@ -1,0 +1,55 @@
+using DeliveryIntelligence.Application.Dto;
+using DeliveryIntelligence.Application.IServices;
+using Microsoft.AspNetCore.Mvc;
+using ProjectMgmt.BuildingBlocks.Results;
+using ProjectMgmt.Solution.Security;
+
+namespace ProjectMgmt.Solution.Controllers;
+
+/// <summary>
+/// API Issue của module DeliveryIntelligence (C). Quyền theo Project kiểm qua ProjectAccess trước khi gọi use case.
+/// Các route cũ GET/PUT/POST trong WorkItemsController vẫn giữ nguyên cho Backlog/Board.
+/// </summary>
+[Route("api/v1")]
+public class IssuesController(IIssueTrackingService issues, ProjectAccess access) : ApiControllerBase
+{
+    [HttpGet("projects/{projectId:guid}/issues")]
+    public async Task<ActionResult<PagedResultDto<IssueListItemDto>>> List(
+        Guid projectId,
+        [FromQuery] IssueListQueryDto query,
+        CancellationToken cancellationToken)
+    {
+        if (!await access.AllowsAsync(projectId)) return Forbidden();
+        return FromResult(await issues.ListAsync(projectId, query, cancellationToken));
+    }
+
+    /// <summary>Dữ liệu lõi của Issue do module C sở hữu (id, số, các tham chiếu XMOD, ước lượng, hạn…).</summary>
+    [HttpGet("issues/{id:guid}/core")]
+    public async Task<ActionResult<IssueDetailDto>> GetCore(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await issues.GetAsync(id, cancellationToken);
+        if (result.IsFailure) return FromResult(result);
+        if (!await access.AllowsAsync(result.Value.ProjectId)) return Forbidden();
+        return Ok(result.Value);
+    }
+
+    [HttpPatch("issues/{id:guid}")]
+    public async Task<ActionResult<IssueDetailDto>> Update(Guid id, UpdateIssueDto request, CancellationToken cancellationToken)
+    {
+        var current = await issues.GetAsync(id, cancellationToken);
+        if (current.IsFailure) return FromResult(current);
+        if (!await access.AllowsAsync(current.Value.ProjectId, "issue.update")) return Forbidden();
+        if (request.AssigneeId != current.Value.AssigneeId
+            && request.AssigneeId != access.UserId
+            && !await access.AllowsAsync(current.Value.ProjectId, "issue.assign")) return Forbidden();
+        return FromResult(await issues.UpdateAsync(id, request, access.UserId, cancellationToken));
+    }
+
+    private ObjectResult Forbidden() => StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+    {
+        Title = "Forbidden",
+        Detail = "Bạn không có quyền thực hiện thao tác này.",
+        Status = StatusCodes.Status403Forbidden,
+        Extensions = { ["code"] = "PROJECT_PERMISSION_DENIED" }
+    });
+}

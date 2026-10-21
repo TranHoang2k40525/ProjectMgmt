@@ -15,6 +15,8 @@ public class IssueTrackingServiceTests
     {
         _service = new IssueTrackingService(
             _repository,
+            new SharedPermissionEvaluator(),
+            TimeProvider.System,
             new CreateIssueDtoValidator(),
             new UpdateIssueDtoValidator(),
             new IssueListQueryDtoValidator());

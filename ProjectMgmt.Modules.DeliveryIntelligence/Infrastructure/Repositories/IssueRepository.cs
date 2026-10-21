@@ -43,6 +43,11 @@ public class IssueRepository : IIssueRepository
             .ThenBy(issue => issue.IssueNumber)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<Issue>> GetByEpicAsync(Guid epicId, CancellationToken cancellationToken = default) =>
+        await _context.Issues
+            .Where(issue => issue.EpicId == epicId)
+            .ToListAsync(cancellationToken);
+
     public async Task<IssuePage> ListAsync(IssueListFilter filter, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(filter);
@@ -112,6 +117,9 @@ public class IssueRepository : IIssueRepository
 
     public async Task AddAsync(Issue issue, CancellationToken cancellationToken = default) =>
         await _context.Issues.AddAsync(issue, cancellationToken);
+
+    public async Task AddActivityAsync(ActivityLog activity, CancellationToken cancellationToken = default) =>
+        await _context.ActivityLogs.AddAsync(activity, cancellationToken);
 
     public Task SaveChangesAsync(CancellationToken cancellationToken = default) =>
         _context.SaveChangesAsync(cancellationToken);

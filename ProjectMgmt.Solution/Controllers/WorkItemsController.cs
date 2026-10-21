@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using DeliveryIntelligence.Application.IServices;
 using DeliveryIntelligence.Domain.Entities;
 using DeliveryIntelligence.Infrastructure;
 using IdentityExperience.Infrastructure;
@@ -88,6 +89,8 @@ public sealed class WorkItemsController(
         return issue is null ? NotFound() : await Save(issue.ProjectId, id, request);
     }
 
+    // TODO(C/B): tạo Issue và đổi trạng thái vẫn chạy luồng cũ cho tới khi Planning bàn giao IIssueNumberGenerator
+    // và IWorkflowValidationService; khi đó chuyển sang IIssueCreationService và use case transition của module C.
     private Task<IActionResult> Save(Guid projectId, Guid? id, WorkItemRequest request) =>
         delivery.Database.CreateExecutionStrategy().ExecuteAsync(() => SaveCore(projectId, id, request));
 
@@ -178,17 +181,13 @@ public sealed class WorkItemsController(
     private Task<bool> accessFor(Guid userId, Guid projectId) => HttpContext.RequestServices.GetRequiredService<ProjectMgmt.IdentityAccess.Contracts.IPermissionEvaluator>().IsProjectMemberAsync(userId, projectId);
 
     [HttpDelete("issues/{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id)
+    public async Task<IActionResult> Delete(Guid id, [FromServices] IIssueTrackingService issues)
     {
-        var issue = await delivery.Issues.SingleOrDefaultAsync(i => i.Id == id && !i.IsDeleted);
-        if (issue is null) return NotFound();
-        if (!await access.AllowsAsync(issue.ProjectId, "issue.delete")) return Denied();
-        var children = await delivery.Issues.Where(i => i.ParentId == id && !i.IsDeleted).ToListAsync();
-        foreach (var child in children.Append(issue)) { child.IsDeleted = true; child.UpdatedAt = DateTime.UtcNow; }
-        var epicLinks = await delivery.Issues.Where(i => i.EpicId == id).ToListAsync();
-        foreach (var link in epicLinks) link.EpicId = null;
-        delivery.ActivityLogs.Add(new ActivityLog { Id = Guid.NewGuid(), IssueId = id, UserId = access.UserId, Action = "Deleted", Source = "User", CreatedAt = DateTime.UtcNow });
-        await delivery.SaveChangesAsync(); return NoContent();
+        var issue = await issues.GetAsync(id);
+        if (issue.IsFailure) return NotFound();
+        if (!await access.AllowsAsync(issue.Value.ProjectId, "issue.delete")) return Denied();
+        var deleted = await issues.DeleteAsync(id, access.UserId);
+        return deleted.IsSuccess ? NoContent() : NotFound();
     }
 
     public sealed class CommentRequest { [Required, StringLength(20000, MinimumLength = 1)] public string Content { get; set; } = ""; }
