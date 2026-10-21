@@ -15,6 +15,7 @@ import { IssueAttachmentsComponent } from './sections/issue-attachments';
 import { IssueCommentsComponent } from './sections/issue-comments';
 import { IssueCriteriaComponent } from './sections/issue-criteria';
 import { IssueRequiredSkillsComponent } from './sections/issue-required-skills';
+import { IssueReleaseLinksComponent } from './sections/issue-release-links';
 import { IssueHistoryComponent } from './sections/issue-history';
 import { IssueLabelsComponent } from './sections/issue-labels';
 import { IssueLinksComponent } from './sections/issue-links';
@@ -23,7 +24,7 @@ import { IssueWatchButtonComponent } from './sections/issue-watch-button';
 @Component({
   selector: 'app-issue-detail-page',
   imports: [CommonModule, FormsModule, RouterLink, IssueFormComponent, IssueAttachmentsComponent, IssueCommentsComponent,
-    IssueWatchButtonComponent, IssueLabelsComponent, IssueLinksComponent, IssueHistoryComponent, IssueCriteriaComponent, IssueRequiredSkillsComponent],
+    IssueWatchButtonComponent, IssueLabelsComponent, IssueLinksComponent, IssueHistoryComponent, IssueCriteriaComponent, IssueRequiredSkillsComponent, IssueReleaseLinksComponent],
   templateUrl: './issue-detail-page.html',
   styleUrl: './issue-detail-page.scss'
 })

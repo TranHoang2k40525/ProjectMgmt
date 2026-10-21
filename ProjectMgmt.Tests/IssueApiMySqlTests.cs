@@ -236,6 +236,14 @@ public class IssueApiMySqlTests(DeliveryApiFixture fixture) : IClassFixture<Deli
     }
 
     [MySqlFact]
+    public async Task ReleaseLinksReportMissingPlanningContract()
+    {
+        var response = await As(SharedTestData.OwnerUserId).GetAsync($"/api/v1/issues/{SharedTestData.BugIssueId}/components");
+        Assert.Equal(HttpStatusCode.NotImplemented, response.StatusCode);
+        Assert.Contains("RELEASE_LOOKUP_UNAVAILABLE", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+    }
+
+    [MySqlFact]
     public async Task TransitionEndpointReportsMissingWorkflowContract()
     {
         var response = await As(SharedTestData.OwnerUserId).PostAsJsonAsync($"/api/v1/issues/{SharedTestData.BugIssueId}/transition",

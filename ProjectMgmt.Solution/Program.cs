@@ -294,6 +294,8 @@ builder.Services.AddScoped<IIssueLabelLinkService, IssueLabelLinkService>();
 builder.Services.AddScoped<IIssueNotifier, IssueNotificationAdapter>();
 builder.Services.AddScoped<ISkillCatalogReader, SkillCatalogAdapter>();
 builder.Services.AddScoped<IRequirementRepository, RequirementRepository>();
+builder.Services.AddScoped<IReleaseLinkRepository, ReleaseLinkRepository>();
+// IssueReleaseService không đăng ký: cần IProjectReleaseLookupService thật của Planning; IssueReleaseController tự dựng khi có.
 builder.Services.AddScoped<IssueRequirementService>();
 builder.Services.AddScoped<IIssueRequirementService>(services => services.GetRequiredService<IssueRequirementService>());
 builder.Services.AddScoped<ProjectMgmt.IssueTracking.Contracts.IIssueSkillService>(services => services.GetRequiredService<IssueRequirementService>());

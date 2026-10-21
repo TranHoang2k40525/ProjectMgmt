@@ -29,6 +29,10 @@ public static class IssueActivities
     public const string CriteriaRemoved = "CriteriaRemoved";
     public const string SkillRequired = "SkillRequired";
     public const string SkillUnrequired = "SkillUnrequired";
+    public const string ComponentAdded = "ComponentAdded";
+    public const string ComponentRemoved = "ComponentRemoved";
+    public const string VersionAdded = "VersionAdded";
+    public const string VersionRemoved = "VersionRemoved";
 
     public static ActivityLog Create(
         Guid issueId,

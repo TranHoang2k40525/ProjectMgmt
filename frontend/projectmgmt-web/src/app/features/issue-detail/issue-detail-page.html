@@ -83,6 +83,7 @@
           <dt>Cập nhật</dt><dd>{{ task.updatedAt ? (task.updatedAt | date:'dd/MM/yyyy HH:mm') : '—' }}</dd>
         </dl>
         <app-issue-labels [issueId]="task.id" [projectId]="task.projectId" (changed)="load()" />
+        <app-issue-release-links [issueId]="task.id" (changed)="historyVersion.update(v => v + 1)" />
         <app-issue-required-skills [issueId]="task.id" (changed)="historyVersion.update(v => v + 1)" />
       </aside>
     </div>

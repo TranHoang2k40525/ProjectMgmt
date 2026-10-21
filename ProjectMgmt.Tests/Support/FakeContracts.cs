@@ -86,6 +86,37 @@ public class SharedWorkflowValidationService : IWorkflowValidationService
     }
 }
 
+/// <summary>Component/Version mẫu: DEMO có 2 component + 2 version; OTHER có 1 component (để kiểm chặn khác Project).</summary>
+public class SharedReleaseLookupService : IProjectReleaseLookupService
+{
+    public static readonly Guid BackendComponentId = Guid.Parse("c0de0000-0000-0000-0008-000000000001");
+    public static readonly Guid FrontendComponentId = Guid.Parse("c0de0000-0000-0000-0008-000000000002");
+    public static readonly Guid OtherComponentId = Guid.Parse("c0de0000-0000-0000-0008-000000000003");
+    public static readonly Guid V1VersionId = Guid.Parse("c0de0000-0000-0000-0009-000000000001");
+    public static readonly Guid V2VersionId = Guid.Parse("c0de0000-0000-0000-0009-000000000002");
+
+    public Task<IReadOnlyList<ProjectComponentDto>> GetComponentsAsync(Guid projectId, CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<ProjectComponentDto> all =
+        [
+            new(BackendComponentId, SharedTestData.ProjectId, "Backend API", SharedTestData.DotnetSkillId),
+            new(FrontendComponentId, SharedTestData.ProjectId, "Web UI", SharedTestData.AngularSkillId),
+            new(OtherComponentId, SharedTestData.OtherProjectId, "Khác", null)
+        ];
+        return Task.FromResult<IReadOnlyList<ProjectComponentDto>>(all.Where(c => c.ProjectId == projectId).ToList());
+    }
+
+    public Task<IReadOnlyList<ProjectVersionDto>> GetVersionsAsync(Guid projectId, CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<ProjectVersionDto> all =
+        [
+            new(V1VersionId, SharedTestData.ProjectId, "v1.0", new DateOnly(2026, 11, 29), false),
+            new(V2VersionId, SharedTestData.ProjectId, "v0.9", new DateOnly(2026, 11, 22), true)
+        ];
+        return Task.FromResult<IReadOnlyList<ProjectVersionDto>>(all.Where(v => v.ProjectId == projectId).ToList());
+    }
+}
+
 public class RecordingIssueNotifier : DeliveryIntelligence.Application.IServices.IIssueNotifier
 {
     public List<DeliveryIntelligence.Application.IServices.IssueNotification> Sent { get; } = [];

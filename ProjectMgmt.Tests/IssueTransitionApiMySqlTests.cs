@@ -7,7 +7,7 @@ using Xunit;
 
 namespace ProjectMgmt.Tests;
 
-/// <summary>Host thật + MySQL tạm + fake IWorkflowValidationService (bản thật của B chưa có).</summary>
+/// <summary>Host thật + MySQL tạm + fake contract của B chưa có (IWorkflowValidationService, IProjectReleaseLookupService).</summary>
 public class TransitionApiFixture : IAsyncLifetime
 {
     public MySqlTestDatabase Database { get; } = new();
@@ -18,7 +18,7 @@ public class TransitionApiFixture : IAsyncLifetime
         await Database.InitializeAsync();
         if (MySqlTestDatabase.IsConfigured)
         {
-            Factory = new DeliveryApiFactory(Database) { RegisterWorkflowFake = true };
+            Factory = new DeliveryApiFactory(Database) { RegisterWorkflowFake = true, RegisterReleaseFake = true };
         }
     }
 
