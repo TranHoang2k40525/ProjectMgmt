@@ -1,6 +1,7 @@
 using DeliveryIntelligence.Application.Dto;
 using DeliveryIntelligence.Application.IServices;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using ProjectMgmt.BuildingBlocks.Results;
 using ProjectMgmt.IdentityAccess.Contracts;
 
@@ -83,8 +84,11 @@ public class DataOpsController(
         await DenyAsync() ?? FromResult(await cleaning.RunAsync(id, cancellationToken));
 
     [HttpPost("versions/{id:guid}/freeze")]
-    public async Task<ActionResult<DatasetVersionDto>> Freeze(Guid id, FreezeVersionDto request, CancellationToken cancellationToken) =>
-        await DenyAsync() ?? FromResult(await review.FreezeAsync(id, request, cancellationToken));
+    public async Task<ActionResult<DatasetVersionDto>> Freeze(
+        Guid id,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] FreezeVersionDto? request,
+        CancellationToken cancellationToken) =>
+        await DenyAsync() ?? FromResult(await review.FreezeAsync(id, request ?? new FreezeVersionDto(), cancellationToken));
 
     [HttpGet("cleaning-rules")]
     public async Task<ActionResult<IReadOnlyList<CleaningRuleDto>>> Rules(CancellationToken cancellationToken) =>

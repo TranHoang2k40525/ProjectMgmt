@@ -11,6 +11,7 @@ namespace DeliveryIntelligence.Application.Services;
 
 public class DatasetReviewService : IDatasetReviewService
 {
+    private const int NoteMaxLength = 1000;
     private readonly IDataOpsRepository _data;
     private readonly TimeProvider _clock;
 
@@ -30,6 +31,11 @@ public class DatasetReviewService : IDatasetReviewService
         if (request.QualityScore is < 0 or > 1)
         {
             return Result<DatasetSampleDto>.Failure(Error.Validation("SAMPLE_QUALITY_SCORE_INVALID", "Điểm chất lượng từ 0 đến 1."));
+        }
+
+        if (request.Note?.Trim().Length > NoteMaxLength)
+        {
+            return Result<DatasetSampleDto>.Failure(Error.Validation("SAMPLE_REVIEW_NOTE_TOO_LONG", "Ghi chú duyệt tối đa 1000 ký tự."));
         }
 
         var (sample, blocked) = await EditableSampleAsync(sampleId, cancellationToken);
@@ -69,7 +75,7 @@ public class DatasetReviewService : IDatasetReviewService
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (string.IsNullOrWhiteSpace(request.Note) || request.Note.Trim().Length > 1000)
+        if (string.IsNullOrWhiteSpace(request.Note) || request.Note.Trim().Length > NoteMaxLength)
         {
             return Result<DatasetSampleDto>.Failure(Error.Validation("SAMPLE_REJECT_NOTE_REQUIRED", "Nhập lý do từ chối (tối đa 1000 ký tự)."));
         }
@@ -186,7 +192,7 @@ public class DatasetReviewService : IDatasetReviewService
         var now = _clock.GetUtcNow().UtcDateTime;
         sample.ReviewedBy = reviewerUserId;
         sample.ReviewedAt = now;
-        sample.ReviewNote = string.IsNullOrWhiteSpace(note) ? null : note.Trim()[..Math.Min(note.Trim().Length, 1000)];
+        sample.ReviewNote = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
         sample.UpdatedAt = now;
     }
 }

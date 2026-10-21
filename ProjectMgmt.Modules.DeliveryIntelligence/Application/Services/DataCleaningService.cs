@@ -113,8 +113,14 @@ public class DataCleaningService : IDataCleaningService
             .GroupBy(sample => CleaningRuleEvaluator.NormalizeInstruction(sample.Instruction))
             .ToDictionary(group => group.Key, group => group.Count());
 
-        // Chỉ thay flag chưa xử lý; flag người duyệt đã đánh dấu xử lý được giữ lại làm lịch sử.
-        _data.RemoveFlags(await _data.GetFlagsAsync(samples.Select(s => s.Id), unresolvedOnly: true, cancellationToken));
+        // Chỉ thay flag chưa xử lý; flag đã xử lý được giữ lại. Phát hiện Warning/Info trùng flag đã xử lý không bị tạo lại
+        // (người duyệt đã chấp nhận); rule Error là cổng cứng nên vẫn gắn lại — phải sửa nội dung mẫu.
+        // Sửa nội dung mẫu xóa hết flag nên quyết định cũ không áp sai cho nội dung mới.
+        var existing = await _data.GetFlagsAsync(samples.Select(s => s.Id), unresolvedOnly: false, cancellationToken);
+        _data.RemoveFlags(existing.Where(flag => !flag.IsResolved));
+        var resolved = existing.Where(flag => flag.IsResolved)
+            .Select(flag => (flag.SampleId, flag.RuleId, flag.FieldPath, flag.Message))
+            .ToHashSet();
 
         var now = _clock.GetUtcNow().UtcDateTime;
         var summary = new CleaningRunSummaryDto { VersionId = versionId, SamplesChecked = samples.Count, RulesApplied = rules.Count };
@@ -126,14 +132,21 @@ public class DataCleaningService : IDataCleaningService
             {
                 foreach (var finding in CleaningRuleEvaluator.Evaluate(rule, sample, duplicates))
                 {
+                    var message = Truncate(finding.Message, 1000)!;
+                    var fieldPath = Truncate(finding.FieldPath, 200);
+                    if (rule.Severity != ErrorSeverity && resolved.Contains((sample.Id, rule.Id, fieldPath, message)))
+                    {
+                        continue;
+                    }
+
                     await _data.AddFlagAsync(new AiDataQualityFlag
                     {
                         Id = Guid.NewGuid(),
                         SampleId = sample.Id,
                         RuleId = rule.Id,
                         Severity = rule.Severity,
-                        Message = Truncate(finding.Message, 1000),
-                        FieldPath = Truncate(finding.FieldPath, 200),
+                        Message = message,
+                        FieldPath = fieldPath,
                         DetectedAt = now
                     }, cancellationToken);
                     summary.FlagsCreated++;

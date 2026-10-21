@@ -219,6 +219,8 @@ public class DatasetService : IDatasetService
 
         Apply(sample, request, hash);
         sample.UpdatedAt = Now();
+        // Flag (kể cả đã xử lý) mô tả nội dung cũ; nội dung mới phải được chạy rule lại từ đầu.
+        _data.RemoveFlags(await _data.GetFlagsAsync([sample.Id], unresolvedOnly: false, cancellationToken));
         await _data.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(sample));
     }

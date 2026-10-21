@@ -114,6 +114,74 @@ public class DatasetReviewServiceTests
     }
 
     [Fact]
+    public async Task ResolvedFlagStaysResolvedWhenRulesRunAgain()
+    {
+        var sample = Add("Gửi OTP tới khachhang@example.com khi đặt lại mật khẩu");
+        await _cleaning.RunAsync(_version.Id);
+        var pii = _data.Flags.Single(f => f.SampleId == sample.Id);
+        await _cleaning.ResolveFlagAsync(pii.Id, SharedTestData.SystemAdminUserId);
+        await _review.ApproveAsync(sample.Id, Approve(), SharedTestData.SystemAdminUserId);
+
+        var rerun = await _cleaning.RunAsync(_version.Id);
+
+        Assert.Equal(0, rerun.Value.FlagsCreated);
+        Assert.Single(_data.Flags, f => f.SampleId == sample.Id);
+        Assert.Equal("Approved", sample.QualityStatus);
+        Assert.True((await _review.FreezeAsync(_version.Id, new FreezeVersionDto())).IsSuccess);
+    }
+
+    [Fact]
+    public async Task EditingSampleDropsFlagsOfOldContent()
+    {
+        var datasets = new DatasetService(_data, new FixedTimeProvider(Now));
+        var sample = Add("Gửi OTP tới khachhang@example.com khi đặt lại mật khẩu");
+        await _cleaning.RunAsync(_version.Id);
+        await _cleaning.ResolveFlagAsync(_data.Flags.Single(f => f.SampleId == sample.Id).Id, SharedTestData.SystemAdminUserId);
+
+        await datasets.UpdateSampleAsync(sample.Id, new SaveDatasetSampleDto
+        {
+            Instruction = "Gửi OTP tới nguoidung@example.com khi đặt lại mật khẩu",
+            OutputJson = """{"subTasks":[{"title":"Tạo endpoint gửi OTP qua email"}]}"""
+        });
+        Assert.DoesNotContain(_data.Flags, f => f.SampleId == sample.Id);
+
+        await _cleaning.RunAsync(_version.Id);
+        Assert.Contains(_data.Flags, f => f.SampleId == sample.Id && !f.IsResolved);
+        Assert.Equal("SAMPLE_OPEN_FLAGS", (await _review.ApproveAsync(sample.Id, Approve(), SharedTestData.SystemAdminUserId)).Error.Code);
+    }
+
+    [Fact]
+    public async Task WrongTypedRuleConfigIsIgnoredInsteadOfFailingTheRun()
+    {
+        _data.Rules.Clear();
+        _data.Rules.Add(new AiDataCleaningRule
+        {
+            Id = Guid.NewGuid(), Code = "bad-config", Name = "Bad", RuleType = "LengthCheck", Severity = "Error",
+            Config = """{"field":"Instruction","min":"15"}""", AppliesTo = "All", IsActive = true, CreatedAt = Now
+        });
+        _data.Rules.Add(new AiDataCleaningRule
+        {
+            Id = Guid.NewGuid(), Code = "bad-pii", Name = "Bad PII", RuleType = "PiiDetection", Severity = "Warning",
+            Config = """{"detectors":[1,"email"]}""", AppliesTo = "All", IsActive = true, CreatedAt = Now
+        });
+        Add("Gửi OTP tới khachhang@example.com");
+
+        var run = await _cleaning.RunAsync(_version.Id);
+
+        Assert.True(run.IsSuccess);
+        Assert.Equal(1, run.Value.FlagsCreated);
+    }
+
+    [Fact]
+    public async Task ApprovalNoteOverLimitIsRejectedNotTruncated()
+    {
+        var sample = Add("Phân rã Story đặt lại mật khẩu qua email");
+        await _cleaning.RunAsync(_version.Id);
+        var result = await _review.ApproveAsync(sample.Id, new ApproveSampleDto { PiiChecked = true, Note = new string('x', 1001) }, SharedTestData.SystemAdminUserId);
+        Assert.Equal("SAMPLE_REVIEW_NOTE_TOO_LONG", result.Error.Code);
+    }
+
+    [Fact]
     public void ManifestChecksumIsOrderIndependentAndSplitSensitive()
     {
         var a = new AiDatasetSample { ContentHash = "aa", SplitType = "Train" };
@@ -166,9 +234,11 @@ public class DataOpsApiMySqlTests(DeliveryApiFixture fixture) : IClassFixture<De
         var pending = await admin.GetFromJsonAsync<PagedResultDto<DatasetSampleDto>>($"/api/v1/ai-data/versions/{version.Id}/samples?qualityStatus=Approved");
         Assert.Equal(1, pending!.TotalCount);
 
-        var frozen = await (await admin.PostAsJsonAsync($"/api/v1/ai-data/versions/{version.Id}/freeze", new FreezeVersionDto { SplitSeed = 7 }))
+        // Không gửi body: seed ngẫu nhiên.
+        var frozen = await (await admin.PostAsync($"/api/v1/ai-data/versions/{version.Id}/freeze", null))
             .Content.ReadFromJsonAsync<DatasetVersionDto>();
         Assert.True(frozen!.IsFrozen);
+        Assert.NotNull(frozen.SplitSeed);
         Assert.Equal(64, frozen.Checksum!.Length);
 
         var afterFreeze = await admin.PostAsJsonAsync($"/api/v1/ai-data/versions/{version.Id}/samples", new SaveDatasetSampleDto { Instruction = "Mẫu sau khi freeze không được thêm" });

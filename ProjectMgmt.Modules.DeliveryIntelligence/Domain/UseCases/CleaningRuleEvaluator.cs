@@ -86,7 +86,7 @@ public static partial class CleaningRuleEvaluator
         var field = Text(c, "field") ?? "title";
         var minWords = Int(c, "minWords") ?? 3;
         var phrases = c.TryGetProperty("phrases", out var list) && list.ValueKind == JsonValueKind.Array
-            ? list.EnumerateArray().Select(p => p.GetString()?.Trim().ToLowerInvariant()).Where(p => !string.IsNullOrEmpty(p)).ToHashSet()
+            ? Strings(list).Select(p => p.Trim().ToLowerInvariant()).Where(p => p.Length > 0).ToHashSet()
             : [];
         if (!SampleHasher.IsValidJson(sample.OutputJson)) return [];
 
@@ -121,7 +121,7 @@ public static partial class CleaningRuleEvaluator
     private static List<CleaningFinding> DetectPii(JsonElement c, AiDatasetSample sample)
     {
         var detectors = c.TryGetProperty("detectors", out var list) && list.ValueKind == JsonValueKind.Array
-            ? list.EnumerateArray().Select(d => d.GetString()).ToHashSet()
+            ? Strings(list).ToHashSet()
             : ["email", "phone", "secret"];
         var findings = new List<CleaningFinding>();
         foreach (var (field, text) in new[] { ("instruction", sample.Instruction), ("input", sample.InputJson), ("output", sample.OutputJson) })
@@ -153,7 +153,11 @@ public static partial class CleaningRuleEvaluator
         c.ValueKind == JsonValueKind.Object && c.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
 
     private static int? Int(JsonElement c, string name) =>
-        c.ValueKind == JsonValueKind.Object && c.TryGetProperty(name, out var v) && v.TryGetInt32(out var i) ? i : null;
+        c.ValueKind == JsonValueKind.Object && c.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out var i) ? i : null;
+
+    // Config do admin nhập: phần tử không phải chuỗi bị bỏ qua thay vì ném lỗi làm hỏng cả lượt chạy rule.
+    private static IEnumerable<string> Strings(JsonElement array) =>
+        array.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.String).Select(e => e.GetString()!);
 
     [GeneratedRegex(@"\s+")]
     private static partial Regex WhitespaceRun();
