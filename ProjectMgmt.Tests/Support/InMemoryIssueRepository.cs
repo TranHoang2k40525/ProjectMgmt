@@ -135,6 +135,17 @@ public class InMemoryIssueRepository : IIssueRepository
         return Task.CompletedTask;
     }
 
+    public Task<(IReadOnlyList<ActivityLog> Items, int TotalCount)> GetActivitiesAsync(
+        Guid issueId,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        var matched = Activities.Where(a => a.IssueId == issueId).OrderByDescending(a => a.CreatedAt).ThenBy(a => a.Id).ToList();
+        IReadOnlyList<ActivityLog> items = matched.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+        return Task.FromResult((items, matched.Count));
+    }
+
     public Task<IssueStatusHistory?> GetLastStatusChangeAsync(Guid issueId, CancellationToken cancellationToken = default) =>
         Task.FromResult(StatusHistory.Where(h => h.IssueId == issueId).MaxBy(h => h.ChangedAt));
 

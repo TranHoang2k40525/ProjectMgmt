@@ -159,6 +159,23 @@ public class IssueRepository : IIssueRepository
     public async Task AddActivityAsync(ActivityLog activity, CancellationToken cancellationToken = default) =>
         await _context.ActivityLogs.AddAsync(activity, cancellationToken);
 
+    public async Task<(IReadOnlyList<ActivityLog> Items, int TotalCount)> GetActivitiesAsync(
+        Guid issueId,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.ActivityLogs.AsNoTracking().Where(activity => activity.IssueId == issueId);
+        var total = await query.CountAsync(cancellationToken);
+        var items = await query
+            .OrderByDescending(activity => activity.CreatedAt)
+            .ThenBy(activity => activity.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+        return (items, total);
+    }
+
     public async Task<IssueStatusHistory?> GetLastStatusChangeAsync(Guid issueId, CancellationToken cancellationToken = default)
     {
         // Ưu tiên bản ghi chưa lưu trong cùng unit of work (ví dụ lúc vừa tạo Issue rồi đổi trạng thái ngay).

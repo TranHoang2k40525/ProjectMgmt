@@ -63,12 +63,7 @@
         <section class="card"><app-issue-attachments [issueId]="task.id" (changed)="load()" /></section>
         <section class="card"><app-issue-comments [issueId]="task.id" (changed)="load()" /></section>
 
-        <section class="card">
-          <h2>Lịch sử thay đổi</h2>
-          @for (activity of task.activities ?? []; track activity.id) {
-            <p class="activity"><strong>{{ activity.actorName || 'Hệ thống' }}</strong> {{ activity.action }} <span class="muted">{{ activity.timestamp | date:'dd/MM/yyyy HH:mm' }}</span></p>
-          } @empty { <p class="muted">Chưa có thay đổi.</p> }
-        </section>
+        <section class="card"><app-issue-history [issueId]="task.id" [version]="historyVersion()" /></section>
       </div>
 
       <aside class="side card" aria-label="Thông tin công việc">

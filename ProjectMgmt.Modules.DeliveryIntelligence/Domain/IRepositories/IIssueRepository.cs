@@ -33,6 +33,13 @@ public interface IIssueRepository
 
     Task AddActivityAsync(ActivityLog activity, CancellationToken cancellationToken = default);
 
+    /// <summary>ActivityLog mới nhất trước (IX_ActivityLog_Issue), phân trang offset — log mỗi Issue nhỏ.</summary>
+    Task<(IReadOnlyList<ActivityLog> Items, int TotalCount)> GetActivitiesAsync(
+        Guid issueId,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Lần đổi trạng thái gần nhất của Issue (dùng IX_IssueStatusHistory_Issue).</summary>
     Task<IssueStatusHistory?> GetLastStatusChangeAsync(Guid issueId, CancellationToken cancellationToken = default);
 

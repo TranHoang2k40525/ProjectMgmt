@@ -13,6 +13,7 @@ import { IssueFormComponent } from '../../shared/components/issue-form/issue-for
 import { resolveIssueRoute } from './issue-route';
 import { IssueAttachmentsComponent } from './sections/issue-attachments';
 import { IssueCommentsComponent } from './sections/issue-comments';
+import { IssueHistoryComponent } from './sections/issue-history';
 import { IssueLabelsComponent } from './sections/issue-labels';
 import { IssueLinksComponent } from './sections/issue-links';
 import { IssueWatchButtonComponent } from './sections/issue-watch-button';
@@ -20,7 +21,7 @@ import { IssueWatchButtonComponent } from './sections/issue-watch-button';
 @Component({
   selector: 'app-issue-detail-page',
   imports: [CommonModule, FormsModule, RouterLink, IssueFormComponent, IssueAttachmentsComponent, IssueCommentsComponent,
-    IssueWatchButtonComponent, IssueLabelsComponent, IssueLinksComponent],
+    IssueWatchButtonComponent, IssueLabelsComponent, IssueLinksComponent, IssueHistoryComponent],
   templateUrl: './issue-detail-page.html',
   styleUrl: './issue-detail-page.scss'
 })
@@ -39,6 +40,7 @@ export class IssueDetailPage implements OnInit {
   readonly editing = signal(false);
   readonly item = signal<WorkItem | null>(null);
   readonly core = signal<IssueCoreDto | null>(null);
+  readonly historyVersion = signal(0);
   /** Mã PROJ-123 đang chờ danh sách Issue của Project tải xong để phân giải. */
   private readonly pendingKey = signal<string | null>(null);
 
@@ -88,6 +90,7 @@ export class IssueDetailPage implements OnInit {
     this.service.getIssue(id).subscribe({
       next: task => {
         this.item.set({ ...task });
+        this.historyVersion.update(v => v + 1);
         this.loading.set(false);
         if (this.service.currentProject().id !== task.projectId) {
           this.service.getProjectById(task.projectId).subscribe({ next: p => this.service.currentProject.set(p), error: e => this.fail(e) });

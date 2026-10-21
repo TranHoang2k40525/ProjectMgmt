@@ -203,6 +203,12 @@ public class IssueApiMySqlTests(DeliveryApiFixture fixture) : IClassFixture<Deli
         Assert.True(status.DurationSeconds > 0);
         var assignment = await delivery.IssueAssignmentHistories.AsNoTracking().SingleAsync(h => h.IssueId == epic);
         Assert.Equal((SharedTestData.DeveloperUserId, "Manual"), (assignment.ToAssigneeId!.Value, assignment.AssignmentSource));
+
+        var statuses = await As(SharedTestData.ViewerUserId).GetFromJsonAsync<List<StatusChangeDto>>($"/api/v1/issues/{epic}/status-history");
+        Assert.Equal("In Progress", Assert.Single(statuses!).ToStatusName);
+        var activity = await As(SharedTestData.ViewerUserId).GetFromJsonAsync<PagedResultDto<ActivityDto>>($"/api/v1/issues/{epic}/history?pageSize=5");
+        Assert.NotEmpty(activity!.Items);
+        Assert.Equal(HttpStatusCode.Forbidden, (await As(SharedTestData.OutsiderUserId).GetAsync($"/api/v1/issues/{epic}/assignment-history")).StatusCode);
     }
 
     [MySqlFact]
