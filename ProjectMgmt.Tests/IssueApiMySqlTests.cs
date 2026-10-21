@@ -178,6 +178,15 @@ public class IssueApiMySqlTests(DeliveryApiFixture fixture) : IClassFixture<Deli
     }
 
     [MySqlFact]
+    public async Task TransitionEndpointReportsMissingWorkflowContract()
+    {
+        var response = await As(SharedTestData.OwnerUserId).PostAsJsonAsync($"/api/v1/issues/{SharedTestData.BugIssueId}/transition",
+            new TransitionIssueDto { TargetStatusId = SharedTestData.InProgressStatusId });
+        Assert.Equal(HttpStatusCode.NotImplemented, response.StatusCode);
+        Assert.Contains("WORKFLOW_VALIDATION_UNAVAILABLE", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+    }
+
+    [MySqlFact]
     public async Task DeleteThroughExistingRouteIsSoftAndCascades()
     {
         var other = fixture.Database.CreateDeliveryContext();

@@ -289,6 +289,9 @@ builder.Services.AddScoped<ICollaborationRepository, CollaborationRepository>();
 builder.Services.AddScoped<IIssueCollaborationService, IssueCollaborationService>();
 builder.Services.AddScoped<ILabelLinkRepository, LabelLinkRepository>();
 builder.Services.AddScoped<IIssueLabelLinkService, IssueLabelLinkService>();
+builder.Services.AddScoped<IIssueNotifier, IssueNotificationAdapter>();
+// IssueTransitionService không đăng ký: cần IWorkflowValidationService thật của Planning (ValidateOnBuild sẽ chặn khởi động).
+// IssuesController tự dựng service khi contract đó có trong DI.
 builder.Services.AddSingleton(builder.Configuration.GetSection(AttachmentOptions.SectionName).Get<AttachmentOptions>() ?? new AttachmentOptions());
 builder.Services.AddSingleton<IAttachmentStorage>(services => new DeliveryIntelligence.Infrastructure.Services.LocalAttachmentStorage(
     Path.Combine(services.GetRequiredService<IWebHostEnvironment>().ContentRootPath, "App_Data", "attachments")));

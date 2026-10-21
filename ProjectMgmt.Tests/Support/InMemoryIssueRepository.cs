@@ -135,6 +135,17 @@ public class InMemoryIssueRepository : IIssueRepository
         return Task.CompletedTask;
     }
 
+    public int TransactionCount { get; private set; }
+
+    public Task<Issue?> LockForUpdateAsync(Guid issueId, CancellationToken cancellationToken = default) =>
+        GetByIdAsync(issueId, cancellationToken: cancellationToken);
+
+    public async Task<T> ExecuteInTransactionAsync<T>(Func<CancellationToken, Task<T>> work, CancellationToken cancellationToken = default)
+    {
+        TransactionCount++;
+        return await work(cancellationToken);
+    }
+
     private static IOrderedEnumerable<Issue> Ordered(IEnumerable<Issue> issues) =>
         issues.OrderBy(issue => issue.RankOrder).ThenBy(issue => issue.IssueNumber);
 }

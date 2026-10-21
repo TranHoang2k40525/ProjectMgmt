@@ -69,6 +69,39 @@ public class IssuesController(
         return FromResult(await hierarchy.RankAsync(id, request, access.UserId, cancellationToken));
     }
 
+    /// <summary>
+    /// Chuyển trạng thái theo workflow. Trả 501 khi Host chưa có IWorkflowValidationService thật của Planning
+    /// (luồng cũ PUT /issues/{id} vẫn đổi được trạng thái).
+    /// </summary>
+    [HttpPost("issues/{id:guid}/transition")]
+    public async Task<ActionResult<IssueTransitionResultDto>> Transition(
+        Guid id,
+        TransitionIssueDto request,
+        [FromServices] IServiceProvider services,
+        CancellationToken cancellationToken)
+    {
+        if (services.GetService<ProjectMgmt.ProjectManagement.Contracts.IWorkflowValidationService>() is null)
+        {
+            return StatusCode(StatusCodes.Status501NotImplemented, new ProblemDetails
+            {
+                Title = "Not Implemented",
+                Detail = "Chưa có dịch vụ kiểm workflow của Planning; dùng luồng cập nhật Issue hiện tại để đổi trạng thái.",
+                Status = StatusCodes.Status501NotImplemented,
+                Extensions = { ["code"] = "WORKFLOW_VALIDATION_UNAVAILABLE" }
+            });
+        }
+
+        var transitions = services.GetService<IIssueTransitionService>()
+            ?? ActivatorUtilities.CreateInstance<DeliveryIntelligence.Application.Services.IssueTransitionService>(services);
+        var current = await issues.GetAsync(id, cancellationToken);
+        if (current.IsFailure) return FromResult(Result<IssueTransitionResultDto>.Failure(current.Error));
+        if (!await access.AllowsAsync(current.Value.ProjectId, "issue.transition")) return Forbidden();
+        var check = await transitions.CheckAsync(id, request.TargetStatusId, cancellationToken);
+        if (check.IsSuccess && !string.IsNullOrWhiteSpace(check.Value.RequiredPermissionCode)
+            && !await access.AllowsAsync(current.Value.ProjectId, check.Value.RequiredPermissionCode)) return Forbidden();
+        return FromResult(await transitions.TransitionAsync(id, request, access.UserId, cancellationToken));
+    }
+
     private ObjectResult Forbidden() => StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
     {
         Title = "Forbidden",

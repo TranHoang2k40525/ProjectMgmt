@@ -19,6 +19,9 @@ public class DeliveryApiFactory(MySqlTestDatabase database) : WebApplicationFact
 {
     public const string UserHeader = "X-Test-User";
 
+    /// <summary>Đăng ký fake IWorkflowValidationService (thay cho bản thật B chưa bàn giao) để test endpoint transition.</summary>
+    public bool RegisterWorkflowFake { get; init; }
+
     public HttpClient CreateClientFor(Guid? userId)
     {
         var client = CreateClient();
@@ -37,6 +40,11 @@ public class DeliveryApiFactory(MySqlTestDatabase database) : WebApplicationFact
         builder.ConfigureTestServices(services =>
         {
             services.AddDataProtection().UseEphemeralDataProtectionProvider();
+            if (RegisterWorkflowFake)
+            {
+                services.AddSingleton<ProjectMgmt.ProjectManagement.Contracts.IWorkflowValidationService, SharedWorkflowValidationService>();
+            }
+
             services.AddAuthentication(options =>
                 {
                     options.DefaultAuthenticateScheme = TestAuthHandler.SchemeName;

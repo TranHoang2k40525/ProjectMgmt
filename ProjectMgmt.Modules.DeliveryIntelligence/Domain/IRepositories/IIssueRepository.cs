@@ -34,6 +34,17 @@ public interface IIssueRepository
     Task AddActivityAsync(ActivityLog activity, CancellationToken cancellationToken = default);
 
     Task SaveChangesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Đọc Issue và khóa dòng (SELECT … FOR UPDATE) trong transaction hiện tại để các thay đổi trạng thái đồng thời chạy tuần tự.
+    /// </summary>
+    Task<Issue?> LockForUpdateAsync(Guid issueId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Chạy <paramref name="work"/> trong một transaction (có execution strategy retry). Change tracker được xóa trước mỗi lần chạy,
+    /// nên <paramref name="work"/> phải tự nạp lại dữ liệu nó cần.
+    /// </summary>
+    Task<T> ExecuteInTransactionAsync<T>(Func<CancellationToken, Task<T>> work, CancellationToken cancellationToken = default);
 }
 
 public class IssueListFilter

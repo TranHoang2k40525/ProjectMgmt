@@ -161,4 +161,25 @@ public class IssueRepository : IIssueRepository
 
     public Task SaveChangesAsync(CancellationToken cancellationToken = default) =>
         _context.SaveChangesAsync(cancellationToken);
+
+    public async Task<Issue?> LockForUpdateAsync(Guid issueId, CancellationToken cancellationToken = default)
+    {
+        var rows = await _context.Issues
+            .FromSqlInterpolated($"SELECT * FROM `Issue` WHERE `Id` = {issueId} AND `IsDeleted` = 0 FOR UPDATE")
+            .ToListAsync(cancellationToken);
+        return rows.SingleOrDefault();
+    }
+
+    public Task<T> ExecuteInTransactionAsync<T>(Func<CancellationToken, Task<T>> work, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(work);
+        return _context.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            _context.ChangeTracker.Clear();
+            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+            var result = await work(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return result;
+        });
+    }
 }

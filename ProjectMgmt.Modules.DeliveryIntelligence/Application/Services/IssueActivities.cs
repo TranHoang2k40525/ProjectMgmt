@@ -21,6 +21,8 @@ public static class IssueActivities
     public const string LabelRemoved = "LabelRemoved";
     public const string LinkAdded = "LinkAdded";
     public const string LinkRemoved = "LinkRemoved";
+    public const string StatusChanged = "StatusChanged";
+    public const string AssigneeChanged = "AssigneeChanged";
 
     public static ActivityLog Create(
         Guid issueId,

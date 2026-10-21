@@ -121,3 +121,24 @@ public class IssueRankDto
     public decimal RankOrder { get; set; }
     public bool Rebalanced { get; set; }
 }
+
+public class TransitionIssueDto
+{
+    public Guid TargetStatusId { get; set; }
+
+    /// <summary>Trạng thái FE đang thấy; khác trạng thái hiện tại thì trả 409 để tải lại thay vì ghi đè.</summary>
+    public Guid? ExpectedStatusId { get; set; }
+
+    /// <summary>Bình luận kèm theo lần chuyển (tùy chọn).</summary>
+    public string? Comment { get; set; }
+}
+
+public class IssueTransitionResultDto
+{
+    public Guid IssueId { get; set; }
+    public Guid PreviousStatusId { get; set; }
+    public Guid NewStatusId { get; set; }
+    public bool Changed { get; set; }
+    public DateTime? StartedAt { get; set; }
+    public DateTime? ResolvedAt { get; set; }
+}

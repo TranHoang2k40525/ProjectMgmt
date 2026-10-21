@@ -65,6 +65,38 @@ public class SharedIssueNumberGenerator : IIssueNumberGenerator
     }
 }
 
+/// <summary>Fake kiểm workflow theo <see cref="SharedTestData.Transitions"/>; có thể đặt quyền riêng cho một đường chuyển.</summary>
+public class SharedWorkflowValidationService : IWorkflowValidationService
+{
+    public Dictionary<(Guid From, Guid To), string> RequiredPermissions { get; } = [];
+
+    public Task<WorkflowTransitionCheck> CheckTransitionAsync(Guid projectId, Guid fromStatusId, Guid toStatusId, CancellationToken cancellationToken = default)
+    {
+        var from = SharedTestData.Statuses.SingleOrDefault(s => s.Id == fromStatusId && s.ProjectId == projectId);
+        var to = SharedTestData.Statuses.SingleOrDefault(s => s.Id == toStatusId && s.ProjectId == projectId);
+        var allowed = from is not null && to is not null && SharedTestData.Transitions.Any(t => t.From == fromStatusId && t.To == toStatusId);
+        RequiredPermissions.TryGetValue((fromStatusId, toStatusId), out var permission);
+        return Task.FromResult(new WorkflowTransitionCheck(
+            allowed,
+            allowed ? null : "WORKFLOW_TRANSITION_NOT_ALLOWED",
+            allowed ? null : $"Không có đường chuyển {from?.Name} → {to?.Name}.",
+            permission,
+            from?.Category,
+            to?.Category ?? string.Empty));
+    }
+}
+
+public class RecordingIssueNotifier : DeliveryIntelligence.Application.IServices.IIssueNotifier
+{
+    public List<DeliveryIntelligence.Application.IServices.IssueNotification> Sent { get; } = [];
+
+    public Task NotifyAsync(DeliveryIntelligence.Application.IServices.IssueNotification notification, CancellationToken cancellationToken = default)
+    {
+        Sent.Add(notification);
+        return Task.CompletedTask;
+    }
+}
+
 /// <summary>Quyền mặc định: thành viên DEMO đọc được; chỉ những mã quyền được Grant mới trả true.</summary>
 public class SharedPermissionEvaluator : IPermissionEvaluator
 {
