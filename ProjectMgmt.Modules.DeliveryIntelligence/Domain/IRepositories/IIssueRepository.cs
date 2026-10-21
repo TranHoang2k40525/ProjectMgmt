@@ -55,8 +55,8 @@ public interface IIssueRepository
     Task<Issue?> LockForUpdateAsync(Guid issueId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Chạy <paramref name="work"/> trong một transaction (có execution strategy retry). Change tracker được xóa trước mỗi lần chạy,
-    /// nên <paramref name="work"/> phải tự nạp lại dữ liệu nó cần.
+    /// Chạy <paramref name="work"/> trong một transaction (có execution strategy retry). Khi chạy lại sau lỗi tạm thời,
+    /// change tracker được xóa nên <paramref name="work"/> phải tự nạp lại dữ liệu nó cần.
     /// </summary>
     Task<T> ExecuteInTransactionAsync<T>(Func<CancellationToken, Task<T>> work, CancellationToken cancellationToken = default);
 }

@@ -40,8 +40,10 @@ public class IssueTransitionServiceTests
         Assert.True(result.Value.Changed);
         Assert.Equal(Now, Subtask.StartedAt);
         Assert.Null(Subtask.ResolvedAt);
-        var activity = Assert.Single(_issues.Activities);
-        Assert.Equal(("StatusChanged", "To Do", "In Progress"), (activity.Action, activity.OldValue, activity.NewValue));
+        var activity = _issues.Activities.Single(a => a.Action == "StatusChanged");
+        Assert.Equal(("To Do", "In Progress"), (activity.OldValue, activity.NewValue));
+        Assert.Contains(_issues.Activities, a => a.Action == "CommentAdded");
+        Assert.Contains(_collaboration.Watchers, w => w.UserId == SharedTestData.OwnerUserId);
         Assert.Equal("Bắt đầu làm", Assert.Single(_collaboration.Comments).Content);
         var sent = Assert.Single(_notifier.Sent);
         Assert.Equal(new[] { SharedTestData.DeveloperUserId, SharedTestData.ViewerUserId }.OrderBy(x => x), sent.RecipientUserIds.OrderBy(x => x));

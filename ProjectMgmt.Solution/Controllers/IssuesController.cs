@@ -96,6 +96,8 @@ public class IssuesController(
         var current = await issues.GetAsync(id, cancellationToken);
         if (current.IsFailure) return FromResult(Result<IssueTransitionResultDto>.Failure(current.Error));
         if (!await access.AllowsAsync(current.Value.ProjectId, "issue.transition")) return Forbidden();
+        // Quyền riêng được kiểm cho đường chuyển xuất phát từ trạng thái đang thấy; nếu trạng thái đổi trước khi ghi thì trả 409.
+        request.ExpectedStatusId ??= current.Value.StatusId;
         var check = await transitions.CheckAsync(id, request.TargetStatusId, cancellationToken);
         if (check.IsSuccess && !string.IsNullOrWhiteSpace(check.Value.RequiredPermissionCode)
             && !await access.AllowsAsync(current.Value.ProjectId, check.Value.RequiredPermissionCode)) return Forbidden();

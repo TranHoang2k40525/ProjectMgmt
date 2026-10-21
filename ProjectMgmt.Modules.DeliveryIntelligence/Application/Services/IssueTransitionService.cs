@@ -145,14 +145,24 @@ public class IssueTransitionService : IIssueTransitionService
 
         if (!string.IsNullOrWhiteSpace(comment))
         {
+            // Cùng hiệu ứng với bình luận thường (ActivityLog + tự theo dõi). Không gọi IssueCollaborationService ở đây vì
+            // nó kiểm @mention qua contract của module khác, không chạy được trong transaction dùng chung connection.
+            var commentId = Guid.NewGuid();
             await _collaboration.AddCommentAsync(new Comment
             {
-                Id = Guid.NewGuid(),
+                Id = commentId,
                 IssueId = issue.Id,
                 UserId = actorUserId,
                 Content = comment.Trim(),
                 CreatedAt = now
             }, cancellationToken);
+            await _issues.AddActivityAsync(
+                IssueActivities.Create(issue.Id, actorUserId, IssueActivities.CommentAdded, now, detail: new { commentId }),
+                cancellationToken);
+            if (await _collaboration.GetWatcherAsync(issue.Id, actorUserId, cancellationToken) is null)
+            {
+                await _collaboration.AddWatcherAsync(new IssueWatcher { IssueId = issue.Id, UserId = actorUserId, CreatedAt = now }, cancellationToken);
+            }
         }
 
         await _issues.SaveChangesAsync(cancellationToken);

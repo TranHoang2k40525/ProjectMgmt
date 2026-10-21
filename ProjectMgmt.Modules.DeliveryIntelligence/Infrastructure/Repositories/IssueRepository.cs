@@ -200,6 +200,18 @@ public class IssueRepository : IIssueRepository
 
     public async Task<Issue?> LockForUpdateAsync(Guid issueId, CancellationToken cancellationToken = default)
     {
+        // Identity map của EF sẽ trả lại instance đã track (giá trị cũ) thay vì dòng vừa khóa: gỡ nó trước khi đọc lại.
+        var tracked = _context.ChangeTracker.Entries<Issue>().FirstOrDefault(entry => entry.Entity.Id == issueId);
+        if (tracked is not null)
+        {
+            if (tracked.State != EntityState.Unchanged)
+            {
+                throw new InvalidOperationException("Issue đang có thay đổi chưa lưu, không thể khóa để đọc lại.");
+            }
+
+            tracked.State = EntityState.Detached;
+        }
+
         var rows = await _context.Issues
             .FromSqlInterpolated($"SELECT * FROM `Issue` WHERE `Id` = {issueId} AND `IsDeleted` = 0 FOR UPDATE")
             .ToListAsync(cancellationToken);
@@ -209,9 +221,15 @@ public class IssueRepository : IIssueRepository
     public Task<T> ExecuteInTransactionAsync<T>(Func<CancellationToken, Task<T>> work, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(work);
+        var attempt = 0;
         return _context.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
-            _context.ChangeTracker.Clear();
+            // Chỉ xóa tracker khi execution strategy chạy lại sau lỗi tạm thời, để không làm mất thay đổi của người gọi.
+            if (attempt++ > 0)
+            {
+                _context.ChangeTracker.Clear();
+            }
+
             await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
             var result = await work(cancellationToken);
             await transaction.CommitAsync(cancellationToken);

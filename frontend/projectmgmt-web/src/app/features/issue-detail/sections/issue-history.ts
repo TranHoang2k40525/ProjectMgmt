@@ -118,13 +118,12 @@ export class IssueHistoryComponent implements OnChanges {
   }
 
   more(): void {
-    this.page++;
-    this.loadActivity(true);
+    this.loadActivity(this.page + 1);
   }
 
   private reload(): void {
     this.error.set('');
-    if (this.tab() === 'all') { this.page = 1; this.loadActivity(false); return; }
+    if (this.tab() === 'all') { this.loadActivity(1); return; }
     this.loading.set(true);
     if (this.tab() === 'status') {
       this.api.statuses(this.issueId()).subscribe({ next: rows => { this.loading.set(false); this.statuses.set(rows); }, error: e => this.fail(e) });
@@ -133,10 +132,13 @@ export class IssueHistoryComponent implements OnChanges {
     }
   }
 
-  private loadActivity(append: boolean): void {
+  /** Chỉ cập nhật số trang khi tải thành công, để lần "Xem thêm" sau lỗi không bỏ sót trang. */
+  private loadActivity(page: number): void {
+    const append = page > 1;
     this.loading.set(true);
-    this.api.activity(this.issueId(), this.page, this.pageSize).subscribe({
+    this.api.activity(this.issueId(), page, this.pageSize).subscribe({
       next: result => {
+        this.page = page;
         this.loading.set(false);
         this.total.set(result.totalCount);
         this.activities.update(current => append ? [...current, ...result.items] : result.items);
