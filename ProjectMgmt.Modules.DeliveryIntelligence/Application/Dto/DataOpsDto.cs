@@ -86,3 +86,62 @@ public class SampleQueryDto
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 20;
 }
+
+public class CleaningRuleDto
+{
+    public Guid Id { get; set; }
+    public string Code { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string RuleType { get; set; } = string.Empty;
+    public string Severity { get; set; } = string.Empty;
+    public string? Config { get; set; }
+    public string AppliesTo { get; set; } = string.Empty;
+    public bool IsActive { get; set; }
+    public bool IsSupported { get; set; }
+}
+
+public class CreateCleaningRuleDto
+{
+    public string Code { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string RuleType { get; set; } = string.Empty;
+    public string Severity { get; set; } = "Warning";
+    public string? Config { get; set; }
+    public string AppliesTo { get; set; } = "All";
+}
+
+public class UpdateCleaningRuleDto
+{
+    public string Name { get; set; } = string.Empty;
+    public string Severity { get; set; } = "Warning";
+    public string? Config { get; set; }
+    public string AppliesTo { get; set; } = "All";
+    public bool IsActive { get; set; } = true;
+}
+
+public class QualityFlagDto
+{
+    public Guid Id { get; set; }
+    public Guid SampleId { get; set; }
+    public Guid RuleId { get; set; }
+    public string RuleCode { get; set; } = string.Empty;
+    public string RuleType { get; set; } = string.Empty;
+    public string Severity { get; set; } = string.Empty;
+    public string? Message { get; set; }
+    public string? FieldPath { get; set; }
+    public bool IsResolved { get; set; }
+    public Guid? ResolvedBy { get; set; }
+    public DateTime? ResolvedAt { get; set; }
+    public DateTime DetectedAt { get; set; }
+}
+
+public class CleaningRunSummaryDto
+{
+    public Guid VersionId { get; set; }
+    public int SamplesChecked { get; set; }
+    public int RulesApplied { get; set; }
+    public int FlagsCreated { get; set; }
+    public int Cleaned { get; set; }
+    public int Rejected { get; set; }
+    public Dictionary<string, int> FlagsBySeverity { get; set; } = [];
+}

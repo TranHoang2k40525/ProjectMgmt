@@ -297,6 +297,7 @@ builder.Services.AddScoped<IRequirementRepository, RequirementRepository>();
 builder.Services.AddScoped<IReleaseLinkRepository, ReleaseLinkRepository>();
 builder.Services.AddScoped<IDataOpsRepository, DataOpsRepository>();
 builder.Services.AddScoped<IDatasetService, DatasetService>();
+builder.Services.AddScoped<IDataCleaningService, DataCleaningService>();
 // IssueReleaseService không đăng ký: cần IProjectReleaseLookupService thật của Planning; IssueReleaseController tự dựng khi có.
 builder.Services.AddScoped<IssueRequirementService>();
 builder.Services.AddScoped<IIssueRequirementService>(services => services.GetRequiredService<IssueRequirementService>());
