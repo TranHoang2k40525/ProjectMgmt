@@ -1,4 +1,10 @@
+using DeliveryIntelligence.Application.Dto;
+using DeliveryIntelligence.Application.IServices;
+using DeliveryIntelligence.Application.Services;
+using DeliveryIntelligence.Domain.IRepositories;
 using DeliveryIntelligence.Infrastructure;
+using DeliveryIntelligence.Infrastructure.Repositories;
+using FluentValidation;
 using IdentityExperience.Application.IServices;
 using IdentityExperience.Application.Services;
 using IdentityExperience.Domain.IRepositories;
@@ -273,6 +279,9 @@ builder.Services.AddScoped<IProjectManagementService, ProjectManagementService>(
 builder.Services.AddScoped<IProjectLookupService, ProjectLookupService>();
 builder.Services.AddScoped<IUserLookupService, UserLookupService>();
 builder.Services.AddScoped<IUserSkillService, UserLookupService>();
+builder.Services.AddValidatorsFromAssemblyContaining<CreateIssueDtoValidator>();
+builder.Services.AddScoped<IIssueRepository, IssueRepository>();
+builder.Services.AddScoped<IIssueTrackingService, IssueTrackingService>();
 
 var app = builder.Build();
 
