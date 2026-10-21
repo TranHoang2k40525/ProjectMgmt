@@ -30,6 +30,11 @@ export class IssueApi {
     return this.http.put<IssueCoreDto>(`${this.baseUrl}/issues/${issueId}/parent`, { parentId });
   }
 
+  /** Xóa mềm Issue cùng con cháu (route cũ, đã chuyển sang service module C). */
+  delete(issueId: string): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/issues/${issueId}`);
+  }
+
   rank(issueId: string, previousIssueId: string | null, nextIssueId: string | null): Observable<IssueRankDto> {
     return this.http.put<IssueRankDto>(`${this.baseUrl}/issues/${issueId}/rank`, { previousIssueId, nextIssueId });
   }
