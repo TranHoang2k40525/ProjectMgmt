@@ -287,6 +287,8 @@ builder.Services.AddScoped<IIssueHierarchyService, IssueHierarchyService>();
 builder.Services.AddScoped<IssueContractService>();
 builder.Services.AddScoped<ICollaborationRepository, CollaborationRepository>();
 builder.Services.AddScoped<IIssueCollaborationService, IssueCollaborationService>();
+builder.Services.AddScoped<ILabelLinkRepository, LabelLinkRepository>();
+builder.Services.AddScoped<IIssueLabelLinkService, IssueLabelLinkService>();
 builder.Services.AddSingleton(builder.Configuration.GetSection(AttachmentOptions.SectionName).Get<AttachmentOptions>() ?? new AttachmentOptions());
 builder.Services.AddSingleton<IAttachmentStorage>(services => new DeliveryIntelligence.Infrastructure.Services.LocalAttachmentStorage(
     Path.Combine(services.GetRequiredService<IWebHostEnvironment>().ContentRootPath, "App_Data", "attachments")));

@@ -8,9 +8,11 @@ import { ProjectManagementService, WorkItem } from '../../core/services/project-
 import { IssueFormComponent } from '../../shared/components/issue-form/issue-form';
 import { IssueAttachmentsComponent } from './sections/issue-attachments';
 import { IssueCommentsComponent } from './sections/issue-comments';
+import { IssueLabelsComponent } from './sections/issue-labels';
+import { IssueLinksComponent } from './sections/issue-links';
 import { IssueWatchButtonComponent } from './sections/issue-watch-button';
 
-@Component({ selector: 'app-issue-detail-page', imports: [CommonModule, FormsModule, RouterLink, IssueFormComponent, IssueAttachmentsComponent, IssueCommentsComponent, IssueWatchButtonComponent], templateUrl: './issue-detail-page.html', styleUrl: './issue-detail-page.scss' })
+@Component({ selector: 'app-issue-detail-page', imports: [CommonModule, FormsModule, RouterLink, IssueFormComponent, IssueAttachmentsComponent, IssueCommentsComponent, IssueWatchButtonComponent, IssueLabelsComponent, IssueLinksComponent], templateUrl: './issue-detail-page.html', styleUrl: './issue-detail-page.scss' })
 export class IssueDetailPage implements OnInit {
   readonly service = inject(ProjectManagementService);
   private readonly route = inject(ActivatedRoute);

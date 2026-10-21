@@ -17,6 +17,10 @@ public static class IssueActivities
     public const string CommentDeleted = "CommentDeleted";
     public const string AttachmentAdded = "AttachmentAdded";
     public const string AttachmentRemoved = "AttachmentRemoved";
+    public const string LabelAdded = "LabelAdded";
+    public const string LabelRemoved = "LabelRemoved";
+    public const string LinkAdded = "LinkAdded";
+    public const string LinkRemoved = "LinkRemoved";
 
     public static ActivityLog Create(
         Guid issueId,

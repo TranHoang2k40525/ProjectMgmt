@@ -152,6 +152,32 @@ public class IssueApiMySqlTests(DeliveryApiFixture fixture) : IClassFixture<Deli
     }
 
     [MySqlFact]
+    public async Task LabelsAndLinksPersistWithPermissions()
+    {
+        var labelsUrl = $"/api/v1/projects/{SharedTestData.ProjectId}/labels";
+        Assert.Equal(HttpStatusCode.Forbidden, (await As(SharedTestData.ViewerUserId).PostAsJsonAsync(labelsUrl, new SaveLabelDto { Name = "api" })).StatusCode);
+        var created = await As(SharedTestData.DeveloperUserId).PostAsJsonAsync(labelsUrl, new SaveLabelDto { Name = "api", ColorHex = "#36B37E" });
+        var label = (await created.Content.ReadFromJsonAsync<LabelDto>())!;
+        Assert.Equal(HttpStatusCode.Conflict, (await As(SharedTestData.DeveloperUserId).PostAsJsonAsync(labelsUrl, new SaveLabelDto { Name = "API" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await As(SharedTestData.DeveloperUserId).DeleteAsync($"/api/v1/labels/{label.Id}")).StatusCode);
+
+        var epic = SharedTestData.EpicIssueId;
+        var tagged = await As(SharedTestData.DeveloperUserId).PostAsync($"/api/v1/issues/{epic}/labels/{label.Id}", null);
+        Assert.Equal("api", Assert.Single((await tagged.Content.ReadFromJsonAsync<List<LabelDto>>())!).Name);
+
+        var link = await As(SharedTestData.DeveloperUserId).PostAsJsonAsync($"/api/v1/issues/{epic}/links",
+            new CreateIssueLinkDto { TargetIssueId = SharedTestData.BacklogTaskIssueId, LinkType = "Duplicates" });
+        Assert.Equal(HttpStatusCode.OK, link.StatusCode);
+        var inverse = await As(SharedTestData.ViewerUserId).GetFromJsonAsync<List<IssueLinkDto>>($"/api/v1/issues/{SharedTestData.BacklogTaskIssueId}/links");
+        var back = Assert.Single(inverse!, l => l.TargetIssueId == epic);
+        Assert.Equal("IsDuplicatedBy", back.LinkType);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await As(SharedTestData.DeveloperUserId).DeleteAsync($"/api/v1/issue-links/{back.Id}")).StatusCode);
+        Assert.Empty((await As(SharedTestData.ViewerUserId).GetFromJsonAsync<List<IssueLinkDto>>($"/api/v1/issues/{epic}/links"))!);
+        Assert.Equal(HttpStatusCode.NoContent, (await As(SharedTestData.OwnerUserId).DeleteAsync($"/api/v1/labels/{label.Id}")).StatusCode);
+    }
+
+    [MySqlFact]
     public async Task DeleteThroughExistingRouteIsSoftAndCascades()
     {
         var other = fixture.Database.CreateDeliveryContext();
