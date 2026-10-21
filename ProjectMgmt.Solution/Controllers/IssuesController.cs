@@ -36,6 +36,25 @@ public class IssuesController(
         return Ok(result.Value);
     }
 
+    /// <summary>Quyền hiệu lực của người dùng hiện tại trên Issue (để FE ẩn/khóa thao tác; backend vẫn kiểm lại mỗi request).</summary>
+    [HttpGet("issues/{id:guid}/permissions")]
+    public async Task<ActionResult<IssuePermissionsDto>> Permissions(Guid id, CancellationToken cancellationToken)
+    {
+        var current = await issues.GetAsync(id, cancellationToken);
+        if (current.IsFailure) return FromResult(Result<IssuePermissionsDto>.Failure(current.Error));
+        var projectId = current.Value.ProjectId;
+        if (!await access.AllowsAsync(projectId)) return Forbidden();
+        return Ok(new IssuePermissionsDto
+        {
+            CanUpdate = await access.AllowsAsync(projectId, "issue.update"),
+            CanDelete = await access.AllowsAsync(projectId, "issue.delete"),
+            CanTransition = await access.AllowsAsync(projectId, "issue.transition"),
+            CanAssign = await access.AllowsAsync(projectId, "issue.assign"),
+            CanRank = await access.AllowsAsync(projectId, "backlog.rank"),
+            CanManageLabels = await access.AllowsAsync(projectId, "project.settings.manage")
+        });
+    }
+
     [HttpPatch("issues/{id:guid}")]
     public async Task<ActionResult<IssueDetailDto>> Update(Guid id, UpdateIssueDto request, CancellationToken cancellationToken)
     {

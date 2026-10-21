@@ -142,3 +142,13 @@ public class IssueTransitionResultDto
     public DateTime? StartedAt { get; set; }
     public DateTime? ResolvedAt { get; set; }
 }
+
+public class IssuePermissionsDto
+{
+    public bool CanUpdate { get; set; }
+    public bool CanDelete { get; set; }
+    public bool CanTransition { get; set; }
+    public bool CanAssign { get; set; }
+    public bool CanRank { get; set; }
+    public bool CanManageLabels { get; set; }
+}

@@ -236,6 +236,21 @@ public class IssueApiMySqlTests(DeliveryApiFixture fixture) : IClassFixture<Deli
     }
 
     [MySqlFact]
+    public async Task PermissionsReflectProjectRoles()
+    {
+        var url = $"/api/v1/issues/{SharedTestData.BugIssueId}/permissions";
+        var owner = await As(SharedTestData.OwnerUserId).GetFromJsonAsync<IssuePermissionsDto>(url);
+        var developer = await As(SharedTestData.DeveloperUserId).GetFromJsonAsync<IssuePermissionsDto>(url);
+        var viewer = await As(SharedTestData.ViewerUserId).GetFromJsonAsync<IssuePermissionsDto>(url);
+
+        Assert.True(owner!.CanDelete && owner.CanRank && owner.CanUpdate);
+        Assert.True(developer!.CanUpdate && developer.CanTransition);
+        Assert.False(developer.CanDelete || developer.CanRank);
+        Assert.False(viewer!.CanUpdate || viewer.CanTransition || viewer.CanDelete);
+        Assert.Equal(HttpStatusCode.Forbidden, (await As(SharedTestData.OutsiderUserId).GetAsync(url)).StatusCode);
+    }
+
+    [MySqlFact]
     public async Task ReleaseLinksReportMissingPlanningContract()
     {
         var response = await As(SharedTestData.OwnerUserId).GetAsync($"/api/v1/issues/{SharedTestData.BugIssueId}/components");

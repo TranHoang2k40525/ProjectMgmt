@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Observable } from 'rxjs';
-import { ISSUE_PRIORITIES, IssueCoreDto } from '../../core/api/issue-api.models';
+import { ISSUE_PRIORITIES, IssueCoreDto, IssuePermissionsDto, NO_ISSUE_PERMISSIONS } from '../../core/api/issue-api.models';
 import { IssueApi } from '../../core/api/issue.api';
 import { apiErrorMessage } from '../../core/http/api-error-message';
 import { ConfirmDialogService } from '../../core/services/confirm-dialog.service';
@@ -20,6 +20,8 @@ import { IssueHistoryComponent } from './sections/issue-history';
 import { IssueLabelsComponent } from './sections/issue-labels';
 import { IssueLinksComponent } from './sections/issue-links';
 import { IssueWatchButtonComponent } from './sections/issue-watch-button';
+
+type IssueTab = 'details' | 'talk' | 'history';
 
 @Component({
   selector: 'app-issue-detail-page',
@@ -44,6 +46,18 @@ export class IssueDetailPage implements OnInit {
   readonly item = signal<WorkItem | null>(null);
   readonly core = signal<IssueCoreDto | null>(null);
   readonly historyVersion = signal(0);
+  /** Mặc định chỉ đọc cho tới khi biết quyền thật, tránh hiện nút rồi mới khóa. */
+  readonly perms = signal<IssuePermissionsDto>(NO_ISSUE_PERMISSIONS);
+  readonly permsLoaded = signal(false);
+  readonly tabs: readonly { id: IssueTab; label: string }[] = [
+    { id: 'details', label: 'Chi tiết' }, { id: 'talk', label: 'Trao đổi' }, { id: 'history', label: 'Lịch sử' }
+  ];
+  readonly tab = signal<IssueTab>('details');
+  readonly statusCategory = computed(() => this.service.projectStatuses().find(s => s.name === this.item()?.statusName)?.category ?? '');
+  readonly isOverdue = computed(() => {
+    const due = this.core()?.dueDate;
+    return !!due && this.statusCategory() !== 'Done' && due < new Date().toISOString().slice(0, 10);
+  });
   /** Mã PROJ-123 đang chờ danh sách Issue của Project tải xong để phân giải. */
   private readonly pendingKey = signal<string | null>(null);
 
@@ -100,6 +114,26 @@ export class IssueDetailPage implements OnInit {
       error: e => { this.item.set(null); this.loading.set(false); this.fail(e); }
     });
     this.issueApi.getCore(id).subscribe({ next: core => this.core.set(core), error: () => this.core.set(null) });
+    this.issueApi.permissions(id).subscribe({
+      next: perms => { this.perms.set(perms); this.permsLoaded.set(true); },
+      error: () => { this.perms.set(NO_ISSUE_PERMISSIONS); this.permsLoaded.set(true); }
+    });
+  }
+
+  refreshHistory(): void { this.historyVersion.update(v => v + 1); }
+
+  selectTab(tab: IssueTab): void { this.tab.set(tab); }
+
+  /** ←/→/Home/End chuyển tab và đặt focus (mẫu ARIA Tabs). */
+  onTabKey(event: KeyboardEvent): void {
+    const index = this.tabs.findIndex(t => t.id === this.tab());
+    const next = event.key === 'ArrowRight' ? (index + 1) % this.tabs.length
+      : event.key === 'ArrowLeft' ? (index - 1 + this.tabs.length) % this.tabs.length
+      : event.key === 'Home' ? 0 : event.key === 'End' ? this.tabs.length - 1 : -1;
+    if (next < 0) return;
+    event.preventDefault();
+    this.tab.set(this.tabs[next].id);
+    (event.currentTarget as HTMLElement).parentElement?.querySelector<HTMLElement>(`#issue-tab-${this.tabs[next].id}`)?.focus();
   }
 
   retry(): void { this.open(this.route.snapshot.paramMap.get('id') ?? ''); }

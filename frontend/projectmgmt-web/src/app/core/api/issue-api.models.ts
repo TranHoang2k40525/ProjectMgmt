@@ -80,6 +80,20 @@ export interface IssueRankDto {
   rebalanced: boolean;
 }
 
+/** Quyền hiệu lực của người dùng hiện tại trên Issue (chỉ để hiển thị; backend vẫn kiểm mọi thao tác). */
+export interface IssuePermissionsDto {
+  canUpdate: boolean;
+  canDelete: boolean;
+  canTransition: boolean;
+  canAssign: boolean;
+  canRank: boolean;
+  canManageLabels: boolean;
+}
+
+export const NO_ISSUE_PERMISSIONS: IssuePermissionsDto = {
+  canUpdate: false, canDelete: false, canTransition: false, canAssign: false, canRank: false, canManageLabels: false
+};
+
 /** Priority dùng chung do migration SeedPlanningReferenceData tạo (Id cố định). */
 export const ISSUE_PRIORITIES: readonly { id: string; name: string }[] = [
   { id: '33333333-0000-0000-0000-000000000001', name: 'Highest' },
