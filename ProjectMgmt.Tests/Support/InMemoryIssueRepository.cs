@@ -72,6 +72,12 @@ public class InMemoryIssueRepository : IIssueRepository
         return Task.FromResult(new IssuePage(items, matched.Count));
     }
 
+    public Task<IReadOnlyList<Issue>> GetRankedAsync(Guid projectId, CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<Issue> result = Ordered(Issues.Where(issue => issue.ProjectId == projectId && !issue.IsDeleted)).ToList();
+        return Task.FromResult(result);
+    }
+
     public Task<decimal?> GetMaxRankAsync(Guid projectId, CancellationToken cancellationToken = default) =>
         Task.FromResult(Issues.Where(issue => issue.ProjectId == projectId && !issue.IsDeleted)
             .Select(issue => (decimal?)issue.RankOrder)

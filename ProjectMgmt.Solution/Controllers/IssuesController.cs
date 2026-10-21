@@ -11,7 +11,10 @@ namespace ProjectMgmt.Solution.Controllers;
 /// Các route cũ GET/PUT/POST trong WorkItemsController vẫn giữ nguyên cho Backlog/Board.
 /// </summary>
 [Route("api/v1")]
-public class IssuesController(IIssueTrackingService issues, ProjectAccess access) : ApiControllerBase
+public class IssuesController(
+    IIssueTrackingService issues,
+    IIssueHierarchyService hierarchy,
+    ProjectAccess access) : ApiControllerBase
 {
     [HttpGet("projects/{projectId:guid}/issues")]
     public async Task<ActionResult<PagedResultDto<IssueListItemDto>>> List(
@@ -43,6 +46,27 @@ public class IssuesController(IIssueTrackingService issues, ProjectAccess access
             && request.AssigneeId != access.UserId
             && !await access.AllowsAsync(current.Value.ProjectId, "issue.assign")) return Forbidden();
         return FromResult(await issues.UpdateAsync(id, request, access.UserId, cancellationToken));
+    }
+
+    [HttpPut("issues/{id:guid}/parent")]
+    public async Task<ActionResult<IssueDetailDto>> ChangeParent(
+        Guid id,
+        ChangeIssueParentDto request,
+        CancellationToken cancellationToken)
+    {
+        var current = await issues.GetAsync(id, cancellationToken);
+        if (current.IsFailure) return FromResult(current);
+        if (!await access.AllowsAsync(current.Value.ProjectId, "issue.update")) return Forbidden();
+        return FromResult(await hierarchy.ChangeParentAsync(id, request, access.UserId, cancellationToken));
+    }
+
+    [HttpPut("issues/{id:guid}/rank")]
+    public async Task<ActionResult<IssueRankDto>> Rank(Guid id, RankIssueDto request, CancellationToken cancellationToken)
+    {
+        var current = await issues.GetAsync(id, cancellationToken);
+        if (current.IsFailure) return FromResult(Result<IssueRankDto>.Failure(current.Error));
+        if (!await access.AllowsAsync(current.Value.ProjectId, "backlog.rank")) return Forbidden();
+        return FromResult(await hierarchy.RankAsync(id, request, access.UserId, cancellationToken));
     }
 
     private ObjectResult Forbidden() => StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails

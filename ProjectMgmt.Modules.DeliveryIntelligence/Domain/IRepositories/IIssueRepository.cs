@@ -16,6 +16,9 @@ public interface IIssueRepository
 
     Task<IssuePage> ListAsync(IssueListFilter filter, CancellationToken cancellationToken = default);
 
+    /// <summary>Toàn bộ Issue còn hiệu lực của Project theo thứ tự rank, có tracking để rebalance.</summary>
+    Task<IReadOnlyList<Issue>> GetRankedAsync(Guid projectId, CancellationToken cancellationToken = default);
+
     Task<decimal?> GetMaxRankAsync(Guid projectId, CancellationToken cancellationToken = default);
 
     Task AddAsync(Issue issue, CancellationToken cancellationToken = default);

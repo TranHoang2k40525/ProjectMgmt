@@ -110,6 +110,13 @@ public class IssueRepository : IIssueRepository
         return new IssuePage(items, totalCount);
     }
 
+    public async Task<IReadOnlyList<Issue>> GetRankedAsync(Guid projectId, CancellationToken cancellationToken = default) =>
+        await _context.Issues
+            .Where(issue => issue.ProjectId == projectId && !issue.IsDeleted)
+            .OrderBy(issue => issue.RankOrder)
+            .ThenBy(issue => issue.IssueNumber)
+            .ToListAsync(cancellationToken);
+
     public async Task<decimal?> GetMaxRankAsync(Guid projectId, CancellationToken cancellationToken = default) =>
         await _context.Issues
             .Where(issue => issue.ProjectId == projectId && !issue.IsDeleted)

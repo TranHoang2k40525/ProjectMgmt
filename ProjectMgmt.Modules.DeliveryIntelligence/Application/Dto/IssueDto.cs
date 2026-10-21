@@ -99,3 +99,25 @@ public class PagedResultDto<T>
     public int Page { get; set; }
     public int PageSize { get; set; }
 }
+
+public class ChangeIssueParentDto
+{
+    /// <summary>null = gỡ khỏi cha (không áp dụng cho Sub-task).</summary>
+    public Guid? ParentId { get; set; }
+}
+
+public class RankIssueDto
+{
+    /// <summary>Issue đứng ngay trước vị trí mới (null = đầu danh sách).</summary>
+    public Guid? PreviousIssueId { get; set; }
+
+    /// <summary>Issue đứng ngay sau vị trí mới (null = cuối danh sách).</summary>
+    public Guid? NextIssueId { get; set; }
+}
+
+public class IssueRankDto
+{
+    public Guid IssueId { get; set; }
+    public decimal RankOrder { get; set; }
+    public bool Rebalanced { get; set; }
+}
