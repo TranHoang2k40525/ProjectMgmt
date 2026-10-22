@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, HostListener, inject, signal, compu
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ConnectedPosition, OverlayModule } from '@angular/cdk/overlay';
-import { DragDropModule, CdkDragDrop } from '@angular/cdk/drag-drop';
+import { DragDropModule, CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
 import { gsap } from 'gsap';
 import { ProjectManagementService, WorkItem, Sprint } from '../../core/services/project-management.service';
 import { IdentityService } from '../../core/services/identity.service';
@@ -206,10 +206,14 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
   // CDK Drag and Drop across Sprints
   onSprintDrop(event: CdkDragDrop<WorkItem[]>, targetSprintId: string, targetSprintName: string): void {
+    if (event.previousContainer === event.container) {
+      const ordered = [...event.container.data]; moveItemInArray(ordered, event.previousIndex, event.currentIndex);
+      this.projectService.reorderWorkItems(ordered.map(i => i.id)); return;
+    }
     const item = event.item.data as WorkItem;
     if (item && item.sprintId !== targetSprintId) {
       this.projectService.updateWorkItemSprint(item.id, targetSprintId, targetSprintName);
-      this.toastService.success('Đã Chuyển Sprint', `Công việc [${item.issueKey}] -> ${targetSprintName}`);
+      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     }
   }
 
@@ -239,14 +243,14 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
           };
           const targetStatus = statusMap[val] || val;
           this.projectService.updateWorkItemStatus(item.id, targetStatus);
-          this.toastService.success('Cập Nhật Trạng Thái', `[${item.issueKey}] -> ${targetStatus}`);
+          this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
         }
         break;
 
       case 'assign': {
         const myName = this.identityService.authState().currentUser?.displayName || 'Tôi';
         this.projectService.updateWorkItemAssignee(item.id, myName);
-        this.toastService.success('Đã Gán Cho Bạn', `[${item.issueKey}] đã giao cho bạn`);
+        this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
         break;
       }
 
@@ -262,7 +266,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
       case 'copy':
         navigator.clipboard?.writeText?.(`${item.issueKey}: ${item.title}`);
-        this.toastService.success('Đã Sao Chép', `Đã chép [${item.issueKey}] vào clipboard`);
+        this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
         break;
 
       case 'delete':
@@ -305,10 +309,9 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   saveEditingTaskTitle(taskId: string): void {
     const title = this.editingTaskTitle().trim();
     if (title) {
-      this.workItems.update(items =>
-        items.map(item => item.id === taskId ? { ...item, title } : item)
-      );
-      this.toastService.success('Đã Cập Nhật', 'Đã đổi tên công việc thành công.');
+      const item = this.workItems().find(task => task.id === taskId);
+      if (item) this.projectService.updateWorkItem({ ...item, title });
+      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     }
     this.editingTaskId.set(null);
   }
@@ -324,7 +327,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     const value = Math.max(0, Math.min(999, Number(this.editingStoryPointsValue()) || 0));
     this.projectService.updateWorkItemStoryPoints(taskId, value);
     this.editingStoryPointsTaskId.set(null);
-    this.toastService.success('Cập Nhật SP', `Đã cập nhật ${value} SP.`);
+    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
   }
 
   updateInlinePriorityNext(taskId: string, currentPriority: WorkItem['priority'], event?: Event): void {
@@ -397,7 +400,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     const name = this.editingSprintName().trim();
     if (name) {
       this.projectService.updateSprintInfo(sprintId, name, this.editingStartDate(), this.editingEndDate());
-      this.toastService.success('Đã Cập Nhật Sprint', `Cập nhật thông tin cho ${name}`);
+      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     }
     this.editingSprintId.set(null);
   }
@@ -422,8 +425,8 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   createSprint(): void {
-    const newSprint = this.projectService.addNewSprint();
-    this.toastService.success('Tạo Sprint Mới', `Đã khởi tạo Sprint ${newSprint.name}`);
+    this.projectService.addNewSprint();
+    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
   }
 
   getAssigneeInitials(name?: string): string {
@@ -461,8 +464,8 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
   createEpic(): void {
     if (!this.newEpicName.trim()) return;
-    const created = this.projectService.addEpic(this.newEpicName.trim(), this.newEpicColor);
-    this.toastService.success('Đã Tạo Epic Mới', `Epic "${created.name}" [${created.key}] đã sẵn sàng!`);
+    this.projectService.addEpic(this.newEpicName.trim(), this.newEpicColor);
+    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     this.newEpicName = '';
     this.showNewEpicModal.set(false);
   }
@@ -518,8 +521,8 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     const title = this.subtaskTitleMap[parentId];
     if (!title || !title.trim()) return;
 
-    const sub = this.projectService.createSubTask(parentId, title.trim());
-    this.toastService.success('Tạo Sub-task', `Đã thêm công việc con [${sub.issueKey}]`);
+    this.projectService.createSubTask(parentId, title.trim());
+    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     this.subtaskTitleMap[parentId] = '';
     this.activeSubtaskInputId.set(null);
   }
@@ -530,7 +533,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     if (!title || !title.trim()) return;
 
     const currentUserName = this.identityService.authState().currentUser?.displayName || '';
-    const created = this.projectService.addWorkItem({
+    this.projectService.addWorkItem({
       title: title.trim(),
       sprintId,
       sprintName,
@@ -541,7 +544,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
       assigneeName: currentUserName
     });
 
-    this.toastService.success('Tạo Công Việc', `Đã thêm [${created.issueKey}] vào ${sprintName}`);
+    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     this.inlineTaskTitleMap[sprintId] = '';
     this.activeInlineSprintId.set(null);
   }
@@ -551,10 +554,10 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     if (event) event.stopPropagation();
     if (sprint.status === 'future') {
       this.projectService.updateSprintStatus(sprint.id, 'active');
-      this.toastService.success('Kích Hoạt Sprint', `Sprint "${sprint.name}" đã bắt đầu.`);
+      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     } else if (sprint.status === 'active') {
       this.projectService.updateSprintStatus(sprint.id, 'completed');
-      this.toastService.success('Hoàn Thành Sprint', `Đã hoàn thành Sprint "${sprint.name}".`);
+      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     } else {
       this.projectService.updateSprintStatus(sprint.id, 'future');
       this.toastService.info('Mở Lại Sprint', `Sprint "${sprint.name}" đưa về kế hoạch.`);
@@ -581,7 +584,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   updateInlineStatus(taskId: string, statusName: string, event?: Event): void {
     if (event) event.stopPropagation();
     this.projectService.updateWorkItemStatus(taskId, statusName);
-    this.toastService.success('Cập Nhật Trạng Thái', `Đã đổi sang ${statusName}`);
+    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
   }
 
   updateInlineAssignee(taskId: string, assigneeName: string, event?: Event): void {
@@ -621,7 +624,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     if (event) event.stopPropagation();
     const myName = this.identityService.authState().currentUser?.displayName || 'Tôi';
     this.projectService.updateWorkItemAssignee(taskId, myName);
-    this.toastService.success('Đã Gán Cho Tôi', 'Đã nhận công việc.');
+    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     this.activeMenuTaskId.set(null);
   }
 
@@ -629,7 +632,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     if (event) event.stopPropagation();
     const cloned = this.projectService.cloneWorkItem(taskId);
     if (cloned) {
-      this.toastService.success('Nhân Bản Thành Công', `Đã tạo bản sao [${cloned.issueKey}]`);
+      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     }
     this.activeMenuTaskId.set(null);
   }
@@ -661,7 +664,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     const ids = this.selectedTaskIds();
     if (ids.length === 0) return;
     this.projectService.bulkUpdateStatus(ids, newStatus);
-    this.toastService.success('Thao Tác Hàng Loạt', `Đã cập nhật ${ids.length} công việc sang ${newStatus}`);
+    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     this.clearSelection();
   }
 
@@ -669,7 +672,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     const ids = this.selectedTaskIds();
     if (ids.length === 0) return;
     this.projectService.bulkUpdateSprint(ids, sprintId, sprintName);
-    this.toastService.success('Thao Tác Hàng Loạt', `Đã chuyển ${ids.length} công việc sang ${sprintName}`);
+    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     this.clearSelection();
   }
 

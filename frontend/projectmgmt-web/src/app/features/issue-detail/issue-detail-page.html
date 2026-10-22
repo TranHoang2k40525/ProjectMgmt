@@ -1,0 +1,110 @@
+<section class="issue-detail">
+  <nav class="crumbs" aria-label="Đường dẫn">
+    <a routerLink="/backlog">Backlog</a><span aria-hidden="true">/</span>
+    <span>{{ service.currentProject().name || 'Dự án' }}</span>
+    @if (item(); as task) { <span aria-hidden="true">/</span><span aria-current="page">{{ task.issueKey }}</span> }
+  </nav>
+
+  @if (message()) { <p role="status" class="banner ok">{{ message() }}<button type="button" class="close" (click)="message.set('')" aria-label="Đóng thông báo">×</button></p> }
+  @if (error() && item()) { <p role="alert" class="banner bad">{{ error() }}<button type="button" class="close" (click)="error.set('')" aria-label="Đóng lỗi">×</button></p> }
+
+  @if (loading() && !item()) {
+    <div class="skeleton" aria-busy="true" aria-label="Đang tải công việc">
+      <div class="bar w40"></div><div class="bar w80 tall"></div>
+      <div class="layout"><div><div class="block"></div><div class="block"></div></div><div class="block side"></div></div>
+    </div>
+  } @else if (!item()) {
+    <div class="empty-state" role="alert">
+      <h1>Không mở được công việc</h1>
+      <p>{{ error() || 'Công việc không tồn tại, đã bị xóa hoặc bạn không có quyền xem.' }}</p>
+      <div class="row"><button type="button" (click)="retry()">Thử lại</button><a routerLink="/backlog">Quay về Backlog</a></div>
+    </div>
+  } @else if (item(); as task) {
+    <header class="issue-header">
+      <div class="title-block">
+        <p class="meta"><span class="type">{{ task.issueType }}</span><strong>{{ task.issueKey }}</strong>
+          <span class="status" [attr.data-category]="statusCategory()">{{ task.statusName }}</span>
+          @if (task.epicName) { <span class="muted">· Epic: {{ task.epicName }}</span> }</p>
+        <h1>{{ task.title }}</h1>
+      </div>
+      <div class="actions">
+        <app-issue-watch-button [issueId]="task.id" />
+        <button type="button" (click)="editing.set(true)" [disabled]="busy() || !perms().canUpdate" [title]="perms().canUpdate ? '' : 'Bạn không có quyền sửa công việc này'">Sửa</button>
+        @if (perms().canDelete) { <button type="button" class="danger" (click)="remove()" [disabled]="busy()">Xóa</button> }
+      </div>
+    </header>
+    @if (!perms().canUpdate && permsLoaded()) { <p class="banner info" role="note">Bạn đang xem ở chế độ chỉ đọc.</p> }
+    @if (editing()) { <app-issue-form [issueId]="task.id" (saved)="edited()" (dismissed)="editing.set(false)" /> }
+
+    <div class="layout">
+      <div class="main">
+        <div role="tablist" aria-label="Nội dung công việc" class="tabs">
+          @for (t of tabs; track t.id) {
+            <button type="button" role="tab" [id]="'issue-tab-' + t.id" [attr.aria-controls]="'issue-panel-' + t.id"
+              [attr.aria-selected]="tab() === t.id" [attr.tabindex]="tab() === t.id ? 0 : -1"
+              (click)="selectTab(t.id)" (keydown)="onTabKey($event)">{{ t.label }}@if (t.id === 'talk') { <span class="count">{{ task.comments?.length ?? 0 }}</span> }</button>
+          }
+        </div>
+
+        <!-- Các panel được giữ trong DOM (ẩn bằng [hidden]) để không mất nội dung đang gõ khi đổi tab. -->
+        <div role="tabpanel" id="issue-panel-details" aria-labelledby="issue-tab-details" [hidden]="tab() !== 'details'" class="panel">
+          <section class="card">
+            <h2>Mô tả</h2>
+            @if (task.description) { <p class="preserve">{{ task.description }}</p> }
+            @else { <p class="muted">Chưa có mô tả.@if (perms().canUpdate) { Bấm "Sửa" để thêm. }</p> }
+          </section>
+          <section class="card"><app-issue-criteria [issueId]="task.id" [canWrite]="perms().canUpdate" (changed)="refreshHistory()" /></section>
+          <section class="card">
+            <h2>Công việc con <span class="muted">({{ subtasks().length }})</span></h2>
+            @for (child of subtasks(); track child.id) {
+              <p class="child"><a [routerLink]="['/issues', child.id]">{{ child.issueKey }} · {{ child.title }}</a><span class="muted">{{ child.statusName }}</span></p>
+            } @empty { <p class="muted">Chưa có công việc con.</p> }
+            @if (perms().canUpdate && !task.parentId && task.issueType !== 'Epic') {
+              <div class="row"><input aria-label="Tên công việc con" [(ngModel)]="subtaskTitle" maxlength="500" placeholder="Tên công việc con…" /><button type="button" (click)="addSubtask()" [disabled]="busy() || !subtaskTitle.trim()">Thêm</button></div>
+            }
+          </section>
+          <section class="card"><app-issue-links [issueId]="task.id" [canWrite]="perms().canUpdate" (changed)="refreshHistory()" /></section>
+        </div>
+
+        <div role="tabpanel" id="issue-panel-talk" aria-labelledby="issue-tab-talk" [hidden]="tab() !== 'talk'" class="panel">
+          <section class="card"><app-issue-comments [issueId]="task.id" [canWrite]="perms().canUpdate" [canModerate]="perms().canDelete" (changed)="load()" /></section>
+          <section class="card"><app-issue-attachments [issueId]="task.id" [canWrite]="perms().canUpdate" (changed)="refreshHistory()" /></section>
+        </div>
+
+        <div role="tabpanel" id="issue-panel-history" aria-labelledby="issue-tab-history" [hidden]="tab() !== 'history'" class="panel">
+          <section class="card"><app-issue-history [issueId]="task.id" [version]="historyVersion()" /></section>
+        </div>
+      </div>
+
+      <aside class="side" aria-label="Thông tin công việc">
+        <section class="card">
+          <h2 class="sr-only">Thuộc tính</h2>
+          <label class="field">Trạng thái
+            <select [ngModel]="task.statusName" (ngModelChange)="changeStatus($event)" [disabled]="busy() || !perms().canTransition">
+              @for (s of service.projectStatuses(); track s.id) { <option [value]="s.name">{{ s.name }}</option> }
+            </select>
+          </label>
+          <label class="field">Sprint
+            <select [ngModel]="task.sprintId ?? ''" (ngModelChange)="changeSprint($event)" [disabled]="busy() || !perms().canUpdate">
+              <option value="">Backlog</option>
+              @for (s of service.sprints(); track s.id) { @if (s.status !== 'completed' || s.id === task.sprintId) { <option [value]="s.id">{{ s.name }}</option> } }
+            </select>
+          </label>
+          <dl>
+            <dt>Người xử lý</dt><dd>{{ task.assigneeName || 'Chưa phân công' }}</dd>
+            <dt>Ưu tiên</dt><dd>{{ priorityName() }}</dd>
+            <dt>Story points</dt><dd>{{ task.storyPoints }}</dd>
+            <dt>Ước lượng</dt><dd>{{ estimateHours() === null ? '—' : estimateHours() + ' giờ' }}</dd>
+            <dt>Hạn hoàn thành</dt><dd [class.overdue]="isOverdue()">{{ core()?.dueDate ? (core()!.dueDate | date:'dd/MM/yyyy') : '—' }}@if (isOverdue()) { · quá hạn }</dd>
+            <dt>Người tạo</dt><dd>{{ task.reporterName || '—' }}</dd>
+            <dt>Tạo lúc</dt><dd>{{ task.createdAt | date:'dd/MM/yyyy HH:mm' }}</dd>
+            <dt>Cập nhật</dt><dd>{{ task.updatedAt ? (task.updatedAt | date:'dd/MM/yyyy HH:mm') : '—' }}</dd>
+          </dl>
+        </section>
+        <section class="card"><app-issue-labels [issueId]="task.id" [projectId]="task.projectId" [canWrite]="perms().canUpdate" (changed)="load()" /></section>
+        <section class="card"><app-issue-release-links [issueId]="task.id" [canWrite]="perms().canUpdate" (changed)="refreshHistory()" /></section>
+        <section class="card"><app-issue-required-skills [issueId]="task.id" [canWrite]="perms().canUpdate" (changed)="refreshHistory()" /></section>
+      </aside>
+    </div>
+  }
+</section>

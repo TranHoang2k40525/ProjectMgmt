@@ -5,6 +5,7 @@ namespace ProjectMgmt.Solution.Controllers;
 
 [Route("api/workflow")]
 [Route("api/v1/workflow")]
+[TypeFilter(typeof(ProjectMgmt.Solution.Security.ProjectAuthorizationFilter))]
 public class WorkflowController : ApiControllerBase
 {
     private readonly IProjectManagementService _service;

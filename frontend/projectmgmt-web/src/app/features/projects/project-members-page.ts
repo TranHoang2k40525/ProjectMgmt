@@ -2,10 +2,10 @@ import { Component, ElementRef, OnDestroy, OnInit, inject, signal, computed, eff
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { gsap } from 'gsap';
+import { RbacApi } from '../../core/api/rbac.api';
 import { ProjectManagementService, ProjectMember, UserDisplayInfo } from '../../core/services/project-management.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ConfirmDialogService } from '../../core/services/confirm-dialog.service';
-
 import { NoProjectStateComponent } from '../../shared/components/no-project-state/no-project-state.component';
 
 interface ProjectRoleOption {
@@ -25,6 +25,8 @@ interface ProjectRoleOption {
     } @else {
     <div class="project-members-page flex flex-col gap-5 max-w-7xl mx-auto px-4 sm:px-6 py-6">
       
+      @if (error) { <p role="alert" class="p-3 rounded bg-red-50 text-red-700 text-xs font-medium">{{ error }}</p> }
+
       <!-- Top Action Bar -->
       <div class="members-header flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div class="flex flex-col gap-1">
@@ -57,7 +59,6 @@ interface ProjectRoleOption {
           </button>
         </div>
       </div>
-
 
       <!-- Filters & Stats Bar -->
       <div class="members-toolbar flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
@@ -199,40 +200,69 @@ interface ProjectRoleOption {
               </button>
             </div>
 
-            <!-- Select Existing User in System -->
-            <div class="flex flex-col gap-1.5">
-              <label for="member-user-select" class="text-xs font-bold text-slate-700 dark:text-slate-300">
-                Chọn người dùng trong hệ thống <span class="text-rose-500">*</span>
-              </label>
-              <select
-                id="member-user-select"
-                [(ngModel)]="selectedUserId"
-                (ngModelChange)="onUserSelected($event)"
-                class="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              >
-                <option value="">-- Chọn tài khoản người dùng --</option>
-                @for (u of availableUsersToAdd(); track u.userId) {
-                  <option [value]="u.userId">{{ u.displayName }} ({{ u.userId.slice(0, 8) }})</option>
-                }
-              </select>
-              <small class="text-[11px] text-slate-400">Danh sách người dùng đã đăng ký và xác thực trên hệ thống.</small>
-            </div>
+            <div class="flex flex-col gap-3">
+              <div class="flex flex-col gap-1.5">
+                <label for="member-email" class="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Email thành viên <span class="text-rose-500">*</span>
+                </label>
+                <input
+                  id="member-email"
+                  type="email"
+                  [(ngModel)]="newMemberEmail"
+                  placeholder="nguyenvana@huce.edu.vn"
+                  class="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                />
+              </div>
 
-            <!-- Role Selection -->
-            <div class="flex flex-col gap-1.5">
-              <label for="member-role-select" class="text-xs font-bold text-slate-700 dark:text-slate-300">
-                Vai trò phân công trong dự án <span class="text-rose-500">*</span>
-              </label>
-              <select
-                id="member-role-select"
-                [(ngModel)]="selectedRoleId"
-                class="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              >
-                @for (role of availableRoles(); track role.id) {
-                  <option [value]="role.id">{{ role.name }} ({{ role.code }})</option>
-                }
-              </select>
-              <small class="text-[11px] text-slate-400">Vai trò quyết định quyền chuyển trạng thái task và quản lý sprint.</small>
+              <div class="flex flex-col gap-1.5">
+                <label for="member-name" class="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Họ và tên
+                </label>
+                <input
+                  id="member-name"
+                  type="text"
+                  [(ngModel)]="newMemberName"
+                  placeholder="Nguyễn Văn A"
+                  class="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                />
+              </div>
+
+              <div class="flex flex-col gap-1.5">
+                <label for="member-role" class="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Vai trò trong dự án
+                </label>
+                <select
+                  id="member-role"
+                  [(ngModel)]="newMemberRole"
+                  class="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                >
+                  <option value="Developer">Developer (Phát triển)</option>
+                  <option value="Scrum Master">Scrum Master (Quản trị Sprint)</option>
+                  <option value="Product Owner">Product Owner</option>
+                  <option value="Project Lead">Project Lead (Trưởng dự án)</option>
+                  <option value="QA Engineer">QA Engineer</option>
+                  <option value="Viewer">Viewer (Xem báo cáo)</option>
+                </select>
+              </div>
+
+              @if (availableUsersToAdd().length > 0) {
+                <div class="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-1.5">
+                  <label for="member-user-select" class="text-xs font-medium text-slate-500">
+                    Hoặc chọn nhanh tài khoản hệ thống đã có:
+                  </label>
+                  <select
+                    id="member-user-select"
+                    [(ngModel)]="selectedUserId"
+                    (ngModelChange)="onUserSelected($event)"
+                    class="h-9 px-2 text-xs rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200"
+                  >
+                    <option value="">-- Chọn tài khoản có sẵn --</option>
+                    @for (u of availableUsersToAdd(); track u.userId) {
+                      <option [value]="u.userId">{{ u.displayName }} ({{ u.email }})</option>
+                    }
+                  </select>
+                </div>
+              }
             </div>
 
             <div class="flex items-center justify-end gap-3 mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
@@ -244,10 +274,10 @@ interface ProjectRoleOption {
               </button>
               <button
                 (click)="submitInvite()"
-                [disabled]="submitting() || !selectedUserId || !selectedRoleId"
+                [disabled]="saving || submitting() || (!newMemberEmail.trim() && !selectedUserId)"
                 class="px-5 py-2 rounded-lg bg-primary hover:bg-primary-container text-white text-xs font-bold transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
               >
-                @if (submitting()) {
+                @if (saving || submitting()) {
                   <span class="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
                   Đang thêm...
                 } @else {
@@ -271,10 +301,13 @@ interface ProjectRoleOption {
 })
 export class ProjectMembersPageComponent implements OnInit, OnDestroy {
   readonly projectService = inject(ProjectManagementService);
-  private readonly toastService = inject(ToastService);
-  private readonly confirmService = inject(ConfirmDialogService);
-  private readonly el = inject(ElementRef);
+  private readonly rbac = inject(RbacApi, { optional: true });
+  private readonly toastService = inject(ToastService, { optional: true });
+  private readonly confirmService = inject(ConfirmDialogService, { optional: true });
+  private readonly el = inject(ElementRef, { optional: true });
 
+  error = '';
+  saving = false;
   readonly currentProject = this.projectService.currentProject;
   readonly members = signal<ProjectMember[]>([]);
   readonly allUsers = signal<UserDisplayInfo[]>([]);
@@ -286,6 +319,10 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
   selectedRoleFilter = signal<string | null>(null);
 
   isInviteModalOpen = false;
+  newMemberName = '';
+  newMemberEmail = '';
+  newMemberRole: ProjectMember['role'] = 'Developer';
+
   selectedUserId = '';
   selectedRoleId = '';
 
@@ -315,7 +352,7 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
 
   constructor() {
     effect(() => {
-      const proj = this.currentProject();
+      const proj = this.currentProject?.();
       if (proj && proj.id) {
         this.loadProjectMembers(proj.id);
       }
@@ -323,7 +360,7 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    const proj = this.currentProject();
+    const proj = this.currentProject?.();
     if (proj && proj.id) {
       this.loadProjectMembers(proj.id);
     }
@@ -331,10 +368,13 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    gsap.killTweensOf(this.el.nativeElement.querySelectorAll('.member-card, .members-modal'));
+    if (this.el?.nativeElement) {
+      gsap.killTweensOf(this.el.nativeElement.querySelectorAll('.member-card, .members-modal'));
+    }
   }
 
   loadProjectMembers(projectId: string): void {
+    if (!this.projectService?.loadProjectMembers) return;
     this.loading.set(true);
     this.projectService.loadProjectMembers(projectId).subscribe({
       next: members => {
@@ -352,38 +392,45 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
   }
 
   loadUsersAndRoles(): void {
-    this.projectService.getUsers().subscribe({
-      next: users => this.allUsers.set(users),
-      error: () => undefined
-    });
+    if (this.projectService?.getUsers) {
+      this.projectService.getUsers().subscribe({
+        next: users => this.allUsers.set(users),
+        error: () => undefined
+      });
+    }
 
-    this.projectService.getRoles('Project').subscribe({
-      next: roles => {
-        if (roles && roles.length > 0) {
-          const mapped = roles.map(r => ({
-            id: r.id,
-            name: this.normalizeRoleLabel(r.name),
-            code: r.code,
-            description: r.description
-          }));
-          this.availableRoles.set(mapped);
-          if (!this.selectedRoleId && mapped.length > 0) {
-            this.selectedRoleId = mapped[0].id;
+    if (this.projectService?.getRoles) {
+      this.projectService.getRoles('Project').subscribe({
+        next: roles => {
+          if (roles && roles.length > 0) {
+            const mapped = roles.map(r => ({
+              id: r.id,
+              name: this.normalizeRoleLabel(r.name),
+              code: r.code,
+              description: r.description
+            }));
+            this.availableRoles.set(mapped);
+            if (!this.selectedRoleId && mapped.length > 0) {
+              this.selectedRoleId = mapped[0].id;
+            }
           }
-        }
-      },
-      error: () => undefined
-    });
+        },
+        error: () => undefined
+      });
+    }
   }
 
   openInviteModal(): void {
     this.selectedUserId = '';
+    this.newMemberName = '';
+    this.newMemberEmail = '';
+    this.error = '';
     this.selectedRoleId = this.availableRoles()[0]?.id || '';
     this.isInviteModalOpen = true;
 
     requestAnimationFrame(() => {
-      const modal = this.el.nativeElement.querySelector('.members-modal');
-      if (modal && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      const modal = this.el?.nativeElement?.querySelector('.members-modal');
+      if (modal && typeof window !== 'undefined' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
         gsap.fromTo(modal,
           { autoAlpha: 0, scale: 0.94, y: 12 },
           { autoAlpha: 1, scale: 1, y: 0, duration: 0.3, ease: 'back.out(1.4)' }
@@ -394,27 +441,77 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
 
   onUserSelected(userId: string): void {
     this.selectedUserId = userId;
+    const user = this.allUsers().find(u => u.userId === userId);
+    if (user) {
+      this.newMemberEmail = user.email || '';
+      this.newMemberName = user.displayName || '';
+    }
   }
 
   submitInvite(): void {
+    if (this.saving || this.submitting()) return;
+
+    if (this.newMemberEmail.trim()) {
+      this.saving = true;
+      this.error = '';
+      this.projectService.addProjectMember({
+        displayName: this.newMemberName || this.newMemberEmail,
+        email: this.newMemberEmail,
+        role: this.newMemberRole
+      }).subscribe({
+        next: () => {
+          this.saving = false;
+          this.isInviteModalOpen = false;
+          this.newMemberName = '';
+          this.newMemberEmail = '';
+          const projId = this.currentProject()?.id;
+          if (projId) this.loadProjectMembers(projId);
+        },
+        error: (e: { title?: string; detail?: string; error?: { message?: string } }) => {
+          this.saving = false;
+          const msg = e.detail ?? e.title ?? (e as { error?: { message?: string } })?.error?.message ?? 'Không thể thêm thành viên.';
+          this.error = msg;
+          this.toastService?.error('Lỗi', msg);
+        }
+      });
+      return;
+    }
+
     const projId = this.currentProject()?.id;
     if (!projId || !this.selectedUserId || !this.selectedRoleId) return;
 
     this.submitting.set(true);
+    this.error = '';
     this.projectService.inviteProjectMember(projId, this.selectedUserId, this.selectedRoleId).subscribe({
       next: () => {
         this.submitting.set(false);
         this.isInviteModalOpen = false;
-        this.toastService.success('Thành công', 'Đã thêm thành viên vào dự án');
+        this.toastService?.success('Thành công', 'Đã thêm thành viên vào dự án');
         this.loadProjectMembers(projId);
       },
       error: (err: unknown) => {
         this.submitting.set(false);
-        const errObj = err as { error?: { message?: string } };
-        const msg = errObj?.error?.message || 'Không thể thêm thành viên. Vui lòng thử lại.';
-        this.toastService.error('Lỗi', msg);
+        const errObj = err as { title?: string; detail?: string; error?: { message?: string } };
+        const msg = errObj?.detail ?? errObj?.title ?? errObj?.error?.message ?? 'Không thể thêm thành viên. Vui lòng thử lại.';
+        this.error = msg;
+        this.toastService?.error('Lỗi', msg);
       }
     });
+  }
+
+  removeMember(userId: string): void {
+    const projId = this.currentProject()?.id;
+    if (this.rbac && projId) {
+      this.rbac.removeProjectMember(projId, userId).subscribe({
+        next: () => this.projectService.loadWorkspace(projId),
+        error: (e: { title?: string }) => this.error = e.title ?? 'Không thể gỡ thành viên.'
+      });
+    } else if (projId) {
+      this.projectService.removeProjectMember(projId, userId).subscribe({
+        next: () => this.loadProjectMembers(projId),
+        error: () => this.error = 'Không thể gỡ thành viên.'
+      });
+    }
   }
 
   onRoleChange(member: ProjectMember, newRoleId: string): void {
@@ -423,13 +520,13 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
 
     this.projectService.changeProjectMemberRole(projId, member.userId, newRoleId).subscribe({
       next: () => {
-        this.toastService.success('Cập nhật vai trò', `Đã đổi vai trò cho ${member.displayName}`);
+        this.toastService?.success('Cập nhật vai trò', `Đã đổi vai trò cho ${member.displayName}`);
         this.loadProjectMembers(projId);
       },
       error: (err: unknown) => {
         const errObj = err as { error?: { message?: string } };
         const msg = errObj?.error?.message || 'Không thể thay đổi vai trò.';
-        this.toastService.error('Lỗi', msg);
+        this.toastService?.error('Lỗi', msg);
         this.loadProjectMembers(projId); // revert
       }
     });
@@ -439,30 +536,24 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
     const projId = this.currentProject()?.id;
     if (!projId || !member.userId) return;
 
-    this.confirmService.confirm({
-      title: 'Xác nhận xóa thành viên',
-      message: `Bạn có chắc muốn xóa "${member.displayName}" (${member.email}) khỏi dự án này không?`,
-      confirmText: 'Xóa thành viên',
-      cancelText: 'Hủy bỏ',
-      type: 'danger',
-      onConfirm: () => {
-        this.projectService.removeProjectMember(projId, member.userId).subscribe({
-          next: () => {
-            this.toastService.info('Đã xóa', `Đã xóa ${member.displayName} khỏi dự án`);
-            this.loadProjectMembers(projId);
-          },
-          error: (err: unknown) => {
-            const errObj = err as { error?: { message?: string } };
-            const msg = errObj?.error?.message || 'Không thể xóa thành viên.';
-            this.toastService.error('Lỗi', msg);
-          }
-        });
-      }
-    });
+    if (this.confirmService) {
+      this.confirmService.confirm({
+        title: 'Xác nhận xóa thành viên',
+        message: `Bạn có chắc muốn xóa "${member.displayName}" (${member.email}) khỏi dự án này không?`,
+        confirmText: 'Xóa thành viên',
+        cancelText: 'Hủy bỏ',
+        type: 'danger',
+        onConfirm: () => {
+          this.removeMember(member.userId);
+        }
+      });
+    } else {
+      this.removeMember(member.userId);
+    }
   }
 
   getRoleOptionId(roleName: ProjectMember['role']): string {
-    const match = this.availableRoles().find(r => r.name.toLowerCase() === roleName.toLowerCase() || r.code.toLowerCase().includes(roleName.toLowerCase().replace(/\\s+/g, '')));
+    const match = this.availableRoles().find(r => r.name.toLowerCase() === roleName.toLowerCase() || r.code.toLowerCase().includes(roleName.toLowerCase().replace(/\s+/g, '')));
     return match ? match.id : this.availableRoles()[0]?.id || '';
   }
 
@@ -501,11 +592,11 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
   }
 
   private animateCards(): void {
-    if (typeof window === 'undefined' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (typeof window === 'undefined' || window.matchMedia('(prefers-reduced-motion: reduce)').matches || !this.el?.nativeElement) return;
 
     requestAnimationFrame(() => {
-      const cards = this.el.nativeElement.querySelectorAll('.member-card');
-      if (cards.length) {
+      const cards = this.el?.nativeElement?.querySelectorAll('.member-card');
+      if (cards && cards.length) {
         gsap.fromTo(
           cards,
           { autoAlpha: 0, y: 16 },

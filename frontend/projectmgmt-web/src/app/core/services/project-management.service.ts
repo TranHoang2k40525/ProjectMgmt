@@ -1,6 +1,8 @@
 import { HttpClient } from '@angular/common/http';
-import { Injectable, inject, signal, computed } from '@angular/core';
-import { Observable, catchError, map, of, tap, throwError } from 'rxjs';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
+import { EMPTY, Observable, Subject, catchError, concatMap, defer, finalize, forkJoin, map, tap } from 'rxjs';
+import { ToastService } from './toast.service';
+import { RbacApi } from '../api/rbac.api';
 import { environment } from '../../../environments/environment';
 
 export interface Organization {
@@ -25,7 +27,7 @@ export interface ProjectMember {
   displayName: string;
   email: string;
   avatarUrl?: string;
-  role: 'Project Lead' | 'Scrum Master' | 'Developer' | 'QA Engineer' | 'Viewer';
+  role: 'Project Lead' | 'Scrum Master' | 'Developer' | 'QA Engineer' | 'Viewer' | 'ProjectManager' | 'ScrumMaster' | 'ProductOwner';
   joinedAt: string;
 }
 
@@ -185,7 +187,8 @@ export interface WorkItem {
   id: string;
   issueKey: string;
   projectId: string;
-  parentId?: string; // Parent Task ID if this is a Sub-task
+  parentId?: string;
+  epicId?: string; // Parent Task ID if this is a Sub-task
   title: string;
   description?: string;
   statusId: string;
@@ -206,6 +209,8 @@ export interface WorkItem {
   updatedAt?: string;
   comments?: TaskComment[];
   activities?: TaskActivity[];
+  attachments?: { id: string; fileName: string; fileSizeBytes: number }[];
+  criteria?: { id: string; content: string; isMet: boolean }[];
 }
 
 @Injectable({ providedIn: 'root' })
@@ -223,15 +228,8 @@ export class ProjectManagementService {
   readonly currentProject = signal<Project>(this.emptyProject);
   readonly hasActiveProject = computed(() => !!this.currentProject().id && this.currentProject().id.trim() !== '');
 
-  // Issue Types Signal (Standard Scrum Types with library icon keys)
-  readonly customIssueTypes = signal<CustomIssueType[]>([
-    { id: 'it-1', name: 'Task', icon: 'check_box', color: 'blue', description: 'Công việc phát triển' },
-    { id: 'it-2', name: 'Story', icon: 'bookmark', color: 'emerald', description: 'Yêu cầu tính năng người dùng' },
-    { id: 'it-3', name: 'Bug', icon: 'bug_report', color: 'red', description: 'Lỗi phát sinh cần sửa' },
-    { id: 'it-4', name: 'Use-Case', icon: 'fact_check', color: 'cyan', description: 'Kịch bản kiểm thử / sử dụng' },
-    { id: 'it-5', name: 'Epic', icon: 'bolt', color: 'purple', description: 'Hạng mục dự án lớn' },
-    { id: 'it-6', name: 'Sub-task', icon: 'subdirectory_arrow_right', color: 'amber', description: 'Nhiệm vụ con phân rã' }
-  ]);
+  // Issue Types Signal (Standard Scrum Types)
+  readonly customIssueTypes = signal<CustomIssueType[]>([]);
 
   // Active Project Statuses Signal (Default Scrum workflow)
   readonly projectStatuses = signal<ProjectStatus[]>([
@@ -248,636 +246,201 @@ export class ProjectManagementService {
     { id: 'epic-3', key: 'E-3', name: 'Trí tuệ Nhân tạo Hỗ trợ Quản trị (AI Copilot)', color: 'emerald', description: 'Mô hình phân rã yêu cầu và xếp hạng phân công', status: 'To Do' }
   ]);
 
-  // Sprints Signal List (real sprints cycle)
-  readonly sprints = signal<Sprint[]>([
-    {
-      id: 'sp-1',
-      projectId: 'f423e261-37af-44cd-9aa6-38f2030501f6',
-      name: 'Sprint 01 - Khởi tạo kiến trúc & RBAC',
-      goal: 'Hoàn thiện nền tảng Micro-services, phân quyền RBAC và luồng bảo mật Token JWT.',
-      status: 'completed',
-      startDate: '2026-10-01',
-      endDate: '2026-10-14',
-      workItemsCount: 2,
-      totalStoryPoints: 10
-    },
-    {
-      id: 'sp-2',
-      projectId: 'f423e261-37af-44cd-9aa6-38f2030501f6',
-      name: 'Sprint 02 - Bảng Scrum & Quản lý Backlog',
-      goal: 'Hoàn thiện kéo thả Kanban Board, quản lý phân tầng User Stories và tối ưu UI/UX.',
-      status: 'active',
-      startDate: '2026-10-15',
-      endDate: '2026-10-29',
-      workItemsCount: 5,
-      totalStoryPoints: 24
-    },
-    {
-      id: 'sp-3',
-      projectId: 'f423e261-37af-44cd-9aa6-38f2030501f6',
-      name: 'Sprint 03 - Trí tuệ Nhân tạo Phân rã & Đề xuất',
-      goal: 'Tích hợp mô hình AI LLM phân rã yêu cầu thành Sub-tasks và xếp hạng ứng viên đa tiêu chí.',
-      status: 'future',
-      startDate: '2026-10-30',
-      endDate: '2026-11-13',
-      workItemsCount: 3,
-      totalStoryPoints: 26
-    }
-  ]);
+  // Sprints Signal List (empty by default)
+  readonly sprints = signal<Sprint[]>([]);
 
-  // WorkItems Signal List (real agile work items)
-  readonly workItems = signal<WorkItem[]>([
-    {
-      id: 'wi-1',
-      issueKey: 'QLDA-1',
-      projectId: 'f423e261-37af-44cd-9aa6-38f2030501f6',
-      title: 'Thiết kế giao diện kéo thả trực quan chuẩn Jira cho Scrum Board',
-      description: 'Hiện thực hóa các cột trạng thái Kanban, tích hợp CDK DragDrop và hiệu ứng FLIP animation mượt mà.',
-      statusId: 'st-1',
-      statusName: 'To Do',
-      issueType: 'Story',
-      priority: 'High',
-      storyPoints: 5,
-      assigneeName: 'Hoàng Trần Văn',
-      reporterName: 'Hoàng Trần Văn',
-      sprintId: 'sp-2',
-      sprintName: 'Sprint 02 - Bảng Scrum & Quản lý Backlog',
-      epicName: 'Bộ máy Điều phối Scrum Agile (Scrum Engine)',
-      epicColor: 'blue',
-      labels: ['frontend', 'ui-ux'],
-      createdAt: '2026-10-15',
-      updatedAt: '2026-10-16'
-    },
-    {
-      id: 'wi-2',
-      issueKey: 'QLDA-2',
-      projectId: 'f423e261-37af-44cd-9aa6-38f2030501f6',
-      title: 'Tối ưu hóa hiệu năng đồng bộ dữ liệu Realtime qua WebSockets',
-      description: 'Giảm thiểu độ trễ truyền gói tin thông báo và cập nhật thẻ việc tức thì giữa các thành viên đang hoạt động.',
-      statusId: 'st-1',
-      statusName: 'To Do',
-      issueType: 'Task',
-      priority: 'Medium',
-      storyPoints: 3,
-      assigneeName: 'Hoàng Trần Văn',
-      reporterName: 'Hoàng Trần Văn',
-      sprintId: 'sp-2',
-      sprintName: 'Sprint 02 - Bảng Scrum & Quản lý Backlog',
-      epicName: 'Kiến trúc Nền tảng & Xác thực (Auth & RBAC)',
-      epicColor: 'purple',
-      labels: ['realtime', 'signalr'],
-      createdAt: '2026-10-15',
-      updatedAt: '2026-10-16'
-    },
-    {
-      id: 'wi-3',
-      issueKey: 'QLDA-3',
-      projectId: 'f423e261-37af-44cd-9aa6-38f2030501f6',
-      title: 'Xây dựng module tự động tính toán Sprint Velocity và Burndown Chart',
-      description: 'Thu thập chỉ số Story Points hoàn thành theo từng ngày trong chu kỳ Sprint và vẽ đồ thị Ideal vs Actual burn rate.',
-      statusId: 'st-2',
-      statusName: 'In Progress',
-      issueType: 'Story',
-      priority: 'High',
-      storyPoints: 8,
-      assigneeName: 'Hoàng Trần Văn',
-      reporterName: 'Hoàng Trần Văn',
-      sprintId: 'sp-2',
-      sprintName: 'Sprint 02 - Bảng Scrum & Quản lý Backlog',
-      epicName: 'Bộ máy Điều phối Scrum Agile (Scrum Engine)',
-      epicColor: 'blue',
-      labels: ['analytics', 'charts'],
-      createdAt: '2026-10-15',
-      updatedAt: '2026-10-17'
-    },
-    {
-      id: 'wi-4',
-      issueKey: 'QLDA-4',
-      projectId: 'f423e261-37af-44cd-9aa6-38f2030501f6',
-      title: 'Chuẩn hóa API RESTful và cơ chế phân quyền RBAC theo từng Project Workspace',
-      description: 'Đảm bảo mỗi request đều được kiểm tra Scoped Permission và User Role trước khi cấp quyền truy xuất tài nguyên.',
-      statusId: 'st-2',
-      statusName: 'In Progress',
-      issueType: 'Task',
-      priority: 'Urgent',
-      storyPoints: 5,
-      assigneeName: 'Hoàng Trần Văn',
-      reporterName: 'Hoàng Trần Văn',
-      sprintId: 'sp-2',
-      sprintName: 'Sprint 02 - Bảng Scrum & Quản lý Backlog',
-      epicName: 'Kiến trúc Nền tảng & Xác thực (Auth & RBAC)',
-      epicColor: 'purple',
-      labels: ['backend', 'security'],
-      createdAt: '2026-10-15',
-      updatedAt: '2026-10-17'
-    },
-    {
-      id: 'wi-5',
-      issueKey: 'QLDA-5',
-      projectId: 'f423e261-37af-44cd-9aa6-38f2030501f6',
-      title: 'Kiểm thử tự động E2E luồng tạo công việc và chuyển trạng thái Sprint',
-      description: 'Viết kịch bản kiểm thử tích hợp đảm bảo tính toàn vẹn của dữ liệu trạng thái công việc qua các bước chuyển Workflow.',
-      statusId: 'st-3',
-      statusName: 'Code Review',
-      issueType: 'Task',
-      priority: 'High',
-      storyPoints: 3,
-      assigneeName: 'Hoàng Trần Văn',
-      reporterName: 'Hoàng Trần Văn',
-      sprintId: 'sp-2',
-      sprintName: 'Sprint 02 - Bảng Scrum & Quản lý Backlog',
-      epicName: 'Bộ máy Điều phối Scrum Agile (Scrum Engine)',
-      epicColor: 'blue',
-      labels: ['testing', 'qa'],
-      createdAt: '2026-10-15',
-      updatedAt: '2026-10-18'
-    },
-    {
-      id: 'wi-6',
-      issueKey: 'QLDA-6',
-      projectId: 'f423e261-37af-44cd-9aa6-38f2030501f6',
-      title: 'Khởi tạo cơ sở dữ liệu và cấu hình hệ thống đa người dùng',
-      description: 'Thiết kế lược đồ bảng MySQL với các ràng buộc khóa ngoại, chỉ mục hiệu năng cao và phân vùng lưu trữ tối ưu.',
-      statusId: 'st-4',
-      statusName: 'Done',
-      issueType: 'Task',
-      priority: 'High',
-      storyPoints: 5,
-      assigneeName: 'Hoàng Trần Văn',
-      reporterName: 'Hoàng Trần Văn',
-      sprintId: 'sp-1',
-      sprintName: 'Sprint 01 - Khởi tạo kiến trúc & RBAC',
-      epicName: 'Kiến trúc Nền tảng & Xác thực (Auth & RBAC)',
-      epicColor: 'purple',
-      labels: ['database', 'mysql'],
-      createdAt: '2026-10-02',
-      updatedAt: '2026-10-12'
-    },
-    {
-      id: 'wi-7',
-      issueKey: 'QLDA-7',
-      projectId: 'f423e261-37af-44cd-9aa6-38f2030501f6',
-      title: 'Cài đặt JWT Authentication và bảo mật phiên đa thiết bị',
-      description: 'Triển khai xác thực Token kép (Access Token + Refresh Token) tích hợp cơ chế thu hồi phiên và bảo vệ chống brute-force.',
-      statusId: 'st-4',
-      statusName: 'Done',
-      issueType: 'Story',
-      priority: 'High',
-      storyPoints: 5,
-      assigneeName: 'Hoàng Trần Văn',
-      reporterName: 'Hoàng Trần Văn',
-      sprintId: 'sp-1',
-      sprintName: 'Sprint 01 - Khởi tạo kiến trúc & RBAC',
-      epicName: 'Kiến trúc Nền tảng & Xác thực (Auth & RBAC)',
-      epicColor: 'purple',
-      labels: ['security', 'auth'],
-      createdAt: '2026-10-03',
-      updatedAt: '2026-10-13'
-    },
-    {
-      id: 'wi-8',
-      issueKey: 'QLDA-8',
-      projectId: 'f423e261-37af-44cd-9aa6-38f2030501f6',
-      title: 'Huấn luyện mô hình phân rã tự động User Stories thành các Sub-tasks kỹ thuật',
-      description: 'Xây dựng prompt template tối ưu và tích hợp LLM phân tích ngữ nghĩa để tự động đề xuất danh sách công việc con.',
-      statusId: 'st-1',
-      statusName: 'To Do',
-      issueType: 'Story',
-      priority: 'High',
-      storyPoints: 13,
-      assigneeName: 'Hoàng Trần Văn',
-      reporterName: 'Hoàng Trần Văn',
-      sprintId: 'sp-3',
-      sprintName: 'Sprint 03 - Trí tuệ Nhân tạo Phân rã & Đề xuất',
-      epicName: 'Trí tuệ Nhân tạo Hỗ trợ Quản trị (AI Copilot)',
-      epicColor: 'emerald',
-      labels: ['ai', 'prompt-engineering'],
-      createdAt: '2026-10-16',
-      updatedAt: '2026-10-16'
-    },
-    {
-      id: 'wi-9',
-      issueKey: 'QLDA-9',
-      projectId: 'f423e261-37af-44cd-9aa6-38f2030501f6',
-      title: 'Thuật toán xếp hạng ứng viên phân bổ công việc theo kỹ năng và tải hiện tại',
-      description: 'Tính toán trọng số phù hợp dựa trên 4 tiêu chí: Workload, Skill match, Lịch sử giải quyết và Capacity khả dụng.',
-      statusId: 'st-1',
-      statusName: 'To Do',
-      issueType: 'Story',
-      priority: 'Medium',
-      storyPoints: 8,
-      assigneeName: 'Hoàng Trần Văn',
-      reporterName: 'Hoàng Trần Văn',
-      sprintId: 'sp-3',
-      sprintName: 'Sprint 03 - Trí tuệ Nhân tạo Phân rã & Đề xuất',
-      epicName: 'Trí tuệ Nhân tạo Hỗ trợ Quản trị (AI Copilot)',
-      epicColor: 'emerald',
-      labels: ['ai', 'algorithm'],
-      createdAt: '2026-10-16',
-      updatedAt: '2026-10-16'
-    },
-    {
-      id: 'wi-10',
-      issueKey: 'QLDA-10',
-      projectId: 'f423e261-37af-44cd-9aa6-38f2030501f6',
-      title: 'Giao diện giám sát AI Token Quota và chi phí sử dụng mô hình LLM',
-      description: 'Bảng theo dõi hạn mức chi tiêu token, đo lường độ trễ API AI và thống kê số lần gọi generation theo thời gian thực.',
-      statusId: 'st-1',
-      statusName: 'To Do',
-      issueType: 'Task',
-      priority: 'Low',
-      storyPoints: 5,
-      assigneeName: 'Hoàng Trần Văn',
-      reporterName: 'Hoàng Trần Văn',
-      sprintId: 'sp-3',
-      sprintName: 'Sprint 03 - Trí tuệ Nhân tạo Phân rã & Đề xuất',
-      epicName: 'Trí tuệ Nhân tạo Hỗ trợ Quản trị (AI Copilot)',
-      epicColor: 'emerald',
-      labels: ['monitoring', 'cost-control'],
-      createdAt: '2026-10-16',
-      updatedAt: '2026-10-16'
-    }
-  ]);
+  // WorkItems Signal List (empty by default)
+  readonly workItems = signal<WorkItem[]>([]);
 
   // Selected Drawer Task State
   readonly activeDrawerTask = signal<WorkItem | null>(null);
 
-  // --- Epic Management ---
+  private readonly toast = inject(ToastService);
+  private readonly rbac = inject(RbacApi);
+  readonly pendingSaves = signal(0);
+  readonly saveError = signal<string | null>(null);
+  readonly workspaceLoading = signal(false);
+  private selectedProjectId = '';
+  private queueEpoch = 0;
+  private readonly writes = new Subject<{ epoch: number; request: () => Observable<unknown> }>();
+
+  constructor() {
+    this.writes.pipe(concatMap(job => defer(() => job.epoch === this.queueEpoch ? job.request() : EMPTY).pipe(
+      catchError((error: { title?: string; message?: string; detail?: string }) => {
+        this.queueEpoch++;
+        const message = error.detail ?? error.title ?? error.message ?? 'Không thể lưu thay đổi.';
+        this.saveError.set(message);
+        this.toast.error('Chưa lưu được thay đổi', message);
+        return EMPTY;
+      }),
+      finalize(() => {
+        this.pendingSaves.update(n => n - 1);
+        if (this.pendingSaves() === 0 && this.currentProject().id) {
+          if (!this.saveError()) this.toast.success('Đã lưu thay đổi');
+          this.loadWorkspace(this.currentProject().id);
+        }
+      })
+    ))).subscribe();
+    effect(() => {
+      const id = this.currentProject().id;
+      if (id === this.selectedProjectId) return;
+      this.selectedProjectId = id;
+      untracked(() => {
+        if (typeof sessionStorage !== 'undefined' && id) sessionStorage.setItem('projectmgmt.selected-project', id);
+        this.customIssueTypes.set([]); this.workItems.set([]); this.sprints.set([]); this.epics.set([]); this.activeDrawerTask.set(null);
+        if (id) this.loadWorkspace(id);
+      });
+    });
+  }
+
+  private enqueue(request: () => Observable<unknown>): void {
+    this.saveError.set(null); this.pendingSaves.update(n => n + 1);
+    this.writes.next({ epoch: this.queueEpoch, request });
+  }
+
+  loadWorkspace(projectId = this.currentProject().id): void {
+    if (!projectId) return;
+    this.workspaceLoading.set(true);
+    forkJoin({
+      data: this.http.get<{ workItems: WorkItem[]; sprints: Sprint[]; epics: EpicItem[]; statuses: ProjectStatus[] }>(`${this.baseUrl}/v1/projects/${projectId}/workspace`),
+      types: this.getIssueTypes(projectId),
+      members: this.rbac.getProjectMembers(projectId)
+    }).subscribe({
+      next: ({data, members, types}) => {
+        if (this.currentProject().id !== projectId) return;
+        if (this.pendingSaves() === 0) {
+          this.customIssueTypes.set(types); this.workItems.set(data.workItems); this.sprints.set(data.sprints); this.epics.set(data.epics); this.projectStatuses.set(data.statuses);
+          const openId = this.activeDrawerTask()?.id;
+          if (openId) this.activeDrawerTask.set(data.workItems.find(i => i.id === openId) ?? null);
+        }
+        this.currentProject.update(p => ({ ...p, members: (members.members ?? []).map(m => ({ id: m.userId ?? '', userId: m.userId ?? '', displayName: m.fullName ?? m.email ?? '', email: m.email ?? '', role: (m.roleName ?? 'Developer') as ProjectMember['role'], joinedAt: m.grantedAt ?? '', avatarUrl: m.avatarUrl ?? undefined })) }));
+      },
+      error: (e: { title?: string }) => { if (this.currentProject().id === projectId) this.saveError.set(e.title ?? 'Không thể tải công việc.'); this.workspaceLoading.set(false); },
+      complete: () => this.workspaceLoading.set(false)
+    });
+  }
+
+  private persist(item: WorkItem, create = false): void {
+    const body = { ...item, parentId: item.parentId || null, epicId: item.epicId || null, assigneeId: item.assigneeId || null, sprintId: item.sprintId || null, labels: item.labels ?? [] };
+    const url = create ? `${this.baseUrl}/v1/projects/${item.projectId}/issues` : `${this.baseUrl}/v1/issues/${item.id}`;
+    this.enqueue(() => create ? this.http.post(url, body) : this.http.put(url, body));
+  }
+
   addEpic(name: string, color = 'indigo', description = ''): EpicItem {
-    const key = `E-${this.epics().length + 1}`;
-    const newEpic: EpicItem = {
-      id: `epic-${Date.now()}`,
-      key,
-      name,
-      color,
-      description,
-      status: 'In Progress'
-    };
-    this.epics.update(list => [...list, newEpic]);
-    return newEpic;
+    const item = this.addWorkItem({ title: name, issueType: 'Epic', description });
+    const epic: EpicItem = { id: item.id, key: item.issueKey, name, color, description, status: 'To Do' };
+    this.epics.update(items => [...items, epic]); return epic;
   }
-
-  // --- Sub-task Creation ---
   createSubTask(parentId: string, title: string): WorkItem {
-    const parent = this.workItems().find(w => w.id === parentId);
-    const subCounter = this.workItems().filter(w => w.parentId === parentId).length + 1;
-    const issueKey = parent ? `${parent.issueKey}-${subCounter}` : `SUB-${Date.now()}`;
-
-    const newSub: WorkItem = {
-      id: `wi-sub-${Date.now()}`,
-      issueKey,
-      projectId: this.currentProject()?.id ?? '',
-      parentId,
-      title: title || 'Sub-task mới',
-      statusId: 'st-1',
-      statusName: 'To Do',
-      issueType: 'Sub-task',
-      priority: 'Medium',
-      storyPoints: 1,
-      assigneeName: parent?.assigneeName || '',
-      reporterName: parent?.reporterName || 'Tôi',
-      sprintId: parent?.sprintId || '',
-      sprintName: parent?.sprintName || '',
-      epicName: parent?.epicName,
-      epicColor: parent?.epicColor,
-      createdAt: new Date().toISOString().split('T')[0]
-    };
-
-    this.workItems.update(list => [...list, newSub]);
-    return newSub;
+    const parent = this.workItems().find(i => i.id === parentId);
+    return this.addWorkItem({ title, parentId, issueType: 'Sub-task', sprintId: parent?.sprintId, assigneeId: parent?.assigneeId, assigneeName: parent?.assigneeName, epicId: parent?.epicId, epicName: parent?.epicName });
   }
-
-  // --- WorkItem Helper Mutations ---
-  updateWorkItem(updatedItem: WorkItem): void {
-    this.workItems.update(items =>
-      items.map(item => item.id === updatedItem.id ? { ...updatedItem, updatedAt: new Date().toISOString().split('T')[0] } : item)
-    );
-    if (this.activeDrawerTask()?.id === updatedItem.id) {
-      this.activeDrawerTask.set({ ...updatedItem });
-    }
+  updateWorkItem(item: WorkItem): void {
+    const updated = { ...item, updatedAt: new Date().toISOString() };
+    this.workItems.update(items => items.map(i => i.id === item.id ? updated : i));
+    if (this.activeDrawerTask()?.id === item.id) this.activeDrawerTask.set(updated);
+    this.persist(updated);
   }
-
-  updateWorkItemStatus(id: string, newStatus: string): void {
-    this.workItems.update(items =>
-      items.map(item => {
-        if (item.id === id) {
-          const updated = {
-            ...item,
-            statusName: newStatus,
-            updatedAt: new Date().toISOString().split('T')[0],
-            activities: [
-              ...(item.activities || []),
-              {
-                id: `act-${Date.now()}`,
-                actorName: 'Bạn',
-                action: `Đã chuyển trạng thái sang ${newStatus}`,
-                timestamp: 'Vừa xong'
-              }
-            ]
-          };
-          if (this.activeDrawerTask()?.id === id) {
-            this.activeDrawerTask.set(updated);
-          }
-          return updated;
-        }
-        return item;
-      })
-    );
+  private patch(id: string, changes: Partial<WorkItem>): void {
+    const item = this.workItems().find(i => i.id === id);
+    if (item) this.updateWorkItem({ ...item, ...changes });
   }
-
-  updateWorkItemAssignee(taskId: string, assigneeName: string): void {
-    this.workItems.update(items =>
-      items.map(item => {
-        if (item.id === taskId) {
-          const updated = { ...item, assigneeName, updatedAt: new Date().toISOString().split('T')[0] };
-          if (this.activeDrawerTask()?.id === taskId) {
-            this.activeDrawerTask.set(updated);
-          }
-          return updated;
-        }
-        return item;
-      })
-    );
+  updateWorkItemStatus(id: string, statusName: string): void { this.patch(id, { statusName }); }
+  updateWorkItemAssignee(id: string, assigneeName: string): void {
+    const member = this.currentProject().members?.find(m => m.displayName === assigneeName);
+    this.patch(id, { assigneeName, assigneeId: member?.userId });
   }
-
-  updateWorkItemPriority(taskId: string, priority: 'Low' | 'Medium' | 'High' | 'Urgent'): void {
-    this.workItems.update(items =>
-      items.map(item => {
-        if (item.id === taskId) {
-          const updated = { ...item, priority, updatedAt: new Date().toISOString().split('T')[0] };
-          if (this.activeDrawerTask()?.id === taskId) {
-            this.activeDrawerTask.set(updated);
-          }
-          return updated;
-        }
-        return item;
-      })
-    );
+  updateWorkItemPriority(id: string, priority: WorkItem['priority']): void { this.patch(id, { priority }); }
+  updateWorkItemEpic(id: string, epicName: string, epicColor = 'indigo'): void { this.patch(id, { epicName, epicColor, epicId: this.epics().find(e => e.name === epicName)?.id }); }
+  updateWorkItemIssueType(id: string, issueType: string): void { this.patch(id, { issueType }); }
+  updateWorkItemStoryPoints(id: string, storyPoints: number): void { this.patch(id, { storyPoints }); }
+  updateWorkItemSprint(id: string, sprintId: string, sprintName: string): void { this.patch(id, { sprintId: sprintId === 'sp-backlog' ? '' : sprintId, sprintName }); }
+  cloneWorkItem(id: string): WorkItem | null {
+    const item = this.workItems().find(i => i.id === id);
+    return item ? this.addWorkItem({ ...item, title: `${item.title} (Bản sao)`, comments: [], activities: [] }) : null;
   }
-
-  updateWorkItemEpic(taskId: string, epicName: string, epicColor = 'indigo'): void {
-    this.workItems.update(items =>
-      items.map(item => {
-        if (item.id === taskId) {
-          const updated = { ...item, epicName, epicColor, updatedAt: new Date().toISOString().split('T')[0] };
-          if (this.activeDrawerTask()?.id === taskId) {
-            this.activeDrawerTask.set(updated);
-          }
-          return updated;
-        }
-        return item;
-      })
-    );
+  deleteWorkItem(id: string): void {
+    this.workItems.update(items => items.filter(i => i.id !== id && i.parentId !== id));
+    if (this.activeDrawerTask()?.id === id) this.activeDrawerTask.set(null);
+    this.enqueue(() => this.http.delete(`${this.baseUrl}/v1/issues/${id}`));
   }
-
-  updateWorkItemIssueType(taskId: string, issueType: WorkItem['issueType']): void {
-    this.workItems.update(items =>
-      items.map(item => {
-        if (item.id === taskId) {
-          const updated = { ...item, issueType, updatedAt: new Date().toISOString().split('T')[0] };
-          if (this.activeDrawerTask()?.id === taskId) {
-            this.activeDrawerTask.set(updated);
-          }
-          return updated;
-        }
-        return item;
-      })
-    );
+  bulkUpdateStatus(ids: string[], status: string): void { ids.forEach(id => this.updateWorkItemStatus(id, status)); }
+  bulkUpdateSprint(ids: string[], sprintId: string, sprintName: string): void { ids.forEach(id => this.updateWorkItemSprint(id, sprintId, sprintName)); }
+  bulkDelete(ids: string[]): void { ids.forEach(id => this.deleteWorkItem(id)); }
+  reorderWorkItems(ids: string[]): void {
+    const items = this.workItems(); const byId = new Map(items.map(i => [i.id, i]));
+    const selected = new Set(ids); let cursor = 0;
+    const ordered = items.map(i => selected.has(i.id) ? byId.get(ids[cursor++])! : i);
+    this.workItems.set(ordered);
+    const projectId = this.currentProject().id;
+    const orderedIds = ordered.map(i => i.id);
+    this.enqueue(() => this.http.put(`${this.baseUrl}/v1/projects/${projectId}/issues/order`, { orderedIds }));
   }
-
-  updateWorkItemStoryPoints(taskId: string, storyPoints: number): void {
-    this.workItems.update(items =>
-      items.map(item => {
-        if (item.id === taskId) {
-          const updated = { ...item, storyPoints, updatedAt: new Date().toISOString().split('T')[0] };
-          if (this.activeDrawerTask()?.id === taskId) {
-            this.activeDrawerTask.set(updated);
-          }
-          return updated;
-        }
-        return item;
-      })
-    );
-  }
-
-  updateWorkItemSprint(taskId: string, newSprintId: string, newSprintName: string): void {
-    this.workItems.update(items =>
-      items.map(item => {
-        if (item.id === taskId) {
-          const updated = { ...item, sprintId: newSprintId, sprintName: newSprintName, updatedAt: new Date().toISOString().split('T')[0] };
-          if (this.activeDrawerTask()?.id === taskId) {
-            this.activeDrawerTask.set(updated);
-          }
-          return updated;
-        }
-        return item;
-      })
-    );
-  }
-
-  cloneWorkItem(taskId: string): WorkItem | null {
-    const item = this.workItems().find(w => w.id === taskId);
-    if (!item) return null;
-
-    const proj = this.currentProject();
-    const counter = (proj?.issueCounter ?? 0) + 1;
-    const issueKey = proj ? `${proj.projectKey}-${counter}` : `TASK-${counter}`;
-    const cloned: WorkItem = {
-      ...item,
-      id: `wi-${Date.now()}`,
-      issueKey,
-      title: `${item.title} (Bản sao)`,
-      createdAt: new Date().toISOString().split('T')[0],
-      comments: [],
-      activities: []
-    };
-
-    this.workItems.update(list => [cloned, ...list]);
-    return cloned;
-  }
-
-  deleteWorkItem(taskId: string): void {
-    this.workItems.update(items => items.filter(item => item.id !== taskId && item.parentId !== taskId));
-    if (this.activeDrawerTask()?.id === taskId) {
-      this.activeDrawerTask.set(null);
-    }
-  }
-
-  // --- Bulk Operations ---
-  bulkUpdateStatus(ids: string[], newStatus: WorkItem['statusName']): void {
-    this.workItems.update(items =>
-      items.map(item => ids.includes(item.id) ? { ...item, statusName: newStatus } : item)
-    );
-  }
-
-  bulkUpdateSprint(ids: string[], sprintId: string, sprintName: string): void {
-    this.workItems.update(items =>
-      items.map(item => ids.includes(item.id) ? { ...item, sprintId, sprintName } : item)
-    );
-  }
-
-  bulkDelete(ids: string[]): void {
-    this.workItems.update(items => items.filter(item => !ids.includes(item.id)));
-  }
-
-  // --- Sprint Management ---
   addNewSprint(): Sprint {
-    const proj = this.currentProject();
-    const nextIdx = this.sprints().length + 1;
-    const name = proj ? `${proj.projectKey} Sprint ${nextIdx}` : `Sprint ${nextIdx}`;
-    const newSp: Sprint = {
-      id: `sp-${Date.now()}`,
-      projectId: proj?.id ?? '',
-      name,
-      goal: `Mục tiêu Sprint ${nextIdx}`,
-      status: 'future',
-      startDate: new Date().toISOString().split('T')[0],
-      endDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
-      workItemsCount: 0,
-      totalStoryPoints: 0
-    };
-    this.sprints.update(list => [...list, newSp]);
-    return newSp;
+    const sprint: Sprint = { id: crypto.randomUUID(), projectId: this.currentProject().id, name: `${this.currentProject().projectKey} Sprint ${this.sprints().length + 1}`, status: 'future', startDate: new Date().toISOString().slice(0, 10), endDate: new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10), workItemsCount: 0, totalStoryPoints: 0 };
+    this.sprints.update(items => [...items, sprint]);
+    this.enqueue(() => this.http.post(`${this.baseUrl}/v1/projects/${sprint.projectId}/sprints`, sprint)); return sprint;
   }
-
-  updateSprintStatus(sprintId: string, status: 'active' | 'future' | 'completed'): void {
-    this.sprints.update(list =>
-      list.map(sp => sp.id === sprintId ? { ...sp, status } : sp)
-    );
+  private patchSprint(id: string, changes: Partial<Sprint>): void {
+    const sprint = this.sprints().find(s => s.id === id); if (!sprint) return;
+    const updated = { ...sprint, ...changes };
+    this.sprints.update(items => items.map(s => s.id === id ? updated : s));
+    this.enqueue(() => this.http.put(`${this.baseUrl}/v1/sprints/${id}`, updated));
   }
-
-  updateSprintGoal(sprintId: string, goal: string): void {
-    this.sprints.update(list =>
-      list.map(sp => sp.id === sprintId ? { ...sp, goal } : sp)
-    );
+  updateSprintStatus(id: string, status: Sprint['status']): void { this.patchSprint(id, { status }); }
+  updateSprintGoal(id: string, goal: string): void { this.patchSprint(id, { goal }); }
+  updateSprintInfo(id: string, name: string, startDate?: string, endDate?: string): void {
+    this.patchSprint(id, { name, ...(startDate ? {startDate} : {}), ...(endDate ? {endDate} : {}) });
   }
-
-  updateSprintInfo(sprintId: string, name: string, startDate?: string, endDate?: string): void {
-    this.sprints.update(list =>
-      list.map(sp => sp.id === sprintId ? { ...sp, name, startDate: startDate ?? sp.startDate, endDate: endDate ?? sp.endDate } : sp)
-    );
+  moveSprintItemsToBacklog(id: string): void { this.workItems().filter(i => i.sprintId === id).forEach(i => this.updateWorkItemSprint(i.id, '', 'Backlog')); }
+  addNewProject(request: { name: string; projectKey: string; type?: string; description?: string }): Project {
+    // Retained for callers that stage a project locally; real creation uses createProject().
+    return { ...this.emptyProject, ...request, id: crypto.randomUUID() };
   }
-
-  moveSprintItemsToBacklog(sprintId: string): void {
-    this.workItems.update(items =>
-      items.map(item => item.sprintId === sprintId ? { ...item, sprintId: 'sp-backlog', sprintName: 'Backlog Pool' } : item)
-    );
+  addWorkItem(request: Partial<WorkItem>): WorkItem {
+    if (!this.currentProject().id) throw new Error('Hãy chọn hoặc tạo dự án trước.');
+    if (!request.sprintId && request.sprintName) request = { ...request, sprintId: this.sprints().find(s => s.name === request.sprintName)?.id };
+    const initial = this.projectStatuses().find(s => s.isInitial) ?? this.projectStatuses()[0];
+    const item: WorkItem = { ...request, id: crypto.randomUUID(), projectId: this.currentProject().id, issueKey: 'Đang lưu…', title: request.title || 'Công việc mới', statusId: initial?.id ?? '', statusName: request.statusName ?? initial?.name ?? 'To Do', issueType: request.issueType ?? 'Task', priority: request.priority ?? 'Medium', storyPoints: request.storyPoints ?? 0, reporterName: 'Tôi', createdAt: new Date().toISOString(), comments: [], activities: [] };
+    this.workItems.update(items => [item, ...items]); this.persist(item, true); return item;
   }
-
-  // --- Project Management Methods ---
-  addNewProject(newProj: { name: string; projectKey: string; type?: string; description?: string }): Project {
-    const created: Project = {
-      id: `proj-${Date.now()}`,
-      orgId: '',
-      projectKey: newProj.projectKey.toUpperCase(),
-      name: newProj.name,
-      type: newProj.type || 'Software space',
-      description: newProj.description || '',
-      leadUserId: '',
-      leadName: '',
-      issueCounter: 0,
-      isArchived: false,
-      isDeleted: false,
-      createdAt: new Date().toISOString()
-    };
-
-    this.allProjectsList.update(list => [created, ...list]);
-    this.currentProject.set(created);
-    return created;
+  addCommentToTask(id: string, content: string): void {
+    this.enqueue(() => this.http.post(`${this.baseUrl}/v1/issues/${id}/comments`, { content }));
   }
-
-  // --- WorkItem CRUD Methods ---
-  addWorkItem(newItem: Partial<WorkItem>): WorkItem {
-    const proj = this.currentProject();
-    const counter = (proj?.issueCounter ?? 0) + 1;
-    const key = proj ? `${proj.projectKey}-${counter}` : `TASK-${counter}`;
-    
-    const createdItem: WorkItem = {
-      id: `wi-${Date.now()}`,
-      issueKey: key,
-      projectId: proj?.id ?? '',
-      parentId: newItem.parentId,
-      title: newItem.title || 'Công việc mới',
-      description: newItem.description || '',
-      statusId: 'st-1',
-      statusName: newItem.statusName || 'To Do',
-      issueType: newItem.issueType || 'Task',
-      priority: newItem.priority || 'Medium',
-      storyPoints: newItem.storyPoints || 3,
-      assigneeName: newItem.assigneeName || '',
-      reporterName: newItem.reporterName || 'Tôi',
-      sprintId: newItem.sprintId || '',
-      sprintName: newItem.sprintName || '',
-      epicName: newItem.epicName || '',
-      epicColor: newItem.epicColor || 'blue',
-      labels: newItem.labels || ['task'],
-      createdAt: new Date().toISOString().split('T')[0],
-      updatedAt: new Date().toISOString().split('T')[0]
-    };
-
-    this.workItems.update(list => [createdItem, ...list]);
-    return createdItem;
+  getIssue(id: string): Observable<WorkItem> { return this.http.get<WorkItem>(`${this.baseUrl}/v1/issues/${id}`); }
+  saveIssue(item: WorkItem): Observable<WorkItem> { return this.http.put<WorkItem>(`${this.baseUrl}/v1/issues/${item.id}`, { ...item, parentId: item.parentId || null, assigneeId: item.assigneeId || null, epicId: item.epicId || null, sprintId: item.sprintId || null, labels: item.labels ?? [] }); }
+  createIssue(projectId: string, item: Partial<WorkItem>): Observable<WorkItem> { return this.http.post<WorkItem>(`${this.baseUrl}/v1/projects/${projectId}/issues`, item); }
+  postComment(id: string, content: string): Observable<WorkItem> { return this.http.post<WorkItem>(`${this.baseUrl}/v1/issues/${id}/comments`, { content }); }
+  uploadAttachment(id: string, file: File): Observable<unknown> {
+    const body = new FormData(); body.append('file', file); return this.http.post(`${this.baseUrl}/v1/issues/${id}/attachments`, body);
   }
-
-  addCommentToTask(taskId: string, commentText: string): void {
-    const newComment: TaskComment = {
-      id: `comment-${Date.now()}`,
-      authorName: 'Tôi',
-      content: commentText,
-      createdAt: new Date().toLocaleString()
-    };
-
-    this.workItems.update(items =>
-      items.map(item => {
-        if (item.id === taskId) {
-          const updated = {
-            ...item,
-            comments: [...(item.comments || []), newComment]
-          };
-          if (this.activeDrawerTask()?.id === taskId) {
-            this.activeDrawerTask.set(updated);
-          }
-          return updated;
-        }
-        return item;
-      })
-    );
-  }
+  downloadAttachment(id: string): Observable<Blob> { return this.http.get(`${this.baseUrl}/v1/attachments/${id}`, { responseType: 'blob' }); }
+  deleteAttachment(id: string): Observable<void> { return this.http.delete<void>(`${this.baseUrl}/v1/attachments/${id}`); }
+  addCriterion(id: string, content: string): Observable<unknown> { return this.http.post(`${this.baseUrl}/v1/issues/${id}/criteria`, { content }); }
+  updateCriterion(id: string, content: string, isMet: boolean): Observable<unknown> { return this.http.put(`${this.baseUrl}/v1/criteria/${id}`, { content, isMet }); }
 
   // HTTP API Operations
   getOrganizations(): Observable<Organization[]> {
-    return this.http.get<Organization[]>(`${this.baseUrl}/organizations`);
+    return this.http.get<Organization[]>(`${this.baseUrl}/v1/organizations`);
   }
 
   createOrganization(req: CreateOrganizationRequest): Observable<Organization> {
-    return this.http.post<Organization>(`${this.baseUrl}/organizations`, req);
-  }
-
-  selectProject(project: Project): void {
-    this.currentProject.set(project);
-    if (typeof localStorage !== 'undefined' && project.id) {
-      try { localStorage.setItem('projectmgmt.active-project-id', project.id); } catch { /* ignore */ }
-    }
+    return this.http.post<Organization>(`${this.baseUrl}/v1/organizations`, req);
   }
 
   getProjects(): Observable<Project[]> {
-    return this.http.get<Project[]>(`${this.baseUrl}/projects`).pipe(tap(projects => {
+    return this.http.get<Project[]>(`${this.baseUrl}/v1/projects`).pipe(tap(projects => {
       this.allProjectsList.set(projects);
-      const savedId = typeof localStorage !== 'undefined' ? localStorage.getItem('projectmgmt.active-project-id') : null;
-      const matched = savedId ? projects.find(p => p.id === savedId) : null;
-      const current = this.currentProject().id ? projects.find(p => p.id === this.currentProject().id) : null;
-      const nextActive = current ?? matched ?? projects[0] ?? this.emptyProject;
-      this.currentProject.set(nextActive);
-      if (nextActive.id && typeof localStorage !== 'undefined') {
-        try { localStorage.setItem('projectmgmt.active-project-id', nextActive.id); } catch { /* ignore */ }
-      }
+      const selected = this.currentProject().id || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('projectmgmt.selected-project') : null);
+      const next = projects.find(p => p.id === selected) ?? projects[0] ?? this.emptyProject;
+      this.currentProject.set(next.id === this.currentProject().id ? { ...this.currentProject(), ...next } : next);
     }));
   }
 
   createProject(req: CreateProjectRequest): Observable<Project> {
-    return this.http.post<Project>(`${this.baseUrl}/projects`, req).pipe(tap(project => {
+    return this.http.post<Project>(`${this.baseUrl}/v1/projects`, req).pipe(tap(project => {
       this.cacheProject(project);
-      this.selectProject(project);
+      this.currentProject.set(project);
     }));
   }
 
@@ -956,8 +519,8 @@ export class ProjectManagementService {
   }
 
   addProjectMember(memberReq: Pick<ProjectMember, 'displayName' | 'email' | 'role'>): Observable<boolean> {
-    void memberReq;
-    return throwError(() => ({ title: 'Chức năng thêm thành viên chưa được tích hợp.' }));
+    const projectId = this.currentProject().id;
+    return this.http.post(`${this.baseUrl}/v1/projects/${projectId}/members/invite`, { email: memberReq.email, roleName: memberReq.role }).pipe(tap(() => this.loadWorkspace(projectId)), map(() => true));
   }
 
   getUsers(): Observable<UserDisplayInfo[]> {
@@ -971,15 +534,15 @@ export class ProjectManagementService {
   }
 
   getProjectById(id: string): Observable<Project> {
-    return this.http.get<Project>(`${this.baseUrl}/projects/${id}`).pipe(tap(project => this.cacheProject(project)));
+    return this.http.get<Project>(`${this.baseUrl}/v1/projects/${id}`).pipe(tap(project => this.cacheProject(project)));
   }
 
   updateProject(id: string, req: UpdateProjectRequest): Observable<Project> {
-    return this.http.put<Project>(`${this.baseUrl}/projects/${id}`, req).pipe(tap(project => this.cacheProject(project)));
+    return this.http.put<Project>(`${this.baseUrl}/v1/projects/${id}`, req).pipe(tap(project => this.cacheProject(project)));
   }
 
   deleteProject(id: string): Observable<boolean> {
-    return this.http.delete<void>(`${this.baseUrl}/projects/${id}`).pipe(tap(() => {
+    return this.http.delete<void>(`${this.baseUrl}/v1/projects/${id}`).pipe(tap(() => {
       this.allProjectsList.update(projects => projects.filter(p => p.id !== id));
       if (this.currentProject().id === id) this.currentProject.set(this.allProjectsList()[0] ?? this.emptyProject);
     }), map(() => true));
@@ -990,90 +553,38 @@ export class ProjectManagementService {
       const exists = projects.some(p => p.id === project.id);
       return exists ? projects.map(p => p.id === project.id ? project : p) : [...projects, project];
     });
-    if (this.currentProject().id === project.id) this.currentProject.set(project);
+    if (this.currentProject().id === project.id) this.currentProject.update(current => ({ ...current, ...project }));
   }
 
-  // Custom Issue Type Creation
-  addCustomIssueType(name: string, icon: string, color: string, description?: string): CustomIssueType {
-    const newType: CustomIssueType = {
-      id: `it-${Date.now()}`,
-      name,
-      icon,
-      color,
-      description,
-      isCustom: true
-    };
-    this.customIssueTypes.update(types => [...types, newType]);
-    return newType;
+  getIssueTypes(projectId: string): Observable<CustomIssueType[]> {
+    return this.http.get<{ id: string; name: string; iconKey?: string; colorHex: string }[]>(`${this.baseUrl}/v1/projects/${projectId}/issue-types`).pipe(
+      map(types => types.map(t => ({ id: t.id, name: t.name, icon: t.iconKey ?? '📘', color: t.colorHex })))
+    );
   }
 
-  // Workflow Status Management
+  addCustomIssueType(name: string, icon: string, color: string): Observable<CustomIssueType> {
+    const projectId = this.currentProject().id;
+    return this.http.post<CustomIssueType>(`${this.baseUrl}/v1/projects/${projectId}/issue-types`, { name, icon, color }).pipe(
+      tap(type => { if (this.currentProject().id === projectId) this.customIssueTypes.update(types => [...types, type]); })
+    );
+  }
+
   getProjectStatuses(projectId: string): Observable<ProjectStatus[]> {
-    return this.http.get<ProjectStatus[]>(`${this.baseUrl}/projects/${projectId}/statuses`);
+    return this.http.get<ProjectStatus[]>(`${this.baseUrl}/v1/projects/${projectId}/statuses`);
   }
 
-  addProjectStatus(name: string, category = 'In Progress'): ProjectStatus {
-    const newStatus: ProjectStatus = {
-      id: `st-${Date.now()}`,
-      name,
-      category,
-      isInitial: false,
-      orderIndex: this.projectStatuses().length + 1
-    };
-    this.projectStatuses.update(list => [...list, newStatus]);
-    return newStatus;
-  }
-
-  deleteProjectStatus(id: string): void {
-    this.projectStatuses.update(list => list.filter(s => s.id !== id));
-  }
-
-  applyWorkflowTemplateToProject(templateId: string): ProjectStatus[] {
-    let newStatuses: ProjectStatus[];
-    if (templateId === 'scrum-std') {
-      newStatuses = [
-        { id: 'st-1', name: 'To Do', category: 'To Do', isInitial: true, orderIndex: 1 },
-        { id: 'st-2', name: 'In Progress', category: 'In Progress', isInitial: false, orderIndex: 2 },
-        { id: 'st-3', name: 'Code Review', category: 'In Progress', isInitial: false, orderIndex: 3 },
-        { id: 'st-4', name: 'Done', category: 'Done', isInitial: false, orderIndex: 4 }
-      ];
-    } else if (templateId === 'agile-qa') {
-      newStatuses = [
-        { id: 'st-1', name: 'To Do', category: 'To Do', isInitial: true, orderIndex: 1 },
-        { id: 'st-2', name: 'In Progress', category: 'In Progress', isInitial: false, orderIndex: 2 },
-        { id: 'st-3', name: 'Code Review', category: 'In Progress', isInitial: false, orderIndex: 3 },
-        { id: 'st-qa', name: 'QA Testing', category: 'In Progress', isInitial: false, orderIndex: 4 },
-        { id: 'st-4', name: 'Done', category: 'Done', isInitial: false, orderIndex: 5 }
-      ];
-    } else if (templateId === 'kanban-simple') {
-      newStatuses = [
-        { id: 'st-1', name: 'To Do', category: 'To Do', isInitial: true, orderIndex: 1 },
-        { id: 'st-2', name: 'In Progress', category: 'In Progress', isInitial: false, orderIndex: 2 },
-        { id: 'st-4', name: 'Done', category: 'Done', isInitial: false, orderIndex: 3 }
-      ];
-    } else if (templateId === 'enterprise') {
-      newStatuses = [
-        { id: 'st-1', name: 'Backlog', category: 'To Do', isInitial: true, orderIndex: 1 },
-        { id: 'st-spec', name: 'Spec Review', category: 'To Do', isInitial: false, orderIndex: 2 },
-        { id: 'st-2', name: 'In Progress', category: 'In Progress', isInitial: false, orderIndex: 3 },
-        { id: 'st-3', name: 'Code Review', category: 'In Progress', isInitial: false, orderIndex: 4 },
-        { id: 'st-qa', name: 'QA Verification', category: 'In Progress', isInitial: false, orderIndex: 5 },
-        { id: 'st-4', name: 'Done', category: 'Done', isInitial: false, orderIndex: 6 }
-      ];
-    } else {
-      newStatuses = this.projectStatuses();
-    }
-
-    this.projectStatuses.set(newStatuses);
-    return newStatuses;
+  applyWorkflowTemplateToProject(projectId: string, templateId: string): Observable<ProjectStatus[]> {
+    return this.http.post<ProjectStatus[]>(`${this.baseUrl}/v1/projects/${projectId}/workflow/template`, { templateId }).pipe(
+      tap(statuses => { if (this.currentProject().id === projectId) this.projectStatuses.set(statuses); })
+    );
   }
 
   getWorkflowTransitions(projectId: string): Observable<WorkflowTransition[]> {
-    return this.http.get<WorkflowTransition[]>(`${this.baseUrl}/projects/${projectId}/workflow/transitions`);
+    return this.http.get<WorkflowTransition[]>(`${this.baseUrl}/v1/projects/${projectId}/workflow/transitions`);
   }
 
   createWorkflowTransition(projectId: string, req: CreateWorkflowTransitionRequest): Observable<WorkflowTransition> {
-    return this.http.post<WorkflowTransition>(`${this.baseUrl}/projects/${projectId}/workflow/transitions`, req);
+    return this.http.post<WorkflowTransition>(`${this.baseUrl}/v1/projects/${projectId}/workflow/transitions`, req);
   }
 
   deleteWorkflowTransition(id: string): Observable<boolean> {
@@ -1081,11 +592,11 @@ export class ProjectManagementService {
   }
 
   getBoards(projectId: string): Observable<Board[]> {
-    return this.http.get<Board[]>(`${this.baseUrl}/projects/${projectId}/boards`);
+    return this.http.get<Board[]>(`${this.baseUrl}/v1/projects/${projectId}/boards`);
   }
 
   createBoard(projectId: string, req: CreateBoardRequest): Observable<Board> {
-    return this.http.post<Board>(`${this.baseUrl}/projects/${projectId}/boards`, req);
+    return this.http.post<Board>(`${this.baseUrl}/v1/projects/${projectId}/boards`, req);
   }
 
   getBoardColumns(boardId: string): Observable<BoardColumn[]> {

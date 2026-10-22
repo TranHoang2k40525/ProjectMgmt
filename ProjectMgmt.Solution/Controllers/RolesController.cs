@@ -2,6 +2,8 @@ using IdentityExperience.Application.Dto;
 using IdentityExperience.Application.IServices;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using IdentityExperience.Infrastructure;
 using ProjectMgmt.IdentityAccess.Contracts;
 using ProjectMgmt.ProjectManagement.Contracts;
 
@@ -45,6 +47,13 @@ public class RolesController : ControllerBase
         try
         {
             var result = await _roleServices.GetRolesAsync(scope);
+            if (result.Success && result.Items is not null)
+            {
+                var db = HttpContext.RequestServices.GetRequiredService<IdentityExperienceDbContext>();
+                var grants = await db.RolePermissions.AsNoTracking().ToListAsync();
+                foreach (var role in result.Items)
+                    role.PermissionIds = grants.Where(p => p.RoleId == role.RoleId).Select(p => p.PermissionId).ToList();
+            }
             return result.Success ? Ok(result) : BadRequest(result);
         }
         catch (Exception exception)
@@ -64,6 +73,26 @@ public class RolesController : ControllerBase
         {
             return InternalError("permissions", exception);
         }
+    }
+
+    [HttpGet("admin/users")]
+    public async Task<IActionResult> GetAdminUsers()
+    {
+        if (!await HasSystemPermission("identity.role.manage")) return Forbidden();
+        var db = HttpContext.RequestServices.GetRequiredService<IdentityExperienceDbContext>();
+        var users = await (from u in db.Users.AsNoTracking()
+                           join p in db.UserProfiles.AsNoTracking() on u.Id equals p.UserId into profiles
+                           from p in profiles.DefaultIfEmpty()
+                           orderby u.CreatedAt descending
+                           select new { u.Id, u.Email, DisplayName = p == null ? u.Email : p.DisplayName,
+                               AvatarUrl = p == null ? null : p.AvatarUrl, JobTitle = p == null ? null : p.JobTitle,
+                               u.IsActive, u.IsEmailVerified, u.CreatedAt, u.LastLoginAt }).ToListAsync();
+        var assignments = await (from ur in db.UserRoles.AsNoTracking()
+                                 join r in db.Roles.AsNoTracking() on ur.RoleId equals r.Id
+                                 select new { ur.UserId, ur.RoleId, RoleName = r.Name, ur.ScopeType, ur.ScopeId }).ToListAsync();
+        return Ok(users.Select(u => new { u.Id, u.Email, u.DisplayName, u.AvatarUrl, u.JobTitle,
+            u.IsActive, u.IsEmailVerified, u.CreatedAt, u.LastLoginAt,
+            Roles = assignments.Where(r => r.UserId == u.Id).Select(r => new { r.RoleId, r.RoleName, r.ScopeType, r.ScopeId }) }));
     }
 
     [HttpPost("roles")]

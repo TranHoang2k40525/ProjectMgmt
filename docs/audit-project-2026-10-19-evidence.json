@@ -1,0 +1,795 @@
+{
+  "date": "2026-10-19",
+  "branch": "hoangtv",
+  "commit": "90dad7de203194ee83655034d838a71dadf6dd56",
+  "backendTests": {
+    "passed": 63,
+    "failed": 0
+  },
+  "frontendTests": {
+    "initialRun": "Worker exited unexpectedly",
+    "files": 15,
+    "maxWorkers": 1,
+    "passed": 67
+  },
+  "frontendBuild": "passed",
+  "frontendLint": {
+    "errors": 1,
+    "detail": "unused of import in project-management.service.ts:3"
+  },
+  "api": {
+    "api-workflow-results": {
+      "value": [
+        {
+          "method": "GET",
+          "path": "/api/v1/users/for-you",
+          "status": 200,
+          "errorCode": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/ai/breakdown/generate",
+          "status": 201,
+          "errorCode": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/ai/breakdown/b91f7cc8-098e-4abd-82be-5857e3a4e3d1",
+          "status": 200,
+          "errorCode": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/ai/breakdown/b91f7cc8-098e-4abd-82be-5857e3a4e3d1/apply",
+          "status": 200,
+          "errorCode": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/projects/9255ceb7-0d1d-4129-9493-44bfbd63b186/boards",
+          "status": 409,
+          "errorCode": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/projects/9255ceb7-0d1d-4129-9493-44bfbd63b186/statuses",
+          "status": 200,
+          "errorCode": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/skills",
+          "status": 200,
+          "errorCode": null
+        },
+        {
+          "method": "PUT",
+          "path": "/api/v1/users/me/skills",
+          "status": 200,
+          "errorCode": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/refresh-token",
+          "status": 200,
+          "errorCode": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/logout",
+          "status": 200,
+          "errorCode": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/refresh-token",
+          "status": 401,
+          "errorCode": "AUTH_REFRESH_TOKEN_INVALID"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/forgot-password",
+          "status": 202,
+          "errorCode": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/reset-password",
+          "status": 200,
+          "errorCode": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 200,
+          "errorCode": null
+        },
+        {
+          "method": "PUT",
+          "path": "/api/v1/users/me/password",
+          "status": 200,
+          "errorCode": null
+        }
+      ],
+      "Count": 15
+    },
+    "api-ai-frontend-contract": {
+      "value": [
+        {
+          "path": "/api/v1/auth/login",
+          "status": 200,
+          "errorCode": null
+        },
+        {
+          "path": "/api/v1/ai/breakdown/generate",
+          "status": 201,
+          "errorCode": null
+        },
+        {
+          "path": "/api/v1/ai/breakdown/08bd01c4-0a75-4c3d-b41d-aaa4d31806d3/apply",
+          "status": 400,
+          "errorCode": "AI_BREAKDOWN_SELECTION_INVALID"
+        }
+      ],
+      "Count": 3
+    },
+    "api-security-results": {
+      "value": [
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/otp/send",
+          "status": 202,
+          "errorCode": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/otp/verify",
+          "status": 200,
+          "errorCode": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 200,
+          "errorCode": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/projects/9255ceb7-0d1d-4129-9493-44bfbd63b186/members",
+          "status": 403,
+          "errorCode": "RBAC_PERMISSION_DENIED"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/projects/9255ceb7-0d1d-4129-9493-44bfbd63b186",
+          "status": 200,
+          "errorCode": null
+        },
+        {
+          "method": "PUT",
+          "path": "/api/v1/projects/9255ceb7-0d1d-4129-9493-44bfbd63b186",
+          "status": 200,
+          "errorCode": null
+        }
+      ],
+      "Count": 6
+    },
+    "api-results": {
+      "value": [
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/register",
+          "status": 202,
+          "errorCode": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 403,
+          "errorCode": "AUTH_EMAIL_NOT_VERIFIED"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/otp/verify",
+          "status": 200,
+          "errorCode": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/login",
+          "status": 200,
+          "errorCode": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/users/me",
+          "status": 200,
+          "errorCode": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/users/for-you",
+          "status": 200,
+          "errorCode": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/skills",
+          "status": 200,
+          "errorCode": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/roles",
+          "status": 200,
+          "errorCode": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/permissions",
+          "status": 200,
+          "errorCode": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/notifications",
+          "status": 200,
+          "errorCode": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/notifications/unread-count",
+          "status": 200,
+          "errorCode": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/organizations",
+          "status": 200,
+          "errorCode": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/projects",
+          "status": 200,
+          "errorCode": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/projects",
+          "status": 404,
+          "errorCode": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/organizations",
+          "status": 404,
+          "errorCode": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/ai/prompt-templates",
+          "status": 200,
+          "errorCode": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/organizations",
+          "status": 201,
+          "errorCode": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/projects",
+          "status": 201,
+          "errorCode": null
+        }
+      ],
+      "Count": 18
+    },
+    "api-board-member-results": {
+      "rows": [
+        {
+          "method": "POST",
+          "url": "/api/v1/auth/login",
+          "status": 200
+        },
+        {
+          "method": "POST",
+          "url": "/api/v1/projects/9255ceb7-0d1d-4129-9493-44bfbd63b186/boards",
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "url": "/api/v1/projects/9255ceb7-0d1d-4129-9493-44bfbd63b186/statuses",
+          "status": 200
+        },
+        {
+          "method": "POST",
+          "url": "/api/boards/ab2d131a-b588-42ef-a98f-708823bcfaa5/columns",
+          "status": 200
+        },
+        {
+          "method": "PUT",
+          "url": "/api/boards/columns/217749fd-0cfe-4507-8e14-9a4c44c5ade7",
+          "status": 200
+        },
+        {
+          "method": "DELETE",
+          "url": "/api/boards/columns/217749fd-0cfe-4507-8e14-9a4c44c5ade7",
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "url": "/api/v1/roles?scope=Project",
+          "status": 200,
+          "code": null
+        },
+        {
+          "method": "POST",
+          "url": "/api/v1/projects/9255ceb7-0d1d-4129-9493-44bfbd63b186/members",
+          "status": 201,
+          "code": null
+        },
+        {
+          "method": "GET",
+          "url": "/api/v1/notifications",
+          "status": 200
+        }
+      ],
+      "realtimeEvents": [
+        {
+          "id": "a3164dbd-f5c8-42ff-86e0-a522e5ad956e",
+          "type": "ProjectInvitation"
+        }
+      ]
+    }
+  },
+  "browser": {
+    "networkAndPersistence": {
+      "checks": [
+        {
+          "route": "projects",
+          "api": [
+            {
+              "url": "/api/projects",
+              "status": 204
+            },
+            {
+              "url": "/hubs/notifications/negotiate",
+              "status": 204
+            },
+            {
+              "url": "/api/projects",
+              "status": 404
+            },
+            {
+              "url": "/hubs/notifications/negotiate",
+              "status": 200
+            },
+            {
+              "url": "/api/projects",
+              "status": 404
+            },
+            {
+              "url": "/hubs/notifications/negotiate",
+              "status": 204
+            },
+            {
+              "url": "/hubs/notifications/negotiate",
+              "status": 200
+            },
+            {
+              "url": "/hubs/notifications",
+              "status": 200
+            },
+            {
+              "url": "/hubs/notifications",
+              "status": 204
+            },
+            {
+              "url": "/hubs/notifications",
+              "status": 200
+            },
+            {
+              "url": "/hubs/notifications",
+              "status": 204
+            },
+            {
+              "url": "/hubs/notifications",
+              "status": 200
+            }
+          ]
+        },
+        {
+          "route": "projects/new",
+          "api": [
+            {
+              "url": "/hubs/notifications/negotiate",
+              "status": 204
+            },
+            {
+              "url": "/api/organizations",
+              "status": 204
+            },
+            {
+              "url": "/api/users",
+              "status": 204
+            },
+            {
+              "url": "/hubs/notifications/negotiate",
+              "status": 200
+            },
+            {
+              "url": "/api/projects",
+              "status": 404
+            },
+            {
+              "url": "/api/organizations",
+              "status": 404
+            },
+            {
+              "url": "/api/users",
+              "status": 200
+            },
+            {
+              "url": "/hubs/notifications/negotiate",
+              "status": 204
+            },
+            {
+              "url": "/hubs/notifications/negotiate",
+              "status": 200
+            },
+            {
+              "url": "/hubs/notifications",
+              "status": 200
+            },
+            {
+              "url": "/hubs/notifications",
+              "status": 204
+            },
+            {
+              "url": "/hubs/notifications",
+              "status": 200
+            },
+            {
+              "url": "/hubs/notifications",
+              "status": 204
+            },
+            {
+              "url": "/hubs/notifications",
+              "status": 200
+            }
+          ]
+        },
+        {
+          "route": "profile",
+          "api": [
+            {
+              "url": "/hubs/notifications/negotiate",
+              "status": 204
+            },
+            {
+              "url": "/api/v1/users/me",
+              "status": 204
+            },
+            {
+              "url": "/hubs/notifications/negotiate",
+              "status": 200
+            },
+            {
+              "url": "/api/projects",
+              "status": 404
+            },
+            {
+              "url": "/api/v1/users/me",
+              "status": 200
+            },
+            {
+              "url": "/api/v1/skills",
+              "status": 204
+            },
+            {
+              "url": "/api/v1/users/ccfe9ce8-a568-4b1a-94fe-1578c2f80d1b/skills",
+              "status": 204
+            },
+            {
+              "url": "/api/v1/skills",
+              "status": 200
+            },
+            {
+              "url": "/api/v1/users/ccfe9ce8-a568-4b1a-94fe-1578c2f80d1b/skills",
+              "status": 200
+            },
+            {
+              "url": "/hubs/notifications/negotiate",
+              "status": 204
+            },
+            {
+              "url": "/hubs/notifications/negotiate",
+              "status": 200
+            },
+            {
+              "url": "/hubs/notifications",
+              "status": 200
+            },
+            {
+              "url": "/hubs/notifications",
+              "status": 204
+            },
+            {
+              "url": "/hubs/notifications",
+              "status": 200
+            },
+            {
+              "url": "/hubs/notifications",
+              "status": 204
+            },
+            {
+              "url": "/hubs/notifications",
+              "status": 200
+            }
+          ]
+        },
+        {
+          "route": "admin/identity",
+          "api": [
+            {
+              "url": "/hubs/notifications/negotiate",
+              "status": 204
+            },
+            {
+              "url": "/api/v1/roles",
+              "status": 204
+            },
+            {
+              "url": "/api/v1/permissions",
+              "status": 204
+            },
+            {
+              "url": "/hubs/notifications/negotiate",
+              "status": 200
+            },
+            {
+              "url": "/api/projects",
+              "status": 404
+            },
+            {
+              "url": "/api/v1/roles",
+              "status": 200
+            },
+            {
+              "url": "/api/v1/permissions",
+              "status": 200
+            },
+            {
+              "url": "/hubs/notifications/negotiate",
+              "status": 204
+            },
+            {
+              "url": "/hubs/notifications/negotiate",
+              "status": 200
+            },
+            {
+              "url": "/hubs/notifications",
+              "status": 200
+            },
+            {
+              "url": "/hubs/notifications",
+              "status": 204
+            },
+            {
+              "url": "/hubs/notifications",
+              "status": 200
+            },
+            {
+              "url": "/hubs/notifications",
+              "status": 204
+            },
+            {
+              "url": "/hubs/notifications",
+              "status": 200
+            }
+          ]
+        },
+        {
+          "route": "notifications",
+          "api": [
+            {
+              "url": "/hubs/notifications/negotiate",
+              "status": 204
+            },
+            {
+              "url": "/api/v1/notifications",
+              "status": 204
+            },
+            {
+              "url": "/api/projects",
+              "status": 404
+            },
+            {
+              "url": "/hubs/notifications/negotiate",
+              "status": 200
+            },
+            {
+              "url": "/api/v1/notifications",
+              "status": 200
+            },
+            {
+              "url": "/hubs/notifications/negotiate",
+              "status": 204
+            },
+            {
+              "url": "/hubs/notifications/negotiate",
+              "status": 200
+            },
+            {
+              "url": "/hubs/notifications",
+              "status": 200
+            },
+            {
+              "url": "/hubs/notifications",
+              "status": 204
+            },
+            {
+              "url": "/hubs/notifications",
+              "status": 200
+            },
+            {
+              "url": "/hubs/notifications",
+              "status": 204
+            },
+            {
+              "url": "/hubs/notifications",
+              "status": 200
+            }
+          ]
+        },
+        {
+          "route": "backlog",
+          "api": [
+            {
+              "url": "/api/projects",
+              "status": 204
+            },
+            {
+              "url": "/hubs/notifications/negotiate",
+              "status": 204
+            },
+            {
+              "url": "/api/projects",
+              "status": 404
+            },
+            {
+              "url": "/hubs/notifications/negotiate",
+              "status": 200
+            },
+            {
+              "url": "/hubs/notifications/negotiate",
+              "status": 204
+            },
+            {
+              "url": "/hubs/notifications/negotiate",
+              "status": 200
+            },
+            {
+              "url": "/hubs/notifications",
+              "status": 200
+            },
+            {
+              "url": "/hubs/notifications",
+              "status": 204
+            }
+          ]
+        }
+      ],
+      "persistence": {
+        "before": {
+          "tasks": 1,
+          "sprints": 1
+        },
+        "after": {
+          "tasks": 0,
+          "sprints": 0
+        }
+      }
+    },
+    "routes": [
+      {
+        "route": "for-you",
+        "uncaughtErrors": [],
+        "horizontalOverflow": false
+      },
+      {
+        "route": "projects",
+        "uncaughtErrors": [],
+        "horizontalOverflow": false
+      },
+      {
+        "route": "projects/new",
+        "uncaughtErrors": [],
+        "horizontalOverflow": false
+      },
+      {
+        "route": "project/summary",
+        "uncaughtErrors": [],
+        "horizontalOverflow": false
+      },
+      {
+        "route": "project/members",
+        "uncaughtErrors": [],
+        "horizontalOverflow": false
+      },
+      {
+        "route": "profile",
+        "uncaughtErrors": [],
+        "horizontalOverflow": false
+      },
+      {
+        "route": "admin/identity",
+        "uncaughtErrors": [],
+        "horizontalOverflow": false
+      },
+      {
+        "route": "admin/ai-governance",
+        "uncaughtErrors": [],
+        "horizontalOverflow": false
+      },
+      {
+        "route": "backlog",
+        "uncaughtErrors": [],
+        "horizontalOverflow": false
+      },
+      {
+        "route": "board",
+        "uncaughtErrors": [],
+        "horizontalOverflow": false
+      },
+      {
+        "route": "task-list",
+        "uncaughtErrors": [],
+        "horizontalOverflow": false
+      },
+      {
+        "route": "roadmap",
+        "uncaughtErrors": [],
+        "horizontalOverflow": false
+      },
+      {
+        "route": "reports",
+        "uncaughtErrors": [],
+        "horizontalOverflow": false
+      },
+      {
+        "route": "issues/00000000-0000-0000-0000-000000000001",
+        "uncaughtErrors": [],
+        "horizontalOverflow": false
+      },
+      {
+        "route": "notifications",
+        "uncaughtErrors": [],
+        "horizontalOverflow": false
+      },
+      {
+        "route": "ai-dataops",
+        "uncaughtErrors": [],
+        "horizontalOverflow": false
+      },
+      {
+        "route": "projects/9255ceb7-0d1d-4129-9493-44bfbd63b186/settings",
+        "uncaughtErrors": [],
+        "horizontalOverflow": false
+      },
+      {
+        "route": "projects/9255ceb7-0d1d-4129-9493-44bfbd63b186/settings/workflow",
+        "uncaughtErrors": [],
+        "horizontalOverflow": false
+      },
+      {
+        "route": "projects/9255ceb7-0d1d-4129-9493-44bfbd63b186/settings/board",
+        "uncaughtErrors": [],
+        "horizontalOverflow": false
+      }
+    ]
+  }
+}

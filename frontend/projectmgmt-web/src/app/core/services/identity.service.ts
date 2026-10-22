@@ -1,5 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { Observable, map, of, switchMap, throwError } from 'rxjs';
+import { HttpClient } from '@angular/common/http';
+import { Observable, forkJoin, map, of, switchMap, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AccountApi } from '../api/account.api';
 import { LoginResult } from '../api/account-api.models';
@@ -33,6 +34,7 @@ export interface AuthState {
   providedIn: 'root'
 })
 export class IdentityService {
+  private readonly http = inject(HttpClient);
   private readonly accountApi = inject(AccountApi);
   private readonly identityApi = inject(IdentityApi);
   private readonly notificationApi = inject(NotificationApi);
@@ -363,35 +365,19 @@ export class IdentityService {
   // ==========================================
 
   getUsers(): Observable<UserProfileModel[]> {
-    return this.identityApi.getUsers().pipe(
-      map(items => (items ?? []).map(u => ({
-        id: u.userId,
-        email: '',
-        displayName: u.displayName || 'Người dùng',
-        avatarUrl: this.resolveAssetUrl(u.avatarUrl),
-        jobTitle: '',
-        roleId: '',
-        roleName: 'Thành viên',
-        isActive: true,
-        twoFactorEnabled: false,
-        createdAt: new Date().toISOString(),
-        lastLoginAt: new Date().toISOString()
-      })))
+    return this.http.get<UserProfileModel[]>(`${environment.apiBaseUrl}/v1/admin/users`).pipe(
+      map(users => users.map(u => ({ ...u, roleId: u.roles?.[0]?.roleId ?? '',
+        roleName: u.roles?.map(r => r.roleName).join(', ') ?? '', twoFactorEnabled: false })))
     );
   }
 
   getRoles(scope?: string): Observable<RoleModel[]> {
-    return this.rbacApi.getRoles(scope).pipe(
-      map(res => {
-        return (res.items ?? []).map(r => ({
-          id: r.roleId ?? '',
-          name: r.name ?? '',
-          code: r.name ? r.name.toUpperCase().replace(/\s+/g, '_') : '',
-          description: r.description ?? '',
-          isSystem: r.isSystem ?? false,
-          permissionCodes: []
-        }));
-      })
+    return forkJoin({ roles: this.rbacApi.getRoles(scope), permissions: this.rbacApi.getPermissions() }).pipe(
+      map(({ roles, permissions }) => (roles.items ?? []).map(r => ({
+        id: r.roleId ?? '', name: r.name ?? '', code: r.name ?? '',
+        scope: r.scope ?? '', description: r.description ?? '', isSystem: r.isSystem ?? false,
+        permissionCodes: (permissions.items ?? []).filter(p => (r.permissionIds ?? []).includes(p.permissionId ?? '')).map(p => p.code ?? '')
+      })))
     );
   }
 
@@ -406,6 +392,7 @@ export class IdentityService {
           module: p.grouping ?? 'System',
           description: p.description ?? ''
         }));
+        return perms;
       })
     );
   }
@@ -421,38 +408,26 @@ export class IdentityService {
     return throwError(() => ({ error: { title: 'Chưa có endpoint khóa/mở tài khoản' } }));
   }
 
+  private permissionIds(codes: string[]): Observable<string[]> {
+    return this.getPermissions().pipe(map(permissions => codes.map(code => {
+      const permission = permissions.find(p => p.code === code);
+      if (!permission) throw new Error('Quyền không còn tồn tại: ' + code);
+      return permission.id;
+    })));
+  }
+
   updateRolePermissions(roleId: string, permissionCodes: string[]): Observable<RoleModel> {
-    return this.rbacApi.updateRolePermissions(roleId, permissionCodes).pipe(
-      map(() => {
-        return {
-          id: roleId,
-          name: 'Role',
-          code: 'ROLE',
-          description: '',
-          isSystem: false,
-          permissionCodes
-        };
-      })
+    return this.permissionIds(permissionCodes).pipe(
+      switchMap(ids => this.rbacApi.updateRolePermissions(roleId, ids)),
+      map(() => ({ id: roleId, name: '', code: '', description: '', isSystem: false, permissionCodes }))
     );
   }
 
   createRole(name: string, description: string, permissionCodes: string[]): Observable<RoleModel> {
-    return this.rbacApi.createRole({
-      name,
-      scope: 'Project',
-      description
-    }).pipe(
-      map(res => {
-        const newRole: RoleModel = {
-          id: res.roleId ?? `role-${Date.now()}`,
-          name: res.name ?? name,
-          code: (res.name ?? name).toUpperCase().replace(/\s+/g, '_'),
-          description: res.description ?? description,
-          isSystem: false,
-          permissionCodes
-        };
-        return newRole;
-      })
+    return this.permissionIds(permissionCodes).pipe(
+      switchMap(permissionIds => this.rbacApi.createRole({ name, scope: 'Project', description, permissionIds })),
+      map(res => ({ id: res.roleId ?? '', name: res.name ?? name, code: res.name ?? name,
+        scope: res.scope ?? 'Project', description, isSystem: false, permissionCodes }))
     );
   }
 
@@ -579,15 +554,18 @@ export class IdentityService {
   }
 
   getActiveSessions(): Observable<ActiveSessionModel[]> {
-    return of([]);
+    return this.http.get<ActiveSessionModel[]>(`${environment.apiBaseUrl}/v1/users/me/sessions`);
   }
 
   revokeSession(sessionId: string): Observable<{ success: boolean }> {
-    void sessionId;
-    return throwError(() => ({
-      status: 501,
-      code: 'AUTH_SESSION_MANAGEMENT_NOT_IMPLEMENTED',
-      title: 'Backend chưa cung cấp API liệt kê và thu hồi từng phiên.'
-    }));
+    return this.http.delete<{ success: boolean; isCurrent: boolean }>(`${environment.apiBaseUrl}/v1/users/me/sessions/${sessionId}`).pipe(
+      map(result => {
+        if (result.isCurrent) {
+          this.tokenStore.clear();
+          this.authState.set({ currentUser: null, isAuthenticated: false, token: null });
+        }
+        return result;
+      })
+    );
   }
 }

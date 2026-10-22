@@ -11,7 +11,7 @@
 @if (!projectService.hasActiveProject()) {
   <app-no-project-state featureName="Kế hoạch Sprint & Backlog"></app-no-project-state>
 } @else {
-<section class="backlog-page" aria-labelledby="backlog-title">
+<section cdkDropListGroup class="backlog-page" aria-labelledby="backlog-title">
   <header class="backlog-toolbar">
     <div class="backlog-heading-row">
       <div class="backlog-heading">

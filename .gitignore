@@ -20,6 +20,7 @@ TestResults/
 **/.pytest_cache/
 *.py[cod]
 .tmp/
+**/App_Data/
 **/plane (1).txt
 ~$*
 **/~$*

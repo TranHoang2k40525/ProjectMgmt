@@ -41,6 +41,10 @@ import { RecentWorkService } from '../../core/attention/recent-work.service';
   styleUrl: './app-shell.scss'
 })
 export class AppShellComponent implements OnDestroy {
+  @HostListener('window:beforeunload', ['$event'])
+  protectPendingChanges(event: BeforeUnloadEvent): void {
+    if (this.projectService.pendingSaves() > 0) event.preventDefault();
+  }
   readonly identity = inject(IdentityService);
   readonly focus = inject(FocusRecommendationService);
   readonly projectService = inject(ProjectManagementService);
@@ -194,9 +198,11 @@ export class AppShellComponent implements OnDestroy {
   }
 
   openCreateTaskModal(): void {
-    if (!this.projectService.hasActiveProject()) {
+    if (!this.projectService.hasActiveProject() || !this.projectService.currentProject().id) {
       this.toastService.info('Chưa Chọn Dự Án', 'Vui lòng chọn hoặc khởi tạo một dự án trước khi tạo công việc mới.');
-      this.router.navigate(['/projects/new']);
+      void this.router.navigate(['/projects/new']);
+      return;
+    }
       return;
     }
     this.isCreateTaskModalOpen.set(true);

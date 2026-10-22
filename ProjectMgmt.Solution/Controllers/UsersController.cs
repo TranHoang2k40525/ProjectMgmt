@@ -53,7 +53,13 @@ public class UsersController : ControllerBase
     {
         try
         {
-            return Ok(await _userLookup.GetAllActiveDisplayInfoAsync(cancellationToken));
+            var identity = HttpContext.RequestServices.GetRequiredService<IdentityExperience.Infrastructure.IdentityExperienceDbContext>();
+            return Ok(await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync(
+                from user in identity.Users
+                join profile in identity.UserProfiles on user.Id equals profile.UserId
+                where user.IsActive && user.IsEmailVerified
+                orderby profile.DisplayName
+                select new { userId = user.Id, profile.DisplayName, user.Email, profile.AvatarUrl }, cancellationToken));
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {

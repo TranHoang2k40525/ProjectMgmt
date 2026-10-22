@@ -8,6 +8,7 @@ namespace ProjectMgmt.Solution.Controllers;
 
 [Route("api/v1/projects")]
 [Route("api/projects")]
+[TypeFilter(typeof(ProjectMgmt.Solution.Security.ProjectAuthorizationFilter))]
 public class ProjectsController : ApiControllerBase
 {
     private static readonly Action<ILogger, Exception?> LogCreateFailure =
@@ -42,8 +43,16 @@ public class ProjectsController : ApiControllerBase
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<ProjectDto>>> GetAll(
         [FromQuery] Guid? orgId,
-        CancellationToken cancellationToken) =>
-        FromResult(await _management.GetProjectsAsync(orgId, cancellationToken));
+        CancellationToken cancellationToken)
+    {
+        var result = await _management.GetProjectsAsync(orgId, cancellationToken);
+        if (!result.IsSuccess) return FromResult(result);
+        var access = HttpContext.RequestServices.GetRequiredService<ProjectMgmt.Solution.Security.ProjectAccess>();
+        var visible = new List<ProjectDto>();
+        foreach (var project in result.Value)
+            if (await access.AllowsAsync(project.Id)) visible.Add(project);
+        return Ok(visible);
+    }
 
     [HttpGet("{projectId:guid}")]
     public async Task<ActionResult<ProjectDto>> GetById(

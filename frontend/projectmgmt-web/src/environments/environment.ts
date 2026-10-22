@@ -1,5 +1,5 @@
 export const environment = {
   production: false,
-  apiBaseUrl: 'http://projectmgmt_develop.dev.com/api',
-  hubBaseUrl: 'http://projectmgmt_develop.dev.com/hubs'
+  apiBaseUrl: 'http://localhost:5083/api',
+  hubBaseUrl: 'http://localhost:5083/hubs'
 } as const;

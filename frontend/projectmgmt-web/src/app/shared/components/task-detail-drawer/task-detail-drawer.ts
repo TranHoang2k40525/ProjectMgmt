@@ -1,6 +1,7 @@
 import { Component, EventEmitter, Input, Output, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { AiBreakdownApi } from '../../../core/api/ai-breakdown.api';
 import { ProjectManagementService, WorkItem } from '../../../core/services/project-management.service';
 import { IdentityService } from '../../../core/services/identity.service';
@@ -10,7 +11,7 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
 @Component({
   selector: 'app-task-detail-drawer',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink],
   template: `
     @if (task) {
       <div class="task-drawer-backdrop fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-xs transition-opacity animate-fade-in font-body text-slate-900 dark:text-slate-100">
@@ -345,6 +346,7 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
                 </span>
               </div>
 
+              <a [routerLink]="['/issues', task.id]" (click)="dismissed.emit()" class="text-primary underline">Mở trang chi tiết · Tệp đính kèm · Tiêu chí nghiệm thu</a>
               <!-- Comment Input Box -->
               <div class="flex gap-3">
                 <div class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold shrink-0">
@@ -576,7 +578,7 @@ export class TaskDetailDrawerComponent {
   onFieldChange(): void {
     if (this.task) {
       this.projectService.updateWorkItem(this.task);
-      this.toastService.success('Đã Cập Nhật Công Việc', `Thay đổi thông tin cho công việc [${this.task.issueKey}]`);
+      this.toastService.info('Đang lưu công việc', 'Vui lòng chờ xác nhận từ máy chủ.');
     }
   }
 
@@ -584,8 +586,8 @@ export class TaskDetailDrawerComponent {
     if (!this.task) return;
     const title = this.newSubtaskTitle().trim();
     if (!title) return;
-    const created = this.projectService.createSubTask(this.task.id, title);
-    this.toastService.success('Tạo Sub-task', `Đã tạo công việc con [${created.issueKey}]`);
+    this.projectService.createSubTask(this.task.id, title);
+    this.toastService.info('Đang lưu công việc con', 'Vui lòng chờ xác nhận từ máy chủ.');
     this.cancelSubtaskComposer();
   }
 
@@ -598,7 +600,7 @@ export class TaskDetailDrawerComponent {
     if (!this.task) return;
     const cloned = this.projectService.cloneWorkItem(this.task.id);
     if (cloned) {
-      this.toastService.success('Nhân Bản Thành Công', `Đã tạo bản sao [${cloned.issueKey}]`);
+      this.toastService.info('Đang lưu bản sao', 'Vui lòng chờ xác nhận từ máy chủ.');
     }
   }
 
@@ -614,7 +616,7 @@ export class TaskDetailDrawerComponent {
       cancelText: 'Hủy',
       onConfirm: () => {
         this.projectService.deleteWorkItem(taskId);
-        this.toastService.warning('Đã Xóa Công Việc', `Công việc [${issueKey}] đã được xóa.`);
+        this.toastService.info('Đang xóa công việc', 'Vui lòng chờ xác nhận từ máy chủ.');
         this.dismissed.emit();
       }
     });
@@ -623,7 +625,7 @@ export class TaskDetailDrawerComponent {
   submitComment(): void {
     if (this.task && this.newCommentText.trim()) {
       this.projectService.addCommentToTask(this.task.id, this.newCommentText);
-      this.toastService.info('Đã Gửi Bình Luận', `Đã thêm trao đổi vào [${this.task.issueKey}]`);
+      this.toastService.info('Đang lưu bình luận', 'Vui lòng chờ xác nhận từ máy chủ.');
       this.newCommentText = '';
     }
   }

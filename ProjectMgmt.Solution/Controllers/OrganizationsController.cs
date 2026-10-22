@@ -33,8 +33,16 @@ public class OrganizationsController : ApiControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<OrganizationDto>>> GetAll(CancellationToken cancellationToken) =>
-        FromResult(await _service.GetOrganizationsAsync(cancellationToken));
+    public async Task<ActionResult<IReadOnlyList<OrganizationDto>>> GetAll(CancellationToken cancellationToken)
+    {
+        var result = await _service.GetOrganizationsAsync(cancellationToken);
+        if (!result.IsSuccess) return FromResult(result);
+        var permissions = HttpContext.RequestServices.GetRequiredService<IPermissionEvaluator>();
+        var visible = new List<OrganizationDto>();
+        foreach (var org in result.Value)
+            if (org.OwnerId == _currentUser.UserId || (_currentUser.UserId.HasValue && await permissions.HasPermissionAsync(_currentUser.UserId.Value, "project.create", "Organization", org.Id))) visible.Add(org);
+        return Ok(visible);
+    }
 
     [HttpPost]
     public async Task<ActionResult<OrganizationDto>> Create(

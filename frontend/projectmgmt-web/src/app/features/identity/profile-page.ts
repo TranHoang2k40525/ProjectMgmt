@@ -90,7 +90,7 @@ export class ProfilePageComponent implements OnInit {
   private loadData(userId: string): void {
     this.identityService.getSkillCatalog().subscribe(res => this.skillsCatalog.set(res));
     this.identityService.getUserSkills(userId).subscribe(res => this.userSkills.set(res));
-    this.identityService.getActiveSessions().subscribe(res => this.activeSessions.set(res));
+    this.identityService.getActiveSessions().subscribe({ next: res => this.activeSessions.set(res), error: e => this.errorMsg.set(this.readError(e, 'Không thể tải danh sách phiên.')) });
   }
 
   setTab(tab: ProfileTab): void {
@@ -196,7 +196,8 @@ export class ProfilePageComponent implements OnInit {
       next: () => {
         this.activeSessions.update(list => list.filter(s => s.id !== sessionId));
         this.successMsg.set('Đã đăng xuất phiên làm việc thành công.');
-      }
+      },
+      error: e => this.errorMsg.set(this.readError(e, 'Không thể thu hồi phiên đăng nhập.'))
     });
   }
 
