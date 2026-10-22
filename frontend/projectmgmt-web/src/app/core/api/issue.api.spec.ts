@@ -8,7 +8,7 @@ import { IssueApi } from './issue.api';
 describe('IssueApi', () => {
   let api: IssueApi;
   let http: HttpTestingController;
-  const baseUrl = `${environment.apiBaseUrl}/v1`;
+  const baseUrl = `${environment.apiBaseUrl}`;
 
   beforeEach(() => {
     TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });

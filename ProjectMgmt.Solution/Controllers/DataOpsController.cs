@@ -11,6 +11,7 @@ namespace ProjectMgmt.Solution.Controllers;
 /// API quản trị DataOps (module C, SCRUMAI-213). Dataset không thuộc Project nào nên mọi endpoint — kể cả đọc, vì mẫu có thể
 /// chứa nội dung Story thật — cần quyền hệ thống "ai.dataset.manage".
 /// </summary>
+[Route("api/ai-data")]
 [Route("api/v1/ai-data")]
 public class DataOpsController(
     IDatasetService datasets,

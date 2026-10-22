@@ -11,6 +11,7 @@ namespace ProjectMgmt.Solution.Controllers;
 /// ghi bình luận/tệp cần "issue.update"; xóa bình luận của người khác cần "issue.delete".
 /// POST /issues/{id}/comments, POST /issues/{id}/attachments, GET/DELETE /attachments/{id} vẫn ở WorkItemsController (URL cũ) nhưng gọi cùng service.
 /// </summary>
+[Route("api")]
 [Route("api/v1")]
 public class IssueCollaborationController(
     IIssueCollaborationService collaboration,

@@ -19,6 +19,7 @@ public sealed class WorkflowTemplateInput
     [Required] public string TemplateId { get; set; } = "";
 }
 
+[Route("api/projects/{projectId:guid}")]
 [Route("api/v1/projects/{projectId:guid}")]
 public sealed class ProjectCustomizationController(PlanningDbContext db, ProjectAccess access) : ApiControllerBase
 {

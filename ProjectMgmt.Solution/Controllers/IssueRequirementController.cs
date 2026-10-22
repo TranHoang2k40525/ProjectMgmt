@@ -10,6 +10,7 @@ namespace ProjectMgmt.Solution.Controllers;
 /// Acceptance Criteria và kỹ năng yêu cầu (module C). Đọc: thành viên Project; ghi: "issue.update".
 /// Route cũ POST /issues/{id}/criteria và PUT /criteria/{id} trong WorkItemsController gọi cùng service.
 /// </summary>
+[Route("api")]
 [Route("api/v1")]
 public class IssueRequirementController(
     IIssueRequirementService requirements,

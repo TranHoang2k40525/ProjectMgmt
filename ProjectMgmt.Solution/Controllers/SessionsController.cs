@@ -6,6 +6,7 @@ using ProjectMgmt.IdentityAccess.Contracts;
 
 namespace ProjectMgmt.Solution.Controllers;
 
+[Route("api/users/me/sessions")]
 [Route("api/v1/users/me/sessions")]
 public sealed class SessionsController(IdentityExperienceDbContext identity, ICurrentUserContext currentUser) : ApiControllerBase
 {

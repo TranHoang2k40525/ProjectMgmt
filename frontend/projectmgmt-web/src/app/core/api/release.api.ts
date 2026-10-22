@@ -37,7 +37,7 @@ export function isReleaseLookupUnavailable(error: unknown): boolean {
 @Injectable({ providedIn: 'root' })
 export class ReleaseApi {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = `${environment.apiBaseUrl}/v1/issues`;
+  private readonly baseUrl = `${environment.apiBaseUrl}/issues`;
 
   links(issueId: string): Observable<IssueReleaseLinksDto> {
     return this.http.get<IssueReleaseLinksDto>(`${this.baseUrl}/${issueId}/release-links`);

@@ -47,7 +47,7 @@ export function moveItem<T>(items: readonly T[], index: number, offset: -1 | 1):
 @Injectable({ providedIn: 'root' })
 export class RequirementApi {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = `${environment.apiBaseUrl}/v1`;
+  private readonly baseUrl = `${environment.apiBaseUrl}`;
 
   criteria(issueId: string): Observable<AcceptanceCriterionDto[]> {
     return this.http.get<AcceptanceCriterionDto[]>(`${this.baseUrl}/issues/${issueId}/acceptance-criteria`);

@@ -38,6 +38,7 @@ public sealed class SprintRequest
     [Required, RegularExpression("^(future|active|completed)$")] public string Status { get; set; } = "future";
 }
 
+[Route("api")]
 [Route("api/v1")]
 public sealed class WorkItemsController(
     DeliveryIntelligenceDbContext delivery, PlanningDbContext planning,

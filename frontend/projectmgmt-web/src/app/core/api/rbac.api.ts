@@ -7,7 +7,7 @@ import { RoleDto } from './rbac-api.models';
 @Injectable({ providedIn: 'root' })
 export class RbacApi {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = `${environment.apiBaseUrl}/v1`;
+  private readonly baseUrl = `${environment.apiBaseUrl}`;
 
   getRoles(scope?: string): Observable<RoleDto> {
     let params = new HttpParams();

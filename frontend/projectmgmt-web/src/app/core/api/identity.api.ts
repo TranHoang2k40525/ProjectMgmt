@@ -8,7 +8,7 @@ import { AvatarResult, ForYouDto, ProfileDto, SkillDto } from './identity-api.mo
 @Injectable({ providedIn: 'root' })
 export class IdentityApi {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = `${environment.apiBaseUrl}/v1`;
+  private readonly baseUrl = `${environment.apiBaseUrl}`;
 
   getMyProfile(): Observable<ProfileDto> {
     return this.http.get<ProfileDto>(`${this.baseUrl}/users/me`);

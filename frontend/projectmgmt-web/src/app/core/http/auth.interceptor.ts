@@ -82,7 +82,7 @@ function updateSession(result: LoginResult, tokenStore: TokenStore): string {
 }
 
 function isAuthEndpoint(url: string): boolean {
-  return url.startsWith(`${environment.apiBaseUrl}/v1/auth/`);
+  return url.startsWith(`${environment.apiBaseUrl}/auth/`);
 }
 
 function readStatus(error: unknown): number | undefined {

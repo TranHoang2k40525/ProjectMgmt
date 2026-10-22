@@ -10,7 +10,7 @@ describe('ReleaseApi', () => {
     TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
     const api = TestBed.inject(ReleaseApi);
     const http = TestBed.inject(HttpTestingController);
-    const base = `${environment.apiBaseUrl}/v1/issues/i1`;
+    const base = `${environment.apiBaseUrl}/issues/i1`;
 
     api.addVersion('i1', 'v1', 'FixVersion').subscribe();
     expect(http.expectOne(`${base}/versions`).request.body).toEqual({ versionId: 'v1', linkType: 'FixVersion' });

@@ -303,7 +303,7 @@ export class ProjectManagementService {
     if (!projectId) return;
     this.workspaceLoading.set(true);
     forkJoin({
-      data: this.http.get<{ workItems: WorkItem[]; sprints: Sprint[]; epics: EpicItem[]; statuses: ProjectStatus[] }>(`${this.baseUrl}/v1/projects/${projectId}/workspace`),
+      data: this.http.get<{ workItems: WorkItem[]; sprints: Sprint[]; epics: EpicItem[]; statuses: ProjectStatus[] }>(`${this.baseUrl}/projects/${projectId}/workspace`),
       types: this.getIssueTypes(projectId),
       members: this.rbac.getProjectMembers(projectId)
     }).subscribe({
@@ -323,7 +323,7 @@ export class ProjectManagementService {
 
   private persist(item: WorkItem, create = false): void {
     const body = { ...item, parentId: item.parentId || null, epicId: item.epicId || null, assigneeId: item.assigneeId || null, sprintId: item.sprintId || null, labels: item.labels ?? [] };
-    const url = create ? `${this.baseUrl}/v1/projects/${item.projectId}/issues` : `${this.baseUrl}/v1/issues/${item.id}`;
+    const url = create ? `${this.baseUrl}/projects/${item.projectId}/issues` : `${this.baseUrl}/issues/${item.id}`;
     this.enqueue(() => create ? this.http.post(url, body) : this.http.put(url, body));
   }
 
@@ -363,7 +363,7 @@ export class ProjectManagementService {
   deleteWorkItem(id: string): void {
     this.workItems.update(items => items.filter(i => i.id !== id && i.parentId !== id));
     if (this.activeDrawerTask()?.id === id) this.activeDrawerTask.set(null);
-    this.enqueue(() => this.http.delete(`${this.baseUrl}/v1/issues/${id}`));
+    this.enqueue(() => this.http.delete(`${this.baseUrl}/issues/${id}`));
   }
   bulkUpdateStatus(ids: string[], status: string): void { ids.forEach(id => this.updateWorkItemStatus(id, status)); }
   bulkUpdateSprint(ids: string[], sprintId: string, sprintName: string): void { ids.forEach(id => this.updateWorkItemSprint(id, sprintId, sprintName)); }
@@ -375,18 +375,18 @@ export class ProjectManagementService {
     this.workItems.set(ordered);
     const projectId = this.currentProject().id;
     const orderedIds = ordered.map(i => i.id);
-    this.enqueue(() => this.http.put(`${this.baseUrl}/v1/projects/${projectId}/issues/order`, { orderedIds }));
+    this.enqueue(() => this.http.put(`${this.baseUrl}/projects/${projectId}/issues/order`, { orderedIds }));
   }
   addNewSprint(): Sprint {
     const sprint: Sprint = { id: crypto.randomUUID(), projectId: this.currentProject().id, name: `${this.currentProject().projectKey} Sprint ${this.sprints().length + 1}`, status: 'future', startDate: new Date().toISOString().slice(0, 10), endDate: new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10), workItemsCount: 0, totalStoryPoints: 0 };
     this.sprints.update(items => [...items, sprint]);
-    this.enqueue(() => this.http.post(`${this.baseUrl}/v1/projects/${sprint.projectId}/sprints`, sprint)); return sprint;
+    this.enqueue(() => this.http.post(`${this.baseUrl}/projects/${sprint.projectId}/sprints`, sprint)); return sprint;
   }
   private patchSprint(id: string, changes: Partial<Sprint>): void {
     const sprint = this.sprints().find(s => s.id === id); if (!sprint) return;
     const updated = { ...sprint, ...changes };
     this.sprints.update(items => items.map(s => s.id === id ? updated : s));
-    this.enqueue(() => this.http.put(`${this.baseUrl}/v1/sprints/${id}`, updated));
+    this.enqueue(() => this.http.put(`${this.baseUrl}/sprints/${id}`, updated));
   }
   updateSprintStatus(id: string, status: Sprint['status']): void { this.patchSprint(id, { status }); }
   updateSprintGoal(id: string, goal: string): void { this.patchSprint(id, { goal }); }
@@ -406,31 +406,31 @@ export class ProjectManagementService {
     this.workItems.update(items => [item, ...items]); this.persist(item, true); return item;
   }
   addCommentToTask(id: string, content: string): void {
-    this.enqueue(() => this.http.post(`${this.baseUrl}/v1/issues/${id}/comments`, { content }));
+    this.enqueue(() => this.http.post(`${this.baseUrl}/issues/${id}/comments`, { content }));
   }
-  getIssue(id: string): Observable<WorkItem> { return this.http.get<WorkItem>(`${this.baseUrl}/v1/issues/${id}`); }
-  saveIssue(item: WorkItem): Observable<WorkItem> { return this.http.put<WorkItem>(`${this.baseUrl}/v1/issues/${item.id}`, { ...item, parentId: item.parentId || null, assigneeId: item.assigneeId || null, epicId: item.epicId || null, sprintId: item.sprintId || null, labels: item.labels ?? [] }); }
-  createIssue(projectId: string, item: Partial<WorkItem>): Observable<WorkItem> { return this.http.post<WorkItem>(`${this.baseUrl}/v1/projects/${projectId}/issues`, item); }
-  postComment(id: string, content: string): Observable<WorkItem> { return this.http.post<WorkItem>(`${this.baseUrl}/v1/issues/${id}/comments`, { content }); }
+  getIssue(id: string): Observable<WorkItem> { return this.http.get<WorkItem>(`${this.baseUrl}/issues/${id}`); }
+  saveIssue(item: WorkItem): Observable<WorkItem> { return this.http.put<WorkItem>(`${this.baseUrl}/issues/${item.id}`, { ...item, parentId: item.parentId || null, assigneeId: item.assigneeId || null, epicId: item.epicId || null, sprintId: item.sprintId || null, labels: item.labels ?? [] }); }
+  createIssue(projectId: string, item: Partial<WorkItem>): Observable<WorkItem> { return this.http.post<WorkItem>(`${this.baseUrl}/projects/${projectId}/issues`, item); }
+  postComment(id: string, content: string): Observable<WorkItem> { return this.http.post<WorkItem>(`${this.baseUrl}/issues/${id}/comments`, { content }); }
   uploadAttachment(id: string, file: File): Observable<unknown> {
-    const body = new FormData(); body.append('file', file); return this.http.post(`${this.baseUrl}/v1/issues/${id}/attachments`, body);
+    const body = new FormData(); body.append('file', file); return this.http.post(`${this.baseUrl}/issues/${id}/attachments`, body);
   }
-  downloadAttachment(id: string): Observable<Blob> { return this.http.get(`${this.baseUrl}/v1/attachments/${id}`, { responseType: 'blob' }); }
-  deleteAttachment(id: string): Observable<void> { return this.http.delete<void>(`${this.baseUrl}/v1/attachments/${id}`); }
-  addCriterion(id: string, content: string): Observable<unknown> { return this.http.post(`${this.baseUrl}/v1/issues/${id}/criteria`, { content }); }
-  updateCriterion(id: string, content: string, isMet: boolean): Observable<unknown> { return this.http.put(`${this.baseUrl}/v1/criteria/${id}`, { content, isMet }); }
+  downloadAttachment(id: string): Observable<Blob> { return this.http.get(`${this.baseUrl}/attachments/${id}`, { responseType: 'blob' }); }
+  deleteAttachment(id: string): Observable<void> { return this.http.delete<void>(`${this.baseUrl}/attachments/${id}`); }
+  addCriterion(id: string, content: string): Observable<unknown> { return this.http.post(`${this.baseUrl}/issues/${id}/criteria`, { content }); }
+  updateCriterion(id: string, content: string, isMet: boolean): Observable<unknown> { return this.http.put(`${this.baseUrl}/criteria/${id}`, { content, isMet }); }
 
   // HTTP API Operations
   getOrganizations(): Observable<Organization[]> {
-    return this.http.get<Organization[]>(`${this.baseUrl}/v1/organizations`);
+    return this.http.get<Organization[]>(`${this.baseUrl}/organizations`);
   }
 
   createOrganization(req: CreateOrganizationRequest): Observable<Organization> {
-    return this.http.post<Organization>(`${this.baseUrl}/v1/organizations`, req);
+    return this.http.post<Organization>(`${this.baseUrl}/organizations`, req);
   }
 
   getProjects(): Observable<Project[]> {
-    return this.http.get<Project[]>(`${this.baseUrl}/v1/projects`).pipe(tap(projects => {
+    return this.http.get<Project[]>(`${this.baseUrl}/projects`).pipe(tap(projects => {
       this.allProjectsList.set(projects);
       const selected = this.currentProject().id || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('projectmgmt.selected-project') : null);
       const next = projects.find(p => p.id === selected) ?? projects[0] ?? this.emptyProject;
@@ -443,7 +443,7 @@ export class ProjectManagementService {
   }
 
   createProject(req: CreateProjectRequest): Observable<Project> {
-    return this.http.post<Project>(`${this.baseUrl}/v1/projects`, req).pipe(tap(project => {
+    return this.http.post<Project>(`${this.baseUrl}/projects`, req).pipe(tap(project => {
       this.cacheProject(project);
       this.currentProject.set(project);
     }));
@@ -499,7 +499,7 @@ export class ProjectManagementService {
 
   getRoles(scope = 'Project'): Observable<Array<{ id: string; name: string; code: string; description?: string }>> {
     return this.http.get<{ success?: boolean; items?: Array<{ roleId?: string; name?: string; description?: string }> }>(
-      `${this.baseUrl}/v1/roles`,
+      `${this.baseUrl}/roles`,
       { params: { scope } }
     ).pipe(
       map(res => (res.items ?? []).map(r => ({
@@ -525,7 +525,7 @@ export class ProjectManagementService {
 
   addProjectMember(memberReq: Pick<ProjectMember, 'displayName' | 'email' | 'role'>): Observable<boolean> {
     const projectId = this.currentProject().id;
-    return this.http.post(`${this.baseUrl}/v1/projects/${projectId}/members/invite`, { email: memberReq.email, roleName: memberReq.role }).pipe(tap(() => this.loadWorkspace(projectId)), map(() => true));
+    return this.http.post(`${this.baseUrl}/projects/${projectId}/members/invite`, { email: memberReq.email, roleName: memberReq.role }).pipe(tap(() => this.loadWorkspace(projectId)), map(() => true));
   }
 
   getUsers(): Observable<UserDisplayInfo[]> {
@@ -539,15 +539,15 @@ export class ProjectManagementService {
   }
 
   getProjectById(id: string): Observable<Project> {
-    return this.http.get<Project>(`${this.baseUrl}/v1/projects/${id}`).pipe(tap(project => this.cacheProject(project)));
+    return this.http.get<Project>(`${this.baseUrl}/projects/${id}`).pipe(tap(project => this.cacheProject(project)));
   }
 
   updateProject(id: string, req: UpdateProjectRequest): Observable<Project> {
-    return this.http.put<Project>(`${this.baseUrl}/v1/projects/${id}`, req).pipe(tap(project => this.cacheProject(project)));
+    return this.http.put<Project>(`${this.baseUrl}/projects/${id}`, req).pipe(tap(project => this.cacheProject(project)));
   }
 
   deleteProject(id: string): Observable<boolean> {
-    return this.http.delete<void>(`${this.baseUrl}/v1/projects/${id}`).pipe(tap(() => {
+    return this.http.delete<void>(`${this.baseUrl}/projects/${id}`).pipe(tap(() => {
       this.allProjectsList.update(projects => projects.filter(p => p.id !== id));
       if (this.currentProject().id === id) this.currentProject.set(this.allProjectsList()[0] ?? this.emptyProject);
     }), map(() => true));
@@ -562,34 +562,34 @@ export class ProjectManagementService {
   }
 
   getIssueTypes(projectId: string): Observable<CustomIssueType[]> {
-    return this.http.get<{ id: string; name: string; iconKey?: string; colorHex: string }[]>(`${this.baseUrl}/v1/projects/${projectId}/issue-types`).pipe(
+    return this.http.get<{ id: string; name: string; iconKey?: string; colorHex: string }[]>(`${this.baseUrl}/projects/${projectId}/issue-types`).pipe(
       map(types => types.map(t => ({ id: t.id, name: t.name, icon: t.iconKey ?? '📘', color: t.colorHex })))
     );
   }
 
   addCustomIssueType(name: string, icon: string, color: string): Observable<CustomIssueType> {
     const projectId = this.currentProject().id;
-    return this.http.post<CustomIssueType>(`${this.baseUrl}/v1/projects/${projectId}/issue-types`, { name, icon, color }).pipe(
+    return this.http.post<CustomIssueType>(`${this.baseUrl}/projects/${projectId}/issue-types`, { name, icon, color }).pipe(
       tap(type => { if (this.currentProject().id === projectId) this.customIssueTypes.update(types => [...types, type]); })
     );
   }
 
   getProjectStatuses(projectId: string): Observable<ProjectStatus[]> {
-    return this.http.get<ProjectStatus[]>(`${this.baseUrl}/v1/projects/${projectId}/statuses`);
+    return this.http.get<ProjectStatus[]>(`${this.baseUrl}/projects/${projectId}/statuses`);
   }
 
   applyWorkflowTemplateToProject(projectId: string, templateId: string): Observable<ProjectStatus[]> {
-    return this.http.post<ProjectStatus[]>(`${this.baseUrl}/v1/projects/${projectId}/workflow/template`, { templateId }).pipe(
+    return this.http.post<ProjectStatus[]>(`${this.baseUrl}/projects/${projectId}/workflow/template`, { templateId }).pipe(
       tap(statuses => { if (this.currentProject().id === projectId) this.projectStatuses.set(statuses); })
     );
   }
 
   getWorkflowTransitions(projectId: string): Observable<WorkflowTransition[]> {
-    return this.http.get<WorkflowTransition[]>(`${this.baseUrl}/v1/projects/${projectId}/workflow/transitions`);
+    return this.http.get<WorkflowTransition[]>(`${this.baseUrl}/projects/${projectId}/workflow/transitions`);
   }
 
   createWorkflowTransition(projectId: string, req: CreateWorkflowTransitionRequest): Observable<WorkflowTransition> {
-    return this.http.post<WorkflowTransition>(`${this.baseUrl}/v1/projects/${projectId}/workflow/transitions`, req);
+    return this.http.post<WorkflowTransition>(`${this.baseUrl}/projects/${projectId}/workflow/transitions`, req);
   }
 
   deleteWorkflowTransition(id: string): Observable<boolean> {
@@ -597,11 +597,11 @@ export class ProjectManagementService {
   }
 
   getBoards(projectId: string): Observable<Board[]> {
-    return this.http.get<Board[]>(`${this.baseUrl}/v1/projects/${projectId}/boards`);
+    return this.http.get<Board[]>(`${this.baseUrl}/projects/${projectId}/boards`);
   }
 
   createBoard(projectId: string, req: CreateBoardRequest): Observable<Board> {
-    return this.http.post<Board>(`${this.baseUrl}/v1/projects/${projectId}/boards`, req);
+    return this.http.post<Board>(`${this.baseUrl}/projects/${projectId}/boards`, req);
   }
 
   getBoardColumns(boardId: string): Observable<BoardColumn[]> {

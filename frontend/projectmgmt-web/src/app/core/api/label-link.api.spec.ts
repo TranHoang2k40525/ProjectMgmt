@@ -8,7 +8,7 @@ import { LabelLinkApi } from './label-link.api';
 describe('LabelLinkApi', () => {
   let api: LabelLinkApi;
   let http: HttpTestingController;
-  const baseUrl = `${environment.apiBaseUrl}/v1`;
+  const baseUrl = `${environment.apiBaseUrl}`;
 
   beforeEach(() => {
     TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });

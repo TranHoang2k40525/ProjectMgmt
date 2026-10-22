@@ -19,7 +19,7 @@ describe('RequirementApi', () => {
     TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
     const api = TestBed.inject(RequirementApi);
     const http = TestBed.inject(HttpTestingController);
-    const base = `${environment.apiBaseUrl}/v1`;
+    const base = `${environment.apiBaseUrl}`;
 
     api.addCriterion('i1', 'Đạt').subscribe();
     const add = http.expectOne(`${base}/issues/i1/acceptance-criteria`);

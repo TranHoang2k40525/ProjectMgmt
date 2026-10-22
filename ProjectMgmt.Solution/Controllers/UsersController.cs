@@ -8,6 +8,7 @@ namespace ProjectMgmt.Solution.Controllers;
 
 [ApiController]
 [Authorize]
+[Route("api/users")]
 [Route("api/v1/users")]
 public class UsersController : ControllerBase
 {

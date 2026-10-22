@@ -8,6 +8,7 @@ namespace ProjectMgmt.Solution.Controllers;
 
 [ApiController]
 [Authorize]
+[Route("api/ai/breakdown")]
 [Route("api/v1/ai/breakdown")]
 public class AiBreakdownController : ControllerBase
 {

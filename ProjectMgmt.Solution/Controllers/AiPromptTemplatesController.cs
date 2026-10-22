@@ -8,6 +8,7 @@ namespace ProjectMgmt.Solution.Controllers;
 
 [ApiController]
 [Authorize]
+[Route("api/ai/prompt-templates")]
 [Route("api/v1/ai/prompt-templates")]
 public class AiPromptTemplatesController : ControllerBase
 {

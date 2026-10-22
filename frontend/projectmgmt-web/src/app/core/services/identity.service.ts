@@ -365,7 +365,7 @@ export class IdentityService {
   // ==========================================
 
   getUsers(): Observable<UserProfileModel[]> {
-    return this.http.get<UserProfileModel[]>(`${environment.apiBaseUrl}/v1/admin/users`).pipe(
+    return this.http.get<UserProfileModel[]>(`${environment.apiBaseUrl}/admin/users`).pipe(
       map(users => users.map(u => ({ ...u, roleId: u.roles?.[0]?.roleId ?? '',
         roleName: u.roles?.map(r => r.roleName).join(', ') ?? '', twoFactorEnabled: false })))
     );
@@ -553,11 +553,11 @@ export class IdentityService {
   }
 
   getActiveSessions(): Observable<ActiveSessionModel[]> {
-    return this.http.get<ActiveSessionModel[]>(`${environment.apiBaseUrl}/v1/users/me/sessions`);
+    return this.http.get<ActiveSessionModel[]>(`${environment.apiBaseUrl}/users/me/sessions`);
   }
 
   revokeSession(sessionId: string): Observable<{ success: boolean }> {
-    return this.http.delete<{ success: boolean; isCurrent: boolean }>(`${environment.apiBaseUrl}/v1/users/me/sessions/${sessionId}`).pipe(
+    return this.http.delete<{ success: boolean; isCurrent: boolean }>(`${environment.apiBaseUrl}/users/me/sessions/${sessionId}`).pipe(
       map(result => {
         if (result.isCurrent) {
           this.tokenStore.clear();

@@ -8,7 +8,7 @@ import { AttachmentDto, CommentDto, CreateCommentRequest, WatchStateDto, Watcher
 @Injectable({ providedIn: 'root' })
 export class CollaborationApi {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = `${environment.apiBaseUrl}/v1`;
+  private readonly baseUrl = `${environment.apiBaseUrl}`;
 
   getComments(issueId: string): Observable<CommentDto[]> {
     return this.http.get<CommentDto[]>(`${this.baseUrl}/issues/${issueId}/comments`);

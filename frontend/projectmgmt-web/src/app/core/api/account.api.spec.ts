@@ -8,7 +8,7 @@ import { AccountApi } from './account.api';
 describe('AccountApi', () => {
   let api: AccountApi;
   let http: HttpTestingController;
-  const baseUrl = `${environment.apiBaseUrl}/v1/auth`;
+  const baseUrl = `${environment.apiBaseUrl}/auth`;
 
   beforeEach(() => {
     TestBed.configureTestingModule({

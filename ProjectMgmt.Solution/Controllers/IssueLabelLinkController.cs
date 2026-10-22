@@ -10,6 +10,7 @@ namespace ProjectMgmt.Solution.Controllers;
 /// Label và IssueLink của module DeliveryIntelligence (C). Đọc: thành viên Project. Gắn nhãn/tạo nhãn/liên kết: "issue.update".
 /// Sửa/xóa nhãn của Project: "project.settings.manage".
 /// </summary>
+[Route("api")]
 [Route("api/v1")]
 public class IssueLabelLinkController(
     IIssueLabelLinkService labels,

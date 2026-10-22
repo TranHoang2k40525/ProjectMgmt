@@ -87,7 +87,7 @@ export function formatDuration(seconds?: number | null): string {
 @Injectable({ providedIn: 'root' })
 export class HistoryApi {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = `${environment.apiBaseUrl}/v1/issues`;
+  private readonly baseUrl = `${environment.apiBaseUrl}/issues`;
 
   activity(issueId: string, page = 1, pageSize = 20): Observable<PagedResult<ActivityDto>> {
     const params = new HttpParams().set('page', page).set('pageSize', pageSize);

@@ -8,7 +8,7 @@ import { NotificationApi } from './notification.api';
 describe('NotificationApi', () => {
   let api: NotificationApi;
   let http: HttpTestingController;
-  const baseUrl = `${environment.apiBaseUrl}/v1/notifications`;
+  const baseUrl = `${environment.apiBaseUrl}/notifications`;
 
   beforeEach(() => {
     TestBed.configureTestingModule({

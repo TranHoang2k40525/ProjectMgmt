@@ -9,7 +9,7 @@ import { CollaborationApi } from './collaboration.api';
 describe('CollaborationApi', () => {
   let api: CollaborationApi;
   let http: HttpTestingController;
-  const baseUrl = `${environment.apiBaseUrl}/v1`;
+  const baseUrl = `${environment.apiBaseUrl}`;
 
   beforeEach(() => {
     TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });

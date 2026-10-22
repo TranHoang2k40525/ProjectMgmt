@@ -12,6 +12,7 @@ namespace ProjectMgmt.Solution.Controllers;
 /// Component / Fix &amp; Affects Version của Issue (module C). Trả 501 khi Host chưa có IProjectReleaseLookupService
 /// thật của Planning; khi B đăng ký contract đó thì các endpoint tự hoạt động.
 /// </summary>
+[Route("api/issues/{id:guid}")]
 [Route("api/v1/issues/{id:guid}")]
 public class IssueReleaseController(
     IIssueTrackingService issues,

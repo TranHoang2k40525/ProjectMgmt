@@ -31,7 +31,7 @@ describe('HistoryApi', () => {
     TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
     const api = TestBed.inject(HistoryApi);
     const http = TestBed.inject(HttpTestingController);
-    const base = `${environment.apiBaseUrl}/v1/issues/i1`;
+    const base = `${environment.apiBaseUrl}/issues/i1`;
 
     api.activity('i1', 2, 10).subscribe();
     const req = http.expectOne(r => r.url === `${base}/history`);

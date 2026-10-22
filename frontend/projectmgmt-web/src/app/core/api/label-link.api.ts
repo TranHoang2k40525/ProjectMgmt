@@ -34,7 +34,7 @@ export const ISSUE_LINK_TYPES: readonly { value: IssueLinkType; label: string }[
 @Injectable({ providedIn: 'root' })
 export class LabelLinkApi {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = `${environment.apiBaseUrl}/v1`;
+  private readonly baseUrl = `${environment.apiBaseUrl}`;
 
   projectLabels(projectId: string): Observable<LabelDto[]> {
     return this.http.get<LabelDto[]>(`${this.baseUrl}/projects/${projectId}/labels`);

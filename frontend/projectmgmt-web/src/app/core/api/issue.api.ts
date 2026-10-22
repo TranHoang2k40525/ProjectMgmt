@@ -8,7 +8,7 @@ import { IssueCoreDto, IssueListItemDto, IssueListQuery, IssuePermissionsDto, Is
 @Injectable({ providedIn: 'root' })
 export class IssueApi {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = `${environment.apiBaseUrl}/v1`;
+  private readonly baseUrl = `${environment.apiBaseUrl}`;
 
   list(projectId: string, query: IssueListQuery = {}): Observable<PagedResult<IssueListItemDto>> {
     let params = new HttpParams();

@@ -10,6 +10,7 @@ namespace ProjectMgmt.Solution.Controllers;
 /// API Issue của module DeliveryIntelligence (C). Quyền theo Project kiểm qua ProjectAccess trước khi gọi use case.
 /// Các route cũ GET/PUT/POST trong WorkItemsController vẫn giữ nguyên cho Backlog/Board.
 /// </summary>
+[Route("api")]
 [Route("api/v1")]
 public class IssuesController(
     IIssueTrackingService issues,

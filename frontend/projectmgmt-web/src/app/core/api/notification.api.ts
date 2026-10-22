@@ -7,7 +7,7 @@ import { NotificationDto } from './notification-api.models';
 @Injectable({ providedIn: 'root' })
 export class NotificationApi {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = `${environment.apiBaseUrl}/v1/notifications`;
+  private readonly baseUrl = `${environment.apiBaseUrl}/notifications`;
 
   getInbox(isRead?: boolean, page = 1, pageSize = 20): Observable<NotificationDto> {
     let params = new HttpParams().set('page', page).set('pageSize', pageSize);

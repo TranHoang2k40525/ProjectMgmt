@@ -8,7 +8,7 @@ import { AiBreakdownApi } from './ai-breakdown.api';
 describe('AiBreakdownApi', () => {
   let api: AiBreakdownApi;
   let http: HttpTestingController;
-  const baseUrl = `${environment.apiBaseUrl}/v1/ai`;
+  const baseUrl = `${environment.apiBaseUrl}/ai`;
 
   beforeEach(() => {
     TestBed.configureTestingModule({
