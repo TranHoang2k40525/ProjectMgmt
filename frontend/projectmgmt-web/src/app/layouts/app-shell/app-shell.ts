@@ -203,8 +203,6 @@ export class AppShellComponent implements OnDestroy {
       void this.router.navigate(['/projects/new']);
       return;
     }
-      return;
-    }
     this.isCreateTaskModalOpen.set(true);
   }
 

@@ -391,8 +391,7 @@ export class IdentityService {
           category: (p.grouping ?? 'System') as PermissionModel['category'],
           module: p.grouping ?? 'System',
           description: p.description ?? ''
-        }));
-        return perms;
+        }));
       })
     );
   }

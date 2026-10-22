@@ -60,7 +60,6 @@ import { ToastService } from '../../../core/services/toast.service';
                     <option value="📋">📋 Research</option>
                     <option value="🧪">🧪 Test</option>
                   </select>
-                  </select>
                   <button (click)="saveCustomIssueType()" [disabled]="savingType() || !customTypeName.trim()" class="px-2 py-1 text-xs bg-primary text-white rounded font-bold shrink-0">{{ savingType() ? 'Đang lưu...' : 'Tạo' }}</button>
                 </div>
               } @else {

@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
-import { EMPTY, Observable, Subject, catchError, concatMap, defer, finalize, forkJoin, map, tap } from 'rxjs';
+import { EMPTY, Observable, Subject, catchError, concatMap, defer, finalize, forkJoin, map, of, tap } from 'rxjs';
 import { ToastService } from './toast.service';
 import { RbacApi } from '../api/rbac.api';
 import { environment } from '../../../environments/environment';
@@ -128,6 +128,7 @@ export interface UpdateBoardColumnRequest {
 export interface UserDisplayInfo {
   userId: string;
   displayName: string;
+  email?: string;
   avatarUrl?: string | null;
 }
 
@@ -435,6 +436,10 @@ export class ProjectManagementService {
       const next = projects.find(p => p.id === selected) ?? projects[0] ?? this.emptyProject;
       this.currentProject.set(next.id === this.currentProject().id ? { ...this.currentProject(), ...next } : next);
     }));
+  }
+
+  selectProject(project: Project): void {
+    this.currentProject.set(project);
   }
 
   createProject(req: CreateProjectRequest): Observable<Project> {

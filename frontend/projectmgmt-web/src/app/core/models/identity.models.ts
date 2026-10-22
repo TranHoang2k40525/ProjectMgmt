@@ -15,6 +15,8 @@ export interface UserProfileModel {
   timezone?: string | null;
   seniorityLevel?: string | null;
   yearsOfExperience?: number | null;
+  roles?: Array<{ roleId: string; roleName: string; scopeType?: string; scopeId?: string }>;
+  isEmailVerified?: boolean;
 }
 
 export interface RoleModel {
@@ -24,6 +26,7 @@ export interface RoleModel {
   description: string;
   isSystem: boolean;
   permissionCodes: string[];
+  scope?: string;
 }
 
 export interface PermissionModel {
