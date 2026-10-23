@@ -30,34 +30,33 @@ public class IssueReleaseService : IIssueReleaseService
         _clock = clock;
     }
 
-    public async Task<Result<IssueReleaseLinksDto>> GetLinksAsync(Guid issueId, CancellationToken cancellationToken = default)
+    public async Task<Result<IssueReleaseLinksDto>> GetLinksAsync(Guid issueId)
     {
-        var issue = await _issues.GetByIdAsync(issueId, cancellationToken: cancellationToken);
+        var issue = await _issues.GetByIdAsync(issueId);
         return issue is null
             ? Result<IssueReleaseLinksDto>.Failure(IssueErrors.NotFound)
-            : Result.Success(await BuildAsync(issue, cancellationToken));
+            : Result.Success(await BuildAsync(issue));
     }
 
     public async Task<Result<IssueReleaseLinksDto>> AddComponentAsync(
         Guid issueId,
         Guid componentId,
-        Guid actorUserId,
-        CancellationToken cancellationToken = default)
+        Guid actorUserId)
     {
-        var issue = await _issues.GetByIdAsync(issueId, cancellationToken: cancellationToken);
+        var issue = await _issues.GetByIdAsync(issueId);
         if (issue is null)
         {
             return Result<IssueReleaseLinksDto>.Failure(IssueErrors.NotFound);
         }
 
-        var components = await _releases.GetComponentsAsync(issue.ProjectId, cancellationToken);
+        var components = await _releases.GetComponentsAsync(issue.ProjectId);
         var component = components.FirstOrDefault(c => c.Id == componentId);
         if (component is null)
         {
             return Result<IssueReleaseLinksDto>.Failure(ReleaseErrors.ComponentNotInProject);
         }
 
-        var existing = await _links.GetComponentLinksAsync(issueId, cancellationToken);
+        var existing = await _links.GetComponentLinksAsync(issueId);
         if (existing.All(link => link.ComponentId != componentId))
         {
             if (existing.Count >= MaxLinksPerKind)
@@ -65,47 +64,43 @@ public class IssueReleaseService : IIssueReleaseService
                 return Result<IssueReleaseLinksDto>.Failure(ReleaseErrors.TooManyLinks);
             }
 
-            await _links.AddComponentLinkAsync(new IssueComponentLink { IssueId = issueId, ComponentId = componentId }, cancellationToken);
+            await _links.AddComponentLinkAsync(new IssueComponentLink { IssueId = issueId, ComponentId = componentId });
             await _issues.AddActivityAsync(
-                IssueActivities.Create(issueId, actorUserId, IssueActivities.ComponentAdded, Now(), "Component", newValue: component.Name),
-                cancellationToken);
-            await _links.SaveChangesAsync(cancellationToken);
+                IssueActivities.Create(issueId, actorUserId, IssueActivities.ComponentAdded, Now(), "Component", newValue: component.Name));
+            await _links.SaveChangesAsync();
         }
 
-        return Result.Success(await BuildAsync(issue, cancellationToken, components));
+        return Result.Success(await BuildAsync(issue, components));
     }
 
     public async Task<Result<IssueReleaseLinksDto>> RemoveComponentAsync(
         Guid issueId,
         Guid componentId,
-        Guid actorUserId,
-        CancellationToken cancellationToken = default)
+        Guid actorUserId)
     {
-        var issue = await _issues.GetByIdAsync(issueId, cancellationToken: cancellationToken);
+        var issue = await _issues.GetByIdAsync(issueId);
         if (issue is null)
         {
             return Result<IssueReleaseLinksDto>.Failure(IssueErrors.NotFound);
         }
 
-        var link = (await _links.GetComponentLinksAsync(issueId, cancellationToken)).FirstOrDefault(l => l.ComponentId == componentId);
+        var link = (await _links.GetComponentLinksAsync(issueId)).FirstOrDefault(l => l.ComponentId == componentId);
         if (link is not null)
         {
-            var name = (await _releases.GetComponentsAsync(issue.ProjectId, cancellationToken)).FirstOrDefault(c => c.Id == componentId)?.Name;
+            var name = (await _releases.GetComponentsAsync(issue.ProjectId)).FirstOrDefault(c => c.Id == componentId)?.Name;
             _links.RemoveComponentLink(link);
             await _issues.AddActivityAsync(
-                IssueActivities.Create(issueId, actorUserId, IssueActivities.ComponentRemoved, Now(), "Component", oldValue: name ?? componentId.ToString()),
-                cancellationToken);
-            await _links.SaveChangesAsync(cancellationToken);
+                IssueActivities.Create(issueId, actorUserId, IssueActivities.ComponentRemoved, Now(), "Component", oldValue: name ?? componentId.ToString()));
+            await _links.SaveChangesAsync();
         }
 
-        return Result.Success(await BuildAsync(issue, cancellationToken));
+        return Result.Success(await BuildAsync(issue));
     }
 
     public async Task<Result<IssueReleaseLinksDto>> AddVersionAsync(
         Guid issueId,
         AddIssueVersionDto request,
-        Guid actorUserId,
-        CancellationToken cancellationToken = default)
+        Guid actorUserId)
     {
         ArgumentNullException.ThrowIfNull(request);
         var linkType = NormalizeLinkType(request.LinkType);
@@ -114,20 +109,20 @@ public class IssueReleaseService : IIssueReleaseService
             return Result<IssueReleaseLinksDto>.Failure(ReleaseErrors.LinkTypeInvalid);
         }
 
-        var issue = await _issues.GetByIdAsync(issueId, cancellationToken: cancellationToken);
+        var issue = await _issues.GetByIdAsync(issueId);
         if (issue is null)
         {
             return Result<IssueReleaseLinksDto>.Failure(IssueErrors.NotFound);
         }
 
-        var versions = await _releases.GetVersionsAsync(issue.ProjectId, cancellationToken);
+        var versions = await _releases.GetVersionsAsync(issue.ProjectId);
         var version = versions.FirstOrDefault(v => v.Id == request.VersionId);
         if (version is null)
         {
             return Result<IssueReleaseLinksDto>.Failure(ReleaseErrors.VersionNotInProject);
         }
 
-        var existing = (await _links.GetVersionLinksAsync(issueId, cancellationToken)).Where(link => link.LinkType == linkType).ToList();
+        var existing = (await _links.GetVersionLinksAsync(issueId)).Where(link => link.LinkType == linkType).ToList();
         if (existing.All(link => link.VersionId != version.Id))
         {
             if (existing.Count >= MaxLinksPerKind)
@@ -135,22 +130,20 @@ public class IssueReleaseService : IIssueReleaseService
                 return Result<IssueReleaseLinksDto>.Failure(ReleaseErrors.TooManyLinks);
             }
 
-            await _links.AddVersionLinkAsync(new IssueVersionLink { IssueId = issueId, VersionId = version.Id, LinkType = linkType }, cancellationToken);
+            await _links.AddVersionLinkAsync(new IssueVersionLink { IssueId = issueId, VersionId = version.Id, LinkType = linkType });
             await _issues.AddActivityAsync(
-                IssueActivities.Create(issueId, actorUserId, IssueActivities.VersionAdded, Now(), linkType, newValue: version.Name),
-                cancellationToken);
-            await _links.SaveChangesAsync(cancellationToken);
+                IssueActivities.Create(issueId, actorUserId, IssueActivities.VersionAdded, Now(), linkType, newValue: version.Name));
+            await _links.SaveChangesAsync();
         }
 
-        return Result.Success(await BuildAsync(issue, cancellationToken, versions: versions));
+        return Result.Success(await BuildAsync(issue, versions: versions));
     }
 
     public async Task<Result<IssueReleaseLinksDto>> RemoveVersionAsync(
         Guid issueId,
         Guid versionId,
         string linkType,
-        Guid actorUserId,
-        CancellationToken cancellationToken = default)
+        Guid actorUserId)
     {
         var normalized = NormalizeLinkType(linkType);
         if (normalized is null)
@@ -158,39 +151,37 @@ public class IssueReleaseService : IIssueReleaseService
             return Result<IssueReleaseLinksDto>.Failure(ReleaseErrors.LinkTypeInvalid);
         }
 
-        var issue = await _issues.GetByIdAsync(issueId, cancellationToken: cancellationToken);
+        var issue = await _issues.GetByIdAsync(issueId);
         if (issue is null)
         {
             return Result<IssueReleaseLinksDto>.Failure(IssueErrors.NotFound);
         }
 
-        var link = (await _links.GetVersionLinksAsync(issueId, cancellationToken))
+        var link = (await _links.GetVersionLinksAsync(issueId))
             .FirstOrDefault(l => l.VersionId == versionId && l.LinkType == normalized);
         if (link is not null)
         {
-            var name = (await _releases.GetVersionsAsync(issue.ProjectId, cancellationToken)).FirstOrDefault(v => v.Id == versionId)?.Name;
+            var name = (await _releases.GetVersionsAsync(issue.ProjectId)).FirstOrDefault(v => v.Id == versionId)?.Name;
             _links.RemoveVersionLink(link);
             await _issues.AddActivityAsync(
-                IssueActivities.Create(issueId, actorUserId, IssueActivities.VersionRemoved, Now(), normalized, oldValue: name ?? versionId.ToString()),
-                cancellationToken);
-            await _links.SaveChangesAsync(cancellationToken);
+                IssueActivities.Create(issueId, actorUserId, IssueActivities.VersionRemoved, Now(), normalized, oldValue: name ?? versionId.ToString()));
+            await _links.SaveChangesAsync();
         }
 
-        return Result.Success(await BuildAsync(issue, cancellationToken));
+        return Result.Success(await BuildAsync(issue));
     }
 
     private async Task<IssueReleaseLinksDto> BuildAsync(
         Issue issue,
-        CancellationToken cancellationToken,
         IReadOnlyList<ProjectComponentDto>? components = null,
         IReadOnlyList<ProjectVersionDto>? versions = null)
     {
-        components ??= await _releases.GetComponentsAsync(issue.ProjectId, cancellationToken);
-        versions ??= await _releases.GetVersionsAsync(issue.ProjectId, cancellationToken);
+        components ??= await _releases.GetComponentsAsync(issue.ProjectId);
+        versions ??= await _releases.GetVersionsAsync(issue.ProjectId);
         var componentNames = components.ToDictionary(c => c.Id);
         var versionInfo = versions.ToDictionary(v => v.Id);
-        var componentLinks = await _links.GetComponentLinksAsync(issue.Id, cancellationToken);
-        var versionLinks = await _links.GetVersionLinksAsync(issue.Id, cancellationToken);
+        var componentLinks = await _links.GetComponentLinksAsync(issue.Id);
+        var versionLinks = await _links.GetVersionLinksAsync(issue.Id);
 
         IssueVersionDto ToVersion(IssueVersionLink link) => versionInfo.TryGetValue(link.VersionId, out var v)
             ? new IssueVersionDto { VersionId = v.Id, Name = v.Name, LinkType = link.LinkType, ReleaseDate = v.ReleaseDate, IsReleased = v.IsReleased }

@@ -16,7 +16,7 @@ public record IssueNotification(
 /// </summary>
 public interface IIssueNotifier
 {
-    Task NotifyAsync(IssueNotification notification, CancellationToken cancellationToken = default);
+    Task NotifyAsync(IssueNotification notification);
 }
 
 public static class IssueNotificationTypes

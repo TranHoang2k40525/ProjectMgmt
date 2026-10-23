@@ -13,17 +13,15 @@ public class IssueRepository : IIssueRepository
         _context = context;
     }
 
-    public Task<Issue?> GetByIdAsync(Guid issueId, bool includeDeleted = false, CancellationToken cancellationToken = default) =>
+    public Task<Issue?> GetByIdAsync(Guid issueId, bool includeDeleted = false) =>
         _context.Issues.SingleOrDefaultAsync(
-            issue => issue.Id == issueId && (includeDeleted || !issue.IsDeleted),
-            cancellationToken);
+            issue => issue.Id == issueId && (includeDeleted || !issue.IsDeleted));
 
-    public Task<Issue?> GetByNumberAsync(Guid projectId, int issueNumber, CancellationToken cancellationToken = default) =>
+    public Task<Issue?> GetByNumberAsync(Guid projectId, int issueNumber) =>
         _context.Issues.SingleOrDefaultAsync(
-            issue => issue.ProjectId == projectId && issue.IssueNumber == issueNumber && !issue.IsDeleted,
-            cancellationToken);
+            issue => issue.ProjectId == projectId && issue.IssueNumber == issueNumber && !issue.IsDeleted);
 
-    public async Task<IReadOnlyList<Issue>> GetByIdsAsync(IEnumerable<Guid> issueIds, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<Issue>> GetByIdsAsync(IEnumerable<Guid> issueIds)
     {
         var ids = issueIds.Distinct().ToList();
         if (ids.Count == 0)
@@ -33,53 +31,53 @@ public class IssueRepository : IIssueRepository
 
         return await _context.Issues
             .Where(issue => ids.Contains(issue.Id) && !issue.IsDeleted)
-            .ToListAsync(cancellationToken);
+            .ToListAsync();
     }
 
-    public async Task<IReadOnlyList<Issue>> GetChildrenAsync(Guid parentId, CancellationToken cancellationToken = default) =>
+    public async Task<IReadOnlyList<Issue>> GetChildrenAsync(Guid parentId) =>
         await _context.Issues
             .Where(issue => issue.ParentId == parentId && !issue.IsDeleted)
             .OrderBy(issue => issue.RankOrder)
             .ThenBy(issue => issue.IssueNumber)
-            .ToListAsync(cancellationToken);
+            .ToListAsync();
 
-    public async Task<IReadOnlyList<Issue>> GetByEpicAsync(Guid epicId, CancellationToken cancellationToken = default) =>
+    public async Task<IReadOnlyList<Issue>> GetByEpicAsync(Guid epicId) =>
         await _context.Issues
             .Where(issue => issue.EpicId == epicId)
-            .ToListAsync(cancellationToken);
+            .ToListAsync();
 
-    public async Task<IReadOnlyList<Issue>> GetBySprintAsync(Guid sprintId, CancellationToken cancellationToken = default) =>
+    public async Task<IReadOnlyList<Issue>> GetBySprintAsync(Guid sprintId) =>
         await _context.Issues
             .AsNoTracking()
             .Where(issue => issue.SprintId == sprintId && !issue.IsDeleted)
             .OrderBy(issue => issue.RankOrder)
             .ThenBy(issue => issue.IssueNumber)
-            .ToListAsync(cancellationToken);
+            .ToListAsync();
 
-    public async Task<IReadOnlyList<Issue>> GetOpenByAssigneeAsync(Guid userId, CancellationToken cancellationToken = default) =>
+    public async Task<IReadOnlyList<Issue>> GetOpenByAssigneeAsync(Guid userId) =>
         await _context.Issues
             .AsNoTracking()
             .Where(issue => issue.AssigneeId == userId && !issue.IsDeleted && issue.ResolvedAt == null)
             .OrderBy(issue => issue.DueDate == null)
             .ThenBy(issue => issue.DueDate)
             .ThenBy(issue => issue.RankOrder)
-            .ToListAsync(cancellationToken);
+            .ToListAsync();
 
-    public async Task<IReadOnlyList<IssueStatusHistory>> GetStatusHistoryAsync(Guid issueId, CancellationToken cancellationToken = default) =>
+    public async Task<IReadOnlyList<IssueStatusHistory>> GetStatusHistoryAsync(Guid issueId) =>
         await _context.IssueStatusHistories
             .AsNoTracking()
             .Where(history => history.IssueId == issueId)
             .OrderBy(history => history.ChangedAt)
-            .ToListAsync(cancellationToken);
+            .ToListAsync();
 
-    public async Task<IReadOnlyList<IssueAssignmentHistory>> GetAssignmentHistoryAsync(Guid issueId, CancellationToken cancellationToken = default) =>
+    public async Task<IReadOnlyList<IssueAssignmentHistory>> GetAssignmentHistoryAsync(Guid issueId) =>
         await _context.IssueAssignmentHistories
             .AsNoTracking()
             .Where(history => history.IssueId == issueId)
             .OrderBy(history => history.AssignedAt)
-            .ToListAsync(cancellationToken);
+            .ToListAsync();
 
-    public async Task<IssuePage> ListAsync(IssueListFilter filter, CancellationToken cancellationToken = default)
+    public async Task<IssuePage> ListAsync(IssueListFilter filter)
     {
         ArgumentNullException.ThrowIfNull(filter);
         var page = Math.Max(filter.Page, 1);
@@ -130,53 +128,52 @@ public class IssueRepository : IIssueRepository
             query = query.Where(issue => issue.Title.Contains(text) || (hasNumber && issue.IssueNumber == number));
         }
 
-        var totalCount = await query.CountAsync(cancellationToken);
+        var totalCount = await query.CountAsync();
         var items = await query
             .OrderBy(issue => issue.RankOrder)
             .ThenBy(issue => issue.IssueNumber)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .ToListAsync(cancellationToken);
+            .ToListAsync();
 
         return new IssuePage(items, totalCount);
     }
 
-    public async Task<IReadOnlyList<Issue>> GetRankedAsync(Guid projectId, CancellationToken cancellationToken = default) =>
+    public async Task<IReadOnlyList<Issue>> GetRankedAsync(Guid projectId) =>
         await _context.Issues
             .Where(issue => issue.ProjectId == projectId && !issue.IsDeleted)
             .OrderBy(issue => issue.RankOrder)
             .ThenBy(issue => issue.IssueNumber)
-            .ToListAsync(cancellationToken);
+            .ToListAsync();
 
-    public async Task<decimal?> GetMaxRankAsync(Guid projectId, CancellationToken cancellationToken = default) =>
+    public async Task<decimal?> GetMaxRankAsync(Guid projectId) =>
         await _context.Issues
             .Where(issue => issue.ProjectId == projectId && !issue.IsDeleted)
-            .MaxAsync(issue => (decimal?)issue.RankOrder, cancellationToken);
+            .MaxAsync(issue => (decimal?)issue.RankOrder);
 
-    public async Task AddAsync(Issue issue, CancellationToken cancellationToken = default) =>
-        await _context.Issues.AddAsync(issue, cancellationToken);
+    public async Task AddAsync(Issue issue) =>
+        await _context.Issues.AddAsync(issue);
 
-    public async Task AddActivityAsync(ActivityLog activity, CancellationToken cancellationToken = default) =>
-        await _context.ActivityLogs.AddAsync(activity, cancellationToken);
+    public async Task AddActivityAsync(ActivityLog activity) =>
+        await _context.ActivityLogs.AddAsync(activity);
 
     public async Task<(IReadOnlyList<ActivityLog> Items, int TotalCount)> GetActivitiesAsync(
         Guid issueId,
         int page,
-        int pageSize,
-        CancellationToken cancellationToken = default)
+        int pageSize)
     {
         var query = _context.ActivityLogs.AsNoTracking().Where(activity => activity.IssueId == issueId);
-        var total = await query.CountAsync(cancellationToken);
+        var total = await query.CountAsync();
         var items = await query
             .OrderByDescending(activity => activity.CreatedAt)
             .ThenBy(activity => activity.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .ToListAsync(cancellationToken);
+            .ToListAsync();
         return (items, total);
     }
 
-    public async Task<IssueStatusHistory?> GetLastStatusChangeAsync(Guid issueId, CancellationToken cancellationToken = default)
+    public async Task<IssueStatusHistory?> GetLastStatusChangeAsync(Guid issueId)
     {
         // Ưu tiên bản ghi chưa lưu trong cùng unit of work (ví dụ lúc vừa tạo Issue rồi đổi trạng thái ngay).
         var pending = _context.IssueStatusHistories.Local
@@ -186,19 +183,19 @@ public class IssueRepository : IIssueRepository
             .AsNoTracking()
             .Where(history => history.IssueId == issueId)
             .OrderByDescending(history => history.ChangedAt)
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync();
     }
 
-    public async Task AddStatusHistoryAsync(IssueStatusHistory history, CancellationToken cancellationToken = default) =>
-        await _context.IssueStatusHistories.AddAsync(history, cancellationToken);
+    public async Task AddStatusHistoryAsync(IssueStatusHistory history) =>
+        await _context.IssueStatusHistories.AddAsync(history);
 
-    public async Task AddAssignmentHistoryAsync(IssueAssignmentHistory history, CancellationToken cancellationToken = default) =>
-        await _context.IssueAssignmentHistories.AddAsync(history, cancellationToken);
+    public async Task AddAssignmentHistoryAsync(IssueAssignmentHistory history) =>
+        await _context.IssueAssignmentHistories.AddAsync(history);
 
-    public Task SaveChangesAsync(CancellationToken cancellationToken = default) =>
-        _context.SaveChangesAsync(cancellationToken);
+    public Task SaveChangesAsync() =>
+        _context.SaveChangesAsync();
 
-    public async Task<Issue?> LockForUpdateAsync(Guid issueId, CancellationToken cancellationToken = default)
+    public async Task<Issue?> LockForUpdateAsync(Guid issueId)
     {
         // Identity map của EF sẽ trả lại instance đã track (giá trị cũ) thay vì dòng vừa khóa: gỡ nó trước khi đọc lại.
         var tracked = _context.ChangeTracker.Entries<Issue>().FirstOrDefault(entry => entry.Entity.Id == issueId);
@@ -214,11 +211,11 @@ public class IssueRepository : IIssueRepository
 
         var rows = await _context.Issues
             .FromSqlInterpolated($"SELECT * FROM `Issue` WHERE `Id` = {issueId} AND `IsDeleted` = 0 FOR UPDATE")
-            .ToListAsync(cancellationToken);
+            .ToListAsync();
         return rows.SingleOrDefault();
     }
 
-    public Task<T> ExecuteInTransactionAsync<T>(Func<CancellationToken, Task<T>> work, CancellationToken cancellationToken = default)
+    public Task<T> ExecuteInTransactionAsync<T>(Func<Task<T>> work)
     {
         ArgumentNullException.ThrowIfNull(work);
         var attempt = 0;
@@ -230,9 +227,9 @@ public class IssueRepository : IIssueRepository
                 _context.ChangeTracker.Clear();
             }
 
-            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
-            var result = await work(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            var result = await work();
+            await transaction.CommitAsync();
             return result;
         });
     }

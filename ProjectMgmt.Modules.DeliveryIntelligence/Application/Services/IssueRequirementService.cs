@@ -44,21 +44,20 @@ public class IssueRequirementService : IIssueRequirementService, IIssueSkillServ
 
     // ---------- Acceptance Criteria ----------
 
-    public async Task<Result<IReadOnlyList<AcceptanceCriterionDto>>> GetCriteriaAsync(Guid issueId, CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyList<AcceptanceCriterionDto>>> GetCriteriaAsync(Guid issueId)
     {
-        if (await _issues.GetByIdAsync(issueId, cancellationToken: cancellationToken) is null)
+        if (await _issues.GetByIdAsync(issueId) is null)
         {
             return Result<IReadOnlyList<AcceptanceCriterionDto>>.Failure(IssueErrors.NotFound);
         }
 
-        return Result.Success(await CriteriaDtosAsync(issueId, cancellationToken));
+        return Result.Success(await CriteriaDtosAsync(issueId));
     }
 
     public async Task<Result<AcceptanceCriterionDto>> AddCriterionAsync(
         Guid issueId,
         SaveCriterionDto request,
-        Guid actorUserId,
-        CancellationToken cancellationToken = default)
+        Guid actorUserId)
     {
         var invalid = Validate(_criterionValidator, request);
         if (invalid is not null)
@@ -66,12 +65,12 @@ public class IssueRequirementService : IIssueRequirementService, IIssueSkillServ
             return Result<AcceptanceCriterionDto>.Failure(invalid);
         }
 
-        if (await _issues.GetByIdAsync(issueId, cancellationToken: cancellationToken) is null)
+        if (await _issues.GetByIdAsync(issueId) is null)
         {
             return Result<AcceptanceCriterionDto>.Failure(IssueErrors.NotFound);
         }
 
-        var existing = await _requirements.GetCriteriaAsync(issueId, cancellationToken);
+        var existing = await _requirements.GetCriteriaAsync(issueId);
         if (existing.Count >= MaxCriteriaPerIssue)
         {
             return Result<AcceptanceCriterionDto>.Failure(RequirementErrors.TooManyCriteria);
@@ -90,19 +89,17 @@ public class IssueRequirementService : IIssueRequirementService, IIssueSkillServ
             Source = Manual,
             CreatedAt = now
         };
-        await _requirements.AddCriterionAsync(criterion, cancellationToken);
+        await _requirements.AddCriterionAsync(criterion);
         await _issues.AddActivityAsync(
-            IssueActivities.Create(issueId, actorUserId, IssueActivities.CriteriaAdded, now, "AcceptanceCriteria", newValue: criterion.Content),
-            cancellationToken);
-        await _requirements.SaveChangesAsync(cancellationToken);
-        return Result.Success(await ToDtoAsync(criterion, cancellationToken));
+            IssueActivities.Create(issueId, actorUserId, IssueActivities.CriteriaAdded, now, "AcceptanceCriteria", newValue: criterion.Content));
+        await _requirements.SaveChangesAsync();
+        return Result.Success(await ToDtoAsync(criterion));
     }
 
     public async Task<Result<AcceptanceCriterionDto>> UpdateCriterionAsync(
         Guid criterionId,
         SaveCriterionDto request,
-        Guid actorUserId,
-        CancellationToken cancellationToken = default)
+        Guid actorUserId)
     {
         var invalid = Validate(_criterionValidator, request);
         if (invalid is not null)
@@ -110,8 +107,8 @@ public class IssueRequirementService : IIssueRequirementService, IIssueSkillServ
             return Result<AcceptanceCriterionDto>.Failure(invalid);
         }
 
-        var criterion = await _requirements.GetCriterionAsync(criterionId, cancellationToken);
-        if (criterion is null || await _issues.GetByIdAsync(criterion.IssueId, cancellationToken: cancellationToken) is null)
+        var criterion = await _requirements.GetCriterionAsync(criterionId);
+        if (criterion is null || await _issues.GetByIdAsync(criterion.IssueId) is null)
         {
             return Result<AcceptanceCriterionDto>.Failure(RequirementErrors.CriterionNotFound);
         }
@@ -133,23 +130,22 @@ public class IssueRequirementService : IIssueRequirementService, IIssueSkillServ
             criterion.MetAt = request.IsMet ? now : null;
             await _issues.AddActivityAsync(
                 IssueActivities.Create(criterion.IssueId, actorUserId, request.IsMet ? IssueActivities.CriteriaMet : IssueActivities.CriteriaUnmet,
-                    now, "AcceptanceCriteria", newValue: criterion.Content),
-                cancellationToken);
+                    now, "AcceptanceCriteria", newValue: criterion.Content));
             changed = true;
         }
 
         if (changed)
         {
             criterion.UpdatedAt = now;
-            await _requirements.SaveChangesAsync(cancellationToken);
+            await _requirements.SaveChangesAsync();
         }
 
-        return Result.Success(await ToDtoAsync(criterion, cancellationToken));
+        return Result.Success(await ToDtoAsync(criterion));
     }
 
-    public async Task<Result> DeleteCriterionAsync(Guid criterionId, Guid actorUserId, CancellationToken cancellationToken = default)
+    public async Task<Result> DeleteCriterionAsync(Guid criterionId, Guid actorUserId)
     {
-        var criterion = await _requirements.GetCriterionAsync(criterionId, cancellationToken);
+        var criterion = await _requirements.GetCriterionAsync(criterionId);
         if (criterion is null)
         {
             return Result.Failure(RequirementErrors.CriterionNotFound);
@@ -157,19 +153,17 @@ public class IssueRequirementService : IIssueRequirementService, IIssueSkillServ
 
         _requirements.RemoveCriterion(criterion);
         await _issues.AddActivityAsync(
-            IssueActivities.Create(criterion.IssueId, actorUserId, IssueActivities.CriteriaRemoved, Now(), "AcceptanceCriteria", oldValue: criterion.Content),
-            cancellationToken);
-        await _requirements.SaveChangesAsync(cancellationToken);
+            IssueActivities.Create(criterion.IssueId, actorUserId, IssueActivities.CriteriaRemoved, Now(), "AcceptanceCriteria", oldValue: criterion.Content));
+        await _requirements.SaveChangesAsync();
         return Result.Success();
     }
 
     public async Task<Result<IReadOnlyList<AcceptanceCriterionDto>>> ReorderCriteriaAsync(
         Guid issueId,
-        ReorderCriteriaDto request,
-        CancellationToken cancellationToken = default)
+        ReorderCriteriaDto request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var criteria = await _requirements.GetCriteriaAsync(issueId, cancellationToken);
+        var criteria = await _requirements.GetCriteriaAsync(issueId);
         var requested = request.OrderedIds.Distinct().ToList();
         if (requested.Count != request.OrderedIds.Count
             || requested.Count != criteria.Count
@@ -184,27 +178,27 @@ public class IssueRequirementService : IIssueRequirementService, IIssueSkillServ
             byId[requested[index]].OrderIndex = index;
         }
 
-        await _requirements.SaveChangesAsync(cancellationToken);
-        return Result.Success(await CriteriaDtosAsync(issueId, cancellationToken));
+        await _requirements.SaveChangesAsync();
+        return Result.Success(await CriteriaDtosAsync(issueId));
     }
 
-    public async Task<Result<Guid>> GetCriterionIssueIdAsync(Guid criterionId, CancellationToken cancellationToken = default)
+    public async Task<Result<Guid>> GetCriterionIssueIdAsync(Guid criterionId)
     {
-        var criterion = await _requirements.GetCriterionAsync(criterionId, cancellationToken);
+        var criterion = await _requirements.GetCriterionAsync(criterionId);
         return criterion is null ? Result<Guid>.Failure(RequirementErrors.CriterionNotFound) : Result.Success(criterion.IssueId);
     }
 
     // ---------- Required skills ----------
 
-    public async Task<Result<IReadOnlyList<RequiredSkillDto>>> GetRequiredSkillsAsync(Guid issueId, CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyList<RequiredSkillDto>>> GetRequiredSkillsAsync(Guid issueId)
     {
-        if (await _issues.GetByIdAsync(issueId, cancellationToken: cancellationToken) is null)
+        if (await _issues.GetByIdAsync(issueId) is null)
         {
             return Result<IReadOnlyList<RequiredSkillDto>>.Failure(IssueErrors.NotFound);
         }
 
-        var skills = await _requirements.GetRequiredSkillsAsync([issueId], cancellationToken);
-        var names = await SkillNamesAsync(cancellationToken);
+        var skills = await _requirements.GetRequiredSkillsAsync([issueId]);
+        var names = await SkillNamesAsync();
         IReadOnlyList<RequiredSkillDto> result = skills.Select(skill => ToDto(skill, names)).ToList();
         return Result.Success(result);
     }
@@ -212,8 +206,7 @@ public class IssueRequirementService : IIssueRequirementService, IIssueSkillServ
     public async Task<Result<RequiredSkillDto>> AddRequiredSkillAsync(
         Guid issueId,
         SaveRequiredSkillDto request,
-        Guid actorUserId,
-        CancellationToken cancellationToken = default)
+        Guid actorUserId)
     {
         var invalid = Validate(_skillValidator, request);
         if (invalid is not null)
@@ -221,18 +214,18 @@ public class IssueRequirementService : IIssueRequirementService, IIssueSkillServ
             return Result<RequiredSkillDto>.Failure(invalid);
         }
 
-        if (await _issues.GetByIdAsync(issueId, cancellationToken: cancellationToken) is null)
+        if (await _issues.GetByIdAsync(issueId) is null)
         {
             return Result<RequiredSkillDto>.Failure(IssueErrors.NotFound);
         }
 
-        var catalog = (await _skills.GetSkillsAsync(cancellationToken)).ToDictionary(skill => skill.Id);
+        var catalog = (await _skills.GetSkillsAsync()).ToDictionary(skill => skill.Id);
         if (!catalog.TryGetValue(request.SkillId, out var skillInfo) || !skillInfo.IsActive)
         {
             return Result<RequiredSkillDto>.Failure(RequirementErrors.SkillUnknown);
         }
 
-        var existing = await _requirements.GetRequiredSkillsAsync([issueId], cancellationToken);
+        var existing = await _requirements.GetRequiredSkillsAsync([issueId]);
         if (existing.Any(skill => skill.SkillId == request.SkillId))
         {
             return Result<RequiredSkillDto>.Failure(RequirementErrors.SkillDuplicate);
@@ -252,18 +245,16 @@ public class IssueRequirementService : IIssueRequirementService, IIssueSkillServ
             Weight = request.Weight,
             Source = Manual
         };
-        await _requirements.AddRequiredSkillAsync(required, cancellationToken);
+        await _requirements.AddRequiredSkillAsync(required);
         await _issues.AddActivityAsync(
-            IssueActivities.Create(issueId, actorUserId, IssueActivities.SkillRequired, Now(), "RequiredSkill", newValue: skillInfo.Name),
-            cancellationToken);
-        await _requirements.SaveChangesAsync(cancellationToken);
+            IssueActivities.Create(issueId, actorUserId, IssueActivities.SkillRequired, Now(), "RequiredSkill", newValue: skillInfo.Name));
+        await _requirements.SaveChangesAsync();
         return Result.Success(ToDto(required, catalog.ToDictionary(pair => pair.Key, pair => pair.Value.Name)));
     }
 
     public async Task<Result<RequiredSkillDto>> UpdateRequiredSkillAsync(
         Guid requiredSkillId,
-        SaveRequiredSkillDto request,
-        CancellationToken cancellationToken = default)
+        SaveRequiredSkillDto request)
     {
         var invalid = Validate(_skillValidator, request);
         if (invalid is not null)
@@ -271,7 +262,7 @@ public class IssueRequirementService : IIssueRequirementService, IIssueSkillServ
             return Result<RequiredSkillDto>.Failure(invalid);
         }
 
-        var required = await _requirements.GetRequiredSkillAsync(requiredSkillId, cancellationToken);
+        var required = await _requirements.GetRequiredSkillAsync(requiredSkillId);
         if (required is null)
         {
             return Result<RequiredSkillDto>.Failure(RequirementErrors.RequiredSkillNotFound);
@@ -284,53 +275,51 @@ public class IssueRequirementService : IIssueRequirementService, IIssueSkillServ
 
         required.MinLevel = (sbyte)request.MinLevel;
         required.Weight = request.Weight;
-        await _requirements.SaveChangesAsync(cancellationToken);
-        return Result.Success(ToDto(required, await SkillNamesAsync(cancellationToken)));
+        await _requirements.SaveChangesAsync();
+        return Result.Success(ToDto(required, await SkillNamesAsync()));
     }
 
-    public async Task<Result> DeleteRequiredSkillAsync(Guid requiredSkillId, Guid actorUserId, CancellationToken cancellationToken = default)
+    public async Task<Result> DeleteRequiredSkillAsync(Guid requiredSkillId, Guid actorUserId)
     {
-        var required = await _requirements.GetRequiredSkillAsync(requiredSkillId, cancellationToken);
+        var required = await _requirements.GetRequiredSkillAsync(requiredSkillId);
         if (required is null)
         {
             return Result.Failure(RequirementErrors.RequiredSkillNotFound);
         }
 
-        var names = await SkillNamesAsync(cancellationToken);
+        var names = await SkillNamesAsync();
         _requirements.RemoveRequiredSkill(required);
         await _issues.AddActivityAsync(
             IssueActivities.Create(required.IssueId, actorUserId, IssueActivities.SkillUnrequired, Now(), "RequiredSkill",
-                oldValue: names.GetValueOrDefault(required.SkillId, required.SkillId.ToString())),
-            cancellationToken);
-        await _requirements.SaveChangesAsync(cancellationToken);
+                oldValue: names.GetValueOrDefault(required.SkillId, required.SkillId.ToString())));
+        await _requirements.SaveChangesAsync();
         return Result.Success();
     }
 
-    public async Task<Result<Guid>> GetRequiredSkillIssueIdAsync(Guid requiredSkillId, CancellationToken cancellationToken = default)
+    public async Task<Result<Guid>> GetRequiredSkillIssueIdAsync(Guid requiredSkillId)
     {
-        var required = await _requirements.GetRequiredSkillAsync(requiredSkillId, cancellationToken);
+        var required = await _requirements.GetRequiredSkillAsync(requiredSkillId);
         return required is null ? Result<Guid>.Failure(RequirementErrors.RequiredSkillNotFound) : Result.Success(required.IssueId);
     }
 
     /// <summary>Contract cho AI phân công (B): kỹ năng yêu cầu của nhiều Issue trong một lần đọc.</summary>
     async Task<IReadOnlyList<IssueRequiredSkillDto>> IIssueSkillService.GetRequiredSkillsAsync(
-        IEnumerable<Guid> issueIds,
-        CancellationToken cancellationToken) =>
-        (await _requirements.GetRequiredSkillsAsync(issueIds, cancellationToken))
+        IEnumerable<Guid> issueIds) =>
+        (await _requirements.GetRequiredSkillsAsync(issueIds))
             .Select(skill => new IssueRequiredSkillDto(skill.IssueId, skill.SkillId, skill.MinLevel, skill.Weight, skill.Source))
             .ToList();
 
     // ---------- Helpers ----------
 
-    private async Task<IReadOnlyList<AcceptanceCriterionDto>> CriteriaDtosAsync(Guid issueId, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<AcceptanceCriterionDto>> CriteriaDtosAsync(Guid issueId)
     {
-        var criteria = await _requirements.GetCriteriaAsync(issueId, cancellationToken);
-        var names = await NamesAsync(criteria.Where(c => c.MetBy.HasValue).Select(c => c.MetBy!.Value), cancellationToken);
+        var criteria = await _requirements.GetCriteriaAsync(issueId);
+        var names = await NamesAsync(criteria.Where(c => c.MetBy.HasValue).Select(c => c.MetBy!.Value));
         return criteria.Select(c => ToDto(c, names)).ToList();
     }
 
-    private async Task<AcceptanceCriterionDto> ToDtoAsync(AcceptanceCriteria criterion, CancellationToken cancellationToken) =>
-        ToDto(criterion, criterion.MetBy.HasValue ? await NamesAsync([criterion.MetBy.Value], cancellationToken) : []);
+    private async Task<AcceptanceCriterionDto> ToDtoAsync(AcceptanceCriteria criterion) =>
+        ToDto(criterion, criterion.MetBy.HasValue ? await NamesAsync([criterion.MetBy.Value]) : []);
 
     private static AcceptanceCriterionDto ToDto(AcceptanceCriteria c, IReadOnlyDictionary<Guid, string> names) => new()
     {
@@ -359,13 +348,13 @@ public class IssueRequirementService : IIssueRequirementService, IIssueSkillServ
         Source = skill.Source
     };
 
-    private async Task<Dictionary<Guid, string>> SkillNamesAsync(CancellationToken cancellationToken) =>
-        (await _skills.GetSkillsAsync(cancellationToken)).ToDictionary(skill => skill.Id, skill => skill.Name);
+    private async Task<Dictionary<Guid, string>> SkillNamesAsync() =>
+        (await _skills.GetSkillsAsync()).ToDictionary(skill => skill.Id, skill => skill.Name);
 
-    private async Task<Dictionary<Guid, string>> NamesAsync(IEnumerable<Guid> userIds, CancellationToken cancellationToken)
+    private async Task<Dictionary<Guid, string>> NamesAsync(IEnumerable<Guid> userIds)
     {
         var ids = userIds.Distinct().ToList();
-        return ids.Count == 0 ? [] : (await _users.GetDisplayInfoAsync(ids, cancellationToken)).ToDictionary(u => u.UserId, u => u.DisplayName);
+        return ids.Count == 0 ? [] : (await _users.GetDisplayInfoAsync(ids)).ToDictionary(u => u.UserId, u => u.DisplayName);
     }
 
     private static Error? Validate<T>(IValidator<T> validator, T request)

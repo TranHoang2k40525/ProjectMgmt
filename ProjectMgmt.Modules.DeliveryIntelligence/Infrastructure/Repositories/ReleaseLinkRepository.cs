@@ -13,21 +13,21 @@ public class ReleaseLinkRepository : IReleaseLinkRepository
         _context = context;
     }
 
-    public async Task<IReadOnlyList<IssueComponentLink>> GetComponentLinksAsync(Guid issueId, CancellationToken cancellationToken = default) =>
-        await _context.IssueComponentLinks.Where(link => link.IssueId == issueId).ToListAsync(cancellationToken);
+    public async Task<IReadOnlyList<IssueComponentLink>> GetComponentLinksAsync(Guid issueId) =>
+        await _context.IssueComponentLinks.Where(link => link.IssueId == issueId).ToListAsync();
 
-    public async Task AddComponentLinkAsync(IssueComponentLink link, CancellationToken cancellationToken = default) =>
-        await _context.IssueComponentLinks.AddAsync(link, cancellationToken);
+    public async Task AddComponentLinkAsync(IssueComponentLink link) =>
+        await _context.IssueComponentLinks.AddAsync(link);
 
     public void RemoveComponentLink(IssueComponentLink link) => _context.IssueComponentLinks.Remove(link);
 
-    public async Task<IReadOnlyList<IssueVersionLink>> GetVersionLinksAsync(Guid issueId, CancellationToken cancellationToken = default) =>
-        await _context.IssueVersionLinks.Where(link => link.IssueId == issueId).ToListAsync(cancellationToken);
+    public async Task<IReadOnlyList<IssueVersionLink>> GetVersionLinksAsync(Guid issueId) =>
+        await _context.IssueVersionLinks.Where(link => link.IssueId == issueId).ToListAsync();
 
-    public async Task AddVersionLinkAsync(IssueVersionLink link, CancellationToken cancellationToken = default) =>
-        await _context.IssueVersionLinks.AddAsync(link, cancellationToken);
+    public async Task AddVersionLinkAsync(IssueVersionLink link) =>
+        await _context.IssueVersionLinks.AddAsync(link);
 
     public void RemoveVersionLink(IssueVersionLink link) => _context.IssueVersionLinks.Remove(link);
 
-    public Task SaveChangesAsync(CancellationToken cancellationToken = default) => _context.SaveChangesAsync(cancellationToken);
+    public Task SaveChangesAsync() => _context.SaveChangesAsync();
 }

@@ -174,7 +174,7 @@ public class AccountController : ControllerBase
             {
                 Success = false,
                 ErrorCode = "AUTH_EXTERNAL_LOGIN_NOT_CONFIGURED",
-                Message = "Đăng nhập Google/Microsoft chưa được cấu hình ClientId và ClientSecret."
+                Message = "Phương thức đăng nhập qua Google hoặc Microsoft chưa được cấu hình Client ID và Client Secret."
             });
     }
 

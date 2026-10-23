@@ -45,8 +45,7 @@ public class IssueCreationService : IIssueCreationService
 
     public async Task<Result<IssueDetailDto>> CreateAsync(
         CreateIssueDto request,
-        Guid reporterUserId,
-        CancellationToken cancellationToken = default)
+        Guid reporterUserId)
     {
         ArgumentNullException.ThrowIfNull(request);
         var validation = _validator.Validate(request);
@@ -71,7 +70,7 @@ public class IssueCreationService : IIssueCreationService
             return Result<IssueDetailDto>.Failure(IssueErrors.AssigneeNotMember);
         }
 
-        var types = await _hierarchy.GetTypesAsync(request.ProjectId, cancellationToken);
+        var types = await _hierarchy.GetTypesAsync(request.ProjectId);
         if (!types.TryGetValue(request.IssueTypeId, out var type))
         {
             return Result<IssueDetailDto>.Failure(IssueErrors.TypeInvalid);
@@ -79,13 +78,13 @@ public class IssueCreationService : IIssueCreationService
 
         var issueId = Guid.NewGuid();
         var placement = await _hierarchy.PlaceAsync(
-            issueId, request.ProjectId, type, request.ParentId, request.EpicId, types, cancellationToken);
+            issueId, request.ProjectId, type, request.ParentId, request.EpicId, types);
         if (placement.Violation is not null)
         {
             return Result<IssueDetailDto>.Failure(IssueErrors.FromRule(placement.Violation));
         }
 
-        var statuses = await _projects.GetStatusesAsync(request.ProjectId, cancellationToken);
+        var statuses = await _projects.GetStatusesAsync(request.ProjectId);
         var initial = statuses.Where(status => status.IsInitial).OrderBy(status => status.OrderIndex).FirstOrDefault();
         if (initial is null)
         {
@@ -98,16 +97,15 @@ public class IssueCreationService : IIssueCreationService
         issue.EpicId = placement.EpicId;
         issue.StatusId = initial.Id;
         issue.ReporterId = reporterUserId;
-        issue.RankOrder = request.RankOrder ?? (await _issues.GetMaxRankAsync(request.ProjectId, cancellationToken) ?? 0) + 1;
-        issue.IssueNumber = await _numbers.ReserveNextAsync(request.ProjectId, cancellationToken);
+        issue.RankOrder = request.RankOrder ?? (await _issues.GetMaxRankAsync(request.ProjectId) ?? 0) + 1;
+        issue.IssueNumber = await _numbers.ReserveNextAsync(request.ProjectId);
 
-        await _issues.AddAsync(issue, cancellationToken);
-        await _history.RecordStatusAsync(issue, null, null, initial.Id, initial.Category, reporterUserId, now, cancellationToken);
-        await _history.RecordAssignmentAsync(issue, null, issue.AssigneeId, reporterUserId, now, cancellationToken: cancellationToken);
+        await _issues.AddAsync(issue);
+        await _history.RecordStatusAsync(issue, null, null, initial.Id, initial.Category, reporterUserId, now);
+        await _history.RecordAssignmentAsync(issue, null, issue.AssigneeId, reporterUserId, now);
         await _issues.AddActivityAsync(
-            IssueActivities.Create(issue.Id, reporterUserId, IssueActivities.Created, now),
-            cancellationToken);
-        await _issues.SaveChangesAsync(cancellationToken);
+            IssueActivities.Create(issue.Id, reporterUserId, IssueActivities.Created, now));
+        await _issues.SaveChangesAsync();
         return Result.Success(IssueMapper.ToDetail(issue));
     }
 }

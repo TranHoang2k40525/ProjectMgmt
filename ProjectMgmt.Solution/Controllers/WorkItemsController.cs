@@ -1,11 +1,15 @@
 using System.ComponentModel.DataAnnotations;
+using DeliveryIntelligence.Application.Dto;
 using DeliveryIntelligence.Application.IServices;
+using DeliveryIntelligence.Application.Services;
 using DeliveryIntelligence.Domain.Entities;
+using DeliveryIntelligence.Domain.UseCases;
 using DeliveryIntelligence.Infrastructure;
-using IdentityExperience.Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Planning.Domain.Entities;
 using Planning.Infrastructure;
+using ProjectMgmt.IdentityAccess.Contracts;
 using ProjectMgmt.Solution.Security;
 
 namespace ProjectMgmt.Solution.Controllers;
@@ -41,8 +45,12 @@ public sealed class SprintRequest
 [Route("api")]
 [Route("api/v1")]
 public sealed class WorkItemsController(
-    DeliveryIntelligenceDbContext delivery, PlanningDbContext planning,
-    IdentityExperienceDbContext identity, ProjectAccess access) : ApiControllerBase
+    DeliveryIntelligenceDbContext delivery,
+    PlanningDbContext planning,
+    IUserLookupService userLookup,
+    IssueHistoryRecorder historyRecorder,
+    IPermissionEvaluator permissionEvaluator,
+    ProjectAccess access) : ApiControllerBase
 {
     private ObjectResult Denied() => StatusCode(403, new { message = "Bạn không có quyền thực hiện thao tác này.", code = "PROJECT_PERMISSION_DENIED" });
     private BadRequestObjectResult Invalid(string message) => BadRequest(new { message });
@@ -105,7 +113,7 @@ public sealed class WorkItemsController(
         if (!id.HasValue && await delivery.Issues.AnyAsync(i => i.Id == issue.Id)) return Conflict(new { message = "Mã công việc đã tồn tại." });
         var type = await planning.IssueTypes.SingleOrDefaultAsync(t => t.ProjectId == projectId && t.Name == request.IssueType);
         if (type is null && request.IssueType == "Sub-task") type = await planning.IssueTypes.FirstOrDefaultAsync(t => t.ProjectId == projectId && t.IsSubtask);
-        var status = await planning.WorkflowStatuses.SingleOrDefaultAsync(s => s.ProjectId == projectId && s.Name == request.StatusName);
+        var status = await planning.WorkflowStatuses.FirstOrDefaultAsync(s => s.ProjectId == projectId && (s.Name == request.StatusName || (request.StatusName == "Code Review" && s.Name == "In Review") || (request.StatusName == "In Review" && s.Name == "Code Review")));
         if (type is null || status is null) return Invalid("Loại công việc hoặc trạng thái không thuộc dự án.");
         if (type.IsSubtask != request.ParentId.HasValue) return Invalid("Subtask phải có công việc cha; các loại khác không dùng ParentId.");
         if (request.ParentId.HasValue)
@@ -125,9 +133,10 @@ public sealed class WorkItemsController(
         Guid? assignee = request.AssigneeId;
         if (!string.IsNullOrWhiteSpace(request.AssigneeName))
         {
-            if (!assignee.HasValue || !await identity.UserProfiles.AnyAsync(p => p.UserId == assignee && p.DisplayName == request.AssigneeName))
+            var allUsers = await userLookup.GetAllActiveDisplayInfoAsync();
+            if (!assignee.HasValue || !allUsers.Any(p => p.UserId == assignee && p.DisplayName == request.AssigneeName))
             {
-                var matches = await identity.UserProfiles.Where(p => p.DisplayName == request.AssigneeName).Select(p => p.UserId).Take(2).ToListAsync();
+                var matches = allUsers.Where(p => p.DisplayName.Equals(request.AssigneeName, StringComparison.OrdinalIgnoreCase)).Select(p => p.UserId).Take(2).ToList();
                 if (matches.Count != 1) return Invalid("Chọn người xử lý bằng tài khoản thành viên hợp lệ.");
                 assignee = matches[0];
             }
@@ -139,8 +148,12 @@ public sealed class WorkItemsController(
         {
             if (!await access.AllowsAsync(projectId, "issue.transition")) return Denied();
             var transition = await planning.WorkflowTransitions.SingleOrDefaultAsync(t => t.ProjectId == projectId && t.FromStatusId == issue.StatusId && t.ToStatusId == status.Id);
-            if (transition is null) return Invalid("Workflow không cho phép chuyển trạng thái này.");
-            if (!string.IsNullOrWhiteSpace(transition.RequiredPermissionCode) && !await access.AllowsAsync(projectId, transition.RequiredPermissionCode)) return Denied();
+            if (transition is null)
+            {
+                var isProjectAdmin = await access.AllowsAsync(projectId, "project.admin") || await access.AllowsAsync(projectId, "workflow.manage");
+                if (!isProjectAdmin) return Invalid("Workflow không cho phép chuyển trạng thái này.");
+            }
+            else if (!string.IsNullOrWhiteSpace(transition.RequiredPermissionCode) && !await access.AllowsAsync(projectId, transition.RequiredPermissionCode)) return Denied();
         }
         if (issue.AssigneeId != assignee && (id.HasValue || assignee != access.UserId) && !await access.AllowsAsync(projectId, "issue.assign")) return Denied();
         var priorityName = request.Priority == "Urgent" ? "Highest" : request.Priority;
@@ -163,12 +176,11 @@ public sealed class WorkItemsController(
         issue.ParentId = request.ParentId; issue.EpicId = epicId; issue.SprintId = sprintId; issue.AssigneeId = assignee; issue.UpdatedAt = DateTime.UtcNow;
         var changedAt = DateTime.UtcNow;
         // Category thật là ToDo/InProgress/Done (CK_WorkflowStatus_Category); luật mốc thời gian dùng chung với module C.
-        DeliveryIntelligence.Domain.UseCases.IssueStatusRules.Apply(issue, status.Category, changedAt);
+        IssueStatusRules.Apply(issue, status.Category, changedAt);
         delivery.ActivityLogs.Add(new ActivityLog { Id = Guid.NewGuid(), IssueId = issue.Id, UserId = access.UserId, Action = id.HasValue ? "Updated" : "Created", FieldName = changingStatus ? "Status" : null, OldValue = changingStatus ? previousCategory : null, NewValue = changingStatus ? status.Name : null, Source = "User", CreatedAt = DateTime.UtcNow });
-        var history = HttpContext.RequestServices.GetRequiredService<DeliveryIntelligence.Application.Services.IssueHistoryRecorder>();
-        if (!id.HasValue) await history.RecordStatusAsync(issue, null, null, status.Id, status.Category, access.UserId, changedAt);
-        else if (changingStatus) await history.RecordStatusAsync(issue, previousStatus, previousCategory, status.Id, status.Category, access.UserId, changedAt);
-        await history.RecordAssignmentAsync(issue, id.HasValue ? previousAssignee : null, assignee, access.UserId, changedAt);
+        if (!id.HasValue) await historyRecorder.RecordStatusAsync(issue, null, null, status.Id, status.Category, access.UserId, changedAt);
+        else if (changingStatus) await historyRecorder.RecordStatusAsync(issue, previousStatus, previousCategory, status.Id, status.Category, access.UserId, changedAt);
+        await historyRecorder.RecordAssignmentAsync(issue, id.HasValue ? previousAssignee : null, assignee, access.UserId, changedAt);
         await delivery.SaveChangesAsync();
         var links = await delivery.IssueLabels.Where(l => l.IssueId == issue.Id).ToListAsync();
         var requestedLabels = request.Labels.Select(l => l.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -184,7 +196,7 @@ public sealed class WorkItemsController(
         return Ok((await Views([issue])).Single());
     }
 
-    private Task<bool> accessFor(Guid userId, Guid projectId) => HttpContext.RequestServices.GetRequiredService<ProjectMgmt.IdentityAccess.Contracts.IPermissionEvaluator>().IsProjectMemberAsync(userId, projectId);
+    private Task<bool> accessFor(Guid userId, Guid projectId) => permissionEvaluator.IsProjectMemberAsync(userId, projectId);
 
     [HttpDelete("issues/{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, [FromServices] IIssueTrackingService issues)
@@ -209,7 +221,7 @@ public sealed class WorkItemsController(
         var issue = await delivery.Issues.AsNoTracking().SingleOrDefaultAsync(i => i.Id == id && !i.IsDeleted);
         if (issue is null) return NotFound();
         if (!await access.AllowsAsync(issue.ProjectId, "issue.update")) return Denied();
-        var added = await collaboration.AddCommentAsync(id, new DeliveryIntelligence.Application.Dto.CreateCommentDto
+        var added = await collaboration.AddCommentAsync(id, new CreateCommentDto
         {
             Content = request.Content, ParentCommentId = request.ParentCommentId, MentionedUserIds = request.MentionedUserIds
         }, access.UserId);
@@ -229,7 +241,7 @@ public sealed class WorkItemsController(
     {
         if (!await access.AllowsAsync(projectId, "sprint.create")) return Denied();
         if (string.IsNullOrWhiteSpace(request.Name) || request.EndDate < request.StartDate) return Invalid("Tên hoặc ngày Sprint không hợp lệ.");
-        var sprint = id.HasValue ? await planning.Sprints.SingleAsync(s => s.Id == id) : new Planning.Domain.Entities.Sprint { Id = request.Id ?? Guid.NewGuid(), ProjectId = projectId, CreatedAt = DateTime.UtcNow, OrderIndex = await planning.Sprints.CountAsync(s => s.ProjectId == projectId) };
+        var sprint = id.HasValue ? await planning.Sprints.SingleAsync(s => s.Id == id) : new Sprint { Id = request.Id ?? Guid.NewGuid(), ProjectId = projectId, CreatedAt = DateTime.UtcNow, OrderIndex = await planning.Sprints.CountAsync(s => s.ProjectId == projectId) };
         var status = request.Status switch { "active" => "Active", "completed" => "Completed", _ => "Planned" };
         if (sprint.Status == "Completed" && status != "Completed") return Invalid("Sprint đã hoàn thành không thể mở lại.");
         if (status != sprint.Status && status != "Planned" && !await access.AllowsAsync(projectId, status == "Active" ? "sprint.start" : "sprint.close")) return Denied();
@@ -243,7 +255,7 @@ public sealed class WorkItemsController(
         return Ok(SprintView(sprint, await delivery.Issues.AsNoTracking().Where(i => i.SprintId == sprint.Id && !i.IsDeleted).ToListAsync()));
     }
 
-    private static object SprintView(Planning.Domain.Entities.Sprint s, List<Issue> issues) => new { s.Id, s.ProjectId, s.Name, s.Goal, s.StartDate, s.EndDate, status = s.Status == "Active" ? "active" : s.Status == "Completed" ? "completed" : "future", workItemsCount = issues.Count(i => i.SprintId == s.Id), totalStoryPoints = issues.Where(i => i.SprintId == s.Id).Sum(i => i.StoryPoints ?? 0) };
+    private static object SprintView(Sprint s, List<Issue> issues) => new { s.Id, s.ProjectId, s.Name, s.Goal, s.StartDate, s.EndDate, status = s.Status == "Active" ? "active" : s.Status == "Completed" ? "completed" : "future", workItemsCount = issues.Count(i => i.SprintId == s.Id), totalStoryPoints = issues.Where(i => i.SprintId == s.Id).Sum(i => i.StoryPoints ?? 0) };
 
     [HttpPost("issues/{id:guid}/attachments")]
     [RequestSizeLimit(11 * 1024 * 1024)]
@@ -287,7 +299,7 @@ public sealed class WorkItemsController(
         var issue = await delivery.Issues.AsNoTracking().SingleOrDefaultAsync(i => i.Id == id && !i.IsDeleted);
         if (issue is null) return NotFound();
         if (!await access.AllowsAsync(issue.ProjectId, "issue.update")) return Denied();
-        var added = await requirements.AddCriterionAsync(id, new DeliveryIntelligence.Application.Dto.SaveCriterionDto { Content = request.Content, IsMet = request.IsMet }, access.UserId);
+        var added = await requirements.AddCriterionAsync(id, new SaveCriterionDto { Content = request.Content, IsMet = request.IsMet }, access.UserId);
         return added.IsSuccess ? Ok() : Invalid(added.Error.Description);
     }
     [HttpPut("criteria/{id:guid}")]
@@ -298,7 +310,7 @@ public sealed class WorkItemsController(
         var issue = await delivery.Issues.AsNoTracking().SingleOrDefaultAsync(i => i.Id == issueId.Value && !i.IsDeleted);
         if (issue is null) return NotFound();
         if (!await access.AllowsAsync(issue.ProjectId, "issue.update")) return Denied();
-        var updated = await requirements.UpdateCriterionAsync(id, new DeliveryIntelligence.Application.Dto.SaveCriterionDto { Content = request.Content, IsMet = request.IsMet }, access.UserId);
+        var updated = await requirements.UpdateCriterionAsync(id, new SaveCriterionDto { Content = request.Content, IsMet = request.IsMet }, access.UserId);
         return updated.IsSuccess ? Ok() : Invalid(updated.Error.Description);
     }
 
@@ -310,7 +322,8 @@ public sealed class WorkItemsController(
         var types = await planning.IssueTypes.AsNoTracking().Where(t => projectIds.Contains(t.ProjectId)).ToDictionaryAsync(t => t.Id);
         var priorities = await planning.Priorities.AsNoTracking().ToDictionaryAsync(p => p.Id);
         var sprints = await planning.Sprints.AsNoTracking().Where(s => projectIds.Contains(s.ProjectId)).ToDictionaryAsync(s => s.Id);
-        var profiles = await identity.UserProfiles.AsNoTracking().ToDictionaryAsync(p => p.UserId);
+        var users = await userLookup.GetAllActiveDisplayInfoAsync();
+        var profiles = users.ToDictionary(p => p.UserId);
         var comments = await delivery.Comments.AsNoTracking().Where(c => ids.Contains(c.IssueId) && !c.IsDeleted).OrderBy(c => c.CreatedAt).ToListAsync();
         var activities = await delivery.ActivityLogs.AsNoTracking().Where(a => ids.Contains(a.IssueId)).OrderByDescending(a => a.CreatedAt).ToListAsync();
         var attachments = await delivery.Attachments.AsNoTracking().Where(a => ids.Contains(a.IssueId)).ToListAsync();

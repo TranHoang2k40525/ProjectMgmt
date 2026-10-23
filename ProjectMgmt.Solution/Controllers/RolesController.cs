@@ -25,6 +25,7 @@ public class RolesController : ControllerBase
     private readonly IPermissionEvaluator _permissions;
     private readonly ICurrentUserContext _currentUser;
     private readonly IProjectLookupService _projects;
+    private readonly IdentityExperienceDbContext _db;
     private readonly ILogger<RolesController> _logger;
 
     public RolesController(
@@ -32,12 +33,14 @@ public class RolesController : ControllerBase
         IPermissionEvaluator permissions,
         ICurrentUserContext currentUser,
         IProjectLookupService projects,
+        IdentityExperienceDbContext db,
         ILogger<RolesController> logger)
     {
         _roleServices = roleServices;
         _permissions = permissions;
         _currentUser = currentUser;
         _projects = projects;
+        _db = db;
         _logger = logger;
     }
 
@@ -49,8 +52,7 @@ public class RolesController : ControllerBase
             var result = await _roleServices.GetRolesAsync(scope);
             if (result.Success && result.Items is not null)
             {
-                var db = HttpContext.RequestServices.GetRequiredService<IdentityExperienceDbContext>();
-                var grants = await db.RolePermissions.AsNoTracking().ToListAsync();
+                var grants = await _db.RolePermissions.AsNoTracking().ToListAsync();
                 foreach (var role in result.Items)
                     role.PermissionIds = grants.Where(p => p.RoleId == role.RoleId).Select(p => p.PermissionId).ToList();
             }
@@ -79,16 +81,15 @@ public class RolesController : ControllerBase
     public async Task<IActionResult> GetAdminUsers()
     {
         if (!await HasSystemPermission("identity.role.manage")) return Forbidden();
-        var db = HttpContext.RequestServices.GetRequiredService<IdentityExperienceDbContext>();
-        var users = await (from u in db.Users.AsNoTracking()
-                           join p in db.UserProfiles.AsNoTracking() on u.Id equals p.UserId into profiles
+        var users = await (from u in _db.Users.AsNoTracking()
+                           join p in _db.UserProfiles.AsNoTracking() on u.Id equals p.UserId into profiles
                            from p in profiles.DefaultIfEmpty()
                            orderby u.CreatedAt descending
                            select new { u.Id, u.Email, DisplayName = p == null ? u.Email : p.DisplayName,
                                AvatarUrl = p == null ? null : p.AvatarUrl, JobTitle = p == null ? null : p.JobTitle,
                                u.IsActive, u.IsEmailVerified, u.CreatedAt, u.LastLoginAt }).ToListAsync();
-        var assignments = await (from ur in db.UserRoles.AsNoTracking()
-                                 join r in db.Roles.AsNoTracking() on ur.RoleId equals r.Id
+        var assignments = await (from ur in _db.UserRoles.AsNoTracking()
+                                 join r in _db.Roles.AsNoTracking() on ur.RoleId equals r.Id
                                  select new { ur.UserId, ur.RoleId, RoleName = r.Name, ur.ScopeType, ur.ScopeId }).ToListAsync();
         return Ok(users.Select(u => new { u.Id, u.Email, u.DisplayName, u.AvatarUrl, u.JobTitle,
             u.IsActive, u.IsEmailVerified, u.CreatedAt, u.LastLoginAt,
@@ -133,8 +134,7 @@ public class RolesController : ControllerBase
                 return Forbidden();
             }
 
-            var db = HttpContext.RequestServices.GetRequiredService<IdentityExperienceDbContext>();
-            var existingRole = await db.Roles.AsNoTracking().FirstOrDefaultAsync(r => r.Id == roleId);
+            var existingRole = await _db.Roles.AsNoTracking().FirstOrDefaultAsync(r => r.Id == roleId);
             if (existingRole is not null && existingRole.IsSystem)
             {
                 return BadRequest(new RoleDto
@@ -161,11 +161,10 @@ public class RolesController : ControllerBase
     [HttpGet("roles/{roleId:guid}/permissions")]
     public async Task<IActionResult> GetRolePermissions(Guid roleId)
     {
-        var db = HttpContext.RequestServices.GetRequiredService<IdentityExperienceDbContext>();
-        var role = await db.Roles.AsNoTracking().FirstOrDefaultAsync(r => r.Id == roleId);
+        var role = await _db.Roles.AsNoTracking().FirstOrDefaultAsync(r => r.Id == roleId);
         if (role is null) return NotFound();
-        var perms = await (from rp in db.RolePermissions.AsNoTracking()
-                           join p in db.Permissions.AsNoTracking() on rp.PermissionId equals p.Id
+        var perms = await (from rp in _db.RolePermissions.AsNoTracking()
+                           join p in _db.Permissions.AsNoTracking() on rp.PermissionId equals p.Id
                            where rp.RoleId == roleId
                            select new { p.Id, p.Code, p.Description }).ToListAsync();
         return Ok(new { roleId, permissions = perms });
@@ -179,8 +178,7 @@ public class RolesController : ControllerBase
             return Forbidden();
         }
 
-        var db = HttpContext.RequestServices.GetRequiredService<IdentityExperienceDbContext>();
-        var role = await db.Roles.FirstOrDefaultAsync(r => r.Id == roleId);
+        var role = await _db.Roles.FirstOrDefaultAsync(r => r.Id == roleId);
         if (role is null)
         {
             return NotFound(new RoleDto { Success = false, ErrorCode = "RBAC_ROLE_NOT_FOUND", Message = "Không tìm thấy vai trò." });
@@ -191,10 +189,10 @@ public class RolesController : ControllerBase
             return BadRequest(new RoleDto { Success = false, ErrorCode = "RBAC_SYSTEM_ROLE_IMMUTABLE", Message = "Không được phép xóa vai trò hệ thống." });
         }
 
-        var rolePerms = await db.RolePermissions.Where(rp => rp.RoleId == roleId).ToListAsync();
-        db.RolePermissions.RemoveRange(rolePerms);
-        db.Roles.Remove(role);
-        await db.SaveChangesAsync();
+        var rolePerms = await _db.RolePermissions.Where(rp => rp.RoleId == roleId).ToListAsync();
+        _db.RolePermissions.RemoveRange(rolePerms);
+        _db.Roles.Remove(role);
+        await _db.SaveChangesAsync();
         return Ok(new { deleted = true, roleId });
     }
 

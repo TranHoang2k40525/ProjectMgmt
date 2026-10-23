@@ -15,7 +15,7 @@ public class ProjectScopeInfo
 
 public interface IProjectLookupService
 {
-    Task<IReadOnlyList<ProjectIssueTypeDto>> GetIssueTypesAsync(Guid projectId, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<ProjectStatusDto>> GetStatusesAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<ProjectIssueTypeDto>> GetIssueTypesAsync(Guid projectId);
+    Task<IReadOnlyList<ProjectStatusDto>> GetStatusesAsync(Guid projectId);
     Task<ProjectScopeInfo?> GetProjectScopeAsync(Guid projectId);
 }

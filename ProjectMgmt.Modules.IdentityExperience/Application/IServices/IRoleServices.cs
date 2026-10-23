@@ -26,4 +26,9 @@ public interface IRoleServices
         Guid actorUserId,
         Guid projectId,
         Guid userId);
+    Task<RoleDto> InviteProjectMemberByEmailAsync(
+        Guid actorUserId,
+        Guid projectId,
+        string email,
+        string roleName);
 }

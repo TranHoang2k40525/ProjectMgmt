@@ -14,22 +14,22 @@ public class RequirementRepository : IRequirementRepository
     }
 
     // Có tracking: danh sách này còn được dùng để đánh lại OrderIndex khi sắp xếp.
-    public async Task<IReadOnlyList<AcceptanceCriteria>> GetCriteriaAsync(Guid issueId, CancellationToken cancellationToken = default) =>
+    public async Task<IReadOnlyList<AcceptanceCriteria>> GetCriteriaAsync(Guid issueId) =>
         await _context.AcceptanceCriteria
             .Where(criterion => criterion.IssueId == issueId)
             .OrderBy(criterion => criterion.OrderIndex)
             .ThenBy(criterion => criterion.CreatedAt)
-            .ToListAsync(cancellationToken);
+            .ToListAsync();
 
-    public Task<AcceptanceCriteria?> GetCriterionAsync(Guid criterionId, CancellationToken cancellationToken = default) =>
-        _context.AcceptanceCriteria.SingleOrDefaultAsync(criterion => criterion.Id == criterionId, cancellationToken);
+    public Task<AcceptanceCriteria?> GetCriterionAsync(Guid criterionId) =>
+        _context.AcceptanceCriteria.SingleOrDefaultAsync(criterion => criterion.Id == criterionId);
 
-    public async Task AddCriterionAsync(AcceptanceCriteria criterion, CancellationToken cancellationToken = default) =>
-        await _context.AcceptanceCriteria.AddAsync(criterion, cancellationToken);
+    public async Task AddCriterionAsync(AcceptanceCriteria criterion) =>
+        await _context.AcceptanceCriteria.AddAsync(criterion);
 
     public void RemoveCriterion(AcceptanceCriteria criterion) => _context.AcceptanceCriteria.Remove(criterion);
 
-    public async Task<IReadOnlyList<IssueRequiredSkill>> GetRequiredSkillsAsync(IEnumerable<Guid> issueIds, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<IssueRequiredSkill>> GetRequiredSkillsAsync(IEnumerable<Guid> issueIds)
     {
         var ids = issueIds.Distinct().ToList();
         if (ids.Count == 0)
@@ -42,16 +42,16 @@ public class RequirementRepository : IRequirementRepository
             .Where(skill => ids.Contains(skill.IssueId))
             .OrderBy(skill => skill.IssueId)
             .ThenByDescending(skill => skill.Weight)
-            .ToListAsync(cancellationToken);
+            .ToListAsync();
     }
 
-    public Task<IssueRequiredSkill?> GetRequiredSkillAsync(Guid requiredSkillId, CancellationToken cancellationToken = default) =>
-        _context.IssueRequiredSkills.SingleOrDefaultAsync(skill => skill.Id == requiredSkillId, cancellationToken);
+    public Task<IssueRequiredSkill?> GetRequiredSkillAsync(Guid requiredSkillId) =>
+        _context.IssueRequiredSkills.SingleOrDefaultAsync(skill => skill.Id == requiredSkillId);
 
-    public async Task AddRequiredSkillAsync(IssueRequiredSkill skill, CancellationToken cancellationToken = default) =>
-        await _context.IssueRequiredSkills.AddAsync(skill, cancellationToken);
+    public async Task AddRequiredSkillAsync(IssueRequiredSkill skill) =>
+        await _context.IssueRequiredSkills.AddAsync(skill);
 
     public void RemoveRequiredSkill(IssueRequiredSkill skill) => _context.IssueRequiredSkills.Remove(skill);
 
-    public Task SaveChangesAsync(CancellationToken cancellationToken = default) => _context.SaveChangesAsync(cancellationToken);
+    public Task SaveChangesAsync() => _context.SaveChangesAsync();
 }

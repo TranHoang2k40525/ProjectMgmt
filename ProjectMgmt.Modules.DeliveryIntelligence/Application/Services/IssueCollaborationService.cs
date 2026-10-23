@@ -58,20 +58,20 @@ public class IssueCollaborationService : IIssueCollaborationService
 
     // ---------- Comments ----------
 
-    public async Task<Result<IReadOnlyList<CommentDto>>> GetCommentsAsync(Guid issueId, CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyList<CommentDto>>> GetCommentsAsync(Guid issueId)
     {
-        if (await _issues.GetByIdAsync(issueId, cancellationToken: cancellationToken) is null)
+        if (await _issues.GetByIdAsync(issueId) is null)
         {
             return Result<IReadOnlyList<CommentDto>>.Failure(IssueErrors.NotFound);
         }
 
-        var comments = await _collaboration.GetCommentsAsync(issueId, cancellationToken);
+        var comments = await _collaboration.GetCommentsAsync(issueId);
         var parentsWithReplies = comments
             .Where(comment => comment.ParentCommentId.HasValue && !comment.IsDeleted)
             .Select(comment => comment.ParentCommentId!.Value)
             .ToHashSet();
         var visible = comments.Where(comment => !comment.IsDeleted || parentsWithReplies.Contains(comment.Id)).ToList();
-        var names = await NamesAsync(visible.Select(comment => comment.UserId), cancellationToken);
+        var names = await NamesAsync(visible.Select(comment => comment.UserId));
         IReadOnlyList<CommentDto> result = visible.Select(comment => ToDto(comment, names)).ToList();
         return Result.Success(result);
     }
@@ -79,8 +79,7 @@ public class IssueCollaborationService : IIssueCollaborationService
     public async Task<Result<CommentDto>> AddCommentAsync(
         Guid issueId,
         CreateCommentDto request,
-        Guid actorUserId,
-        CancellationToken cancellationToken = default)
+        Guid actorUserId)
     {
         ArgumentNullException.ThrowIfNull(request);
         var validation = _createCommentValidator.Validate(request);
@@ -89,7 +88,7 @@ public class IssueCollaborationService : IIssueCollaborationService
             return Result<CommentDto>.Failure(IssueTrackingService.ToError(validation));
         }
 
-        var issue = await _issues.GetByIdAsync(issueId, cancellationToken: cancellationToken);
+        var issue = await _issues.GetByIdAsync(issueId);
         if (issue is null)
         {
             return Result<CommentDto>.Failure(IssueErrors.NotFound);
@@ -98,7 +97,7 @@ public class IssueCollaborationService : IIssueCollaborationService
         Guid? parentId = null;
         if (request.ParentCommentId.HasValue)
         {
-            var parent = await _collaboration.GetCommentAsync(request.ParentCommentId.Value, cancellationToken);
+            var parent = await _collaboration.GetCommentAsync(request.ParentCommentId.Value);
             if (parent is null || parent.IssueId != issueId || parent.IsDeleted)
             {
                 return Result<CommentDto>.Failure(CollaborationErrors.ParentCommentInvalid);
@@ -127,41 +126,38 @@ public class IssueCollaborationService : IIssueCollaborationService
             MentionedUserIds = mentions.Count == 0 ? null : JsonSerializer.Serialize(mentions),
             CreatedAt = now
         };
-        await _collaboration.AddCommentAsync(comment, cancellationToken);
+        await _collaboration.AddCommentAsync(comment);
         await _issues.AddActivityAsync(
-            IssueActivities.Create(issueId, actorUserId, IssueActivities.CommentAdded, now, detail: new { commentId = comment.Id }),
-            cancellationToken);
-        if (await _collaboration.GetWatcherAsync(issueId, actorUserId, cancellationToken) is null)
+            IssueActivities.Create(issueId, actorUserId, IssueActivities.CommentAdded, now, detail: new { commentId = comment.Id }));
+        if (await _collaboration.GetWatcherAsync(issueId, actorUserId) is null)
         {
-            await _collaboration.AddWatcherAsync(new IssueWatcher { IssueId = issueId, UserId = actorUserId, CreatedAt = now }, cancellationToken);
+            await _collaboration.AddWatcherAsync(new IssueWatcher { IssueId = issueId, UserId = actorUserId, CreatedAt = now });
         }
 
-        await _collaboration.SaveChangesAsync(cancellationToken);
-        return Result.Success(ToDto(comment, await NamesAsync([actorUserId], cancellationToken)));
+        await _collaboration.SaveChangesAsync();
+        return Result.Success(ToDto(comment, await NamesAsync([actorUserId])));
     }
 
     public async Task<Result<CommentDto>> ReplyAsync(
         Guid commentId,
         CreateCommentDto request,
-        Guid actorUserId,
-        CancellationToken cancellationToken = default)
+        Guid actorUserId)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var parent = await _collaboration.GetCommentAsync(commentId, cancellationToken);
+        var parent = await _collaboration.GetCommentAsync(commentId);
         if (parent is null || parent.IsDeleted)
         {
             return Result<CommentDto>.Failure(CollaborationErrors.CommentNotFound);
         }
 
         request.ParentCommentId = parent.Id;
-        return await AddCommentAsync(parent.IssueId, request, actorUserId, cancellationToken);
+        return await AddCommentAsync(parent.IssueId, request, actorUserId);
     }
 
     public async Task<Result<CommentDto>> UpdateCommentAsync(
         Guid commentId,
         UpdateCommentDto request,
-        Guid actorUserId,
-        CancellationToken cancellationToken = default)
+        Guid actorUserId)
     {
         ArgumentNullException.ThrowIfNull(request);
         var validation = _updateCommentValidator.Validate(request);
@@ -170,7 +166,7 @@ public class IssueCollaborationService : IIssueCollaborationService
             return Result<CommentDto>.Failure(IssueTrackingService.ToError(validation));
         }
 
-        var comment = await _collaboration.GetCommentAsync(commentId, cancellationToken);
+        var comment = await _collaboration.GetCommentAsync(commentId);
         if (comment is null || comment.IsDeleted)
         {
             return Result<CommentDto>.Failure(CollaborationErrors.CommentNotFound);
@@ -187,19 +183,18 @@ public class IssueCollaborationService : IIssueCollaborationService
             comment.Content = content;
             comment.IsEdited = true;
             comment.UpdatedAt = _clock.GetUtcNow().UtcDateTime;
-            await _collaboration.SaveChangesAsync(cancellationToken);
+            await _collaboration.SaveChangesAsync();
         }
 
-        return Result.Success(ToDto(comment, await NamesAsync([comment.UserId], cancellationToken)));
+        return Result.Success(ToDto(comment, await NamesAsync([comment.UserId])));
     }
 
     public async Task<Result> DeleteCommentAsync(
         Guid commentId,
         Guid actorUserId,
-        bool canModerate,
-        CancellationToken cancellationToken = default)
+        bool canModerate)
     {
-        var comment = await _collaboration.GetCommentAsync(commentId, cancellationToken);
+        var comment = await _collaboration.GetCommentAsync(commentId);
         if (comment is null || comment.IsDeleted)
         {
             return Result.Failure(CollaborationErrors.CommentNotFound);
@@ -214,15 +209,14 @@ public class IssueCollaborationService : IIssueCollaborationService
         comment.IsDeleted = true;
         comment.UpdatedAt = now;
         await _issues.AddActivityAsync(
-            IssueActivities.Create(comment.IssueId, actorUserId, IssueActivities.CommentDeleted, now, detail: new { commentId }),
-            cancellationToken);
-        await _collaboration.SaveChangesAsync(cancellationToken);
+            IssueActivities.Create(comment.IssueId, actorUserId, IssueActivities.CommentDeleted, now, detail: new { commentId }));
+        await _collaboration.SaveChangesAsync();
         return Result.Success();
     }
 
-    public async Task<Result<Guid>> GetCommentIssueIdAsync(Guid commentId, CancellationToken cancellationToken = default)
+    public async Task<Result<Guid>> GetCommentIssueIdAsync(Guid commentId)
     {
-        var comment = await _collaboration.GetCommentAsync(commentId, cancellationToken);
+        var comment = await _collaboration.GetCommentAsync(commentId);
         return comment is null || comment.IsDeleted
             ? Result<Guid>.Failure(CollaborationErrors.CommentNotFound)
             : Result.Success(comment.IssueId);
@@ -230,15 +224,15 @@ public class IssueCollaborationService : IIssueCollaborationService
 
     // ---------- Attachments ----------
 
-    public async Task<Result<IReadOnlyList<AttachmentDto>>> GetAttachmentsAsync(Guid issueId, CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyList<AttachmentDto>>> GetAttachmentsAsync(Guid issueId)
     {
-        if (await _issues.GetByIdAsync(issueId, cancellationToken: cancellationToken) is null)
+        if (await _issues.GetByIdAsync(issueId) is null)
         {
             return Result<IReadOnlyList<AttachmentDto>>.Failure(IssueErrors.NotFound);
         }
 
-        var attachments = await _collaboration.GetAttachmentsAsync(issueId, cancellationToken);
-        var names = await NamesAsync(attachments.Select(attachment => attachment.UploadedBy), cancellationToken);
+        var attachments = await _collaboration.GetAttachmentsAsync(issueId);
+        var names = await NamesAsync(attachments.Select(attachment => attachment.UploadedBy));
         IReadOnlyList<AttachmentDto> result = attachments.Select(attachment => ToDto(attachment, names)).ToList();
         return Result.Success(result);
     }
@@ -248,8 +242,7 @@ public class IssueCollaborationService : IIssueCollaborationService
         string fileName,
         long length,
         Stream content,
-        Guid actorUserId,
-        CancellationToken cancellationToken = default)
+        Guid actorUserId)
     {
         ArgumentNullException.ThrowIfNull(content);
         var extension = Path.GetExtension(fileName ?? string.Empty).ToLowerInvariant();
@@ -262,7 +255,7 @@ public class IssueCollaborationService : IIssueCollaborationService
                 $"Chỉ nhận tệp {allowed}, tối đa {_attachmentOptions.MaxFileSizeBytes / (1024 * 1024)} MB."));
         }
 
-        if (await _issues.GetByIdAsync(issueId, cancellationToken: cancellationToken) is null)
+        if (await _issues.GetByIdAsync(issueId) is null)
         {
             return Result<AttachmentDto>.Failure(IssueErrors.NotFound);
         }
@@ -280,15 +273,14 @@ public class IssueCollaborationService : IIssueCollaborationService
         };
         attachment.StoredPath = attachment.Id.ToString("N") + extension;
 
-        await _storage.SaveAsync(attachment.StoredPath, content, cancellationToken);
+        await _storage.SaveAsync(attachment.StoredPath, content);
         try
         {
-            await _collaboration.AddAttachmentAsync(attachment, cancellationToken);
+            await _collaboration.AddAttachmentAsync(attachment);
             await _issues.AddActivityAsync(
                 IssueActivities.Create(issueId, actorUserId, IssueActivities.AttachmentAdded, now, newValue: attachment.FileName,
-                    detail: new { attachmentId = attachment.Id }),
-                cancellationToken);
-            await _collaboration.SaveChangesAsync(cancellationToken);
+                    detail: new { attachmentId = attachment.Id }));
+            await _collaboration.SaveChangesAsync();
         }
         catch
         {
@@ -296,13 +288,13 @@ public class IssueCollaborationService : IIssueCollaborationService
             throw;
         }
 
-        return Result.Success(ToDto(attachment, await NamesAsync([actorUserId], cancellationToken)));
+        return Result.Success(ToDto(attachment, await NamesAsync([actorUserId])));
     }
 
-    public async Task<Result<AttachmentFile>> OpenAttachmentAsync(Guid attachmentId, CancellationToken cancellationToken = default)
+    public async Task<Result<AttachmentFile>> OpenAttachmentAsync(Guid attachmentId)
     {
-        var attachment = await _collaboration.GetAttachmentAsync(attachmentId, cancellationToken);
-        if (attachment is null || await _issues.GetByIdAsync(attachment.IssueId, cancellationToken: cancellationToken) is null)
+        var attachment = await _collaboration.GetAttachmentAsync(attachmentId);
+        if (attachment is null || await _issues.GetByIdAsync(attachment.IssueId) is null)
         {
             return Result<AttachmentFile>.Failure(CollaborationErrors.AttachmentNotFound);
         }
@@ -313,17 +305,17 @@ public class IssueCollaborationService : IIssueCollaborationService
             : Result.Success(new AttachmentFile(ToDto(attachment, new Dictionary<Guid, string>()), stream));
     }
 
-    public async Task<Result<Guid>> GetAttachmentIssueIdAsync(Guid attachmentId, CancellationToken cancellationToken = default)
+    public async Task<Result<Guid>> GetAttachmentIssueIdAsync(Guid attachmentId)
     {
-        var attachment = await _collaboration.GetAttachmentAsync(attachmentId, cancellationToken);
+        var attachment = await _collaboration.GetAttachmentAsync(attachmentId);
         return attachment is null
             ? Result<Guid>.Failure(CollaborationErrors.AttachmentNotFound)
             : Result.Success(attachment.IssueId);
     }
 
-    public async Task<Result> DeleteAttachmentAsync(Guid attachmentId, Guid actorUserId, CancellationToken cancellationToken = default)
+    public async Task<Result> DeleteAttachmentAsync(Guid attachmentId, Guid actorUserId)
     {
-        var attachment = await _collaboration.GetAttachmentAsync(attachmentId, cancellationToken);
+        var attachment = await _collaboration.GetAttachmentAsync(attachmentId);
         if (attachment is null)
         {
             return Result.Failure(CollaborationErrors.AttachmentNotFound);
@@ -333,71 +325,69 @@ public class IssueCollaborationService : IIssueCollaborationService
         _collaboration.RemoveAttachment(attachment);
         await _issues.AddActivityAsync(
             IssueActivities.Create(attachment.IssueId, actorUserId, IssueActivities.AttachmentRemoved, now, oldValue: attachment.FileName,
-                detail: new { attachmentId }),
-            cancellationToken);
-        await _collaboration.SaveChangesAsync(cancellationToken);
+                detail: new { attachmentId }));
+        await _collaboration.SaveChangesAsync();
         _storage.Delete(attachment.StoredPath);
         return Result.Success();
     }
 
     // ---------- Watchers ----------
 
-    public async Task<Result<IReadOnlyList<WatcherDto>>> GetWatchersAsync(Guid issueId, CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyList<WatcherDto>>> GetWatchersAsync(Guid issueId)
     {
-        if (await _issues.GetByIdAsync(issueId, cancellationToken: cancellationToken) is null)
+        if (await _issues.GetByIdAsync(issueId) is null)
         {
             return Result<IReadOnlyList<WatcherDto>>.Failure(IssueErrors.NotFound);
         }
 
-        var watchers = await _collaboration.GetWatchersAsync(issueId, cancellationToken);
-        var names = await NamesAsync(watchers.Select(watcher => watcher.UserId), cancellationToken);
+        var watchers = await _collaboration.GetWatchersAsync(issueId);
+        var names = await NamesAsync(watchers.Select(watcher => watcher.UserId));
         IReadOnlyList<WatcherDto> result = watchers
             .Select(watcher => new WatcherDto { UserId = watcher.UserId, DisplayName = names.GetValueOrDefault(watcher.UserId, string.Empty), CreatedAt = watcher.CreatedAt })
             .ToList();
         return Result.Success(result);
     }
 
-    public async Task<Result<WatchStateDto>> WatchAsync(Guid issueId, Guid userId, CancellationToken cancellationToken = default)
+    public async Task<Result<WatchStateDto>> WatchAsync(Guid issueId, Guid userId)
     {
-        if (await _issues.GetByIdAsync(issueId, cancellationToken: cancellationToken) is null)
+        if (await _issues.GetByIdAsync(issueId) is null)
         {
             return Result<WatchStateDto>.Failure(IssueErrors.NotFound);
         }
 
-        if (await _collaboration.GetWatcherAsync(issueId, userId, cancellationToken) is null)
+        if (await _collaboration.GetWatcherAsync(issueId, userId) is null)
         {
             await _collaboration.AddWatcherAsync(
-                new IssueWatcher { IssueId = issueId, UserId = userId, CreatedAt = _clock.GetUtcNow().UtcDateTime },
-                cancellationToken);
-            await _collaboration.SaveChangesAsync(cancellationToken);
+                new IssueWatcher { IssueId = issueId, UserId = userId, CreatedAt = _clock.GetUtcNow().UtcDateTime });
+            await _collaboration.SaveChangesAsync();
         }
 
-        return Result.Success(await WatchStateAsync(issueId, true, cancellationToken));
+        return Result.Success(await WatchStateAsync(issueId, true));
     }
 
-    public async Task<Result<WatchStateDto>> UnwatchAsync(Guid issueId, Guid userId, CancellationToken cancellationToken = default)
+    public async Task<Result<WatchStateDto>> UnwatchAsync(Guid issueId, Guid userId)
     {
-        if (await _issues.GetByIdAsync(issueId, cancellationToken: cancellationToken) is null)
+        if (await _issues.GetByIdAsync(issueId) is null)
         {
             return Result<WatchStateDto>.Failure(IssueErrors.NotFound);
         }
 
-        var watcher = await _collaboration.GetWatcherAsync(issueId, userId, cancellationToken);
+        var watcher = await _collaboration.GetWatcherAsync(issueId, userId);
         if (watcher is not null)
         {
             _collaboration.RemoveWatcher(watcher);
-            await _collaboration.SaveChangesAsync(cancellationToken);
+            await _collaboration.SaveChangesAsync();
         }
 
-        return Result.Success(await WatchStateAsync(issueId, false, cancellationToken));
+        return Result.Success(await WatchStateAsync(issueId, false));
     }
 
-    private async Task<WatchStateDto> WatchStateAsync(Guid issueId, bool isWatching, CancellationToken cancellationToken) =>
-        new() { IsWatching = isWatching, WatcherCount = (await _collaboration.GetWatchersAsync(issueId, cancellationToken)).Count };
+    private async Task<WatchStateDto> WatchStateAsync(Guid issueId, bool isWatching) =>
+        new() { IsWatching = isWatching, WatcherCount = (await _collaboration.GetWatchersAsync(issueId)).Count };
 
     // ---------- Helpers ----------
 
-    private async Task<Dictionary<Guid, string>> NamesAsync(IEnumerable<Guid> userIds, CancellationToken cancellationToken)
+    private async Task<Dictionary<Guid, string>> NamesAsync(IEnumerable<Guid> userIds)
     {
         var ids = userIds.Distinct().ToList();
         if (ids.Count == 0)
@@ -405,7 +395,7 @@ public class IssueCollaborationService : IIssueCollaborationService
             return [];
         }
 
-        var users = await _users.GetDisplayInfoAsync(ids, cancellationToken);
+        var users = await _users.GetDisplayInfoAsync(ids);
         return users.ToDictionary(user => user.UserId, user => user.DisplayName);
     }
 

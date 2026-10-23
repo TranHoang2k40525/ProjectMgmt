@@ -13,37 +13,37 @@ public class InMemoryDataOpsRepository : IDataOpsRepository
     public List<AiDataQualityFlag> Flags { get; } = [];
     public int SaveCount { get; private set; }
 
-    public Task<IReadOnlyList<AiDataset>> GetDatasetsAsync(CancellationToken cancellationToken = default) =>
+    public Task<IReadOnlyList<AiDataset>> GetDatasetsAsync() =>
         Task.FromResult<IReadOnlyList<AiDataset>>(Datasets.OrderBy(d => d.Code).ToList());
 
-    public Task<AiDataset?> GetDatasetAsync(Guid datasetId, CancellationToken cancellationToken = default) =>
+    public Task<AiDataset?> GetDatasetAsync(Guid datasetId) =>
         Task.FromResult(Datasets.SingleOrDefault(d => d.Id == datasetId));
 
-    public Task<bool> DatasetCodeExistsAsync(string code, CancellationToken cancellationToken = default) =>
+    public Task<bool> DatasetCodeExistsAsync(string code) =>
         Task.FromResult(Datasets.Any(d => d.Code == code));
 
-    public Task AddDatasetAsync(AiDataset dataset, CancellationToken cancellationToken = default)
+    public Task AddDatasetAsync(AiDataset dataset)
     {
         Datasets.Add(dataset);
         return Task.CompletedTask;
     }
 
-    public Task<IReadOnlyList<AiDatasetVersion>> GetVersionsAsync(Guid datasetId, CancellationToken cancellationToken = default) =>
+    public Task<IReadOnlyList<AiDatasetVersion>> GetVersionsAsync(Guid datasetId) =>
         Task.FromResult<IReadOnlyList<AiDatasetVersion>>(Versions.Where(v => v.DatasetId == datasetId).OrderByDescending(v => v.CreatedAt).ToList());
 
-    public Task<AiDatasetVersion?> GetVersionAsync(Guid versionId, CancellationToken cancellationToken = default) =>
+    public Task<AiDatasetVersion?> GetVersionAsync(Guid versionId) =>
         Task.FromResult(Versions.SingleOrDefault(v => v.Id == versionId));
 
-    public Task<bool> VersionTagExistsAsync(Guid datasetId, string versionTag, CancellationToken cancellationToken = default) =>
+    public Task<bool> VersionTagExistsAsync(Guid datasetId, string versionTag) =>
         Task.FromResult(Versions.Any(v => v.DatasetId == datasetId && v.VersionTag == versionTag));
 
-    public Task AddVersionAsync(AiDatasetVersion version, CancellationToken cancellationToken = default)
+    public Task AddVersionAsync(AiDatasetVersion version)
     {
         Versions.Add(version);
         return Task.CompletedTask;
     }
 
-    public Task<SamplePage> ListSamplesAsync(SampleFilter filter, CancellationToken cancellationToken = default)
+    public Task<SamplePage> ListSamplesAsync(SampleFilter filter)
     {
         var query = Samples.Where(s => s.DatasetVersionId == filter.VersionId);
         if (!string.IsNullOrEmpty(filter.QualityStatus)) query = query.Where(s => s.QualityStatus == filter.QualityStatus);
@@ -56,46 +56,46 @@ public class InMemoryDataOpsRepository : IDataOpsRepository
         return Task.FromResult(new SamplePage(items, matched.Count));
     }
 
-    public Task<IReadOnlyList<AiDatasetSample>> GetVersionSamplesAsync(Guid versionId, CancellationToken cancellationToken = default) =>
+    public Task<IReadOnlyList<AiDatasetSample>> GetVersionSamplesAsync(Guid versionId) =>
         Task.FromResult<IReadOnlyList<AiDatasetSample>>(Samples.Where(s => s.DatasetVersionId == versionId).OrderBy(s => s.CreatedAt).ThenBy(s => s.Id).ToList());
 
-    public Task<AiDatasetSample?> GetSampleAsync(Guid sampleId, CancellationToken cancellationToken = default) =>
+    public Task<AiDatasetSample?> GetSampleAsync(Guid sampleId) =>
         Task.FromResult(Samples.SingleOrDefault(s => s.Id == sampleId));
 
-    public Task<bool> SampleHashExistsAsync(Guid versionId, string contentHash, Guid? exceptSampleId, CancellationToken cancellationToken = default) =>
+    public Task<bool> SampleHashExistsAsync(Guid versionId, string contentHash, Guid? exceptSampleId) =>
         Task.FromResult(Samples.Any(s => s.DatasetVersionId == versionId && s.ContentHash == contentHash && s.Id != exceptSampleId));
 
-    public Task AddSampleAsync(AiDatasetSample sample, CancellationToken cancellationToken = default)
+    public Task AddSampleAsync(AiDatasetSample sample)
     {
         Samples.Add(sample);
         return Task.CompletedTask;
     }
 
-    public Task<IReadOnlyList<AiDataCleaningRule>> GetRulesAsync(bool activeOnly, CancellationToken cancellationToken = default) =>
+    public Task<IReadOnlyList<AiDataCleaningRule>> GetRulesAsync(bool activeOnly) =>
         Task.FromResult<IReadOnlyList<AiDataCleaningRule>>(Rules.Where(r => !activeOnly || r.IsActive).OrderBy(r => r.Code).ToList());
 
-    public Task<AiDataCleaningRule?> GetRuleAsync(Guid ruleId, CancellationToken cancellationToken = default) =>
+    public Task<AiDataCleaningRule?> GetRuleAsync(Guid ruleId) =>
         Task.FromResult(Rules.SingleOrDefault(r => r.Id == ruleId));
 
-    public Task<bool> RuleCodeExistsAsync(string code, CancellationToken cancellationToken = default) =>
+    public Task<bool> RuleCodeExistsAsync(string code) =>
         Task.FromResult(Rules.Any(r => r.Code == code));
 
-    public Task AddRuleAsync(AiDataCleaningRule rule, CancellationToken cancellationToken = default)
+    public Task AddRuleAsync(AiDataCleaningRule rule)
     {
         Rules.Add(rule);
         return Task.CompletedTask;
     }
 
-    public Task<IReadOnlyList<AiDataQualityFlag>> GetFlagsAsync(IEnumerable<Guid> sampleIds, bool unresolvedOnly, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<AiDataQualityFlag>> GetFlagsAsync(IEnumerable<Guid> sampleIds, bool unresolvedOnly)
     {
         var ids = sampleIds.ToHashSet();
         return Task.FromResult<IReadOnlyList<AiDataQualityFlag>>(Flags.Where(f => ids.Contains(f.SampleId) && (!unresolvedOnly || !f.IsResolved)).OrderBy(f => f.DetectedAt).ToList());
     }
 
-    public Task<AiDataQualityFlag?> GetFlagAsync(Guid flagId, CancellationToken cancellationToken = default) =>
+    public Task<AiDataQualityFlag?> GetFlagAsync(Guid flagId) =>
         Task.FromResult(Flags.SingleOrDefault(f => f.Id == flagId));
 
-    public Task AddFlagAsync(AiDataQualityFlag flag, CancellationToken cancellationToken = default)
+    public Task AddFlagAsync(AiDataQualityFlag flag)
     {
         Flags.Add(flag);
         return Task.CompletedTask;
@@ -109,7 +109,7 @@ public class InMemoryDataOpsRepository : IDataOpsRepository
         }
     }
 
-    public Task SaveChangesAsync(CancellationToken cancellationToken = default)
+    public Task SaveChangesAsync()
     {
         SaveCount++;
         return Task.CompletedTask;

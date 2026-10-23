@@ -18,13 +18,11 @@ public class WorkflowController : ApiControllerBase
     [HttpPut("transitions/{transitionId:guid}")]
     public async Task<ActionResult<WorkflowTransitionItemDto>> UpdateTransition(
         Guid transitionId,
-        [FromBody] UpdateWorkflowTransitionRequestDto request,
-        CancellationToken cancellationToken) =>
-        FromResult(await _service.UpdateWorkflowTransitionAsync(transitionId, request, cancellationToken));
+        [FromBody] UpdateWorkflowTransitionRequestDto request) =>
+        FromResult(await _service.UpdateWorkflowTransitionAsync(transitionId, request));
 
     [HttpDelete("transitions/{transitionId:guid}")]
     public async Task<IActionResult> DeleteTransition(
-        Guid transitionId,
-        CancellationToken cancellationToken) =>
-        FromResult(await _service.DeleteWorkflowTransitionAsync(transitionId, cancellationToken));
+        Guid transitionId) =>
+        FromResult(await _service.DeleteWorkflowTransitionAsync(transitionId));
 }

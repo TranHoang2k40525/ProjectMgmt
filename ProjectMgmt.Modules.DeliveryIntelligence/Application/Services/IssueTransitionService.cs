@@ -41,22 +41,21 @@ public class IssueTransitionService : IIssueTransitionService
         _clock = clock;
     }
 
-    public async Task<Result<WorkflowTransitionCheck>> CheckAsync(Guid issueId, Guid targetStatusId, CancellationToken cancellationToken = default)
+    public async Task<Result<WorkflowTransitionCheck>> CheckAsync(Guid issueId, Guid targetStatusId)
     {
-        var issue = await _issues.GetByIdAsync(issueId, cancellationToken: cancellationToken);
+        var issue = await _issues.GetByIdAsync(issueId);
         if (issue is null)
         {
             return Result<WorkflowTransitionCheck>.Failure(IssueErrors.NotFound);
         }
 
-        return Result.Success(await _workflow.CheckTransitionAsync(issue.ProjectId, issue.StatusId, targetStatusId, cancellationToken));
+        return Result.Success(await _workflow.CheckTransitionAsync(issue.ProjectId, issue.StatusId, targetStatusId));
     }
 
     public async Task<Result<IssueTransitionResultDto>> TransitionAsync(
         Guid issueId,
         TransitionIssueDto request,
-        Guid actorUserId,
-        CancellationToken cancellationToken = default)
+        Guid actorUserId)
     {
         ArgumentNullException.ThrowIfNull(request);
         if (request.TargetStatusId == Guid.Empty)
@@ -70,7 +69,7 @@ public class IssueTransitionService : IIssueTransitionService
         }
 
         // Ba DbContext dùng chung một MySqlConnection: mọi lời gọi contract sang Planning phải xong TRƯỚC khi mở transaction.
-        var observed = await _issues.GetByIdAsync(issueId, cancellationToken: cancellationToken);
+        var observed = await _issues.GetByIdAsync(issueId);
         if (observed is null)
         {
             return Result<IssueTransitionResultDto>.Failure(IssueErrors.NotFound);
@@ -87,13 +86,13 @@ public class IssueTransitionService : IIssueTransitionService
             return Result.Success(ToResult(observed, fromStatusId, changed: false));
         }
 
-        var statuses = (await _projects.GetStatusesAsync(observed.ProjectId, cancellationToken)).ToDictionary(status => status.Id);
+        var statuses = (await _projects.GetStatusesAsync(observed.ProjectId)).ToDictionary(status => status.Id);
         if (!statuses.TryGetValue(request.TargetStatusId, out var target))
         {
             return Result<IssueTransitionResultDto>.Failure(TransitionErrors.TargetNotInProject);
         }
 
-        var check = await _workflow.CheckTransitionAsync(observed.ProjectId, fromStatusId, target.Id, cancellationToken);
+        var check = await _workflow.CheckTransitionAsync(observed.ProjectId, fromStatusId, target.Id);
         if (!check.Allowed)
         {
             return Result<IssueTransitionResultDto>.Failure(Error.Conflict(
@@ -102,10 +101,10 @@ public class IssueTransitionService : IIssueTransitionService
         }
 
         var plan = new TransitionPlan(fromStatusId, statuses.GetValueOrDefault(fromStatusId)?.Name, target, check.FromCategory);
-        var outcome = await _issues.ExecuteInTransactionAsync(ct => ApplyLockedAsync(issueId, plan, request.Comment, actorUserId, ct), cancellationToken);
+        var outcome = await _issues.ExecuteInTransactionAsync(() => ApplyLockedAsync(issueId, plan, request.Comment, actorUserId));
         if (outcome.IsSuccess && outcome.Value.Changed)
         {
-            await NotifyAsync(outcome.Value, target.Name, actorUserId, cancellationToken);
+            await NotifyAsync(outcome.Value, target.Name, actorUserId);
         }
 
         return outcome;
@@ -118,10 +117,9 @@ public class IssueTransitionService : IIssueTransitionService
         Guid issueId,
         TransitionPlan plan,
         string? comment,
-        Guid actorUserId,
-        CancellationToken cancellationToken)
+        Guid actorUserId)
     {
-        var issue = await _issues.LockForUpdateAsync(issueId, cancellationToken);
+        var issue = await _issues.LockForUpdateAsync(issueId);
         if (issue is null)
         {
             return Result<IssueTransitionResultDto>.Failure(IssueErrors.NotFound);
@@ -134,14 +132,13 @@ public class IssueTransitionService : IIssueTransitionService
 
         var now = _clock.GetUtcNow().UtcDateTime;
         IssueStatusRules.Apply(issue, plan.Target.Category, now);
-        await _history.RecordStatusAsync(issue, plan.FromStatusId, plan.FromCategory, plan.Target.Id, plan.Target.Category, actorUserId, now, cancellationToken);
+        await _history.RecordStatusAsync(issue, plan.FromStatusId, plan.FromCategory, plan.Target.Id, plan.Target.Category, actorUserId, now);
         issue.StatusId = plan.Target.Id;
         issue.UpdatedAt = now;
         await _issues.AddActivityAsync(
             IssueActivities.Create(issue.Id, actorUserId, IssueActivities.StatusChanged, now, nameof(Issue.StatusId),
                 plan.FromName ?? plan.FromStatusId.ToString(), plan.Target.Name,
-                detail: new { fromStatusId = plan.FromStatusId, toStatusId = plan.Target.Id, fromCategory = plan.FromCategory, toCategory = plan.Target.Category }),
-            cancellationToken);
+                detail: new { fromStatusId = plan.FromStatusId, toStatusId = plan.Target.Id, fromCategory = plan.FromCategory, toCategory = plan.Target.Category }));
 
         if (!string.IsNullOrWhiteSpace(comment))
         {
@@ -155,29 +152,28 @@ public class IssueTransitionService : IIssueTransitionService
                 UserId = actorUserId,
                 Content = comment.Trim(),
                 CreatedAt = now
-            }, cancellationToken);
+            });
             await _issues.AddActivityAsync(
-                IssueActivities.Create(issue.Id, actorUserId, IssueActivities.CommentAdded, now, detail: new { commentId }),
-                cancellationToken);
-            if (await _collaboration.GetWatcherAsync(issue.Id, actorUserId, cancellationToken) is null)
+                IssueActivities.Create(issue.Id, actorUserId, IssueActivities.CommentAdded, now, detail: new { commentId }));
+            if (await _collaboration.GetWatcherAsync(issue.Id, actorUserId) is null)
             {
-                await _collaboration.AddWatcherAsync(new IssueWatcher { IssueId = issue.Id, UserId = actorUserId, CreatedAt = now }, cancellationToken);
+                await _collaboration.AddWatcherAsync(new IssueWatcher { IssueId = issue.Id, UserId = actorUserId, CreatedAt = now });
             }
         }
 
-        await _issues.SaveChangesAsync(cancellationToken);
+        await _issues.SaveChangesAsync();
         return Result.Success(ToResult(issue, plan.FromStatusId, changed: true));
     }
 
-    private async Task NotifyAsync(IssueTransitionResultDto result, string statusName, Guid actorUserId, CancellationToken cancellationToken)
+    private async Task NotifyAsync(IssueTransitionResultDto result, string statusName, Guid actorUserId)
     {
-        var issue = await _issues.GetByIdAsync(result.IssueId, cancellationToken: cancellationToken);
+        var issue = await _issues.GetByIdAsync(result.IssueId);
         if (issue is null)
         {
             return;
         }
 
-        var recipients = await IssueRecipients.CollectAsync(issue, actorUserId, _collaboration, _permissions, cancellationToken);
+        var recipients = await IssueRecipients.CollectAsync(issue, actorUserId, _collaboration, _permissions);
         if (recipients.Count == 0)
         {
             return;
@@ -185,7 +181,7 @@ public class IssueTransitionService : IIssueTransitionService
 
         await _notifier.NotifyAsync(new IssueNotification(
             issue.Id, issue.ProjectId, actorUserId, IssueNotificationTypes.StatusChanged,
-            $"Issue #{issue.IssueNumber} chuyển sang {statusName}", issue.Title, recipients), cancellationToken);
+            $"Công việc #{issue.IssueNumber} đã chuyển sang {statusName}", issue.Title, recipients));
     }
 
     private static IssueTransitionResultDto ToResult(Issue issue, Guid previousStatusId, bool changed) => new()
@@ -209,8 +205,7 @@ public static class IssueRecipients
         Issue issue,
         Guid actorUserId,
         ICollaborationRepository collaboration,
-        IPermissionEvaluator permissions,
-        CancellationToken cancellationToken)
+        IPermissionEvaluator permissions)
     {
         var recipients = new HashSet<Guid> { issue.ReporterId };
         if (issue.AssigneeId.HasValue)
@@ -218,7 +213,7 @@ public static class IssueRecipients
             recipients.Add(issue.AssigneeId.Value);
         }
 
-        foreach (var watcher in await collaboration.GetWatchersAsync(issue.Id, cancellationToken))
+        foreach (var watcher in await collaboration.GetWatchersAsync(issue.Id))
         {
             recipients.Add(watcher.UserId);
         }

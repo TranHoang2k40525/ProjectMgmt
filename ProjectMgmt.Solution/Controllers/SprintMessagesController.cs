@@ -1,14 +1,14 @@
 #pragma warning disable CA1848
 using IdentityExperience.Application.Dto;
 using IdentityExperience.Application.IServices;
-using IdentityExperience.Infrastructure;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Planning.Domain.Entities;
 using Planning.Infrastructure;
-using DeliveryIntelligence.Infrastructure;
+using ProjectMgmt.IdentityAccess.Contracts;
+using ProjectMgmt.IssueTracking.Contracts;
 using ProjectMgmt.Solution.Realtime;
 using ProjectMgmt.Solution.Security;
 
@@ -20,8 +20,9 @@ namespace ProjectMgmt.Solution.Controllers;
 [Route("api/v1/sprints/{sprintId:guid}/messages")]
 public sealed class SprintMessagesController(
     PlanningDbContext planning,
-    DeliveryIntelligenceDbContext delivery,
-    IdentityExperienceDbContext identity,
+    IIssueReadService issueReader,
+    IUserLookupService userLookup,
+    IRoleServices roleServices,
     ProjectAccess access,
     IHubContext<NotificationHub> hub,
     INotificationServices notifications,
@@ -48,22 +49,25 @@ public sealed class SprintMessagesController(
             .ToListAsync();
 
         var userIds = messages.Select(m => m.UserId).Distinct().ToList();
-        var profiles = await identity.UserProfiles.AsNoTracking().Where(p => userIds.Contains(p.UserId)).ToDictionaryAsync(p => p.UserId);
-        var users = await identity.Users.AsNoTracking().Where(u => userIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id);
+        var userDict = (await userLookup.GetDisplayInfoAsync(userIds)).ToDictionary(u => u.UserId);
 
-        var result = messages.Select(m => new SprintMessageDto
+        var result = messages.Select(m =>
         {
-            Id = m.Id,
-            SprintId = m.SprintId,
-            UserId = m.UserId,
-            SenderName = profiles.TryGetValue(m.UserId, out var p) && !string.IsNullOrWhiteSpace(p.DisplayName) 
-                ? p.DisplayName 
-                : (users.TryGetValue(m.UserId, out var u) ? u.Email : "Thành viên"),
-            SenderEmail = users.TryGetValue(m.UserId, out var usr) ? usr.Email : null,
-            SenderAvatar = profiles.TryGetValue(m.UserId, out var prof) ? prof.AvatarUrl : null,
-            Content = m.Content,
-            CreatedAt = m.CreatedAt,
-            IsCurrentUser = m.UserId == access.UserId
+            var user = userDict.TryGetValue(m.UserId, out var u) ? u : null;
+            return new SprintMessageDto
+            {
+                Id = m.Id,
+                SprintId = m.SprintId,
+                UserId = m.UserId,
+                SenderName = !string.IsNullOrWhiteSpace(user?.DisplayName)
+                    ? user.DisplayName
+                    : (user?.Email ?? "Thành viên"),
+                SenderEmail = user?.Email,
+                SenderAvatar = user?.AvatarUrl,
+                Content = m.Content,
+                CreatedAt = m.CreatedAt,
+                IsCurrentUser = m.UserId == access.UserId
+            };
         }).ToList();
 
         return Ok(result);
@@ -101,10 +105,9 @@ public sealed class SprintMessagesController(
         planning.SprintMessages.Add(message);
         await planning.SaveChangesAsync();
 
-        var senderProfile = await identity.UserProfiles.AsNoTracking().FirstOrDefaultAsync(p => p.UserId == access.UserId);
-        var senderUser = await identity.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == access.UserId);
-        var senderName = !string.IsNullOrWhiteSpace(senderProfile?.DisplayName) 
-            ? senderProfile.DisplayName 
+        var senderUser = await userLookup.GetDisplayInfoAsync(access.UserId);
+        var senderName = !string.IsNullOrWhiteSpace(senderUser?.DisplayName)
+            ? senderUser.DisplayName
             : (senderUser?.Email ?? "Thành viên");
 
         var broadcastDto = new SprintMessageDto
@@ -114,7 +117,7 @@ public sealed class SprintMessagesController(
             UserId = message.UserId,
             SenderName = senderName,
             SenderEmail = senderUser?.Email,
-            SenderAvatar = senderProfile?.AvatarUrl,
+            SenderAvatar = senderUser?.AvatarUrl,
             Content = message.Content,
             CreatedAt = message.CreatedAt,
             IsCurrentUser = false
@@ -131,20 +134,19 @@ public sealed class SprintMessagesController(
         }
 
         // 2. Gửi thông báo tức thì (Event-driven notification) tới tất cả những người liên quan đến Sprint
-        var sprintAssignees = await delivery.Issues
-            .AsNoTracking()
-            .Where(i => i.SprintId == sprintId && !i.IsDeleted && i.AssigneeId.HasValue)
+        var sprintIssues = await issueReader.GetBySprintAsync(sprintId);
+        var sprintAssignees = sprintIssues
+            .Where(i => i.AssigneeId.HasValue)
             .Select(i => i.AssigneeId!.Value)
             .Distinct()
-            .ToListAsync();
+            .ToList();
 
         var project = await planning.Projects.AsNoTracking().FirstOrDefaultAsync(p => p.Id == sprint.ProjectId);
-        var projectMembers = await identity.UserRoles
-            .AsNoTracking()
-            .Where(ur => ur.ScopeType == "Project" && ur.ScopeId == sprint.ProjectId)
-            .Select(ur => ur.UserId)
-            .Distinct()
-            .ToListAsync();
+        var membersResult = await roleServices.GetProjectMembersAsync(sprint.ProjectId);
+        var projectMembers = membersResult.Items?
+            .Where(m => m.UserId.HasValue)
+            .Select(m => m.UserId!.Value)
+            ?? Enumerable.Empty<Guid>();
 
         var recipients = new HashSet<Guid>(sprintAssignees);
         if (project?.LeadUserId != null && project.LeadUserId != Guid.Empty)
@@ -188,7 +190,7 @@ public sealed class SprintMessagesController(
             UserId = message.UserId,
             SenderName = senderName,
             SenderEmail = senderUser?.Email,
-            SenderAvatar = senderProfile?.AvatarUrl,
+            SenderAvatar = senderUser?.AvatarUrl,
             Content = message.Content,
             CreatedAt = message.CreatedAt,
             IsCurrentUser = true

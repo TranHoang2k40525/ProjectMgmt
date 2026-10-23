@@ -10,16 +10,16 @@ public class InMemoryRequirementRepository : IRequirementRepository
     public List<IssueRequiredSkill> Skills { get; } = [];
     public int SaveCount { get; private set; }
 
-    public Task<IReadOnlyList<AcceptanceCriteria>> GetCriteriaAsync(Guid issueId, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<AcceptanceCriteria>> GetCriteriaAsync(Guid issueId)
     {
         IReadOnlyList<AcceptanceCriteria> result = Criteria.Where(c => c.IssueId == issueId).OrderBy(c => c.OrderIndex).ThenBy(c => c.CreatedAt).ToList();
         return Task.FromResult(result);
     }
 
-    public Task<AcceptanceCriteria?> GetCriterionAsync(Guid criterionId, CancellationToken cancellationToken = default) =>
+    public Task<AcceptanceCriteria?> GetCriterionAsync(Guid criterionId) =>
         Task.FromResult(Criteria.SingleOrDefault(c => c.Id == criterionId));
 
-    public Task AddCriterionAsync(AcceptanceCriteria criterion, CancellationToken cancellationToken = default)
+    public Task AddCriterionAsync(AcceptanceCriteria criterion)
     {
         Criteria.Add(criterion);
         return Task.CompletedTask;
@@ -27,17 +27,17 @@ public class InMemoryRequirementRepository : IRequirementRepository
 
     public void RemoveCriterion(AcceptanceCriteria criterion) => Criteria.Remove(criterion);
 
-    public Task<IReadOnlyList<IssueRequiredSkill>> GetRequiredSkillsAsync(IEnumerable<Guid> issueIds, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<IssueRequiredSkill>> GetRequiredSkillsAsync(IEnumerable<Guid> issueIds)
     {
         var ids = issueIds.ToHashSet();
         IReadOnlyList<IssueRequiredSkill> result = Skills.Where(s => ids.Contains(s.IssueId)).OrderBy(s => s.IssueId).ThenByDescending(s => s.Weight).ToList();
         return Task.FromResult(result);
     }
 
-    public Task<IssueRequiredSkill?> GetRequiredSkillAsync(Guid requiredSkillId, CancellationToken cancellationToken = default) =>
+    public Task<IssueRequiredSkill?> GetRequiredSkillAsync(Guid requiredSkillId) =>
         Task.FromResult(Skills.SingleOrDefault(s => s.Id == requiredSkillId));
 
-    public Task AddRequiredSkillAsync(IssueRequiredSkill skill, CancellationToken cancellationToken = default)
+    public Task AddRequiredSkillAsync(IssueRequiredSkill skill)
     {
         Skills.Add(skill);
         return Task.CompletedTask;
@@ -45,7 +45,7 @@ public class InMemoryRequirementRepository : IRequirementRepository
 
     public void RemoveRequiredSkill(IssueRequiredSkill skill) => Skills.Remove(skill);
 
-    public Task SaveChangesAsync(CancellationToken cancellationToken = default)
+    public Task SaveChangesAsync()
     {
         SaveCount++;
         return Task.CompletedTask;
@@ -57,7 +57,7 @@ public class SharedSkillCatalogReader : ISkillCatalogReader
 {
     public static readonly Guid RetiredSkillId = Guid.Parse("44444444-0000-0000-0000-0000000000ff");
 
-    public Task<IReadOnlyList<SkillCatalogItem>> GetSkillsAsync(CancellationToken cancellationToken = default) =>
+    public Task<IReadOnlyList<SkillCatalogItem>> GetSkillsAsync() =>
         Task.FromResult<IReadOnlyList<SkillCatalogItem>>(
         [
             new(SharedTestData.DotnetSkillId, ".NET / C#", "Backend", true),

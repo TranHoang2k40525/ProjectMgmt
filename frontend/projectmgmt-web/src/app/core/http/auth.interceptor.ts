@@ -12,7 +12,7 @@ export const authInterceptor: HttpInterceptorFn = (request, next) => {
   const tokenStore = inject(TOKEN_STORE);
   const accountApi = inject(AccountApi);
   const token = tokenStore.getAccessToken();
-  const targetsBackend = request.url.startsWith(environment.apiBaseUrl);
+  const targetsBackend = isBackendUrl(request.url);
 
   if (!token || !targetsBackend) {
     return next(request);
@@ -81,8 +81,14 @@ function updateSession(result: LoginResult, tokenStore: TokenStore): string {
   return session.accessToken;
 }
 
+function isBackendUrl(url: string): boolean {
+  if (url.startsWith(environment.apiBaseUrl)) return true;
+  if (url.startsWith('/api') || url.includes('/api/')) return true;
+  return false;
+}
+
 function isAuthEndpoint(url: string): boolean {
-  return url.startsWith(`${environment.apiBaseUrl}/auth/`);
+  return url.includes('/api/v1/auth/') || url.includes('/api/auth/');
 }
 
 function readStatus(error: unknown): number | undefined {

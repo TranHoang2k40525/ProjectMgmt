@@ -16,13 +16,13 @@ public class LocalAttachmentStorage : IAttachmentStorage
         Directory.CreateDirectory(_root);
     }
 
-    public async Task SaveAsync(string storedName, Stream content, CancellationToken cancellationToken = default)
+    public async Task SaveAsync(string storedName, Stream content)
     {
         var target = Resolve(storedName);
         try
         {
             await using var file = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-            await content.CopyToAsync(file, cancellationToken);
+            await content.CopyToAsync(file);
         }
         catch
         {

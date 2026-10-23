@@ -22,6 +22,7 @@ public class ProjectsController : ApiControllerBase
     private readonly IWorkspaceProvisioningService _provisioning;
     private readonly IPermissionEvaluator _permissions;
     private readonly ICurrentUserContext _currentUser;
+    private readonly ProjectMgmt.Solution.Security.ProjectAccess _access;
     private readonly ILogger<ProjectsController> _logger;
 
     public ProjectsController(
@@ -30,6 +31,7 @@ public class ProjectsController : ApiControllerBase
         IWorkspaceProvisioningService provisioning,
         IPermissionEvaluator permissions,
         ICurrentUserContext currentUser,
+        ProjectMgmt.Solution.Security.ProjectAccess access,
         ILogger<ProjectsController> logger)
     {
         _projects = projects;
@@ -37,33 +39,30 @@ public class ProjectsController : ApiControllerBase
         _provisioning = provisioning;
         _permissions = permissions;
         _currentUser = currentUser;
+        _access = access;
         _logger = logger;
     }
 
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<ProjectDto>>> GetAll(
-        [FromQuery] Guid? orgId,
-        CancellationToken cancellationToken)
+        [FromQuery] Guid? orgId)
     {
-        var result = await _management.GetProjectsAsync(orgId, cancellationToken);
+        var result = await _management.GetProjectsAsync(orgId);
         if (!result.IsSuccess) return FromResult(result);
-        var access = HttpContext.RequestServices.GetRequiredService<ProjectMgmt.Solution.Security.ProjectAccess>();
         var visible = new List<ProjectDto>();
         foreach (var project in result.Value)
-            if (await access.AllowsAsync(project.Id)) visible.Add(project);
+            if (await _access.AllowsAsync(project.Id)) visible.Add(project);
         return Ok(visible);
     }
 
     [HttpGet("{projectId:guid}")]
     public async Task<ActionResult<ProjectDto>> GetById(
-        Guid projectId,
-        CancellationToken cancellationToken) =>
-        FromResult(await _management.GetProjectByIdAsync(projectId, cancellationToken));
+        Guid projectId) =>
+        FromResult(await _management.GetProjectByIdAsync(projectId));
 
     [HttpPost]
     public async Task<ActionResult<ProjectDto>> Create(
-        [FromBody] CreateProjectRequestDto request,
-        CancellationToken cancellationToken = default)
+        [FromBody] CreateProjectRequestDto request)
     {
         try
         {
@@ -78,7 +77,7 @@ public class ProjectsController : ApiControllerBase
             }
 
             var isOrgOwner = false;
-            var orgsResult = await _management.GetOrganizationsAsync(cancellationToken);
+            var orgsResult = await _management.GetOrganizationsAsync();
             if (orgsResult.IsSuccess)
             {
                 var targetOrg = orgsResult.Value.FirstOrDefault(o => o.Id == request.OrgId);
@@ -135,27 +134,23 @@ public class ProjectsController : ApiControllerBase
     [HttpPut("{projectId:guid}")]
     public async Task<ActionResult<ProjectDto>> Update(
         Guid projectId,
-        [FromBody] UpdateProjectRequestDto request,
-        CancellationToken cancellationToken) =>
-        FromResult(await _management.UpdateProjectAsync(projectId, request, cancellationToken));
+        [FromBody] UpdateProjectRequestDto request) =>
+        FromResult(await _management.UpdateProjectAsync(projectId, request));
 
     [HttpDelete("{projectId:guid}")]
     public async Task<IActionResult> Delete(
-        Guid projectId,
-        CancellationToken cancellationToken) =>
-        FromResult(await _management.DeleteProjectAsync(projectId, cancellationToken));
+        Guid projectId) =>
+        FromResult(await _management.DeleteProjectAsync(projectId));
 
     [HttpGet("{projectId:guid}/issue-types")]
     public Task<IReadOnlyList<ProjectIssueTypeDto>> GetIssueTypes(
-        Guid projectId,
-        CancellationToken cancellationToken) =>
-        _projects.GetIssueTypesAsync(projectId, cancellationToken);
+        Guid projectId) =>
+        _projects.GetIssueTypesAsync(projectId);
 
     [HttpGet("{projectId:guid}/statuses")]
     public Task<IReadOnlyList<ProjectStatusDto>> GetStatuses(
-        Guid projectId,
-        CancellationToken cancellationToken) =>
-        _projects.GetStatusesAsync(projectId, cancellationToken);
+        Guid projectId) =>
+        _projects.GetStatusesAsync(projectId);
 
     // ==========================================
     // WORKFLOW TRANSITIONS
@@ -163,16 +158,14 @@ public class ProjectsController : ApiControllerBase
 
     [HttpGet("{projectId:guid}/workflow/transitions")]
     public async Task<ActionResult<IReadOnlyList<WorkflowTransitionItemDto>>> GetWorkflowTransitions(
-        Guid projectId,
-        CancellationToken cancellationToken) =>
-        FromResult(await _management.GetWorkflowTransitionsAsync(projectId, cancellationToken));
+        Guid projectId) =>
+        FromResult(await _management.GetWorkflowTransitionsAsync(projectId));
 
     [HttpPost("{projectId:guid}/workflow/transitions")]
     public async Task<ActionResult<WorkflowTransitionItemDto>> CreateWorkflowTransition(
         Guid projectId,
-        [FromBody] CreateWorkflowTransitionRequestDto request,
-        CancellationToken cancellationToken) =>
-        FromResult(await _management.CreateWorkflowTransitionAsync(projectId, request, cancellationToken));
+        [FromBody] CreateWorkflowTransitionRequestDto request) =>
+        FromResult(await _management.CreateWorkflowTransitionAsync(projectId, request));
 
     // ==========================================
     // BOARDS
@@ -180,14 +173,12 @@ public class ProjectsController : ApiControllerBase
 
     [HttpGet("{projectId:guid}/boards")]
     public async Task<ActionResult<IReadOnlyList<BoardDto>>> GetBoards(
-        Guid projectId,
-        CancellationToken cancellationToken) =>
-        FromResult(await _management.GetBoardsAsync(projectId, cancellationToken));
+        Guid projectId) =>
+        FromResult(await _management.GetBoardsAsync(projectId));
 
     [HttpPost("{projectId:guid}/boards")]
     public async Task<ActionResult<BoardDto>> CreateBoard(
         Guid projectId,
-        [FromBody] CreateBoardRequestDto request,
-        CancellationToken cancellationToken) =>
-        FromResult(await _management.CreateBoardAsync(projectId, request, cancellationToken));
+        [FromBody] CreateBoardRequestDto request) =>
+        FromResult(await _management.CreateBoardAsync(projectId, request));
 }

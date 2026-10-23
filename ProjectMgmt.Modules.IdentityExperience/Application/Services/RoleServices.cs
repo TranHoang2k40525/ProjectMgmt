@@ -15,17 +15,20 @@ public class RoleServices : IRoleServices
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private readonly IRbacRepository _rbacRepository;
+    private readonly IIdentityRepository? _identityRepository;
     private readonly TimeProvider _timeProvider;
     private readonly INotificationServices? _notificationServices;
 
     public RoleServices(
         IRbacRepository rbacRepository,
         TimeProvider timeProvider,
-        INotificationServices? notificationServices = null)
+        INotificationServices? notificationServices = null,
+        IIdentityRepository? identityRepository = null)
     {
         _rbacRepository = rbacRepository;
         _timeProvider = timeProvider;
         _notificationServices = notificationServices;
+        _identityRepository = identityRepository;
     }
 
     public async Task<RoleDto> GetRolesAsync(string? scope)
@@ -484,5 +487,36 @@ public class RoleServices : IRoleServices
     {
         var trimmed = value?.Trim();
         return string.IsNullOrEmpty(trimmed) ? null : trimmed;
+    }
+
+    public async Task<RoleDto> InviteProjectMemberByEmailAsync(
+        Guid actorUserId,
+        Guid projectId,
+        string email,
+        string roleName)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            return Failure("RBAC_EMAIL_REQUIRED", "Email người dùng là bắt buộc.");
+        }
+
+        var normalized = email.Trim().ToUpperInvariant();
+        var user = _identityRepository is not null
+            ? await _identityRepository.GetUserByNormalizedEmailAsync(normalized)
+            : null;
+
+        if (user is null || !user.IsActive || !user.IsEmailVerified)
+        {
+            return Failure("RBAC_USER_NOT_FOUND", "Chưa tìm thấy tài khoản đã xác minh với email này.");
+        }
+
+        var roles = await _rbacRepository.GetRolesAsync("Project");
+        var role = roles.FirstOrDefault(r => r.Name.Equals(roleName?.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (role is null)
+        {
+            return Failure("RBAC_PROJECT_ROLE_NOT_FOUND", "Vai trò dự án không hợp lệ.");
+        }
+
+        return await AddProjectMemberAsync(actorUserId, projectId, user.Id, role.Id);
     }
 }

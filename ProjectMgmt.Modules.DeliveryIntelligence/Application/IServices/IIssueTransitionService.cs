@@ -11,11 +11,10 @@ namespace DeliveryIntelligence.Application.IServices;
 public interface IIssueTransitionService
 {
     /// <summary>Kiểm trước để Host biết transition có cần quyền riêng (RequiredPermissionCode) hay không.</summary>
-    Task<Result<WorkflowTransitionCheck>> CheckAsync(Guid issueId, Guid targetStatusId, CancellationToken cancellationToken = default);
+    Task<Result<WorkflowTransitionCheck>> CheckAsync(Guid issueId, Guid targetStatusId);
 
     Task<Result<IssueTransitionResultDto>> TransitionAsync(
         Guid issueId,
         TransitionIssueDto request,
-        Guid actorUserId,
-        CancellationToken cancellationToken = default);
+        Guid actorUserId);
 }

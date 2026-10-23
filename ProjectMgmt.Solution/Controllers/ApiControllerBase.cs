@@ -32,12 +32,12 @@ public abstract class ApiControllerBase : ControllerBase
     {
         return error.Type switch
         {
-            ErrorType.Validation => BadRequest(CreateProblemDetails("Validation Error", error)),
-            ErrorType.NotFound => NotFound(CreateProblemDetails("Not Found", error)),
-            ErrorType.Conflict => Conflict(CreateProblemDetails("Conflict", error)),
-            ErrorType.Unauthorized => Unauthorized(CreateProblemDetails("Unauthorized", error)),
-            ErrorType.Forbidden => StatusCode(StatusCodes.Status403Forbidden, CreateProblemDetails("Forbidden", error)),
-            _ => BadRequest(CreateProblemDetails("Bad Request", error))
+            ErrorType.Validation => BadRequest(CreateProblemDetails("Dữ liệu không hợp lệ", error)),
+            ErrorType.NotFound => NotFound(CreateProblemDetails("Không tìm thấy dữ liệu", error)),
+            ErrorType.Conflict => Conflict(CreateProblemDetails("Xung đột dữ liệu", error)),
+            ErrorType.Unauthorized => Unauthorized(CreateProblemDetails("Chưa xác thực", error)),
+            ErrorType.Forbidden => StatusCode(StatusCodes.Status403Forbidden, CreateProblemDetails("Không có quyền truy cập", error)),
+            _ => BadRequest(CreateProblemDetails("Yêu cầu không hợp lệ", error))
         };
     }
 
