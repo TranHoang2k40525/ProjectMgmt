@@ -299,6 +299,10 @@ builder.Services.AddScoped<IDataOpsRepository, DataOpsRepository>();
 builder.Services.AddScoped<IDatasetService, DatasetService>();
 builder.Services.AddScoped<IDataCleaningService, DataCleaningService>();
 builder.Services.AddScoped<IDatasetReviewService, DatasetReviewService>();
+builder.Services.AddScoped<IWorkflowValidationService, PlanningWorkflowValidationService>();
+builder.Services.AddScoped<IProjectReleaseLookupService, PlanningReleaseLookupService>();
+builder.Services.AddScoped<IIssueReleaseService, IssueReleaseService>();
+builder.Services.AddScoped<IIssueTransitionService, IssueTransitionService>();
 // IssueReleaseService không đăng ký: cần IProjectReleaseLookupService thật của Planning; IssueReleaseController tự dựng khi có.
 builder.Services.AddScoped<IssueRequirementService>();
 builder.Services.AddScoped<IIssueRequirementService>(services => services.GetRequiredService<IssueRequirementService>());
@@ -313,6 +317,64 @@ builder.Services.AddScoped<ProjectMgmt.IssueTracking.Contracts.IIssueSprintServi
 // IIssueCreationService chưa đăng ký: cần IIssueNumberGenerator thật từ Planning.
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var db = scope.ServiceProvider.GetRequiredService<IdentityExperienceDbContext>();
+        var skillServices = scope.ServiceProvider.GetRequiredService<ISkillServices>();
+        var roleServices = scope.ServiceProvider.GetRequiredService<IRoleServices>();
+
+        var catalog = await skillServices.GetCatalogAsync(null, null);
+        if (catalog.Items is null || catalog.Items.Count < 3)
+        {
+            await skillServices.CreateCatalogSkillAsync(new IdentityExperience.Application.Dto.SkillDto { Code = "CSHARP_DOTNET", Name = "C# / .NET", Category = "Backend", IsActive = true });
+            await skillServices.CreateCatalogSkillAsync(new IdentityExperience.Application.Dto.SkillDto { Code = "ANGULAR_TS", Name = "Angular / TypeScript", Category = "Frontend", IsActive = true });
+            await skillServices.CreateCatalogSkillAsync(new IdentityExperience.Application.Dto.SkillDto { Code = "MYSQL_DB", Name = "MySQL / Database", Category = "Database", IsActive = true });
+        }
+
+        var adminUser = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == "hoanghaihau989@gmail.com");
+        var sysAdminRole = await db.Roles.AsNoTracking().FirstOrDefaultAsync(r => r.Name == "Admin" || r.Name == "SystemAdmin" || r.Scope == "System");
+        if (adminUser is not null && sysAdminRole is not null)
+        {
+            var hasRole = await db.UserRoles.AnyAsync(ur => ur.UserId == adminUser.Id && ur.RoleId == sysAdminRole.Id && ur.ScopeType == "System");
+            if (!hasRole)
+            {
+                db.UserRoles.Add(new IdentityExperience.Domain.Entities.UserRole
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = adminUser.Id,
+                    RoleId = sysAdminRole.Id,
+                    ScopeType = "System",
+                    ScopeId = null,
+                    GrantedBy = adminUser.Id
+                });
+                await db.SaveChangesAsync();
+            }
+
+            var allPerms = await db.Permissions.AsNoTracking().Select(p => p.Id).ToListAsync();
+            var existingRolePerms = await db.RolePermissions.AsNoTracking().Where(rp => rp.RoleId == sysAdminRole.Id).Select(rp => rp.PermissionId).ToListAsync();
+            var missingPerms = allPerms.Except(existingRolePerms).ToList();
+            if (missingPerms.Count > 0)
+            {
+                foreach (var permId in missingPerms)
+                {
+                    db.RolePermissions.Add(new IdentityExperience.Domain.Entities.RolePermission
+                    {
+                        RoleId = sysAdminRole.Id,
+                        PermissionId = permId
+                    });
+                }
+                await db.SaveChangesAsync();
+            }
+        }
+    }
+    catch
+    {
+        // Ignore seed errors on startup
+    }
+}
 
 if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
 {
