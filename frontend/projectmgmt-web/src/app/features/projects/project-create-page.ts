@@ -135,6 +135,7 @@ import { ToastService } from '../../core/services/toast.service';
               id="leadUserId"
               name="leadUserId"
               [(ngModel)]="formData.leadUserId"
+              (ngModelChange)="onLeadChange($event)"
               required
               class="form-control"
             >
@@ -842,10 +843,16 @@ export class ProjectCreatePage implements OnInit {
     });
   }
 
+  keyManuallyEdited = false;
+
+  onLeadChange(leadId: string): void {
+    this.selectedMemberIds.update(ids => ids.filter(id => id !== leadId));
+  }
+
   onNameChange(name: string): void {
-    if (!this.formData.projectKey && name) {
+    if (!this.keyManuallyEdited && name) {
       const normalized = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
-      const words = normalized.trim().split(/\s+/).filter(w => w.length > 0);
+      const words = normalized.trim().split(/[\s-]+/).filter(w => w.length > 0);
       let autoKey: string;
       if (words.length === 1) {
         autoKey = words[0].slice(0, 4).toUpperCase();
@@ -860,7 +867,9 @@ export class ProjectCreatePage implements OnInit {
   }
 
   onKeyInput(value: string): void {
-    this.formData.projectKey = (value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const cleaned = (value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    this.keyManuallyEdited = cleaned.length > 0;
+    this.formData.projectKey = cleaned;
   }
 
   onSubmit(): void {

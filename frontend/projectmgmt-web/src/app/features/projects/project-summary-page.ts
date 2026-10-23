@@ -164,6 +164,16 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
               </div>
             </div>
           </div>
+
+          <div class="summary-priority-box pt-4 border-t border-slate-100 dark:border-slate-800">
+            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Phân bổ theo Độ ưu tiên</h4>
+            <div class="flex items-center gap-4 text-xs font-medium">
+              <span class="text-red-500 font-semibold">Khẩn cấp (Urgent): {{ urgentCount() }}</span>
+              <span class="text-orange-500 font-semibold">Cao (High): {{ highCount() }}</span>
+              <span class="text-blue-500 font-semibold">Trung bình (Medium): {{ mediumCount() }}</span>
+              <span class="text-slate-500 font-semibold">Thấp (Low): {{ lowCount() }}</span>
+            </div>
+          </div>
         </div>
 
         <!-- Tile Right: Activity Stream -->
@@ -223,16 +233,30 @@ export class ProjectSummaryPageComponent implements AfterViewInit, OnDestroy {
 
   readonly currentProject = this.projectService.currentProject;
   readonly items = this.projectService.workItems;
-  readonly activeSprint = computed(() => this.projectService.sprints().find(s => s.status === 'active') ?? this.projectService.sprints()[0] ?? null);
+  readonly activeSprint = computed(() => this.projectService.sprints().find(s => s.status === 'active') ?? null);
 
   readonly totalCount = computed(() => this.items().length);
-  readonly completedCount = computed(() => this.items().filter(i => i.statusName === 'Done').length);
-  readonly inProgressCount = computed(() => this.items().filter(i => i.statusName === 'In Progress').length);
+  readonly completedCount = computed(() => {
+    const doneNames = new Set(this.projectService.projectStatuses().filter(s => s.category === 'Done').map(s => s.name));
+    return this.items().filter(i => i.statusName === 'Done' || doneNames.has(i.statusName)).length;
+  });
+  readonly inProgressCount = computed(() => {
+    const inProgNames = new Set(this.projectService.projectStatuses().filter(s => s.category === 'InProgress' && s.name !== 'Code Review').map(s => s.name));
+    return this.items().filter(i => i.statusName === 'In Progress' || inProgNames.has(i.statusName)).length;
+  });
   readonly codeReviewCount = computed(() => this.items().filter(i => i.statusName === 'Code Review').length);
-  readonly toDoCount = computed(() => this.items().filter(i => i.statusName === 'To Do').length);
+  readonly toDoCount = computed(() => {
+    const todoNames = new Set(this.projectService.projectStatuses().filter(s => s.category === 'ToDo').map(s => s.name));
+    return this.items().filter(i => i.statusName === 'To Do' || todoNames.has(i.statusName)).length;
+  });
 
   readonly donePercent = computed(() => this.totalCount() > 0 ? Math.round((this.completedCount() / this.totalCount()) * 100) : 0);
   readonly inProgressPercent = computed(() => this.totalCount() > 0 ? Math.round((this.inProgressCount() / this.totalCount()) * 100) : 0);
+
+  readonly urgentCount = computed(() => this.items().filter(i => i.priority === 'Urgent').length);
+  readonly highCount = computed(() => this.items().filter(i => i.priority === 'High').length);
+  readonly mediumCount = computed(() => this.items().filter(i => i.priority === 'Medium').length);
+  readonly lowCount = computed(() => this.items().filter(i => i.priority === 'Low').length);
 
   readonly recentActivities = computed(() => {
     const list: { id: string; actorName: string; action: string; timestamp: string; issueKey: string }[] = [];

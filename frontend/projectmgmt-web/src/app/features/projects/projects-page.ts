@@ -32,7 +32,7 @@ import { ToastService } from '../../core/services/toast.service';
       </div>
 
       <!-- Filter Bar by Organization -->
-      @if (organizations().length > 1) {
+      @if (organizations().length >= 1) {
         <div class="filter-bar">
           <span class="filter-label">Lọc theo Tổ chức:</span>
           <div class="org-pills">
@@ -42,7 +42,7 @@ import { ToastService } from '../../core/services/toast.service';
               [class.active]="selectedOrgId() === 'all'"
               (click)="selectedOrgId.set('all')"
             >
-              Tất cả ({{ projects().length }})
+              Tất cả tổ chức ({{ projects().length }})
             </button>
             @for (org of organizations(); track org.id) {
               <button
@@ -108,9 +108,9 @@ import { ToastService } from '../../core/services/toast.service';
               </div>
 
               <div class="card-actions">
-                <a [routerLink]="['/board']" (click)="selectProject(project)" class="btn btn-sm btn-outline">Bảng Board</a>
+                <a [routerLink]="['/board']" (click)="selectProject(project)" class="btn btn-sm btn-outline">Mở Board</a>
                 <a [routerLink]="['/backlog']" (click)="selectProject(project)" class="btn btn-sm btn-outline">Backlog</a>
-                <a [routerLink]="['/projects', project.id, 'settings']" class="btn btn-sm btn-secondary">Cài đặt</a>
+                <a [routerLink]="['/projects', project.id, 'settings']" (click)="selectProject(project)" class="btn btn-sm btn-secondary">Cài đặt</a>
               </div>
             </div>
           }

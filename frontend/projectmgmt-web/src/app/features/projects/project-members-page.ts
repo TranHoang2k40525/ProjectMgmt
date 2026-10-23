@@ -451,6 +451,32 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
   submitInvite(): void {
     if (this.saving || this.submitting()) return;
 
+    const projId = this.currentProject()?.id;
+    const resolvedRoleId = this.getRoleOptionId(this.newMemberRole) || this.selectedRoleId;
+    if (projId && this.selectedUserId && resolvedRoleId) {
+      this.submitting.set(true);
+      this.error = '';
+      this.projectService.inviteProjectMember(projId, this.selectedUserId, resolvedRoleId).subscribe({
+        next: () => {
+          this.submitting.set(false);
+          this.isInviteModalOpen = false;
+          this.selectedUserId = '';
+          this.newMemberName = '';
+          this.newMemberEmail = '';
+          this.toastService?.success('Thành công', 'Đã thêm thành viên vào dự án');
+          this.loadProjectMembers(projId);
+        },
+        error: (err: unknown) => {
+          this.submitting.set(false);
+          const errObj = err as { title?: string; detail?: string; error?: { message?: string } };
+          const msg = errObj?.detail ?? errObj?.title ?? errObj?.error?.message ?? 'Không thể thêm thành viên. Vui lòng thử lại.';
+          this.error = msg;
+          this.toastService?.error('Lỗi', msg);
+        }
+      });
+      return;
+    }
+
     if (this.newMemberEmail.trim()) {
       this.saving = true;
       this.error = '';
@@ -464,7 +490,6 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
           this.isInviteModalOpen = false;
           this.newMemberName = '';
           this.newMemberEmail = '';
-          const projId = this.currentProject()?.id;
           if (projId) this.loadProjectMembers(projId);
         },
         error: (e: { title?: string; detail?: string; error?: { message?: string } }) => {
@@ -474,36 +499,17 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
           this.toastService?.error('Lỗi', msg);
         }
       });
-      return;
     }
-
-    const projId = this.currentProject()?.id;
-    if (!projId || !this.selectedUserId || !this.selectedRoleId) return;
-
-    this.submitting.set(true);
-    this.error = '';
-    this.projectService.inviteProjectMember(projId, this.selectedUserId, this.selectedRoleId).subscribe({
-      next: () => {
-        this.submitting.set(false);
-        this.isInviteModalOpen = false;
-        this.toastService?.success('Thành công', 'Đã thêm thành viên vào dự án');
-        this.loadProjectMembers(projId);
-      },
-      error: (err: unknown) => {
-        this.submitting.set(false);
-        const errObj = err as { title?: string; detail?: string; error?: { message?: string } };
-        const msg = errObj?.detail ?? errObj?.title ?? errObj?.error?.message ?? 'Không thể thêm thành viên. Vui lòng thử lại.';
-        this.error = msg;
-        this.toastService?.error('Lỗi', msg);
-      }
-    });
   }
 
   removeMember(userId: string): void {
     const projId = this.currentProject()?.id;
     if (this.rbac && projId) {
       this.rbac.removeProjectMember(projId, userId).subscribe({
-        next: () => this.projectService.loadWorkspace(projId),
+        next: () => {
+          this.loadProjectMembers(projId);
+          this.projectService.loadWorkspace(projId);
+        },
         error: (e: { title?: string }) => this.error = e.title ?? 'Không thể gỡ thành viên.'
       });
     } else if (projId) {
