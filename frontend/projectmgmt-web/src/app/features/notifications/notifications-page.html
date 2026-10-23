@@ -4,7 +4,7 @@
     <!-- Breadcrumbs & Header Section -->
     <section class="flex flex-col gap-2">
       <nav aria-label="Breadcrumb" class="flex items-center gap-2 text-on-surface-variant font-label-sm text-label-sm">
-        <span class="hover:text-primary cursor-pointer transition-colors">Dự án</span>
+        <a routerLink="/projects" class="hover:text-primary cursor-pointer transition-colors">Dự án</a>
         <span class="material-symbols-outlined text-[14px]">chevron_right</span>
         <span class="px-2 py-0.5 rounded bg-surface-container font-mono text-primary font-bold">{{ currentProject().name || 'Dự án' }}</span>
         <span class="material-symbols-outlined text-[14px]">chevron_right</span>
@@ -102,9 +102,9 @@
               [class.border-primary-container]="!item.isRead"
               [class.bg-surface-container-lowest]="item.isRead"
               [class.bg-surface-container-low/40]="!item.isRead"
-              (click)="markAsRead(item.id)"
-              (keydown.enter)="markAsRead(item.id)"
-              (keydown.space)="$event.preventDefault(); markAsRead(item.id)"
+              (click)="markAsRead(item)"
+              (keydown.enter)="markAsRead(item)"
+              (keydown.space)="$event.preventDefault(); markAsRead(item)"
               role="button"
               tabindex="0">
               

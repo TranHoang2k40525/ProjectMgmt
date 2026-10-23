@@ -424,6 +424,10 @@
                   </label>
                   <input id="skillRange" type="range" min="10" max="100" step="5" [(ngModel)]="selectedSkillLevel" class="w-full accent-primary h-2 bg-surface-container-high rounded-lg cursor-pointer" />
                 </div>
+                <div class="profile-skill-field min-w-[140px]">
+                  <label for="skillYears" class="block font-label-md text-label-md text-on-surface font-semibold mb-1.5">Số năm kinh nghiệm</label>
+                  <input id="skillYears" name="newSkillYears" data-testid="skill-years-input" type="number" min="0" max="50" step="0.5" [(ngModel)]="selectedSkillYears" class="w-full h-11 px-3.5 rounded-xl bg-surface-container-lowest border border-outline-variant text-on-surface font-body-sm text-body-sm outline-none" />
+                </div>
 
                 <button type="button" (click)="onAddSkill()" [disabled]="!selectedSkillId" class="h-11 px-5 rounded-xl bg-primary-container hover:bg-primary text-on-primary font-label-md text-label-md font-bold transition-all shadow-sm disabled:opacity-50 cursor-pointer">
                   + Thêm Kỹ Năng

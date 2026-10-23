@@ -84,7 +84,7 @@
                     <td class="checkbox-cell">
                       <input
                         type="checkbox"
-                        class="matrix-checkbox" [disabled]="loading()"
+                        class="matrix-checkbox" [disabled]="loading() || r.isSystem"
                         [checked]="hasPermission(r, p.code)"
                         (change)="togglePermission(r, p.code)"
                         [attr.aria-label]="'Permission ' + p.code + ' for role ' + r.name"
@@ -148,6 +148,17 @@
                   @for (r of u.roles ?? []; track $index) {
                     <div>{{ r.roleName }} — {{ r.scopeType }} @if (r.scopeId) { <small>{{ r.scopeId }}</small> }</div>
                   } @empty { <span>Chưa được gán vai trò</span> }
+                  <div class="mt-2 flex items-center gap-1.5">
+                    <select [(ngModel)]="selectedAssignRoleByUser[u.id]" class="select-input text-xs py-1 px-2" aria-label="Chọn vai trò để gán">
+                      <option value="">-- Chọn vai trò --</option>
+                      @for (role of roles(); track role.id) {
+                        <option [value]="role.id">{{ role.name }} ({{ role.scope }})</option>
+                      }
+                    </select>
+                    <button type="button" class="assign-role-btn px-2.5 py-1 rounded bg-blue-600 text-white text-xs font-bold cursor-pointer" data-testid="user-role-action" (click)="assignRoleToUser(u)">
+                      Gán vai trò
+                    </button>
+                  </div>
 
                 </td>
                 <td>
@@ -185,6 +196,15 @@
           <div class="form-group">
             <label for="newRoleName">Tên Vai Trò</label>
             <input id="newRoleName" type="text" formControlName="name" placeholder="Ví dụ: SecurityAuditor" class="input-control" />
+          </div>
+
+          <div class="form-group">
+            <label for="newRoleScope">Phạm Vi (Scope)</label>
+            <select id="newRoleScope" name="roleScope" formControlName="scope" data-testid="role-scope-select" class="input-control">
+              <option value="Project">Project</option>
+              <option value="Organization">Organization</option>
+              <option value="System">System</option>
+            </select>
           </div>
 
           <div class="form-group">

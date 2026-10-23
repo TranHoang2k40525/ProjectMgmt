@@ -97,12 +97,27 @@ export class AppShellComponent implements OnDestroy {
   readonly projectsList = this.projectService.allProjectsList;
   readonly activeProject = this.projectService.currentProject;
   readonly workItems = this.projectService.workItems;
+  readonly recentWorkItems = computed(() => {
+    const ids = this.recentWork.recentTaskIds();
+    const all = this.workItems();
+    const matched = ids.map(id => all.find(i => i.id === id)).filter((x): x is WorkItem => !!x);
+    return matched.length > 0 ? matched : all.slice(0, 6);
+  });
+  @HostListener('document:keydown', ['$event'])
+  onGlobalKeydown(event: KeyboardEvent): void {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      const input = document.querySelector<HTMLInputElement>('.desktop-quick-search input');
+      input?.focus();
+    }
+  }
 
   constructor() {
     this.projectService.getProjects().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       error: () => this.toastService.error('Dự án', 'Không thể tải dự án. Mở danh sách dự án để thử lại.')
     });
     afterNextRender(() => this.revealActiveProjectTab());
+    this.identity.getUnreadCount().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ error: () => {} });
 
     this.router.events.pipe(
       filter((event): event is NavigationEnd => event instanceof NavigationEnd),

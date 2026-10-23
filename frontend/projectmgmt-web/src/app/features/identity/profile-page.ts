@@ -51,6 +51,7 @@ export class ProfilePageComponent implements OnInit {
   // Selected Skill for adding
   selectedSkillId: string = '';
   selectedSkillLevel: number = 80;
+  selectedSkillYears: number | null = 2;
 
   ngOnInit(): void {
     this.loading.set(true);
@@ -174,12 +175,13 @@ export class ProfilePageComponent implements OnInit {
   onAddSkill(): void {
     if (!this.selectedSkillId || !this.user()) return;
 
-    this.identityService.addUserSkill(this.user()!.id, this.selectedSkillId, this.selectedSkillLevel).subscribe({
+    this.identityService.addUserSkill(this.user()!.id, this.selectedSkillId, this.selectedSkillLevel, this.selectedSkillYears).subscribe({
       next: () => {
         this.loadData(this.user()!.id);
         this.successMsg.set('Đã cập nhật kỹ năng cá nhân!');
         this.selectedSkillId = '';
-      }
+      },
+      error: e => this.errorMsg.set(this.readError(e, 'Không thể cập nhật kỹ năng.'))
     });
   }
 
@@ -187,7 +189,9 @@ export class ProfilePageComponent implements OnInit {
     this.identityService.removeUserSkill(skillId).subscribe({
       next: () => {
         if (this.user()) this.loadData(this.user()!.id);
-      }
+        this.successMsg.set('Đã gỡ kỹ năng khỏi hồ sơ.');
+      },
+      error: e => this.errorMsg.set(this.readError(e, 'Không thể gỡ kỹ năng.'))
     });
   }
 

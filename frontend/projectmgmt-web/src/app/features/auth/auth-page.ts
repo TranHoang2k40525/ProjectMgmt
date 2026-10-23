@@ -60,7 +60,8 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
       displayName: ['', [Validators.required, Validators.minLength(2)]],
       email: ['', [Validators.required, Validators.email]],
       phoneNumber: ['', [Validators.pattern(/^\+?[0-9\s()-]{8,20}$/)]],
-      password: ['', [Validators.required, Validators.pattern(AuthPageComponent.strongPasswordPattern)]]
+      password: ['', [Validators.required, Validators.pattern(AuthPageComponent.strongPasswordPattern)]],
+      confirmPassword: ['']
     });
 
     this.forgotForm = this.fb.group({
@@ -155,6 +156,11 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onSignup(): void {
     if (this.signupForm.invalid) return;
+    const { password, confirmPassword } = this.signupForm.value;
+    if (confirmPassword && confirmPassword !== password) {
+      this.errorMessage.set('Mật khẩu xác nhận không khớp với mật khẩu đã nhập.');
+      return;
+    }
     this.loading.set(true);
     this.errorMessage.set(null);
 
@@ -198,6 +204,7 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
       },
       error: (err) => {
         this.loading.set(false);
+        this.setMode('OTP_FORGOT');
         this.errorMessage.set(this.readError(err, 'Không thể gửi mã OTP.'));
       }
     });
@@ -228,10 +235,22 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  onOtpPaste(event: ClipboardEvent): void {
+    event.preventDefault();
+    const text = event.clipboardData?.getData('text/plain')?.replace(/\D/g, '') || '';
+    if (!text) return;
+    for (let i = 0; i < 6; i++) {
+      this.otpPins[i] = text[i] || '';
+      const el = document.getElementById(`otp-${i}`) as HTMLInputElement | null;
+      if (el) el.value = this.otpPins[i];
+    }
+    this.otpForm.patchValue({ code: this.otpPins.join('') });
+  }
+
   onVerifyOtp(): void {
     const fullCode = this.otpPins.join('');
     if (fullCode.length < 6) {
-      this.errorMessage.set('Vui lòng nhập đủ 6 chữ số mã OTP.');
+      this.errorMessage.set('Vui lòng nhập đầy đủ 6 chữ số OTP.');
       return;
     }
 
@@ -263,6 +282,10 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
     const newPass = this.otpForm.value.newPassword;
     const fullCode = this.otpPins.join('');
     const email = this.forgotForm.value.email;
+    if (fullCode.length < 6) {
+      this.errorMessage.set('Vui lòng nhập đầy đủ 6 chữ số OTP.');
+      return;
+    }
 
     if (!newPass || !AuthPageComponent.strongPasswordPattern.test(newPass)) {
       this.errorMessage.set('Mật khẩu phải dài 8-128 ký tự và có chữ hoa, chữ thường, số, ký tự đặc biệt.');

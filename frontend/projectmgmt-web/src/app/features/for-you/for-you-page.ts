@@ -102,11 +102,12 @@ export class ForYouPageComponent implements OnInit, AfterViewInit, OnDestroy {
   openDrawer(task: WorkItem): void {
     this.attention.stop();
     this.recent.rememberTask(task.id);
-    this.projectService.activeDrawerTask.set(task);
+    const fullTask = this.workItems().find(item => item.id === task.id) ?? task;
+    this.projectService.activeDrawerTask.set(fullTask);
   }
 
   selectProject(project: Project): void {
-    this.projectService.currentProject.set(project);
+    this.projectService.selectProject(project);
     void this.router.navigate(['/project/summary']);
   }
 

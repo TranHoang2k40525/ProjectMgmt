@@ -221,8 +221,9 @@
               </div>
 
               <div class="flex flex-col gap-1 max-h-60 overflow-y-auto">
-                @for (item of workItems(); track item.id) {
+                @for (item of recentWorkItems(); track item.id) {
                   <button
+                    data-testid="recent-flyout-item"
                     (click)="openRecentItem(item)"
                     [title]="item.issueKey + ': ' + item.title"
                     class="flex items-center gap-2.5 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-left transition-colors cursor-pointer"
@@ -253,6 +254,17 @@
         </a>
 
         <!-- Active Project Workspace Indicator: Single space shortcut to eliminate duplicate action buttons -->
+        <a
+          routerLink="/admin/identity"
+          routerLinkActive="bg-primary/10 text-primary font-bold"
+          [title]="!isSidebarExpanded() ? 'Quản trị phân quyền' : 'Quản trị vai trò & phân quyền RBAC'"
+          class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors whitespace-nowrap"
+        >
+          <span class="material-symbols-outlined text-[20px] shrink-0">admin_panel_settings</span>
+          @if (isSidebarExpanded()) {
+            <span class="truncate">Quản trị phân quyền</span>
+          }
+        </a>
         @if (projectService.hasActiveProject()) {
           <div class="border-t border-slate-200/60 dark:border-slate-800 pt-2 mt-2">
             @if (isSidebarExpanded()) {
@@ -313,7 +325,7 @@
               <span class="material-symbols-outlined text-[16px]">
                 {{ isSpacesSectionExpanded() ? 'expand_more' : 'chevron_right' }}
               </span>
-              <span>Dự án ({{ projectsList().length }})</span>
+              <span>Không gian làm việc ({{ projectsList().length }})</span>
             </button>
           } @else {
             <button
@@ -327,7 +339,7 @@
           @if (isSidebarExpanded()) {
             <button
               (click)="openCreateProjectModal()"
-              title="Khởi tạo Dự án mới (+ Create Space)"
+              title="Tạo dự án mới"
               class="w-6 h-6 rounded hover:bg-primary/20 hover:text-primary text-slate-500 flex items-center justify-center transition-colors cursor-pointer"
             >
               <span class="material-symbols-outlined text-[18px]">add</span>
