@@ -1,5 +1,6 @@
-import { AfterViewInit, Component, ElementRef, OnDestroy, computed, inject } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, OnDestroy, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { gsap } from 'gsap';
 import { ProjectManagementService, Sprint } from '../../core/services/project-management.service';
 import { NoProjectStateComponent } from '../../shared/components/no-project-state/no-project-state.component';
@@ -7,7 +8,7 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
 @Component({
   selector: 'app-reports-page',
   standalone: true,
-  imports: [CommonModule, NoProjectStateComponent],
+  imports: [CommonModule, FormsModule, NoProjectStateComponent],
   template: `
     @if (!projectService.hasActiveProject()) {
       <app-no-project-state featureName="Báo Cáo Tiến Độ"></app-no-project-state>
@@ -23,6 +24,17 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
           </h1>
           <p class="text-sm text-slate-500">Biểu đồ Burndown Chart và Sprint Velocity phân tích tiến độ thực tế</p>
         </div>
+        @if (sprints().length > 0) {
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold uppercase text-slate-400">Chọn Sprint:</span>
+            <select [ngModel]="selectedSprintId()" (ngModelChange)="selectedSprintId.set($event)" data-testid="report-sprint-select" class="h-9 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold">
+              <option value="">Mặc định (Active Sprint)</option>
+              @for (sp of sprints(); track sp.id) {
+                <option [value]="sp.id">{{ sp.name }}</option>
+              }
+            </select>
+          </div>
+        }
       </div>
 
       <!-- Charts Grid Container -->
@@ -99,10 +111,11 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
             <!-- Bar Chart Container -->
             <div class="velocity-chart h-64 w-full flex items-end justify-around p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 rounded-xl gap-4">
               @for (sprint of sprints(); track sprint.id) {
+                @let completedPts = getSprintCompletedPoints(sprint.id);
                 <div class="flex flex-col items-center gap-2 h-full justify-end flex-1">
-                  <span class="text-xs font-mono font-bold text-primary">{{ sprint.totalStoryPoints }} SP</span>
+                  <span class="text-xs font-mono font-bold text-primary">{{ completedPts }} / {{ sprint.totalStoryPoints }} SP</span>
                   <div
-                    [style.height.%]="sprint.totalStoryPoints > 0 ? (sprint.totalStoryPoints / maxVelocityPoints()) * 100 : 4"
+                    [style.height.%]="completedPts > 0 ? (completedPts / maxVelocityPoints()) * 100 : (sprint.totalStoryPoints > 0 ? (sprint.totalStoryPoints / maxVelocityPoints()) * 100 : 4)"
                     class="velocity-bar w-full max-w-[48px] bg-indigo-600 dark:bg-indigo-500 rounded-t-xl hover:brightness-110 transition-all cursor-pointer"
                   ></div>
                   <span class="velocity-label text-xs font-bold text-slate-700 dark:text-slate-300 truncate w-full text-center">{{ sprint.name }}</span>
@@ -148,10 +161,22 @@ export class ReportsPageComponent implements AfterViewInit, OnDestroy {
   private readonly elementRef = inject<ElementRef<HTMLElement>>(ElementRef);
   private motionMedia: ReturnType<typeof gsap.matchMedia> | null = null;
   readonly sprints = this.projectService.sprints;
+  readonly selectedSprintId = signal<string>('');
 
   readonly activeSprint = computed<Sprint | null>(() => {
+    const sel = this.selectedSprintId();
+    if (sel) {
+      const found = this.sprints().find(s => s.id === sel);
+      if (found) return found;
+    }
     return this.sprints().find(s => s.status === 'active') ?? this.sprints()[0] ?? null;
   });
+
+  getSprintCompletedPoints(sprintId: string): number {
+    return this.projectService.workItems()
+      .filter(i => i.sprintId === sprintId && i.statusName === 'Done')
+      .reduce((acc, i) => acc + (i.storyPoints || 0), 0);
+  }
 
   readonly sprintWorkItems = computed(() => {
     const sp = this.activeSprint();

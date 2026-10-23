@@ -107,6 +107,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   // Inline Sprint Edit State
   editingSprintId = signal<string | null>(null);
   editingSprintName = signal<string>('');
+  editingSprintGoal = signal<string>('');
   editingStartDate = signal<string>('');
   editingEndDate = signal<string>('');
 
@@ -117,6 +118,14 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   readonly sprints = this.projectService.sprints;
   readonly workItems = this.projectService.workItems;
   readonly epics = this.projectService.epics;
+  readonly statusNames = computed(() => {
+    const s = this.projectService.projectStatuses().map(st => st.name);
+    return s.length > 0 ? s : ['To Do', 'In Progress', 'Code Review', 'Done'];
+  });
+  readonly issueTypes = computed(() => {
+    const custom = this.projectService.customIssueTypes().map(t => t.name);
+    return Array.from(new Set(['Story', 'Task', 'Bug', 'Use-Case', 'Epic', 'Sub-task', ...custom]));
+  });
 
   ngOnInit(): void {
     const currentProj = this.projectService.currentProject();
@@ -392,6 +401,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     if (event) event.stopPropagation();
     this.editingSprintId.set(sprint.id);
     this.editingSprintName.set(sprint.name);
+    this.editingSprintGoal.set(sprint.goal || '');
     this.editingStartDate.set(sprint.startDate || '');
     this.editingEndDate.set(sprint.endDate || '');
   }
@@ -399,7 +409,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   saveEditingSprint(sprintId: string): void {
     const name = this.editingSprintName().trim();
     if (name) {
-      this.projectService.updateSprintInfo(sprintId, name, this.editingStartDate(), this.editingEndDate());
+      this.projectService.updateSprintInfo(sprintId, name, this.editingStartDate(), this.editingEndDate(), this.editingSprintGoal());
       this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     }
     this.editingSprintId.set(null);
@@ -533,10 +543,11 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     if (!title || !title.trim()) return;
 
     const currentUserName = this.identityService.authState().currentUser?.displayName || '';
+    const normalizedSprintId = sprintId === 'sp-backlog' ? undefined : sprintId;
     this.projectService.addWorkItem({
       title: title.trim(),
-      sprintId,
-      sprintName,
+      sprintId: normalizedSprintId,
+      sprintName: normalizedSprintId ? sprintName : 'Backlog Pool',
       statusName: 'To Do',
       issueType: 'Task',
       priority: 'Medium',
@@ -668,9 +679,10 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     this.clearSelection();
   }
 
-  bulkChangeSprint(sprintId: string, sprintName: string): void {
+  bulkChangeSprint(sprintId: string, fallbackSprintName: string = 'Sprint đã chọn'): void {
     const ids = this.selectedTaskIds();
     if (ids.length === 0) return;
+    const sprintName = this.sprints().find(s => s.id === sprintId)?.name ?? fallbackSprintName;
     this.projectService.bulkUpdateSprint(ids, sprintId, sprintName);
     this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     this.clearSelection();

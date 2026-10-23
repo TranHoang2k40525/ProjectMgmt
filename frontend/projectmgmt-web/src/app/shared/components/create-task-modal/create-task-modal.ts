@@ -220,7 +220,7 @@ export class CreateTaskModalComponent {
 
   showNewTypeForm = signal<boolean>(false);
   customTypeName = '';
-  customTypeIcon = 'shield';
+  customTypeIcon = '⚡';
 
   title = '';
   issueType = 'Task';

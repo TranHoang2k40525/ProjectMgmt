@@ -103,7 +103,8 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
               <span class="material-symbols-outlined absolute left-3 top-2.5 text-[20px] text-slate-400 pointer-events-none">search</span>
               <input
                 type="text"
-                [(ngModel)]="searchTerm"
+                [ngModel]="searchTerm()"
+                (ngModelChange)="searchTerm.set($event)"
                 placeholder="Lọc công việc theo tên hoặc mã task..."
                 class="w-full h-10 pl-10 pr-4 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary border border-transparent"
               />
@@ -221,7 +222,7 @@ export class TaskListPageComponent {
   readonly epics = this.projectService.epics;
   readonly selectedGroup = signal<'all' | 'my'>('all');
   readonly selectedEpic = signal<string | null>(null);
-  searchTerm = '';
+  readonly searchTerm = signal<string>('');
 
   filteredItems = computed(() => {
     let list = this.allWorkItems();
@@ -235,8 +236,9 @@ export class TaskListPageComponent {
     if (epic) {
       list = list.filter(i => i.epicName === epic);
     }
-    if (this.searchTerm.trim()) {
-      const term = this.searchTerm.toLowerCase();
+    const q = this.searchTerm().trim();
+    if (q) {
+      const term = q.toLowerCase();
       list = list.filter(i => i.title.toLowerCase().includes(term) || i.issueKey.toLowerCase().includes(term));
     }
     return list;

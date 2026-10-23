@@ -67,12 +67,9 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
                   (ngModelChange)="onFieldChange()"
                   class="px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wider bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 focus:outline-none cursor-pointer"
                 >
-                  <option value="Task">Task</option>
-                  <option value="Story">Story</option>
-                  <option value="Bug">Bug</option>
-                  <option value="Use-Case">Use-Case</option>
-                  <option value="Epic">Epic</option>
-                  <option value="Sub-task">Sub-task</option>
+                  @for (t of availableIssueTypes(); track t) {
+                    <option [value]="t">{{ t }}</option>
+                  }
                 </select>
 
                 <!-- Epic Selector -->
@@ -108,10 +105,9 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
                   (ngModelChange)="onFieldChange()"
                   class="h-9 px-3 rounded-lg text-sm font-semibold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary"
                 >
-                  <option value="To Do">To Do</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Code Review">Code Review</option>
-                  <option value="Done">Done</option>
+                  @for (st of availableStatusNames(); track st) {
+                    <option [value]="st">{{ st }}</option>
+                  }
                 </select>
               </div>
 
@@ -465,6 +461,14 @@ export class TaskDetailDrawerComponent {
   readonly candidateScores = signal<Array<{ name: string; totalScore: number; workloadScore: number; skillScore: number; historyScore: number; capacityScore: number; reason: string }>>([]);
 
   readonly projectMembers = computed(() => this.projectService.currentProject()?.members ?? []);
+  readonly availableIssueTypes = computed(() => {
+    const custom = this.projectService.customIssueTypes().map(t => t.name);
+    return Array.from(new Set(['Task', 'Story', 'Bug', 'Use-Case', 'Epic', 'Sub-task', ...custom]));
+  });
+  readonly availableStatusNames = computed(() => {
+    const dynamic = this.projectService.projectStatuses().map(s => s.name);
+    return dynamic.length > 0 ? dynamic : ['To Do', 'In Progress', 'Code Review', 'Done'];
+  });
 
   toggleAiBreakdownPanel(): void {
     this.showAiAssignmentPanel.set(false);
@@ -577,6 +581,18 @@ export class TaskDetailDrawerComponent {
 
   onFieldChange(): void {
     if (this.task) {
+      if (this.task.assigneeName) {
+        const m = this.projectMembers().find(x => x.displayName === this.task?.assigneeName);
+        if (m) this.task.assigneeId = m.userId;
+      } else {
+        this.task.assigneeId = undefined;
+      }
+      if (this.task.epicName) {
+        const e = this.epics().find(x => x.name === this.task?.epicName);
+        if (e) this.task.epicId = e.id;
+      } else {
+        this.task.epicId = undefined;
+      }
       this.projectService.updateWorkItem(this.task);
       this.toastService.info('Đang lưu công việc', 'Vui lòng chờ xác nhận từ máy chủ.');
     }

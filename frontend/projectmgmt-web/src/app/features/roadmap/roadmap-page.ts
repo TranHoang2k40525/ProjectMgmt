@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ProjectManagementService, Sprint } from '../../core/services/project-management.service';
 import { NoProjectStateComponent } from '../../shared/components/no-project-state/no-project-state.component';
@@ -35,9 +35,9 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
           </div>
 
           <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-xl text-sm font-semibold">
-            <button class="px-3.5 py-1.5 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs">Tuần</button>
-            <button class="px-3.5 py-1.5 rounded-lg text-slate-500 hover:text-slate-900">Tháng</button>
-            <button class="px-3.5 py-1.5 rounded-lg text-slate-500 hover:text-slate-900">Quý</button>
+            <button (click)="timeframe.set('week')" [class.bg-white]="timeframe() === 'week'" [class.dark:bg-slate-700]="timeframe() === 'week'" [class.text-slate-900]="timeframe() === 'week'" [class.dark:text-white]="timeframe() === 'week'" [class.shadow-2xs]="timeframe() === 'week'" [class.text-slate-500]="timeframe() !== 'week'" class="px-3.5 py-1.5 rounded-lg cursor-pointer transition-all">Tuần</button>
+            <button (click)="timeframe.set('month')" [class.bg-white]="timeframe() === 'month'" [class.dark:bg-slate-700]="timeframe() === 'month'" [class.text-slate-900]="timeframe() === 'month'" [class.dark:text-white]="timeframe() === 'month'" [class.shadow-2xs]="timeframe() === 'month'" [class.text-slate-500]="timeframe() !== 'month'" class="px-3.5 py-1.5 rounded-lg cursor-pointer transition-all">Tháng</button>
+            <button (click)="timeframe.set('quarter')" [class.bg-white]="timeframe() === 'quarter'" [class.dark:bg-slate-700]="timeframe() === 'quarter'" [class.text-slate-900]="timeframe() === 'quarter'" [class.dark:text-white]="timeframe() === 'quarter'" [class.shadow-2xs]="timeframe() === 'quarter'" [class.text-slate-500]="timeframe() !== 'quarter'" class="px-3.5 py-1.5 rounded-lg cursor-pointer transition-all">Quý</button>
           </div>
         </div>
 
@@ -112,6 +112,7 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
 export class RoadmapPageComponent {
   readonly projectService = inject(ProjectManagementService);
   readonly sprints = this.projectService.sprints;
+  readonly timeframe = signal<'week' | 'month' | 'quarter'>('week');
 
   getSprintProgress(sprint: Sprint): { percent: number; label: string; bgClass: string } {
     if (sprint.status === 'completed') {

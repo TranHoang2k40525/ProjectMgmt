@@ -30,7 +30,7 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
   readonly toastService = inject(ToastService);
 
   readonly projectMembers = computed(() => this.projectService.currentProject()?.members ?? []);
-  readonly activeSprint = computed(() => this.projectService.sprints().find(s => s.status === 'active') ?? this.projectService.sprints()[0] ?? null);
+  readonly activeSprint = computed(() => this.projectService.sprints().find(s => s.status === 'active') ?? null);
 
   searchQuery = signal<string>('');
   selectedAssigneeFilter = signal<string | null>(null);

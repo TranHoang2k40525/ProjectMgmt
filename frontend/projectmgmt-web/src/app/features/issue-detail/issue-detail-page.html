@@ -94,14 +94,14 @@
             <dt>Người xử lý</dt><dd>{{ task.assigneeName || 'Chưa phân công' }}</dd>
             <dt>Ưu tiên</dt><dd>{{ priorityName() }}</dd>
             <dt>Story points</dt><dd>{{ task.storyPoints }}</dd>
-            <dt>Ước lượng</dt><dd>{{ estimateHours() === null ? '—' : estimateHours() + ' giờ' }}</dd>
+            <dt>Ước lượng</dt><dd>{{ estimateHours() === null ? '—' : estimateHours() + ' giờ' }} · Đã làm: {{ (core()?.timeSpentMinutes || 0) }} phút</dd>
             <dt>Hạn hoàn thành</dt><dd [class.overdue]="isOverdue()">{{ core()?.dueDate ? (core()!.dueDate | date:'dd/MM/yyyy') : '—' }}@if (isOverdue()) { · quá hạn }</dd>
             <dt>Người tạo</dt><dd>{{ task.reporterName || '—' }}</dd>
             <dt>Tạo lúc</dt><dd>{{ task.createdAt | date:'dd/MM/yyyy HH:mm' }}</dd>
             <dt>Cập nhật</dt><dd>{{ task.updatedAt ? (task.updatedAt | date:'dd/MM/yyyy HH:mm') : '—' }}</dd>
           </dl>
         </section>
-        <section class="card"><app-issue-labels [issueId]="task.id" [projectId]="task.projectId" [canWrite]="perms().canUpdate" (changed)="load()" /></section>
+        <section class="card"><app-issue-labels [issueId]="task.id" [projectId]="task.projectId" [canWrite]="perms().canManageLabels || perms().canUpdate" (changed)="load()" /></section>
         <section class="card"><app-issue-release-links [issueId]="task.id" [canWrite]="perms().canUpdate" (changed)="refreshHistory()" /></section>
         <section class="card"><app-issue-required-skills [issueId]="task.id" [canWrite]="perms().canUpdate" (changed)="refreshHistory()" /></section>
       </aside>
