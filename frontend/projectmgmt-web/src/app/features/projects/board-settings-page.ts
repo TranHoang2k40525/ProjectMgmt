@@ -1,3 +1,4 @@
+import { apiErrorMessage } from '../../core/http/api-error-message';
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -37,9 +38,22 @@ import { ToastService } from '../../core/services/toast.service';
 
       <!-- Navigation Tabs -->
       <div class="settings-tabs">
-        <a [routerLink]="['/projects', projectId, 'settings']" class="tab-item">⚙️ Thông tin chung</a>
-        <a [routerLink]="['/projects', projectId, 'settings', 'workflow']" class="tab-item">🔄 Cấu hình Workflow</a>
-        <span class="tab-item active">📋 Cấu hình Board</span>
+        <a [routerLink]="['/projects', projectId, 'settings']" class="tab-item flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[18px]">tune</span>
+          <span>Thông tin chung</span>
+        </a>
+        <a [routerLink]="['/projects', projectId, 'settings', 'workflow']" class="tab-item flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[18px]">sync_alt</span>
+          <span>Cấu hình Workflow</span>
+        </a>
+        <span class="tab-item active flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[18px]">view_kanban</span>
+          <span>Cấu hình Board</span>
+        </span>
+        <a [routerLink]="['/projects', projectId, 'members']" class="tab-item flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[18px]">badge</span>
+          <span>Thành viên & Phân quyền</span>
+        </a>
       </div>
 
       @if (alertMessage()) {
@@ -82,6 +96,7 @@ import { ToastService } from '../../core/services/toast.service';
               <input
                 type="text"
                 [(ngModel)]="newBoard.name"
+                maxlength="150"
                 placeholder="Tên board (VD: Sprint Board, Kanban Fast-track)"
                 class="form-control"
               />
@@ -89,7 +104,7 @@ import { ToastService } from '../../core/services/toast.service';
                 <option value="Kanban">Kanban</option>
                 <option value="Scrum">Scrum</option>
               </select>
-              <button (click)="onCreateBoard()" class="btn btn-primary btn-sm">Tạo</button>
+              <button [disabled]="savingColumn() || submittingBoard() || !project()" (click)="onCreateBoard()" class="btn btn-primary btn-sm">Tạo</button>
               <button (click)="showNewBoardModal.set(false)" class="btn btn-secondary btn-sm">Hủy</button>
             </div>
           </div>
@@ -123,14 +138,14 @@ import { ToastService } from '../../core/services/toast.service';
                     <div class="col-drag-handle">
                       <button
                         (click)="moveColumn(i, -1)"
-                        [disabled]="i === 0"
+                        [disabled]="savingColumn() || savingOrder() || columnsLoading() || submittingCol() || i === 0"
                         class="btn-arrow"
                         title="Di chuyển sang trái"
                       >▲</button>
                       <span class="order-idx">{{ col.orderIndex }}</span>
                       <button
                         (click)="moveColumn(i, 1)"
-                        [disabled]="i === columns().length - 1"
+                        [disabled]="savingColumn() || savingOrder() || columnsLoading() || submittingCol() || i === columns().length - 1"
                         class="btn-arrow"
                         title="Di chuyển sang phải"
                       >▼</button>
@@ -151,9 +166,26 @@ import { ToastService } from '../../core/services/toast.service';
                     </div>
 
                     <div class="col-actions">
-                      <button (click)="onDeleteColumn(col)" class="btn-delete" title="Xóa cột">✕</button>
+                      <button type="button" class="btn btn-secondary btn-sm" [disabled]="savingColumn() || savingOrder() || columnsLoading() || submittingCol()" (click)="editColumn(col)">Sửa</button>
+                      <button [disabled]="savingColumn() || savingOrder() || columnsLoading() || submittingCol()" (click)="onDeleteColumn(col)" class="btn-delete flex items-center justify-center" title="Xóa cột">
+                        <span class="material-symbols-outlined text-[16px]">delete</span>
+                      </button>
                     </div>
                   </div>
+                  @if (editingColumnId() === col.id) {
+                    <form (ngSubmit)="saveColumn()" class="card" aria-label="Sửa cấu hình cột">
+                      <label [for]="'edit-name-' + col.id">Tên hiển thị</label>
+                      <input [id]="'edit-name-' + col.id" name="editName" [(ngModel)]="editName" maxlength="80" class="form-control" [disabled]="savingColumn()" />
+                      <small>Để trống để dùng tên trạng thái {{ col.statusName }}.</small>
+                      <label [for]="'edit-wip-' + col.id">Giới hạn WIP</label>
+                      <input [id]="'edit-wip-' + col.id" name="editWip" type="number" min="1" step="1" [(ngModel)]="editWip" class="form-control" [disabled]="savingColumn()" />
+                      <small>Số nguyên lớn hơn 0; để trống nếu không giới hạn.</small>
+                      <div>
+                        <button type="submit" class="btn btn-primary" [disabled]="savingColumn()">{{ savingColumn() ? 'Đang lưu...' : 'Lưu thay đổi' }}</button>
+                        <button type="button" class="btn btn-secondary" [disabled]="savingColumn()" (click)="cancelEdit()">Hủy</button>
+                      </div>
+                    </form>
+                  }
                 }
               </div>
             }
@@ -172,6 +204,7 @@ import { ToastService } from '../../core/services/toast.service';
                   id="colName"
                   name="colName"
                   [(ngModel)]="newColumn.name"
+                  maxlength="80"
                   placeholder="Để trống sẽ lấy tên trạng thái"
                   class="form-control"
                 />
@@ -188,7 +221,7 @@ import { ToastService } from '../../core/services/toast.service';
                 >
                   <option value="" disabled>-- Chọn trạng thái map vào cột --</option>
                   @for (s of statuses(); track s.id) {
-                    <option [value]="s.id">{{ s.name }} ({{ s.category }})</option>
+                    <option [value]="s.id" [disabled]="isStatusMapped(s.id)">{{ s.name }} ({{ s.category }})</option>
                   }
                 </select>
               </div>
@@ -200,16 +233,16 @@ import { ToastService } from '../../core/services/toast.service';
                   id="wipLimit"
                   name="wipLimit"
                   [(ngModel)]="newColumn.wipLimit"
-                  min="0"
+                  min="1" step="1"
                   placeholder="VD: 3 hoặc 5 (để trống = vô hạn)"
                   class="form-control"
                 />
-                <small class="form-hint">Chặn nhập số âm (&lt; 0). Cảnh báo khi số task vượt quá giới hạn này.</small>
+                <small class="form-hint">Nhập số nguyên lớn hơn 0, hoặc để trống nếu không giới hạn.</small>
               </div>
 
               <button
                 type="submit"
-                [disabled]="submittingCol() || !newColumn.statusId"
+                [disabled]="!project() || savingColumn() || columnsLoading() || savingOrder() || submittingCol() || !newColumn.statusId"
                 class="btn btn-primary btn-block"
               >
                 {{ submittingCol() ? 'Đang thêm cột...' : '+ Thêm Cột' }}
@@ -652,6 +685,12 @@ export class BoardSettingsPage implements OnInit {
 
   readonly showNewBoardModal = signal<boolean>(false);
   readonly columnsLoading = signal<boolean>(false);
+  readonly savingOrder = signal(false);
+  readonly savingColumn = signal(false);
+  readonly editingColumnId = signal<string | null>(null);
+  editName = '';
+  editWip: number | null = null;
+  readonly submittingBoard = signal(false);
   readonly submittingCol = signal<boolean>(false);
   readonly alertMessage = signal<string | null>(null);
   readonly alertType = signal<'success' | 'error'>('success');
@@ -678,11 +717,15 @@ export class BoardSettingsPage implements OnInit {
   }
 
   loadProject(): void {
-    this.projectService.getProjectById(this.projectId).subscribe(p => this.project.set(p));
+    this.projectService.getProjectById(this.projectId).subscribe({
+      next: p => this.project.set(p), error: err => this.reportError(err)
+    });
   }
 
   loadStatuses(): void {
-    this.projectService.getProjectStatuses(this.projectId).subscribe(s => this.statuses.set(s));
+    this.projectService.getProjectStatuses(this.projectId).subscribe({
+      next: statuses => this.statuses.set(statuses), error: err => this.reportError(err)
+    });
   }
 
   loadBoards(): void {
@@ -693,12 +736,21 @@ export class BoardSettingsPage implements OnInit {
           const defaultB = bList.find(x => x.isDefault) || bList[0];
           this.selectBoard(defaultB);
         }
-      }
+      },
+      error: err => this.reportError(err)
     });
   }
 
+  private reportError(err: unknown): void {
+    this.alertType.set('error');
+    this.alertMessage.set(apiErrorMessage(err, 'Không thể tải cấu hình board.'));
+  }
+
   selectBoard(b: Board): void {
+    if (this.savingColumn() || this.savingOrder() || this.submittingCol()) return;
+    this.cancelEdit();
     this.selectedBoard.set(b);
+    this.columns.set([]);
     this.loadColumns(b.id);
   }
 
@@ -706,18 +758,24 @@ export class BoardSettingsPage implements OnInit {
     this.columnsLoading.set(true);
     this.projectService.getBoardColumns(boardId).subscribe({
       next: (cols) => {
+        if (this.selectedBoard()?.id !== boardId) return;
         this.columns.set(cols.sort((a, b) => a.orderIndex - b.orderIndex));
         this.columnsLoading.set(false);
       },
-      error: () => this.columnsLoading.set(false)
+      error: err => {
+        if (this.selectedBoard()?.id !== boardId) return;
+        this.columnsLoading.set(false);
+        this.reportError(err);
+      }
     });
   }
 
   onCreateBoard(): void {
-    if (!this.newBoard.name.trim()) return;
-
+    if (!this.newBoard.name.trim() || this.savingColumn() || this.submittingBoard() || !this.project()) return;
+    this.submittingBoard.set(true);
     this.projectService.createBoard(this.projectId, this.newBoard).subscribe({
       next: (b) => {
+        this.submittingBoard.set(false);
         this.showNewBoardModal.set(false);
         this.newBoard = { name: '', type: 'Kanban', isDefault: false };
         this.alertType.set('success');
@@ -727,25 +785,30 @@ export class BoardSettingsPage implements OnInit {
         this.selectBoard(b);
       },
       error: (err) => {
+        this.submittingBoard.set(false);
         this.alertType.set('error');
-        this.alertMessage.set(err?.error?.title || 'Không thể tạo Board.');
-        this.toastService.error('Lỗi', err?.error?.title || 'Không thể tạo Board.');
+        this.alertMessage.set(apiErrorMessage(err, 'Không thể tạo Board.'));
+        this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể tạo Board.'));
       }
     });
   }
 
   onCreateColumn(): void {
     const board = this.selectedBoard();
-    if (!board) return;
+    if (!board || this.savingColumn() || !this.project() || this.columnsLoading() || this.submittingCol() || this.savingOrder()) return;
 
-    // 1. Chặn WIP < 0
-    if (this.newColumn.wipLimit !== null && this.newColumn.wipLimit !== undefined && this.newColumn.wipLimit < 0) {
+    // WIP must match the database constraint: a positive integer or null.
+    if (this.newColumn.wipLimit !== null && this.newColumn.wipLimit !== undefined && (!Number.isInteger(this.newColumn.wipLimit) || this.newColumn.wipLimit <= 0)) {
       this.alertType.set('error');
-      this.alertMessage.set('Lỗi: WIP limit không được là số âm (< 0)!');
-      this.toastService.error('Lỗi WIP Limit', 'Giới hạn WIP không được là số âm (< 0)');
+      this.alertMessage.set('WIP limit phải là số nguyên lớn hơn 0; để trống nếu không giới hạn.');
+      this.toastService.error('Lỗi WIP Limit', 'Giới hạn WIP phải là số nguyên lớn hơn 0.');
       return;
     }
 
+    if (!this.newColumn.statusId || this.columns().some(c => c.statusId === this.newColumn.statusId)) {
+      this.reportError({ title: 'Chọn trạng thái chưa được liên kết với cột nào trên board này.' });
+      return;
+    }
     this.submittingCol.set(true);
     this.alertMessage.set(null);
 
@@ -761,13 +824,14 @@ export class BoardSettingsPage implements OnInit {
       error: (err) => {
         this.submittingCol.set(false);
         this.alertType.set('error');
-        this.alertMessage.set(err?.error?.title || 'Không thể thêm cột.');
-        this.toastService.error('Lỗi', err?.error?.title || 'Không thể thêm cột.');
+        this.alertMessage.set(apiErrorMessage(err, 'Không thể thêm cột.'));
+        this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể thêm cột.'));
       }
     });
   }
 
   moveColumn(index: number, direction: -1 | 1): void {
+    if (this.savingColumn() || this.savingOrder() || this.columnsLoading() || this.submittingCol()) return;
     const cols = [...this.columns()];
     const targetIdx = index + direction;
     if (targetIdx < 0 || targetIdx >= cols.length) return;
@@ -778,28 +842,74 @@ export class BoardSettingsPage implements OnInit {
     cols[targetIdx] = temp;
 
     // Update locally
-    this.columns.set(cols);
+    // Keep the persisted order visible until the request succeeds.
 
     // Save order to server
     const orderedIds = cols.map(c => c.id);
     const board = this.selectedBoard();
     if (board) {
+      this.savingOrder.set(true);
       this.projectService.reorderBoardColumns(board.id, orderedIds).subscribe({
         next: () => {
+          this.savingOrder.set(false);
           this.alertType.set('success');
           this.alertMessage.set('Đã lưu thứ tự cột thành công!');
           this.toastService.success('Cập Nhật Thứ Tự', 'Đã sắp xếp lại thứ tự cột trên bảng');
           this.loadColumns(board.id);
         },
         error: (err) => {
+          this.savingOrder.set(false);
           this.alertType.set('error');
-          this.alertMessage.set(err?.error?.title || 'Không thể lưu thứ tự cột.');
+          this.alertMessage.set(apiErrorMessage(err, 'Không thể lưu thứ tự cột.'));
         }
       });
     }
   }
 
+  isStatusMapped(statusId: string): boolean {
+    return this.columns().some(c => c.statusId === statusId);
+  }
+
+  editColumn(column: BoardColumn): void {
+    if (this.savingColumn() || this.savingOrder() || this.submittingCol() || this.columnsLoading()) return;
+    this.editingColumnId.set(column.id);
+    this.editName = column.name ?? '';
+    this.editWip = column.wipLimit ?? null;
+  }
+
+  cancelEdit(): void {
+    if (this.savingColumn()) return;
+    this.editingColumnId.set(null);
+    this.editName = '';
+    this.editWip = null;
+  }
+
+  saveColumn(): void {
+    const id = this.editingColumnId();
+    if (!id || this.savingColumn() || this.savingOrder() || this.submittingCol() || this.columnsLoading()) return;
+    if (this.editName.trim().length > 80 ||
+        (this.editWip !== null && (!Number.isInteger(this.editWip) || this.editWip <= 0))) {
+      this.reportError({ detail: 'Tên cột tối đa 80 ký tự. WIP phải là số nguyên lớn hơn 0 hoặc để trống.' });
+      return;
+    }
+    this.savingColumn.set(true);
+    this.projectService.updateBoardColumn(id, { name: this.editName.trim() || null, wipLimit: this.editWip }).subscribe({
+      next: saved => {
+        this.columns.update(columns => columns.map(column => column.id === saved.id ? saved : column));
+        this.savingColumn.set(false);
+        this.cancelEdit();
+        this.alertType.set('success');
+        this.alertMessage.set('Đã lưu cấu hình cột.');
+      },
+      error: err => {
+        this.savingColumn.set(false);
+        this.reportError(err);
+      }
+    });
+  }
+
   onDeleteColumn(col: BoardColumn): void {
+    if (this.savingColumn()) return;
     this.confirmService.confirm({
       title: 'Xóa Cột Board',
       message: `Bạn có chắc chắn muốn xóa cột "${col.name || col.statusName}" khỏi Bảng không?`,
@@ -818,8 +928,8 @@ export class BoardSettingsPage implements OnInit {
           },
           error: (err) => {
             this.alertType.set('error');
-            this.alertMessage.set(err?.error?.title || 'Không thể xóa cột.');
-            this.toastService.error('Lỗi Xóa Cột', err?.error?.title || 'Không thể xóa cột.');
+            this.alertMessage.set(apiErrorMessage(err, 'Không thể xóa cột.'));
+            this.toastService.error('Lỗi Xóa Cột', apiErrorMessage(err, 'Không thể xóa cột.'));
           }
         });
       }

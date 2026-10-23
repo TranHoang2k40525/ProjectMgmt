@@ -7,7 +7,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { IdentityService } from '../../core/services/identity.service';
 import { ProjectManagementService, Project, WorkItem } from '../../core/services/project-management.service';
 import { ExcelDataService } from '../../core/services/excel-data.service';
-import { ToastService } from '../../core/services/toast.service';
+import { ToastService, ToastMessage } from '../../core/services/toast.service';
 import { ConfirmDialogService } from '../../core/services/confirm-dialog.service';
 import { TaskDetailDrawerComponent } from '../../shared/components/task-detail-drawer/task-detail-drawer';
 import { CreateTaskModalComponent } from '../../shared/components/create-task-modal/create-task-modal';
@@ -41,6 +41,10 @@ import { RecentWorkService } from '../../core/attention/recent-work.service';
   styleUrl: './app-shell.scss'
 })
 export class AppShellComponent implements OnDestroy {
+  @HostListener('window:beforeunload', ['$event'])
+  protectPendingChanges(event: BeforeUnloadEvent): void {
+    if (this.projectService.pendingSaves() > 0) event.preventDefault();
+  }
   readonly identity = inject(IdentityService);
   readonly focus = inject(FocusRecommendationService);
   readonly projectService = inject(ProjectManagementService);
@@ -61,7 +65,7 @@ export class AppShellComponent implements OnDestroy {
   // Check if current route is inside a Project Context (Show Sub-Header)
   readonly isProjectRoute = computed(() => {
     const url = this.currentUrl();
-    return url.includes('/project/') || url.includes('/board') || url.includes('/backlog') || url.includes('/task-list') || url.includes('/roadmap') || url.includes('/reports');
+    return url.includes('/project/') || url.includes('/board') || url.includes('/backlog') || url.includes('/task-list') || url.includes('/roadmap') || url.includes('/reports') || (url.includes('/projects/') && url.includes('/settings'));
   });
 
   // Header Live Search Signal
@@ -93,9 +97,27 @@ export class AppShellComponent implements OnDestroy {
   readonly projectsList = this.projectService.allProjectsList;
   readonly activeProject = this.projectService.currentProject;
   readonly workItems = this.projectService.workItems;
+  readonly recentWorkItems = computed(() => {
+    const ids = this.recentWork.recentTaskIds();
+    const all = this.workItems();
+    const matched = ids.map(id => all.find(i => i.id === id)).filter((x): x is WorkItem => !!x);
+    return matched.length > 0 ? matched : all.slice(0, 6);
+  });
+  @HostListener('document:keydown', ['$event'])
+  onGlobalKeydown(event: KeyboardEvent): void {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      const input = document.querySelector<HTMLInputElement>('.desktop-quick-search input');
+      input?.focus();
+    }
+  }
 
   constructor() {
+    this.projectService.getProjects().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      error: () => this.toastService.error('Dự án', 'Không thể tải dự án. Mở danh sách dự án để thử lại.')
+    });
     afterNextRender(() => this.revealActiveProjectTab());
+    this.identity.getUnreadCount().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ error: () => {} });
 
     this.router.events.pipe(
       filter((event): event is NavigationEnd => event instanceof NavigationEnd),
@@ -125,8 +147,7 @@ export class AppShellComponent implements OnDestroy {
 
   useAvatarFallback(event: Event): void {
     const image = event.target as HTMLImageElement;
-    const fallback = 'assets/images/huce-branding/huce-official-logo.png';
-    if (image.getAttribute('src') !== fallback) image.src = fallback;
+    image.style.display = 'none';
   }
 
   toggleSidebar(): void {
@@ -173,25 +194,30 @@ export class AppShellComponent implements OnDestroy {
   }
 
   selectProjectSpace(proj: Project): void {
-    this.projectService.currentProject.set(proj);
+    this.projectService.selectProject(proj);
     this.closeFlyouts();
     this.toastService.info('Chuyển Không Gian Dự Án', `Đã mở không gian làm việc ${proj.name} (${proj.projectKey})`);
     this.router.navigate(['/project/summary']);
   }
 
   openSearchResult(item: WorkItem): void {
+    this.closeFlyouts();
     this.recentWork.rememberTask(item.id);
     this.projectService.activeDrawerTask.set(item);
-    this.closeFlyouts();
   }
 
   openRecentItem(item: WorkItem): void {
+    this.closeFlyouts();
     this.recentWork.rememberTask(item.id);
     this.projectService.activeDrawerTask.set(item);
-    this.closeFlyouts();
   }
 
   openCreateTaskModal(): void {
+    if (!this.projectService.hasActiveProject() || !this.projectService.currentProject().id) {
+      this.toastService.info('Chưa Chọn Dự Án', 'Vui lòng chọn hoặc khởi tạo một dự án trước khi tạo công việc mới.');
+      void this.router.navigate(['/projects/new']);
+      return;
+    }
     this.isCreateTaskModalOpen.set(true);
   }
 
@@ -200,7 +226,7 @@ export class AppShellComponent implements OnDestroy {
   }
 
   openCreateProjectModal(): void {
-    this.isCreateProjectModalOpen.set(true);
+    void this.router.navigate(['/projects/new']);
     this.closeFlyouts();
   }
 
@@ -221,7 +247,7 @@ export class AppShellComponent implements OnDestroy {
   }
 
   exportExcel(): void {
-    this.excelService.exportToExcel(this.projectService.workItems(), 'HUCE_Project_WorkItems_Export.csv');
+    this.excelService.exportToExcel(this.projectService.workItems(), 'Project_WorkItems_Export.csv');
     this.toastService.success('Xuất Dữ Liệu Excel', 'Đã tải xuống file CSV/Excel danh sách công việc thành công.');
   }
 
@@ -232,7 +258,7 @@ export class AppShellComponent implements OnDestroy {
   logout(): void {
     this.confirmService.confirm({
       title: 'Xác Nhận Đăng Xuất',
-      message: 'Bạn có chắc chắn muốn đăng xuất khỏi hệ thống HUCE Scrum Platform?',
+      message: 'Bạn có chắc chắn muốn đăng xuất khỏi Hệ thống Quản lý Dự án Scrum tích hợp AI?',
       type: 'danger',
       confirmText: 'Đăng xuất ngay',
       cancelText: 'Hủy bỏ',
@@ -242,5 +268,12 @@ export class AppShellComponent implements OnDestroy {
         this.router.navigate(['/auth']);
       }
     });
+  }
+
+  onToastClick(toast: ToastMessage): void {
+    if (toast.actionUrl) {
+      this.toastService.remove(toast.id);
+      void this.router.navigateByUrl(toast.actionUrl);
+    }
   }
 }

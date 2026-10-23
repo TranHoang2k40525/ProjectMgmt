@@ -45,6 +45,13 @@ public class ProjectConfiguration : IEntityTypeConfiguration<Project>
             .HasColumnName("Description")
             .HasColumnType("text");
 
+        builder.Property(entity => entity.CreatedByUserId)
+            .HasColumnName("CreatedByUserId")
+            .HasColumnType("char(36)")
+            .HasCharSet("utf8mb4")
+            .UseCollation("utf8mb4_0900_ai_ci")
+            .HasComment("XMOD -> User.Id; người khởi tạo dự án, không đổi theo Lead");
+
         builder.Property(entity => entity.LeadUserId)
             .HasColumnName("LeadUserId")
             .HasColumnType("char(36)")
@@ -82,6 +89,8 @@ public class ProjectConfiguration : IEntityTypeConfiguration<Project>
         builder.HasIndex(entity => new { entity.OrgId, entity.ProjectKey }, "UQ_Project_Org_Key").IsUnique();
 
         builder.HasIndex(entity => entity.LeadUserId, "IX_Project_LeadUserId");
+
+        builder.HasIndex(entity => entity.CreatedByUserId, "IX_Project_CreatedByUserId");
 
         builder.HasIndex(entity => entity.Name, "IX_Project_Name");
 

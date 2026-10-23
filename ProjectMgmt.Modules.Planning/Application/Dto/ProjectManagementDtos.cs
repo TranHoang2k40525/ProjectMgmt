@@ -40,6 +40,7 @@ public class CreateOrganizationDto
     public string Name { get; set; } = string.Empty;
     public string Slug { get; set; } = string.Empty;
     public Guid OwnerId { get; set; }
+    public List<Guid>? MemberUserIds { get; set; }
 }
 
 public class ProjectDto
@@ -54,6 +55,7 @@ public class ProjectDto
         string projectKey,
         string name,
         string? description,
+        Guid createdByUserId,
         Guid leadUserId,
         int issueCounter,
         bool isArchived,
@@ -66,6 +68,7 @@ public class ProjectDto
         ProjectKey = projectKey;
         Name = name;
         Description = description;
+        CreatedByUserId = createdByUserId;
         LeadUserId = leadUserId;
         IssueCounter = issueCounter;
         IsArchived = isArchived;
@@ -79,6 +82,7 @@ public class ProjectDto
     public string ProjectKey { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
+    public Guid CreatedByUserId { get; set; }
     public Guid LeadUserId { get; set; }
     public int IssueCounter { get; set; }
     public bool IsArchived { get; set; }
@@ -112,6 +116,7 @@ public class CreateProjectRequestDto
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public Guid LeadUserId { get; set; }
+    public List<Guid>? MemberUserIds { get; set; }
 }
 
 public class UpdateProjectRequestDto
@@ -314,6 +319,12 @@ public class CreateBoardColumnRequestDto
     }
 
     public Guid StatusId { get; set; }
+    public string? Name { get; set; }
+    public int? WipLimit { get; set; }
+}
+
+public class UpdateBoardColumnRequestDto
+{
     public string? Name { get; set; }
     public int? WipLimit { get; set; }
 }

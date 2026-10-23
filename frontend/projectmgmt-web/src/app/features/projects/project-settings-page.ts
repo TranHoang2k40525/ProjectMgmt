@@ -1,3 +1,4 @@
+import { apiErrorMessage } from '../../core/http/api-error-message';
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -38,23 +39,34 @@ import { ToastService } from '../../core/services/toast.service';
           [routerLink]="['/projects', projectId, 'settings']"
           routerLinkActive="active"
           [routerLinkActiveOptions]="{ exact: true }"
-          class="tab-item"
+          class="tab-item flex items-center gap-1.5"
         >
-          ⚙️ Thông tin chung
+          <span class="material-symbols-outlined text-[18px]">tune</span>
+          <span>Thông tin chung</span>
         </a>
         <a
           [routerLink]="['/projects', projectId, 'settings', 'workflow']"
           routerLinkActive="active"
-          class="tab-item"
+          class="tab-item flex items-center gap-1.5"
         >
-          🔄 Cấu hình Workflow (Nhiệm vụ 2)
+          <span class="material-symbols-outlined text-[18px]">sync_alt</span>
+          <span>Cấu hình Workflow</span>
         </a>
         <a
           [routerLink]="['/projects', projectId, 'settings', 'board']"
           routerLinkActive="active"
-          class="tab-item"
+          class="tab-item flex items-center gap-1.5"
         >
-          📋 Cấu hình Board (Nhiệm vụ 3)
+          <span class="material-symbols-outlined text-[18px]">view_kanban</span>
+          <span>Cấu hình Board</span>
+        </a>
+        <a
+          [routerLink]="['/projects', projectId, 'members']"
+          routerLinkActive="active"
+          class="tab-item flex items-center gap-1.5"
+        >
+          <span class="material-symbols-outlined text-[18px]">badge</span>
+          <span>Thành viên & Phân quyền</span>
         </a>
       </div>
 
@@ -94,6 +106,7 @@ import { ToastService } from '../../core/services/toast.service';
                   name="name"
                   [(ngModel)]="editForm.name"
                   required
+                  maxlength="200"
                   class="form-control"
                 />
               </div>
@@ -134,7 +147,7 @@ import { ToastService } from '../../core/services/toast.service';
           <!-- Danger Zone -->
           <div class="card danger-card">
             <h3>Khu vực nguy hiểm</h3>
-            <p>Xóa dự án này sẽ đánh dấu lưu trữ và ẩn khỏi danh sách làm việc.</p>
+            <p>Xóa mềm dự án sẽ ẩn dự án khỏi danh sách làm việc và giữ lại dữ liệu trong cơ sở dữ liệu.</p>
             <button (click)="onDeleteProject()" class="btn btn-danger">Xóa Dự Án Này</button>
           </div>
         </div>
@@ -153,7 +166,7 @@ import { ToastService } from '../../core/services/toast.service';
       margin-bottom: 1rem;
     }
     .breadcrumb a {
-      color: #2563eb;
+      color: #1b4332;
       text-decoration: none;
     }
     .settings-header {
@@ -187,11 +200,11 @@ import { ToastService } from '../../core/services/toast.service';
       transition: all 0.2s;
     }
     .tab-item:hover {
-      color: #2563eb;
+      color: #1b4332;
     }
     .tab-item.active {
-      color: #2563eb;
-      border-bottom-color: #2563eb;
+      color: #1b4332;
+      border-bottom-color: #2d6a4f;
     }
     .card {
       background: #ffffff;
@@ -230,8 +243,8 @@ import { ToastService } from '../../core/services/toast.service';
     }
     .form-control:focus {
       outline: none;
-      border-color: #2563eb;
-      box-shadow: 0 0 0 3px rgba(37,99,235,0.15);
+      border-color: #2d6a4f;
+      box-shadow: 0 0 0 3px rgba(45, 106, 79, 0.15);
     }
     .readonly-input {
       background: #f8fafc;
@@ -261,11 +274,11 @@ import { ToastService } from '../../core/services/toast.service';
       transition: all 0.2s;
     }
     .btn-primary {
-      background: #2563eb;
+      background: #1b4332;
       color: #ffffff;
     }
     .btn-primary:hover:not(:disabled) {
-      background: #1d4ed8;
+      background: #2d6a4f;
     }
     .btn-danger {
       background: #dc2626;
@@ -375,7 +388,10 @@ export class ProjectSettingsPage implements OnInit {
   }
 
   loadUsers(): void {
-    this.projectService.getUsers().subscribe(u => this.users.set(u));
+    this.projectService.getUsers().subscribe({
+      next: users => this.users.set(users),
+      error: err => this.error.set(apiErrorMessage(err, 'Không thể tải người phụ trách dự án.'))
+    });
   }
 
   loadProject(): void {
@@ -392,13 +408,14 @@ export class ProjectSettingsPage implements OnInit {
         this.loading.set(false);
       },
       error: (err) => {
-        this.error.set(err?.error?.title || 'Không tìm thấy dự án.');
+        this.error.set(apiErrorMessage(err, 'Không tìm thấy dự án.'));
         this.loading.set(false);
       }
     });
   }
 
   onSaveGeneral(): void {
+    if (this.saving() || this.loading() || !this.project()) return;
     this.saving.set(true);
     this.feedbackMsg.set(null);
 
@@ -413,8 +430,8 @@ export class ProjectSettingsPage implements OnInit {
       error: (err) => {
         this.saving.set(false);
         this.feedbackType.set('error');
-        this.feedbackMsg.set(err?.error?.title || 'Không thể lưu thay đổi.');
-        this.toastService.error('Lỗi Cập Nhật', err?.error?.title || 'Không thể lưu thay đổi.');
+        this.feedbackMsg.set(apiErrorMessage(err, 'Không thể lưu thay đổi.'));
+        this.toastService.error('Lỗi Cập Nhật', apiErrorMessage(err, 'Không thể lưu thay đổi.'));
       }
     });
   }
@@ -434,7 +451,7 @@ export class ProjectSettingsPage implements OnInit {
             this.router.navigate(['/projects']);
           },
           error: (err) => {
-            this.toastService.error('Lỗi Xóa Dự Án', err?.error?.title || 'Không thể xóa dự án.');
+            this.toastService.error('Lỗi Xóa Dự Án', apiErrorMessage(err, 'Không thể xóa dự án.'));
           }
         });
       }

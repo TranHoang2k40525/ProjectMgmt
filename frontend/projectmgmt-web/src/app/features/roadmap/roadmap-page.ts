@@ -1,12 +1,16 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ProjectManagementService } from '../../core/services/project-management.service';
+import { ProjectManagementService, Sprint } from '../../core/services/project-management.service';
+import { NoProjectStateComponent } from '../../shared/components/no-project-state/no-project-state.component';
 
 @Component({
   selector: 'app-roadmap-page',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, NoProjectStateComponent],
   template: `
+    @if (!projectService.hasActiveProject()) {
+      <app-no-project-state featureName="Lộ Trình Dự Án (Roadmap)"></app-no-project-state>
+    } @else {
     <div class="roadmap-page flex flex-col gap-6 animate-fade-in font-body text-slate-900 dark:text-slate-100">
       
       <!-- Top Action Bar -->
@@ -27,13 +31,13 @@ import { ProjectManagementService } from '../../core/services/project-management
         <!-- Month Header Track -->
         <div class="roadmap-controls flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
           <div class="flex items-center gap-2">
-            <span class="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Tháng 8 - Tháng 10 (2026)</span>
+            <span class="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Trục thời gian các Sprint</span>
           </div>
 
           <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-xl text-sm font-semibold">
-            <button class="px-3.5 py-1.5 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs">Tuần</button>
-            <button class="px-3.5 py-1.5 rounded-lg text-slate-500 hover:text-slate-900">Tháng</button>
-            <button class="px-3.5 py-1.5 rounded-lg text-slate-500 hover:text-slate-900">Quý</button>
+            <button (click)="timeframe.set('week')" [class.bg-white]="timeframe() === 'week'" [class.dark:bg-slate-700]="timeframe() === 'week'" [class.text-slate-900]="timeframe() === 'week'" [class.dark:text-white]="timeframe() === 'week'" [class.shadow-2xs]="timeframe() === 'week'" [class.text-slate-500]="timeframe() !== 'week'" class="px-3.5 py-1.5 rounded-lg cursor-pointer transition-all">Tuần</button>
+            <button (click)="timeframe.set('month')" [class.bg-white]="timeframe() === 'month'" [class.dark:bg-slate-700]="timeframe() === 'month'" [class.text-slate-900]="timeframe() === 'month'" [class.dark:text-white]="timeframe() === 'month'" [class.shadow-2xs]="timeframe() === 'month'" [class.text-slate-500]="timeframe() !== 'month'" class="px-3.5 py-1.5 rounded-lg cursor-pointer transition-all">Tháng</button>
+            <button (click)="timeframe.set('quarter')" [class.bg-white]="timeframe() === 'quarter'" [class.dark:bg-slate-700]="timeframe() === 'quarter'" [class.text-slate-900]="timeframe() === 'quarter'" [class.dark:text-white]="timeframe() === 'quarter'" [class.shadow-2xs]="timeframe() === 'quarter'" [class.text-slate-500]="timeframe() !== 'quarter'" class="px-3.5 py-1.5 rounded-lg cursor-pointer transition-all">Quý</button>
           </div>
         </div>
 
@@ -55,16 +59,23 @@ import { ProjectManagementService } from '../../core/services/project-management
                 <span class="text-sm font-mono font-bold text-primary">{{ sprint.totalStoryPoints }} Points</span>
               </div>
 
+              @let prog = getSprintProgress(sprint);
               <!-- Gantt Progress Bar Track -->
               <div class="w-full h-6 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden flex relative mt-1">
-                @if (sprint.status === 'completed') {
-                  <div class="h-full bg-emerald-500 rounded-full w-full flex items-center justify-center text-xs font-bold text-white">100% Hoàn thành</div>
-                } @else if (sprint.status === 'active') {
-                  <div class="h-full bg-blue-500 rounded-full w-3/5 flex items-center justify-center text-xs font-bold text-white">60% Đang thực hiện</div>
-                } @else {
-                  <div class="h-full bg-slate-400 rounded-full w-1/5 flex items-center justify-center text-xs font-bold text-white">Kế hoạch</div>
-                }
+                <div
+                  [class]="prog.bgClass"
+                  [style.width.%]="prog.percent"
+                  class="h-full rounded-full flex items-center justify-center text-xs font-bold text-white transition-all duration-300 px-2 truncate min-w-[2.5rem]"
+                >
+                  {{ prog.label }}
+                </div>
               </div>
+            </div>
+          } @empty {
+            <div class="p-8 text-center text-slate-400">
+              <span class="material-symbols-outlined text-[36px] block mb-2 opacity-60">route</span>
+              <p class="text-sm font-medium">Chưa có Sprint nào trong lộ trình</p>
+              <p class="text-xs text-slate-400 mt-1">Các chu kỳ Sprint được tạo sẽ xuất hiện tự động dưới dạng biểu đồ Gantt tại đây.</p>
             </div>
           }
         </div>
@@ -72,6 +83,7 @@ import { ProjectManagementService } from '../../core/services/project-management
       </div>
 
     </div>
+    }
   `,
   styles: [`
     .roadmap-scroll-hint { display: none; }
@@ -98,6 +110,27 @@ import { ProjectManagementService } from '../../core/services/project-management
   `]
 })
 export class RoadmapPageComponent {
-  private readonly projectService = inject(ProjectManagementService);
+  readonly projectService = inject(ProjectManagementService);
   readonly sprints = this.projectService.sprints;
+  readonly timeframe = signal<'week' | 'month' | 'quarter'>('week');
+
+  getSprintProgress(sprint: Sprint): { percent: number; label: string; bgClass: string } {
+    if (sprint.status === 'completed') {
+      return { percent: 100, label: '100% Hoàn thành', bgClass: 'bg-emerald-500' };
+    }
+    const sprintItems = this.projectService.workItems().filter(w => w.sprintId === sprint.id);
+    if (sprintItems.length === 0) {
+      if (sprint.status === 'active') {
+        return { percent: 0, label: 'Đang chạy (chưa có công việc)', bgClass: 'bg-blue-500' };
+      }
+      return { percent: 0, label: 'Kế hoạch', bgClass: 'bg-slate-400' };
+    }
+    const doneCount = sprintItems.filter(w => w.statusName === 'Done').length;
+    const pct = Math.round((doneCount / sprintItems.length) * 100);
+    return {
+      percent: Math.max(pct, 10),
+      label: `${pct}% Hoàn thành (${doneCount}/${sprintItems.length} việc)`,
+      bgClass: sprint.status === 'active' ? 'bg-blue-500' : 'bg-slate-400'
+    };
+  }
 }

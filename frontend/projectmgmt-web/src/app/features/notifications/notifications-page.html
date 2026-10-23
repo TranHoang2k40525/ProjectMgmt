@@ -4,9 +4,9 @@
     <!-- Breadcrumbs & Header Section -->
     <section class="flex flex-col gap-2">
       <nav aria-label="Breadcrumb" class="flex items-center gap-2 text-on-surface-variant font-label-sm text-label-sm">
-        <span class="hover:text-primary cursor-pointer transition-colors">Dự án</span>
+        <a routerLink="/projects" class="hover:text-primary cursor-pointer transition-colors">Dự án</a>
         <span class="material-symbols-outlined text-[14px]">chevron_right</span>
-        <span class="px-2 py-0.5 rounded bg-surface-container font-mono text-primary font-bold">SCRUMAI-2025</span>
+        <span class="px-2 py-0.5 rounded bg-surface-container font-mono text-primary font-bold">{{ currentProject().name || 'Dự án' }}</span>
         <span class="material-symbols-outlined text-[14px]">chevron_right</span>
         <span class="text-on-surface font-semibold">Trung tâm Thông báo & Giám sát</span>
       </nav>
@@ -22,7 +22,7 @@
             </span>
           </div>
           <p class="font-body-md text-body-md text-on-surface-variant mt-1">
-            Quản lý dòng sự kiện SignalR, thông báo tác vụ cá nhân, và tra cứu nhật ký thay đổi hệ thống (Audit Trail) phục vụ đồ án K65.
+            Quản lý dòng sự kiện thời gian thực, thông báo tác vụ cá nhân và tra cứu nhật ký hoạt động hệ thống.
           </p>
         </div>
 
@@ -30,10 +30,12 @@
       <div class="notifications-actions flex items-center flex-wrap gap-3 shrink-0">
           <div class="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-surface-container-low shadow-xs border border-outline-variant/30">
             <span class="relative flex h-2.5 w-2.5">
-              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              @if (isRealtimeConnected()) {
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              }
+              <span class="relative inline-flex rounded-full h-2.5 w-2.5" [class.bg-emerald-500]="isRealtimeConnected()" [class.bg-slate-400]="!isRealtimeConnected()"></span>
             </span>
-            <span class="font-label-sm text-label-sm text-on-surface font-semibold">SignalR: <strong class="text-emerald-700">Connected</strong> (24ms)</span>
+            <span class="font-label-sm text-label-sm text-on-surface font-semibold">SignalR: <strong [class.text-emerald-700]="isRealtimeConnected()">{{ realtimeStateLabel() }}</strong></span>
           </div>
 
           @if (unreadCount() > 0) {
@@ -100,9 +102,9 @@
               [class.border-primary-container]="!item.isRead"
               [class.bg-surface-container-lowest]="item.isRead"
               [class.bg-surface-container-low/40]="!item.isRead"
-              (click)="markAsRead(item.id)"
-              (keydown.enter)="markAsRead(item.id)"
-              (keydown.space)="$event.preventDefault(); markAsRead(item.id)"
+              (click)="markAsRead(item)"
+              (keydown.enter)="markAsRead(item)"
+              (keydown.space)="$event.preventDefault(); markAsRead(item)"
               role="button"
               tabindex="0">
               
@@ -166,43 +168,36 @@
         <div class="realtime-metrics-grid grid grid-cols-2 gap-3">
             <div class="p-3.5 rounded-xl bg-surface-container-low flex flex-col">
               <span class="font-label-sm text-label-sm text-on-surface-variant font-bold">Hub Endpoint</span>
-              <span class="font-mono text-label-sm font-bold text-primary truncate mt-1">/hub/scrum-events</span>
-              <span class="text-emerald-700 font-label-sm text-[11px] mt-1 flex items-center gap-1">
-                <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span> 24ms Ping
+              <span class="font-mono text-label-sm font-bold text-primary truncate mt-1">/hub/notifications</span>
+              <span class="font-label-sm text-[11px] mt-1 flex items-center gap-1" [class.text-emerald-700]="isRealtimeConnected()" [class.text-slate-500]="!isRealtimeConnected()">
+                <span class="h-1.5 w-1.5 rounded-full" [class.bg-emerald-500]="isRealtimeConnected()" [class.bg-slate-400]="!isRealtimeConnected()"></span>
+                {{ isRealtimeConnected() ? 'Kênh trực tiếp mở' : 'Đang ở trạng thái sẵn sàng' }}
               </span>
             </div>
 
             <div class="p-3.5 rounded-xl bg-surface-container-low flex flex-col">
-              <span class="font-label-sm text-label-sm text-on-surface-variant font-bold">Redis Backplane</span>
-              <span class="font-mono text-label-sm font-bold text-on-surface truncate mt-1">redis://cluster-k65:6379</span>
-              <span class="text-on-surface-variant font-label-sm text-[11px] mt-1">Pub/Sub Message Bus</span>
+              <span class="font-label-sm text-label-sm text-on-surface-variant font-bold">Giao thức truyền tải</span>
+              <span class="font-mono text-label-sm font-bold text-on-surface truncate mt-1">WebSocket / SSE</span>
+              <span class="text-on-surface-variant font-label-sm text-[11px] mt-1">Đồng bộ hai chiều</span>
             </div>
           </div>
 
           <div class="p-4 rounded-xl bg-surface-container-low flex flex-col gap-2">
             <span class="font-label-md text-label-md font-bold text-on-surface flex items-center gap-2">
               <span class="material-symbols-outlined text-emerald-600 text-[18px]">group</span>
-              Đang trực tuyến trong đồ án (5)
+              Thành viên trong dự án ({{ onlineMembers().length }})
             </span>
             <div class="flex flex-col gap-1.5 pt-1">
-              <div class="flex items-center justify-between text-body-sm text-on-surface">
-                <span class="flex items-center gap-2">
-                  <span class="h-2 w-2 rounded-full bg-emerald-500"></span> PGS.TS. Đặng Tiến Dũng
-                </span>
-                <span class="font-label-sm text-[10px] text-outline font-semibold">Giảng viên HD</span>
-              </div>
-              <div class="flex items-center justify-between text-body-sm text-on-surface">
-                <span class="flex items-center gap-2">
-                  <span class="h-2 w-2 rounded-full bg-emerald-500"></span> ThS. Phạm Quang Thắng
-                </span>
-                <span class="font-label-sm text-[10px] text-outline font-semibold">Hội đồng</span>
-              </div>
-              <div class="flex items-center justify-between text-body-sm text-on-surface">
-                <span class="flex items-center gap-2">
-                  <span class="h-2 w-2 rounded-full bg-emerald-500"></span> Trần Văn Hoàng
-                </span>
-                <span class="font-label-sm text-[10px] text-primary font-bold">Scrum Master</span>
-              </div>
+              @for (m of onlineMembers(); track m.id) {
+                <div class="flex items-center justify-between text-body-sm text-on-surface">
+                  <span class="flex items-center gap-2">
+                    <span class="h-2 w-2 rounded-full bg-emerald-500"></span> {{ m.displayName }}
+                  </span>
+                  <span class="font-label-sm text-[10px] text-primary font-bold">{{ m.role }}</span>
+                </div>
+              } @empty {
+                <p class="text-xs text-outline py-2">Chưa có thành viên nào</p>
+              }
             </div>
           </div>
         </div>

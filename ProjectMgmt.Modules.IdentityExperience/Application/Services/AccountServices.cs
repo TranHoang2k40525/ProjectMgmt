@@ -1,77 +1,938 @@
-using System;
-using System.Collections.Generic;
-using System.Text;
-using BCrypt.Net;
-using System.Linq;
-using IdentityExperience.Domain.Entities;
+using System.ComponentModel.DataAnnotations;
+using System.Text.RegularExpressions;
 using IdentityExperience.Application.Dto;
 using IdentityExperience.Application.IServices;
-using  IdentityExperience.Infrastructure.IRepository;
-using System.Xml.Serialization;
+using IdentityExperience.Domain.Entities;
+using IdentityExperience.Domain.IRepositories;
+using IdentityExperience.Domain.Models;
+using PhoneNumbers;
 
-namespace IdentityExperience.Application.Services
+namespace IdentityExperience.Application.Services;
+
+public class AccountServices : IAccountServices
 {
-    
+    private const string VerifyEmailPurpose = "VerifyEmail";
+    private const string ResetPasswordPurpose = "ResetPassword";
+    private static readonly TimeSpan OtpLifetime = TimeSpan.FromMinutes(5);
+    private const int OtpResendAfterSeconds = 60;
+    private const int OtpMaximumAttempts = 5;
+    private static readonly Regex PasswordPattern = new(
+        @"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,128}$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    public class AccountServices : IAccountServices
+    private readonly IIdentityRepository _identityRepository;
+    private readonly IPasswordService _passwordService;
+    private readonly IOtpCodeService _otpCodeService;
+    private readonly IEmailService _emailService;
+    private readonly ITokenService _tokenService;
+    private readonly TimeProvider _timeProvider;
+    private readonly INotificationServices? _notificationServices;
+
+    public AccountServices(
+        IIdentityRepository identityRepository,
+        IPasswordService passwordService,
+        IOtpCodeService otpCodeService,
+        IEmailService emailService,
+        ITokenService tokenService,
+        TimeProvider timeProvider,
+        INotificationServices? notificationServices = null)
     {
-        private readonly IIdentityRepository _identityRepository;
-        public AccountServices(IIdentityRepository identityRepository) {
-             _identityRepository = identityRepository;
+        _identityRepository = identityRepository;
+        _passwordService = passwordService;
+        _otpCodeService = otpCodeService;
+        _emailService = emailService;
+        _tokenService = tokenService;
+        _timeProvider = timeProvider;
+        _notificationServices = notificationServices;
+    }
+
+    public async Task<RegisterResult> RegisterAsync(
+        string? email,
+        string? password,
+        string? fullName,
+        string? phoneNumber)
+    {
+        var validationError = ValidateRegistration(email, password, fullName, phoneNumber);
+        if (validationError is not null)
+        {
+            return validationError;
         }
 
-        public async Task<ResultLogin> LoginAsync(string username, string password)
-        {
-            var Data = await _identityRepository.GetBy<User>(u => u.Email == username);
-            if(Data.Email == null || Data.PasswordHash == null) {
-            return new ResultLogin{
-            Message = "Tài khoản và mật khẩu không tồn tại",
-            Success = false
-            };
-            }
-            var verify = HasPassword(password, Data.PasswordHash);
-            if (verify == false) {
-                return new ResultLogin
-                {
-                    Message = "Mật khẩu không đúng, vui lòng nhập lại mật khẩu",
-                    Success = false
-                };
+        email = email!.Trim();
+        var normalizedEmail = email.ToUpperInvariant();
+        var existingUser = await _identityRepository.GetUserByNormalizedEmailAsync(normalizedEmail);
 
-            }
-            return new ResultLogin
+        if (existingUser is not null)
+        {
+            return new RegisterResult
             {
-                Message = " đăng nhập thành công",
-                Success = true
+                Success = false,
+                ErrorCode = existingUser.IsEmailVerified
+                    ? "AUTH_EMAIL_ALREADY_EXISTS"
+                    : "AUTH_EMAIL_VERIFICATION_PENDING",
+                Message = existingUser.IsEmailVerified
+                    ? "Email đã được sử dụng."
+                    : "Email đã đăng ký nhưng chưa xác minh. Hãy yêu cầu gửi lại OTP.",
+                UserId = existingUser.Id,
+                Email = existingUser.Email,
+                Status = existingUser.IsEmailVerified ? "Active" : "PendingVerification"
             };
-
-
         }
 
-        public async Task<Result> RegisterAsync(AccountDto.Register registerDto)
+        if (!TryNormalizePhone(phoneNumber!, out var normalizedPhoneNumber))
         {
-            var Data = await _identityRepository.GetBy<UserProfile>(u => u.DisplayName == $"{registerDto.FirstName} {registerDto.FirstName}" );
-            if(Data.DisplayName.Any())
+            return Failure("AUTH_PHONE_INVALID", "Số điện thoại không hợp lệ.");
+        }
+
+        if (await _identityRepository.PhoneNumberExistsAsync(normalizedPhoneNumber))
+        {
+            return Failure("AUTH_PHONE_ALREADY_EXISTS", "Số điện thoại đã được sử dụng.");
+        }
+
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var userId = Guid.NewGuid();
+        var otpCode = _otpCodeService.GenerateCode();
+        var otpExpiresAt = now.Add(OtpLifetime);
+
+        var user = new User
+        {
+            Id = userId,
+            Email = email,
+            NormalizedEmail = normalizedEmail,
+            PasswordHash = _passwordService.Hash(password!),
+            IsEmailVerified = false,
+            IsActive = true,
+            SecurityStamp = Guid.NewGuid(),
+            CreatedAt = now
+        };
+
+        var profile = new UserProfile
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            DisplayName = fullName!.Trim(),
+            PhoneNumber = normalizedPhoneNumber,
+            Timezone = "Asia/Ho_Chi_Minh",
+            CreatedAt = now
+        };
+
+        var otp = new OtpCode
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            CodeHash = _otpCodeService.Hash(normalizedEmail, VerifyEmailPurpose, otpCode),
+            Purpose = VerifyEmailPurpose,
+            ExpiresAt = otpExpiresAt,
+            IsUsed = false,
+            AttemptCount = 0,
+            CreatedAt = now
+        };
+
+        var created = await _identityRepository.CreatePendingRegistrationAsync(
+            user,
+            profile,
+            otp);
+
+        if (!created)
+        {
+            return Failure(
+                "AUTH_REGISTRATION_CONFLICT",
+                "Email hoặc số điện thoại vừa được sử dụng bởi một yêu cầu khác.");
+        }
+
+        var emailDelivered = await _emailService.SendOtpAsync(
+            email,
+            profile.DisplayName,
+            otpCode,
+            otpExpiresAt);
+
+        if (!emailDelivered)
+        {
+            return new RegisterResult
             {
-                return new Result
-                {
-                    Message = "Tên người dùng đã tồn tại",
-                    Success = false
-                };
-            }
-            //var PostData = await _identityRepository.PostAsync<User>(registerDto);
-            return new Result{
-            Message = "đăng ký thành công",
-            Success = true
+                Success = false,
+                ErrorCode = "AUTH_EMAIL_DELIVERY_FAILED",
+                Message = "Tài khoản đã được tạo ở trạng thái chờ xác minh nhưng chưa gửi được email OTP. Hãy thử gửi lại.",
+                UserId = userId,
+                Email = email,
+                Status = "PendingVerification",
+                OtpExpiresAt = otpExpiresAt,
+                ResendAfterSeconds = OtpResendAfterSeconds
             };
         }
 
-        public async Task<Result> VerifyAsync<TEntity, T>(TEntity entity, T m)
+        return new RegisterResult
         {
-            throw new NotImplementedException();
+            Success = true,
+            Message = "Đã tạo tài khoản và gửi mã OTP xác minh email.",
+            UserId = userId,
+            Email = email,
+            Status = "PendingVerification",
+            OtpExpiresAt = otpExpiresAt,
+            ResendAfterSeconds = OtpResendAfterSeconds
+        };
+    }
+
+    public async Task<ResultLogin> LoginAsync(
+        string? email,
+        string? password,
+        string? ipAddress,
+        string? userAgent)
+    {
+        if (!TryNormalizeEmail(email, out _, out var normalizedEmail)
+            || string.IsNullOrEmpty(password)
+            || password.Length > 128)
+        {
+            return LoginFailure("AUTH_INVALID_CREDENTIALS", "Email hoặc mật khẩu không đúng.");
         }
-        private bool HasPassword(string password, string passwordhash) {
-            var hashpass = BCrypt.Net.BCrypt.Verify(password, passwordhash);
-            return hashpass;
+
+        var user = await _identityRepository.GetUserByNormalizedEmailAsync(normalizedEmail);
+        if (user?.PasswordHash is null
+            || !_passwordService.Verify(password, user.PasswordHash))
+        {
+            return LoginFailure("AUTH_INVALID_CREDENTIALS", "Email hoặc mật khẩu không đúng.");
         }
+
+        if (!user.IsActive)
+        {
+            return LoginFailure("AUTH_ACCOUNT_DISABLED", "Tài khoản đã bị vô hiệu hóa.");
+        }
+
+        if (!user.IsEmailVerified)
+        {
+            return LoginFailure(
+                "AUTH_EMAIL_NOT_VERIFIED",
+                "Email chưa được xác minh. Hãy xác minh OTP trước khi đăng nhập.");
+        }
+
+        var profile = await _identityRepository.GetUserProfileAsync(user.Id);
+        var roles = await _identityRepository.GetSystemRoleNamesAsync(user.Id);
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var tokenSet = _tokenService.CreateTokenSet(user, profile, roles, now);
+        var refreshToken = BuildRefreshToken(user.Id, tokenSet, ipAddress, userAgent, now);
+
+        var sessionStatus = await _identityRepository.CreateLoginSessionAsync(
+            user.Id,
+            refreshToken,
+            now);
+        if (sessionStatus != LoginSessionStatus.Created)
+        {
+            return sessionStatus switch
+            {
+                LoginSessionStatus.AccountDisabled =>
+                    LoginFailure("AUTH_ACCOUNT_DISABLED", "Tài khoản đã bị vô hiệu hóa."),
+                LoginSessionStatus.EmailNotVerified =>
+                    LoginFailure("AUTH_EMAIL_NOT_VERIFIED", "Email chưa được xác minh."),
+                _ => LoginFailure("AUTH_INVALID_CREDENTIALS", "Không thể tạo phiên đăng nhập.")
+            };
+        }
+
+        return BuildLoginSuccess(user, profile, roles, tokenSet, now);
+    }
+
+    public async Task<OtpResult> SendOtpAsync(
+        string? email,
+        string? purpose)
+    {
+        if (!TryNormalizeEmail(email, out var normalizedInputEmail, out var normalizedEmail))
+        {
+            return OtpFailure("AUTH_EMAIL_INVALID", "Email không hợp lệ.");
+        }
+
+        purpose = string.IsNullOrWhiteSpace(purpose)
+            ? VerifyEmailPurpose
+            : purpose.Trim();
+        if (!string.Equals(purpose, VerifyEmailPurpose, StringComparison.Ordinal))
+        {
+            return OtpFailure(
+                "AUTH_OTP_PURPOSE_INVALID",
+                "Endpoint này chỉ hỗ trợ mục đích VerifyEmail.");
+        }
+
+        var user = await _identityRepository.GetUserByNormalizedEmailAsync(normalizedEmail);
+        if (user is null)
+        {
+            return OtpFailure("AUTH_ACCOUNT_NOT_FOUND", "Không tìm thấy tài khoản với email này.");
+        }
+
+        if (user.IsEmailVerified)
+        {
+            return OtpFailure("AUTH_EMAIL_ALREADY_VERIFIED", "Email đã được xác minh.");
+        }
+
+        var profile = await _identityRepository.GetUserProfileAsync(user.Id);
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var otpCode = _otpCodeService.GenerateCode();
+        var otp = new OtpCode
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            CodeHash = _otpCodeService.Hash(normalizedEmail, VerifyEmailPurpose, otpCode),
+            Purpose = VerifyEmailPurpose,
+            ExpiresAt = now.Add(OtpLifetime),
+            IsUsed = false,
+            AttemptCount = 0,
+            CreatedAt = now
+        };
+
+        var issueResult = await _identityRepository.ReplaceEmailVerificationOtpAsync(
+            user.Id,
+            otp,
+            now,
+            TimeSpan.FromSeconds(OtpResendAfterSeconds));
+
+        if (issueResult.Status == OtpIssueStatus.RateLimited)
+        {
+            return new OtpResult
+            {
+                Success = false,
+                ErrorCode = "AUTH_OTP_RATE_LIMITED",
+                Message = "OTP vừa được cấp. Vui lòng chờ trước khi yêu cầu mã mới.",
+                Email = normalizedInputEmail,
+                Status = "PendingVerification",
+                OtpExpiresAt = issueResult.ExpiresAt,
+                ResendAfterSeconds = issueResult.RetryAfterSeconds
+            };
+        }
+
+        if (issueResult.Status == OtpIssueStatus.EmailAlreadyVerified)
+        {
+            return OtpFailure("AUTH_EMAIL_ALREADY_VERIFIED", "Email đã được xác minh.");
+        }
+
+        if (issueResult.Status == OtpIssueStatus.UserNotFound)
+        {
+            return OtpFailure("AUTH_ACCOUNT_NOT_FOUND", "Tài khoản không còn tồn tại.");
+        }
+
+        var emailDelivered = await _emailService.SendOtpAsync(
+            normalizedInputEmail,
+            profile?.DisplayName ?? normalizedInputEmail,
+            otpCode,
+            otp.ExpiresAt);
+        if (!emailDelivered)
+        {
+            return new OtpResult
+            {
+                Success = false,
+                ErrorCode = "AUTH_EMAIL_DELIVERY_FAILED",
+                Message = "Đã tạo OTP mới nhưng chưa gửi được email. Hãy thử lại sau thời gian chờ.",
+                Email = normalizedInputEmail,
+                Status = "PendingVerification",
+                OtpExpiresAt = otp.ExpiresAt,
+                ResendAfterSeconds = OtpResendAfterSeconds
+            };
+        }
+
+        return new OtpResult
+        {
+            Success = true,
+            Message = "Đã gửi mã OTP mới.",
+            Email = normalizedInputEmail,
+            Status = "PendingVerification",
+            OtpExpiresAt = otp.ExpiresAt,
+            ResendAfterSeconds = OtpResendAfterSeconds
+        };
+    }
+
+    public async Task<OtpResult> VerifyOtpAsync(
+        string? email,
+        string? code,
+        string? purpose)
+    {
+        if (!TryNormalizeEmail(email, out var normalizedInputEmail, out var normalizedEmail))
+        {
+            return OtpFailure("AUTH_EMAIL_INVALID", "Email không hợp lệ.");
+        }
+
+        purpose = string.IsNullOrWhiteSpace(purpose)
+            ? VerifyEmailPurpose
+            : purpose.Trim();
+        if (!string.Equals(purpose, VerifyEmailPurpose, StringComparison.Ordinal))
+        {
+            return OtpFailure(
+                "AUTH_OTP_PURPOSE_INVALID",
+                "Endpoint này chỉ hỗ trợ mục đích VerifyEmail.");
+        }
+
+        var otpCode = code?.Trim() ?? string.Empty;
+        if (otpCode.Length != 6 || otpCode.Any(character => character is < '0' or > '9'))
+        {
+            return OtpFailure("AUTH_OTP_INVALID_FORMAT", "OTP phải gồm đúng 6 chữ số.");
+        }
+
+        var user = await _identityRepository.GetUserByNormalizedEmailAsync(normalizedEmail);
+        if (user is null)
+        {
+            return OtpFailure("AUTH_ACCOUNT_NOT_FOUND", "Không tìm thấy tài khoản với email này.");
+        }
+
+        var expectedHash = _otpCodeService.Hash(normalizedEmail, VerifyEmailPurpose, otpCode);
+        var verification = await _identityRepository.VerifyEmailOtpAsync(
+            user.Id,
+            VerifyEmailPurpose,
+            expectedHash,
+            _timeProvider.GetUtcNow().UtcDateTime,
+            OtpMaximumAttempts);
+
+        return verification.Status switch
+        {
+            OtpVerificationStatus.Verified => new OtpResult
+            {
+                Success = true,
+                Message = "Xác minh email thành công. Tài khoản đã sẵn sàng đăng nhập.",
+                Email = normalizedInputEmail,
+                Status = "Active",
+                AttemptsRemaining = verification.AttemptsRemaining
+            },
+            OtpVerificationStatus.AlreadyVerified => new OtpResult
+            {
+                Success = true,
+                Message = "Email đã được xác minh trước đó.",
+                Email = normalizedInputEmail,
+                Status = "Active"
+            },
+            OtpVerificationStatus.UserNotFound =>
+                OtpFailure("AUTH_ACCOUNT_NOT_FOUND", "Tài khoản không còn tồn tại."),
+            OtpVerificationStatus.AccountDisabled =>
+                OtpFailure("AUTH_ACCOUNT_DISABLED", "Tài khoản đã bị vô hiệu hóa."),
+            OtpVerificationStatus.NoActiveCode =>
+                OtpFailure("AUTH_OTP_NOT_FOUND", "Không có OTP đang hoạt động. Hãy yêu cầu mã mới."),
+            OtpVerificationStatus.Expired =>
+                OtpFailure("AUTH_OTP_EXPIRED", "OTP đã hết hạn. Hãy yêu cầu mã mới."),
+            OtpVerificationStatus.AttemptsExceeded => new OtpResult
+            {
+                Success = false,
+                ErrorCode = "AUTH_OTP_ATTEMPTS_EXCEEDED",
+                Message = "OTP đã bị khóa sau quá nhiều lần nhập sai. Hãy yêu cầu mã mới.",
+                Email = normalizedInputEmail,
+                Status = "PendingVerification",
+                AttemptsRemaining = 0
+            },
+            _ => new OtpResult
+            {
+                Success = false,
+                ErrorCode = "AUTH_OTP_INVALID",
+                Message = "OTP không đúng.",
+                Email = normalizedInputEmail,
+                Status = "PendingVerification",
+                AttemptsRemaining = verification.AttemptsRemaining
+            }
+        };
+    }
+
+    public async Task<ResultLogin> RefreshTokenAsync(
+        string? refreshToken,
+        string? ipAddress,
+        string? userAgent)
+    {
+        if (string.IsNullOrWhiteSpace(refreshToken) || refreshToken.Length > 512)
+        {
+            return LoginFailure("AUTH_REFRESH_TOKEN_INVALID", "Refresh token không hợp lệ.");
+        }
+
+        var currentTokenHash = _tokenService.HashRefreshToken(refreshToken.Trim());
+        var context = await _identityRepository.GetRefreshSessionContextAsync(currentTokenHash);
+        if (context is null)
+        {
+            return LoginFailure("AUTH_REFRESH_TOKEN_INVALID", "Refresh token không hợp lệ.");
+        }
+
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var tokenSet = _tokenService.CreateTokenSet(
+            context.User,
+            context.Profile,
+            context.SystemRoles,
+            now);
+        var replacementToken = BuildRefreshToken(
+            context.User.Id,
+            tokenSet,
+            ipAddress,
+            userAgent,
+            now);
+
+        var rotationStatus = await _identityRepository.RotateRefreshTokenAsync(
+            currentTokenHash,
+            replacementToken,
+            now);
+        if (rotationStatus != TokenRotationStatus.Rotated)
+        {
+            return rotationStatus switch
+            {
+                TokenRotationStatus.TokenExpired =>
+                    LoginFailure("AUTH_REFRESH_TOKEN_EXPIRED", "Refresh token đã hết hạn."),
+                TokenRotationStatus.ReuseDetected =>
+                    LoginFailure(
+                        "AUTH_REFRESH_TOKEN_REUSE_DETECTED",
+                        "Phát hiện refresh token đã bị tái sử dụng; các phiên liên quan đã bị thu hồi."),
+                TokenRotationStatus.AccountDisabled =>
+                    LoginFailure("AUTH_ACCOUNT_DISABLED", "Tài khoản đã bị vô hiệu hóa."),
+                TokenRotationStatus.EmailNotVerified =>
+                    LoginFailure("AUTH_EMAIL_NOT_VERIFIED", "Email chưa được xác minh."),
+                _ => LoginFailure("AUTH_REFRESH_TOKEN_INVALID", "Refresh token không còn hiệu lực.")
+            };
+        }
+
+        return BuildLoginSuccess(
+            context.User,
+            context.Profile,
+            context.SystemRoles,
+            tokenSet,
+            now);
+    }
+
+    public async Task<Result> LogoutAsync(string? refreshToken)
+    {
+        if (!string.IsNullOrWhiteSpace(refreshToken) && refreshToken.Length <= 512)
+        {
+            var refreshTokenHash = _tokenService.HashRefreshToken(refreshToken.Trim());
+            await _identityRepository.RevokeRefreshTokenAsync(refreshTokenHash);
+        }
+
+        return new Result
+        {
+            Success = true,
+            Message = "Đã thu hồi phiên đăng nhập an toàn."
+        };
+    }
+
+    public async Task<Result> ForgotPasswordAsync(string? email)
+    {
+        var acceptedResult = new Result
+        {
+            Success = true,
+            Message = "Nếu email thuộc một tài khoản hợp lệ, mã đặt lại mật khẩu sẽ được gửi trong ít phút."
+        };
+
+        if (!TryNormalizeEmail(email, out var normalizedInputEmail, out var normalizedEmail))
+        {
+            return acceptedResult;
+        }
+
+        var user = await _identityRepository.GetUserByNormalizedEmailAsync(normalizedEmail);
+        if (user is null || !user.IsActive || !user.IsEmailVerified)
+        {
+            return acceptedResult;
+        }
+
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var otpCode = _otpCodeService.GenerateCode();
+        var otp = new OtpCode
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            CodeHash = _otpCodeService.Hash(normalizedEmail, ResetPasswordPurpose, otpCode),
+            Purpose = ResetPasswordPurpose,
+            ExpiresAt = now.Add(OtpLifetime),
+            IsUsed = false,
+            AttemptCount = 0,
+            CreatedAt = now
+        };
+
+        var issueResult = await _identityRepository.ReplacePasswordResetOtpAsync(
+            user.Id,
+            otp,
+            now,
+            TimeSpan.FromSeconds(OtpResendAfterSeconds));
+        if (issueResult.Status != OtpIssueStatus.Issued)
+        {
+            return acceptedResult;
+        }
+
+        var profile = await _identityRepository.GetUserProfileAsync(user.Id);
+        await _emailService.SendPasswordResetOtpAsync(
+            normalizedInputEmail,
+            profile?.DisplayName ?? normalizedInputEmail,
+            otpCode,
+            otp.ExpiresAt);
+
+        return acceptedResult;
+    }
+
+    public async Task<OtpResult> ResetPasswordAsync(
+        string? email,
+        string? code,
+        string? newPassword)
+    {
+        if (!TryNormalizeEmail(email, out var normalizedInputEmail, out var normalizedEmail))
+        {
+            return OtpFailure("AUTH_PASSWORD_RESET_INVALID", "Thông tin đặt lại mật khẩu không hợp lệ.");
+        }
+
+        var otpCode = code?.Trim() ?? string.Empty;
+        if (otpCode.Length != 6 || otpCode.Any(character => character is < '0' or > '9'))
+        {
+            return OtpFailure("AUTH_OTP_INVALID_FORMAT", "OTP phải gồm đúng 6 chữ số.");
+        }
+
+        if (!IsStrongPassword(newPassword))
+        {
+            return OtpFailure(
+                "AUTH_PASSWORD_WEAK",
+                "Mật khẩu phải dài 8-128 ký tự và có chữ hoa, chữ thường, số, ký tự đặc biệt.");
+        }
+
+        var user = await _identityRepository.GetUserByNormalizedEmailAsync(normalizedEmail);
+        if (user is null)
+        {
+            return OtpFailure("AUTH_PASSWORD_RESET_INVALID", "Thông tin đặt lại mật khẩu không hợp lệ.");
+        }
+
+        if (user.PasswordHash is not null && _passwordService.Verify(newPassword!, user.PasswordHash))
+        {
+            return OtpFailure(
+                "AUTH_PASSWORD_REUSED",
+                "Mật khẩu mới phải khác mật khẩu hiện tại.");
+        }
+
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var expectedCodeHash = _otpCodeService.Hash(
+            normalizedEmail,
+            ResetPasswordPurpose,
+            otpCode);
+        var resetResult = await _identityRepository.ResetPasswordAsync(
+            user.Id,
+            ResetPasswordPurpose,
+            expectedCodeHash,
+            _passwordService.Hash(newPassword!),
+            Guid.NewGuid(),
+            now,
+            OtpMaximumAttempts);
+
+        if (resetResult.Status == PasswordResetStatus.Changed)
+        {
+            var profile = await _identityRepository.GetUserProfileAsync(user.Id);
+            await SendPasswordChangedNotificationAsync(user, profile, now);
+
+            return new OtpResult
+            {
+                Success = true,
+                Message = "Đặt lại mật khẩu thành công. Tất cả phiên đăng nhập cũ đã bị thu hồi.",
+                Email = normalizedInputEmail,
+                Status = "PasswordChanged",
+                AttemptsRemaining = resetResult.AttemptsRemaining
+            };
+        }
+
+        return resetResult.Status switch
+        {
+            PasswordResetStatus.Expired => PasswordResetFailure(
+                "AUTH_OTP_EXPIRED",
+                "OTP đã hết hạn. Hãy yêu cầu mã mới.",
+                normalizedInputEmail,
+                0),
+            PasswordResetStatus.AttemptsExceeded => PasswordResetFailure(
+                "AUTH_OTP_ATTEMPTS_EXCEEDED",
+                "OTP đã bị khóa sau quá nhiều lần nhập sai. Hãy yêu cầu mã mới.",
+                normalizedInputEmail,
+                0),
+            PasswordResetStatus.InvalidCode => PasswordResetFailure(
+                "AUTH_OTP_INVALID",
+                "OTP không đúng.",
+                normalizedInputEmail,
+                resetResult.AttemptsRemaining),
+            PasswordResetStatus.AccountDisabled => PasswordResetFailure(
+                "AUTH_ACCOUNT_DISABLED",
+                "Tài khoản đã bị vô hiệu hóa.",
+                normalizedInputEmail),
+            PasswordResetStatus.EmailNotVerified => PasswordResetFailure(
+                "AUTH_EMAIL_NOT_VERIFIED",
+                "Email chưa được xác minh.",
+                normalizedInputEmail),
+            _ => PasswordResetFailure(
+                "AUTH_PASSWORD_RESET_INVALID",
+                "Thông tin đặt lại mật khẩu không hợp lệ hoặc đã được sử dụng.",
+                normalizedInputEmail)
+        };
+    }
+
+    public async Task<Result> ChangePasswordAsync(
+        Guid userId,
+        string? currentPassword,
+        string? newPassword)
+    {
+        if (userId == Guid.Empty)
+        {
+            return ResultFailure("AUTH_UNAUTHENTICATED", "Phiên đăng nhập không hợp lệ.");
+        }
+
+        if (string.IsNullOrEmpty(currentPassword) || currentPassword.Length > 128)
+        {
+            return ResultFailure("AUTH_CURRENT_PASSWORD_INVALID", "Mật khẩu hiện tại không đúng.");
+        }
+
+        if (!IsStrongPassword(newPassword))
+        {
+            return ResultFailure(
+                "AUTH_PASSWORD_WEAK",
+                "Mật khẩu phải dài 8-128 ký tự và có chữ hoa, chữ thường, số, ký tự đặc biệt.");
+        }
+
+        var user = await _identityRepository.GetUserByIdAsync(userId);
+        if (user?.PasswordHash is null
+            || !_passwordService.Verify(currentPassword, user.PasswordHash))
+        {
+            return ResultFailure("AUTH_CURRENT_PASSWORD_INVALID", "Mật khẩu hiện tại không đúng.");
+        }
+
+        if (_passwordService.Verify(newPassword!, user.PasswordHash))
+        {
+            return ResultFailure("AUTH_PASSWORD_REUSED", "Mật khẩu mới phải khác mật khẩu hiện tại.");
+        }
+
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var changeResult = await _identityRepository.ChangePasswordAsync(
+            userId,
+            user.PasswordHash,
+            _passwordService.Hash(newPassword!),
+            Guid.NewGuid(),
+            now);
+
+        if (changeResult.Status != PasswordChangeStatus.Changed)
+        {
+            return changeResult.Status switch
+            {
+                PasswordChangeStatus.AccountDisabled =>
+                    ResultFailure("AUTH_ACCOUNT_DISABLED", "Tài khoản đã bị vô hiệu hóa."),
+                PasswordChangeStatus.EmailNotVerified =>
+                    ResultFailure("AUTH_EMAIL_NOT_VERIFIED", "Email chưa được xác minh."),
+                PasswordChangeStatus.CurrentPasswordChanged =>
+                    ResultFailure(
+                        "AUTH_PASSWORD_CONFLICT",
+                        "Mật khẩu vừa được thay đổi ở một yêu cầu khác. Hãy đăng nhập lại."),
+                _ => ResultFailure("AUTH_ACCOUNT_NOT_FOUND", "Không tìm thấy tài khoản.")
+            };
+        }
+
+        var profile = await _identityRepository.GetUserProfileAsync(userId);
+        await SendPasswordChangedNotificationAsync(user, profile, now);
+
+        return new Result
+        {
+            Success = true,
+            Message = "Đổi mật khẩu thành công. Tất cả phiên đăng nhập cũ đã bị thu hồi."
+        };
+    }
+
+    private async Task SendPasswordChangedNotificationAsync(
+        User user,
+        UserProfile? profile,
+        DateTime changedAtUtc)
+    {
+        var persisted = false;
+        if (_notificationServices is not null)
+        {
+            persisted = await _notificationServices.PublishAsync(new NotificationDto
+            {
+                UserId = user.Id,
+                Type = NotificationTypes.PasswordChanged,
+                Title = "Mật khẩu đã được thay đổi",
+                Content = "Mật khẩu đã thay đổi và tất cả phiên đăng nhập cũ đã bị thu hồi.",
+                EntityType = "User",
+                EntityId = user.Id,
+                SendEmail = true
+            });
+        }
+
+        if (!persisted)
+        {
+            await _emailService.SendPasswordChangedAsync(
+                user.Email,
+                profile?.DisplayName ?? user.Email,
+                changedAtUtc);
+        }
+    }
+
+    private static RegisterResult? ValidateRegistration(
+        string? email,
+        string? password,
+        string? fullName,
+        string? phoneNumber)
+    {
+        if (string.IsNullOrWhiteSpace(email)
+            || !new EmailAddressAttribute().IsValid(email.Trim()))
+        {
+            return Failure("AUTH_EMAIL_INVALID", "Email không hợp lệ.");
+        }
+
+        if (email.Trim().Length > 256)
+        {
+            return Failure("AUTH_EMAIL_TOO_LONG", "Email không được vượt quá 256 ký tự.");
+        }
+
+        if (string.IsNullOrWhiteSpace(fullName)
+            || fullName.Trim().Length is < 2 or > 150)
+        {
+            return Failure("AUTH_FULL_NAME_INVALID", "Họ tên phải có từ 2 đến 150 ký tự.");
+        }
+
+        if (string.IsNullOrWhiteSpace(phoneNumber))
+        {
+            return Failure("AUTH_PHONE_REQUIRED", "Số điện thoại là bắt buộc.");
+        }
+
+        if (!IsStrongPassword(password))
+        {
+            return Failure(
+                "AUTH_PASSWORD_WEAK",
+                "Mật khẩu phải dài 8-128 ký tự và có chữ hoa, chữ thường, số, ký tự đặc biệt.");
+        }
+
+        return null;
+    }
+
+    private static bool TryNormalizeEmail(
+        string? rawEmail,
+        out string email,
+        out string normalizedEmail)
+    {
+        email = rawEmail?.Trim() ?? string.Empty;
+        normalizedEmail = string.Empty;
+        if (email.Length is 0 or > 256 || !new EmailAddressAttribute().IsValid(email))
+        {
+            return false;
+        }
+
+        normalizedEmail = email.ToUpperInvariant();
+        return true;
+    }
+
+    private static bool TryNormalizePhone(string rawPhoneNumber, out string phoneNumber)
+    {
+        phoneNumber = string.Empty;
+        try
+        {
+            var phoneUtil = PhoneNumberUtil.GetInstance();
+            var parsed = phoneUtil.Parse(rawPhoneNumber.Trim(), "VN");
+            if (!phoneUtil.IsValidNumber(parsed))
+            {
+                return false;
+            }
+
+            phoneNumber = phoneUtil.Format(parsed, PhoneNumberFormat.E164);
+            return true;
+        }
+        catch (NumberParseException)
+        {
+            return false;
+        }
+    }
+
+    private static RegisterResult Failure(string errorCode, string message)
+    {
+        return new RegisterResult
+        {
+            Success = false,
+            ErrorCode = errorCode,
+            Message = message
+        };
+    }
+
+    private static OtpResult OtpFailure(string errorCode, string message)
+    {
+        return new OtpResult
+        {
+            Success = false,
+            ErrorCode = errorCode,
+            Message = message
+        };
+    }
+
+    private static OtpResult PasswordResetFailure(
+        string errorCode,
+        string message,
+        string email,
+        int? attemptsRemaining = null)
+    {
+        return new OtpResult
+        {
+            Success = false,
+            ErrorCode = errorCode,
+            Message = message,
+            Email = email,
+            Status = "PasswordResetPending",
+            AttemptsRemaining = attemptsRemaining
+        };
+    }
+
+    private static Result ResultFailure(string errorCode, string message)
+    {
+        return new Result
+        {
+            Success = false,
+            ErrorCode = errorCode,
+            Message = message
+        };
+    }
+
+    private static bool IsStrongPassword(string? password)
+    {
+        return !string.IsNullOrEmpty(password) && PasswordPattern.IsMatch(password);
+    }
+
+    private static RefreshToken BuildRefreshToken(
+        Guid userId,
+        TokenSet tokenSet,
+        string? ipAddress,
+        string? userAgent,
+        DateTime nowUtc)
+    {
+        return new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            TokenHash = tokenSet.RefreshTokenHash,
+            ExpiresAt = tokenSet.RefreshTokenExpiresAt,
+            IsRevoked = false,
+            CreatedByIp = Truncate(ipAddress, 45),
+            UserAgent = Truncate(userAgent, 400),
+            CreatedAt = nowUtc
+        };
+    }
+
+    private static ResultLogin BuildLoginSuccess(
+        User user,
+        UserProfile? profile,
+        List<string> roles,
+        TokenSet tokenSet,
+        DateTime nowUtc)
+    {
+        return new ResultLogin
+        {
+            Success = true,
+            Message = "Đăng nhập thành công.",
+            AccessToken = tokenSet.AccessToken,
+            RefreshToken = tokenSet.RefreshToken,
+            AccessTokenExpiresAt = tokenSet.AccessTokenExpiresAt,
+            RefreshTokenExpiresAt = tokenSet.RefreshTokenExpiresAt,
+            ExpiresInSeconds = Math.Max(
+                0,
+                (int)(tokenSet.AccessTokenExpiresAt - nowUtc).TotalSeconds),
+            UserId = user.Id,
+            Email = user.Email,
+            FullName = profile?.DisplayName,
+            Roles = roles
+        };
+    }
+
+    private static ResultLogin LoginFailure(string errorCode, string message)
+    {
+        return new ResultLogin
+        {
+            Success = false,
+            ErrorCode = errorCode,
+            Message = message
+        };
+    }
+
+    private static string? Truncate(string? value, int maximumLength)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var trimmed = value.Trim();
+        return trimmed.Length <= maximumLength ? trimmed : trimmed[..maximumLength];
     }
 }

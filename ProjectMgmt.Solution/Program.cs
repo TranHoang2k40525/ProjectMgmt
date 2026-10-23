@@ -1,10 +1,22 @@
+using DeliveryIntelligence.Application.Dto;
+using DeliveryIntelligence.Application.IServices;
+using DeliveryIntelligence.Application.Services;
+using DeliveryIntelligence.Domain.IRepositories;
 using DeliveryIntelligence.Infrastructure;
+using DeliveryIntelligence.Infrastructure.Repositories;
+using FluentValidation;
 using IdentityExperience.Application.IServices;
 using IdentityExperience.Application.Services;
+using IdentityExperience.Domain.IRepositories;
 using IdentityExperience.Infrastructure;
-using IdentityExperience.Infrastructure.IRepository;
 using IdentityExperience.Infrastructure.Repository;
+using IdentityExperience.Infrastructure.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Planning.Infrastructure;
 using ProjectMgmt.IdentityAccess.Contracts;
@@ -14,8 +26,34 @@ using ProjectMgmt.Modules.Planning.ProjectManagement.Application.Services;
 using ProjectMgmt.Modules.Planning.ProjectManagement.Domain.IRepositories;
 using ProjectMgmt.Modules.Planning.ProjectManagement.Infrastructure.Repositories;
 using ProjectMgmt.ProjectManagement.Contracts;
+using ProjectMgmt.Solution.Security;
+using ProjectMgmt.Solution.Realtime;
+using ProjectMgmt.Solution.Services;
+using Serilog;
+using System.Globalization;
+using System.Security.Claims;
+using System.Text;
+using System.Threading.RateLimiting;
+using MySqlConnector;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var logFilePath = Path.Combine(
+    builder.Environment.ContentRootPath,
+    "Logs",
+    "ProjectMgmt-.log");
+
+builder.Host.UseSerilog((context, services, loggerConfiguration) => loggerConfiguration
+    .ReadFrom.Configuration(context.Configuration)
+    .ReadFrom.Services(services)
+    .Enrich.FromLogContext()
+    .WriteTo.Console(formatProvider: CultureInfo.InvariantCulture)
+    .WriteTo.File(
+        logFilePath,
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 14,
+        formatProvider: CultureInfo.InvariantCulture,
+        shared: true));
 
 var connectionString = builder.Configuration.GetConnectionString("ProjectMgmt");
 if (string.IsNullOrWhiteSpace(connectionString))
@@ -28,6 +66,7 @@ var serverVersionText = builder.Configuration["Database:ServerVersion"] ?? "8.0.
 var serverVersion = new MySqlServerVersion(Version.Parse(serverVersionText));
 
 builder.Services.AddControllers();
+builder.Services.AddScoped<ProjectAccess>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -37,13 +76,144 @@ builder.Services.AddSwaggerGen(options =>
         Version = "v1",
         Description = "API cho hệ thống quản lý dự án ProjectMgmt."
     });
-});
-builder.Services.AddAuthorization();
-builder.Services.AddHealthChecks();
 
-builder.Services.AddDbContext<IdentityExperienceDbContext>(options =>
+    var securityScheme = new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Description = "Nhập JWT token để xác thực một lần cho tất cả API. Hệ thống sẽ tự động gửi kèm Authorization header.",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT"
+    };
+
+    options.AddSecurityDefinition(JwtBearerDefaults.AuthenticationScheme, securityScheme);
+
+    options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
+    {
+        [new OpenApiSecuritySchemeReference(JwtBearerDefaults.AuthenticationScheme, document)] = new List<string>()
+    });
+});
+var jwtIssuer = builder.Configuration["Jwt:Issuer"];
+var jwtAudience = builder.Configuration["Jwt:Audience"];
+var jwtSigningKey = builder.Configuration["Jwt:SigningKey"];
+if (string.IsNullOrWhiteSpace(jwtIssuer)
+    || string.IsNullOrWhiteSpace(jwtAudience)
+    || string.IsNullOrWhiteSpace(jwtSigningKey)
+    || Encoding.UTF8.GetByteCount(jwtSigningKey) < 32)
+{
+    throw new InvalidOperationException(
+        "Missing secure JWT configuration. Set Jwt:Issuer, Jwt:Audience and Jwt:SigningKey (at least 32 UTF-8 bytes)."
+    );
+}
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = jwtIssuer,
+            ValidateAudience = true,
+            ValidAudience = jwtAudience,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSigningKey)),
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromSeconds(30)
+        };
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                if (!string.IsNullOrWhiteSpace(accessToken)
+                    && context.HttpContext.Request.Path.StartsWithSegments("/hubs/notifications"))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            },
+            OnTokenValidated = async context =>
+            {
+                var userIdValue = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+                var securityStampValue = context.Principal?.FindFirstValue("security_stamp");
+                if (!Guid.TryParse(userIdValue, out var userId)
+                    || !Guid.TryParse(securityStampValue, out var tokenSecurityStamp))
+                {
+                    context.Fail("Token không chứa định danh bảo mật hợp lệ.");
+                    return;
+                }
+
+                var identityRepository = context.HttpContext.RequestServices
+                    .GetRequiredService<IIdentityRepository>();
+                var user = await identityRepository.GetUserByIdAsync(userId);
+                if (user is null
+                    || !user.IsActive
+                    || !user.IsEmailVerified
+                    || user.SecurityStamp != tokenSecurityStamp)
+                {
+                    context.Fail("Token đã bị thu hồi hoặc tài khoản không còn hợp lệ.");
+                }
+                var sessionHash = context.Principal?.FindFirstValue("session_hash");
+                var identityContext = context.HttpContext.RequestServices.GetRequiredService<IdentityExperienceDbContext>();
+                if (string.IsNullOrEmpty(sessionHash) || !await identityContext.RefreshTokens.AsNoTracking()
+                    .AnyAsync(t => t.UserId == userId && t.TokenHash == sessionHash && !t.IsRevoked && t.ExpiresAt > DateTime.UtcNow))
+                    context.Fail("Phiên đăng nhập đã hết hạn hoặc bị thu hồi.");
+            }
+        };
+    });
+builder.Services.AddAuthorization(options =>
+{
+    options.FallbackPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+});
+var allowedOrigins = builder.Configuration
+    .GetSection("Cors:AllowedOrigins")
+    .Get<string[]>() ?? ["http://localhost:4200"];
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("Frontend", policy =>
+    {
+        policy
+            .WithOrigins(allowedOrigins)
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
+});
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("auth-login", context => RateLimitPartition.GetFixedWindowLimiter(
+        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        factory: _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 10,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        }));
+    options.AddPolicy("auth-otp", context => RateLimitPartition.GetFixedWindowLimiter(
+        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        factory: _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 5,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        }));
+});
+builder.Services.AddHealthChecks();
+builder.Services.AddSignalR();
+
+builder.Services.AddScoped(_ => new MySqlConnection(connectionString));
+
+builder.Services.AddDbContext<IdentityExperienceDbContext>((services, options) =>
     options.UseMySql(
-        connectionString,
+        services.GetRequiredService<MySqlConnection>(),
         serverVersion,
         mysql =>
         {
@@ -51,9 +221,9 @@ builder.Services.AddDbContext<IdentityExperienceDbContext>(options =>
             mysql.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null);
         }));
 
-builder.Services.AddDbContext<PlanningDbContext>(options =>
+builder.Services.AddDbContext<PlanningDbContext>((services, options) =>
     options.UseMySql(
-        connectionString,
+        services.GetRequiredService<MySqlConnection>(),
         serverVersion,
         mysql =>
         {
@@ -61,9 +231,9 @@ builder.Services.AddDbContext<PlanningDbContext>(options =>
             mysql.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null);
         }));
 
-builder.Services.AddDbContext<DeliveryIntelligenceDbContext>(options =>
+builder.Services.AddDbContext<DeliveryIntelligenceDbContext>((services, options) =>
     options.UseMySql(
-        connectionString,
+        services.GetRequiredService<MySqlConnection>(),
         serverVersion,
         mysql =>
         {
@@ -73,14 +243,161 @@ builder.Services.AddDbContext<DeliveryIntelligenceDbContext>(options =>
 
 // DI
 builder.Services.AddScoped<IIdentityRepository, IdentityRepository>();
+builder.Services.AddScoped<IProfileRepository, ProfileRepository>();
+builder.Services.AddScoped<ISkillRepository, SkillRepository>();
+builder.Services.AddScoped<IRbacRepository, RbacRepository>();
+builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
+builder.Services.AddScoped<IAiBreakdownRepository, AiBreakdownRepository>();
 builder.Services.AddScoped<IAccountServices, AccountServices>();
+builder.Services.AddScoped<IProfileServices, ProfileServices>();
+builder.Services.AddScoped<ISkillServices, SkillServices>();
+builder.Services.AddScoped<IRoleServices, RoleServices>();
+builder.Services.AddScoped<INotificationServices, NotificationServices>();
+builder.Services.AddScoped<IAiBreakdownServices, AiBreakdownServices>();
+builder.Services.AddScoped<IForYouServices, ForYouServices>();
+builder.Services.AddScoped<IAiBreakdownInference, FakeAiBreakdownInference>();
+builder.Services.AddScoped<IAiIssueSourceReader, AiIssueSourceReader>();
+builder.Services.AddScoped<IAiBreakdownApplyCoordinator, AiBreakdownApplyCoordinator>();
+builder.Services.AddScoped<IUserWorkReader, UserWorkReader>();
+builder.Services.AddScoped<IAvatarStorage, LocalAvatarStorage>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserContext, CurrentUserContext>();
+builder.Services.AddScoped<IPermissionEvaluator, PermissionEvaluator>();
+builder.Services.AddScoped<IRoleAssignmentService, RoleAssignmentService>();
+builder.Services.AddScoped<IWorkspaceProvisioningService, WorkspaceProvisioningService>();
+builder.Services.AddScoped<IPasswordService, PasswordService>();
+builder.Services.AddScoped<IOtpCodeService, OtpCodeService>();
+builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
+builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<INotificationEmailDispatcher, NotificationEmailDispatcher>();
+builder.Services.AddScoped<INotificationRealtimeSender, SignalRNotificationSender>();
+builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
+builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IProjectRepository, ProjectRepository>();
 builder.Services.AddScoped<IProjectManagementService, ProjectManagementService>();
 builder.Services.AddScoped<IProjectLookupService, ProjectLookupService>();
 builder.Services.AddScoped<IUserLookupService, UserLookupService>();
 builder.Services.AddScoped<IUserSkillService, UserLookupService>();
+builder.Services.AddValidatorsFromAssemblyContaining<CreateIssueDtoValidator>();
+builder.Services.AddScoped<IIssueRepository, IssueRepository>();
+builder.Services.AddScoped<IIssueTrackingService, IssueTrackingService>();
+builder.Services.AddScoped<IssueHierarchyLoader>();
+builder.Services.AddScoped<IssueHistoryRecorder>();
+builder.Services.AddScoped<IIssueHistoryService, IssueHistoryService>();
+builder.Services.AddScoped<IIssueHierarchyService, IssueHierarchyService>();
+builder.Services.AddScoped<IssueContractService>();
+builder.Services.AddScoped<ICollaborationRepository, CollaborationRepository>();
+builder.Services.AddScoped<IIssueCollaborationService, IssueCollaborationService>();
+builder.Services.AddScoped<ILabelLinkRepository, LabelLinkRepository>();
+builder.Services.AddScoped<IIssueLabelLinkService, IssueLabelLinkService>();
+builder.Services.AddScoped<IIssueNotifier, IssueNotificationAdapter>();
+builder.Services.AddScoped<ISkillCatalogReader, SkillCatalogAdapter>();
+builder.Services.AddScoped<IRequirementRepository, RequirementRepository>();
+builder.Services.AddScoped<IReleaseLinkRepository, ReleaseLinkRepository>();
+builder.Services.AddScoped<IDataOpsRepository, DataOpsRepository>();
+builder.Services.AddScoped<IDatasetService, DatasetService>();
+builder.Services.AddScoped<IDataCleaningService, DataCleaningService>();
+builder.Services.AddScoped<IDatasetReviewService, DatasetReviewService>();
+builder.Services.AddScoped<IWorkflowValidationService, PlanningWorkflowValidationService>();
+builder.Services.AddScoped<IProjectReleaseLookupService, PlanningReleaseLookupService>();
+builder.Services.AddScoped<IIssueReleaseService, IssueReleaseService>();
+builder.Services.AddScoped<IIssueTransitionService, IssueTransitionService>();
+// IssueReleaseService không đăng ký: cần IProjectReleaseLookupService thật của Planning; IssueReleaseController tự dựng khi có.
+builder.Services.AddScoped<IssueRequirementService>();
+builder.Services.AddScoped<IIssueRequirementService>(services => services.GetRequiredService<IssueRequirementService>());
+builder.Services.AddScoped<ProjectMgmt.IssueTracking.Contracts.IIssueSkillService>(services => services.GetRequiredService<IssueRequirementService>());
+// IssueTransitionService không đăng ký: cần IWorkflowValidationService thật của Planning (ValidateOnBuild sẽ chặn khởi động).
+// IssuesController tự dựng service khi contract đó có trong DI.
+builder.Services.AddSingleton(builder.Configuration.GetSection(AttachmentOptions.SectionName).Get<AttachmentOptions>() ?? new AttachmentOptions());
+builder.Services.AddSingleton<IAttachmentStorage>(services => new DeliveryIntelligence.Infrastructure.Services.LocalAttachmentStorage(
+    Path.Combine(services.GetRequiredService<IWebHostEnvironment>().ContentRootPath, "App_Data", "attachments")));
+builder.Services.AddScoped<ProjectMgmt.IssueTracking.Contracts.IIssueReadService>(services => services.GetRequiredService<IssueContractService>());
+builder.Services.AddScoped<ProjectMgmt.IssueTracking.Contracts.IIssueSprintService>(services => services.GetRequiredService<IssueContractService>());
+// IIssueCreationService chưa đăng ký: cần IIssueNumberGenerator thật từ Planning.
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var db = scope.ServiceProvider.GetRequiredService<IdentityExperienceDbContext>();
+        var skillServices = scope.ServiceProvider.GetRequiredService<ISkillServices>();
+        var roleServices = scope.ServiceProvider.GetRequiredService<IRoleServices>();
+
+        var catalog = await skillServices.GetCatalogAsync(null, null);
+        if (catalog.Items is null || catalog.Items.Count < 3)
+        {
+            await skillServices.CreateCatalogSkillAsync(new IdentityExperience.Application.Dto.SkillDto { Code = "CSHARP_DOTNET", Name = "C# / .NET", Category = "Backend", IsActive = true });
+            await skillServices.CreateCatalogSkillAsync(new IdentityExperience.Application.Dto.SkillDto { Code = "ANGULAR_TS", Name = "Angular / TypeScript", Category = "Frontend", IsActive = true });
+            await skillServices.CreateCatalogSkillAsync(new IdentityExperience.Application.Dto.SkillDto { Code = "MYSQL_DB", Name = "MySQL / Database", Category = "Database", IsActive = true });
+        }
+
+        var adminUser = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == "hoanghaihau989@gmail.com");
+        var sysAdminRole = await db.Roles.AsNoTracking().FirstOrDefaultAsync(r => r.Name == "Admin" || r.Name == "SystemAdmin" || r.Scope == "System");
+        if (adminUser is not null && sysAdminRole is not null)
+        {
+            var hasRole = await db.UserRoles.AnyAsync(ur => ur.UserId == adminUser.Id && ur.RoleId == sysAdminRole.Id && ur.ScopeType == "System");
+            if (!hasRole)
+            {
+                db.UserRoles.Add(new IdentityExperience.Domain.Entities.UserRole
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = adminUser.Id,
+                    RoleId = sysAdminRole.Id,
+                    ScopeType = "System",
+                    ScopeId = null,
+                    GrantedBy = adminUser.Id
+                });
+                await db.SaveChangesAsync();
+            }
+
+            var allPerms = await db.Permissions.AsNoTracking().Select(p => p.Id).ToListAsync();
+            var existingRolePerms = await db.RolePermissions.AsNoTracking().Where(rp => rp.RoleId == sysAdminRole.Id).Select(rp => rp.PermissionId).ToListAsync();
+            var missingPerms = allPerms.Except(existingRolePerms).ToList();
+            if (missingPerms.Count > 0)
+            {
+                foreach (var permId in missingPerms)
+                {
+                    db.RolePermissions.Add(new IdentityExperience.Domain.Entities.RolePermission
+                    {
+                        RoleId = sysAdminRole.Id,
+                        PermissionId = permId
+                    });
+                }
+                await db.SaveChangesAsync();
+            }
+        }
+
+        try
+        {
+            var planningDb = scope.ServiceProvider.GetRequiredService<Planning.Infrastructure.PlanningDbContext>();
+            await planningDb.Database.ExecuteSqlRawAsync(@"
+CREATE TABLE IF NOT EXISTS SprintMessage (
+    Id char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
+    SprintId char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
+    UserId char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
+    Content text CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
+    CreatedAt datetime(6) NOT NULL,
+    UpdatedAt datetime(6) NULL,
+    IsDeleted tinyint(1) NOT NULL DEFAULT 0,
+    PRIMARY KEY (Id),
+    KEY IX_SprintMessage_SprintId (SprintId),
+    KEY IX_SprintMessage_UserId (UserId)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+");
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not ensure SprintMessage table exists");
+        }
+    }
+    catch
+    {
+        // Ignore seed errors on startup
+    }
+}
 
 if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
 {
@@ -98,18 +415,35 @@ if (!app.Environment.IsDevelopment() && !app.Environment.IsStaging())
     app.UseHttpsRedirection();
 }
 
+app.UseSerilogRequestLogging(options =>
+{
+    options.MessageTemplate = "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000} ms";
+});
+
 var frontendIndexPath = Path.Combine(app.Environment.WebRootPath ?? string.Empty, "index.html");
 var hasFrontendArtifact = File.Exists(frontendIndexPath);
+var avatarDirectory = Path.Combine(app.Environment.ContentRootPath, "Assets", "avatars");
+Directory.CreateDirectory(avatarDirectory);
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(avatarDirectory),
+    RequestPath = "/assets/avatars"
+});
 if (hasFrontendArtifact)
 {
     app.UseDefaultFiles();
     app.UseStaticFiles();
 }
 
+app.UseCors("Frontend");
+app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.MapControllers();
-app.MapHealthChecks("/health");
-app.MapGet("/health/live", () => Results.Ok(new { status = "Healthy" }));
+app.MapHub<NotificationHub>("/hubs/notifications");
+app.MapHealthChecks("/health").AllowAnonymous();
+app.MapGet("/health/live", () => Results.Ok(new { status = "Healthy" }))
+    .AllowAnonymous();
 
 if (hasFrontendArtifact)
 {

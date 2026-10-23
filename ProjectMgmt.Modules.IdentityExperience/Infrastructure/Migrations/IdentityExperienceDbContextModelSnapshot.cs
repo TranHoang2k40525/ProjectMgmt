@@ -1124,6 +1124,9 @@ namespace IdentityExperience.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "JobTitle" }, "IX_UserProfile_JobTitle");
 
+                    b.HasIndex(new[] { "PhoneNumber" }, "UQ_UserProfile_PhoneNumber")
+                        .IsUnique();
+
                     b.HasIndex(new[] { "UserId" }, "UQ_UserProfile_UserId")
                         .IsUnique();
 

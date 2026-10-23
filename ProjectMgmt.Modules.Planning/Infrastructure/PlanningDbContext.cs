@@ -22,6 +22,7 @@ public class PlanningDbContext : DbContext
     public DbSet<Board> Boards => Set<Board>();
     public DbSet<BoardColumn> BoardColumns => Set<BoardColumn>();
     public DbSet<Sprint> Sprints => Set<Sprint>();
+    public DbSet<SprintMessage> SprintMessages => Set<SprintMessage>();
     public DbSet<SprintSnapshot> SprintSnapshots => Set<SprintSnapshot>();
     public DbSet<SprintMemberCapacity> SprintMemberCapacities => Set<SprintMemberCapacity>();
     public DbSet<UserWorkloadSnapshot> UserWorkloadSnapshots => Set<UserWorkloadSnapshot>();

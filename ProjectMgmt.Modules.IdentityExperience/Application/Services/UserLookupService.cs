@@ -1,23 +1,92 @@
+using IdentityExperience.Domain.IRepositories;
 using ProjectMgmt.IdentityAccess.Contracts;
 
 namespace ProjectMgmt.Modules.IdentityExperience.Application.Services;
 
 public class UserLookupService : IUserLookupService, IUserSkillService
 {
-    public Task<IReadOnlyList<UserDisplayInfo>> GetDisplayInfoAsync(IEnumerable<Guid> userIds, CancellationToken cancellationToken = default)
+    private readonly IProfileRepository _profileRepository;
+    private readonly ISkillRepository _skillRepository;
+
+    public UserLookupService(
+        IProfileRepository profileRepository,
+        ISkillRepository skillRepository)
     {
-        var list = userIds.Select(id => new UserDisplayInfo(id, $"User {id.ToString()[..8]}", null)).ToList();
-        return Task.FromResult<IReadOnlyList<UserDisplayInfo>>(list);
+        _profileRepository = profileRepository;
+        _skillRepository = skillRepository;
     }
 
-    public Task<UserDisplayInfo?> GetDisplayInfoAsync(Guid userId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<UserDisplayInfo>> GetAllActiveDisplayInfoAsync(
+        CancellationToken cancellationToken = default)
     {
-        return Task.FromResult<UserDisplayInfo?>(new UserDisplayInfo(userId, $"User {userId.ToString()[..8]}", null));
+        cancellationToken.ThrowIfCancellationRequested();
+        var profiles = await _profileRepository.GetAllActiveProfilesAsync(cancellationToken);
+        if (profiles.Count > 0)
+        {
+            return profiles.Select(p => new UserDisplayInfo
+            {
+                UserId = p.UserId,
+                DisplayName = !string.IsNullOrWhiteSpace(p.DisplayName) ? p.DisplayName : p.Email,
+                AvatarUrl = p.AvatarUrl
+            }).ToList();
+        }
+
+        return Array.Empty<UserDisplayInfo>();
     }
 
-    public Task<IReadOnlyList<UserSkillInfo>> GetUserSkillsAsync(IEnumerable<Guid> userIds, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<UserDisplayInfo>> GetDisplayInfoAsync(
+        IEnumerable<Guid> userIds,
+        CancellationToken cancellationToken = default)
     {
-        var list = new List<UserSkillInfo>();
-        return Task.FromResult<IReadOnlyList<UserSkillInfo>>(list);
+        cancellationToken.ThrowIfCancellationRequested();
+        var results = new List<UserDisplayInfo>();
+        foreach (var userId in userIds.Distinct())
+        {
+            var user = await GetDisplayInfoAsync(userId, cancellationToken);
+            if (user is not null)
+            {
+                results.Add(user);
+            }
+        }
+
+        return results;
+    }
+
+    public async Task<UserDisplayInfo?> GetDisplayInfoAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var details = await _profileRepository.GetProfileDetailsAsync(userId);
+        if (details is not null)
+        {
+            return new UserDisplayInfo
+            {
+                UserId = userId,
+                DisplayName = !string.IsNullOrWhiteSpace(details.Profile.DisplayName)
+                    ? details.Profile.DisplayName
+                    : details.User.Email,
+                AvatarUrl = details.Profile.AvatarUrl
+            };
+        }
+
+        return null;
+    }
+
+    public async Task<IReadOnlyList<UserSkillInfo>> GetUserSkillsAsync(IEnumerable<Guid> userIds)
+    {
+        var results = new List<UserSkillInfo>();
+        foreach (var userId in userIds.Distinct())
+        {
+            var skills = await _skillRepository.GetUserSkillsAsync(userId);
+            results.AddRange(skills.Select(skill => new UserSkillInfo
+            {
+                UserId = userId,
+                SkillName = skill.Skill.Name,
+                ProficiencyLevel = skill.UserSkill.ProficiencyLevel
+            }));
+        }
+
+        return results;
     }
 }

@@ -1,44 +1,24 @@
-<div #authPage class="auth-page font-body-md" [class.auth-page--panel-open]="panelOpen()">
-  @if (sceneVisible()) {
-    <app-sylva-arrival class="auth-arrival" (enter)="openAuth()" />
-  }
+<div #authPage class="auth-page font-body-md">
+  <main class="auth-panel-layer">
+    <div class="auth-panel-layout">
+      <section class="auth-panel-intro" aria-labelledby="auth-intro-heading">
+        <div class="auth-panel-brand">
+          <img src="assets/images/huce-branding/huce-official-logo.png" alt="Logo" />
+          <span><b>Quản lý Dự án Scrum + AI</b></span>
+        </div>
+        <div class="auth-panel-copy">
+          <span class="auth-eyebrow">Một nơi cho công việc của cả nhóm</span>
+          <h1 id="auth-intro-heading">Trở lại với điều<br />bạn đang xây dựng.</h1>
+          <p>Tiếp tục sprint, giải quyết việc cần chú ý và giữ mọi thành viên cùng một nhịp.</p>
+        </div>
+        <div class="auth-panel-footnote">Hệ thống Quản lý Dự án Scrum Agile</div>
+      </section>
 
-  @if (!panelOpen()) {
-    <div class="arrival-bar">
-      <div class="arrival-brand">
-        <img src="assets/images/huce-branding/huce-official-logo.png" alt="Biểu trưng HUCE" />
-        <span>ProjectMgmt <small>by HUCE</small></span>
-      </div>
-      <button type="button" class="arrival-skip" (click)="openAuth()">
-        Bỏ qua và đăng nhập <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
-      </button>
-    </div>
-  }
-
-  @if (panelOpen()) {
-    <main class="auth-panel-layer">
-      <div class="auth-panel-layout">
-        <section class="auth-panel-intro" aria-labelledby="auth-intro-heading">
-          <div class="auth-panel-brand">
-            <img src="assets/images/huce-branding/huce-official-logo.png" alt="" />
-            <span>HUCE <b>ProjectMgmt</b></span>
+      <div class="auth-panel-form">
+        <div class="auth-card text-slate-900">
+          <div class="auth-card-topline">
+            <span>TRUY CẬP KHÔNG GIAN LÀM VIỆC</span>
           </div>
-          <div class="auth-panel-copy">
-            <span class="auth-eyebrow">Một nơi cho công việc của cả nhóm</span>
-            <h1 id="auth-intro-heading">Trở lại với điều<br />bạn đang xây dựng.</h1>
-            <p>Tiếp tục sprint, giải quyết việc cần chú ý và giữ mọi thành viên cùng một nhịp.</p>
-          </div>
-          <div class="auth-panel-footnote">Trường Đại học Xây dựng Hà Nội · Không gian làm việc nhóm</div>
-        </section>
-
-        <div class="auth-panel-form">
-          <div class="auth-card text-slate-900">
-            <div class="auth-card-topline">
-              <span>TRUY CẬP KHÔNG GIAN LÀM VIỆC</span>
-              @if (canReplayArrival()) {
-                <button type="button" (click)="reopenArrival()">Xem lại khu vườn</button>
-              }
-            </div>
 
         <!-- Auth Body Content -->
         <div class="auth-card-body p-6 sm:p-8 space-y-6">
@@ -46,7 +26,7 @@
           <!-- Center Logo & Title -->
           <div class="text-center space-y-2">
             <div class="w-14 h-14 rounded-2xl bg-blue-50 border border-blue-100 p-2 mx-auto shadow-sm flex items-center justify-center">
-              <img src="assets/images/huce-branding/huce-official-logo.png" alt="HUCE" class="w-full h-full object-contain" />
+              <img src="assets/images/huce-branding/huce-official-logo.png" alt="Logo" class="w-full h-full object-contain" />
             </div>
 
             <h3 class="text-2xl font-black text-slate-900 tracking-tight">
@@ -57,7 +37,7 @@
             </h3>
 
             <p class="text-xs text-slate-500 font-medium">
-              Sử dụng tài khoản email sinh viên hoặc cán bộ HUCE
+              Nhập email và mật khẩu của bạn để tiếp tục
             </p>
           </div>
 
@@ -86,7 +66,7 @@
                     id="loginEmail"
                     type="email"
                     formControlName="email"
-                    placeholder="phamthehoai2004hn@huce.edu.vn"
+                    placeholder="email@example.com"
                     class="w-full h-11 pl-10 pr-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 text-sm font-medium focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
                 </div>
               </div>
@@ -128,18 +108,26 @@
           @if (mode() === 'SIGNUP') {
             <form [formGroup]="signupForm" (ngSubmit)="onSignup()" class="space-y-4">
               <div>
-                <label for="signupName" class="block text-xs font-bold text-slate-700 mb-1.5">Họ và tên sinh viên / cán bộ</label>
+                <label for="signupName" class="block text-xs font-bold text-slate-700 mb-1.5">Họ và tên</label>
                 <div class="relative flex items-center">
                   <span class="material-symbols-outlined absolute left-3.5 text-slate-400 text-[18px]">badge</span>
-                  <input id="signupName" type="text" formControlName="displayName" placeholder="Trần Văn Hoàng" class="w-full h-11 pl-10 pr-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 text-sm font-medium focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
+                  <input id="signupName" type="text" formControlName="displayName" placeholder="Họ và tên của bạn" class="w-full h-11 pl-10 pr-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 text-sm font-medium focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
                 </div>
               </div>
 
               <div>
-                <label for="signupEmail" class="block text-xs font-bold text-slate-700 mb-1.5">Email trường (@huce.edu.vn)</label>
+                <label for="signupEmail" class="block text-xs font-bold text-slate-700 mb-1.5">Địa chỉ Email</label>
                 <div class="relative flex items-center">
                   <span class="material-symbols-outlined absolute left-3.5 text-slate-400 text-[18px]">mail</span>
-                  <input id="signupEmail" type="email" formControlName="email" placeholder="hoang.tv@huce.edu.vn" class="w-full h-11 pl-10 pr-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 text-sm font-medium focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
+                  <input id="signupEmail" type="email" formControlName="email" placeholder="email@example.com" class="w-full h-11 pl-10 pr-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 text-sm font-medium focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
+                </div>
+              </div>
+
+              <div>
+                <label for="signupPhone" class="block text-xs font-bold text-slate-700 mb-1.5">Số điện thoại <span class="font-normal text-slate-400">(không bắt buộc)</span></label>
+                <div class="relative flex items-center">
+                  <span class="material-symbols-outlined absolute left-3.5 text-slate-400 text-[18px]">phone</span>
+                  <input id="signupPhone" type="tel" formControlName="phoneNumber" placeholder="+84 901 234 567" class="w-full h-11 pl-10 pr-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 text-sm font-medium focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
                 </div>
               </div>
 
@@ -147,7 +135,29 @@
                 <label for="signupPass" class="block text-xs font-bold text-slate-700 mb-1.5">Mật khẩu</label>
                 <div class="relative flex items-center">
                   <span class="material-symbols-outlined absolute left-3.5 text-slate-400 text-[18px]">key</span>
-                  <input id="signupPass" type="password" formControlName="password" placeholder="Tối thiểu 6 ký tự" class="w-full h-11 pl-10 pr-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 text-sm font-medium focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
+                  <input id="signupPass" [type]="passwordVisible() ? 'text' : 'password'" formControlName="password" placeholder="Tối thiểu 8 ký tự, đủ hoa/thường/số/ký tự đặc biệt" class="w-full h-11 pl-10 pr-10 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 text-sm font-medium focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
+                  <button type="button" class="password-toggle" (click)="passwordVisible.set(!passwordVisible())" [attr.aria-label]="passwordVisible() ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'">
+                    <span class="material-symbols-outlined text-[18px]" aria-hidden="true">{{ passwordVisible() ? 'visibility_off' : 'visibility' }}</span>
+                  </button>
+                </div>
+                @if (calculatePasswordStrength(signupForm.value.password); as strength) {
+                  <div class="password-strength-bar mt-2 space-y-1" data-testid="password-strength">
+                    <div class="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                      <div class="h-full transition-all duration-300" [style.width.%]="strength.score" [style.backgroundColor]="strength.color"></div>
+                    </div>
+                    <div class="flex justify-between text-[11px] font-semibold">
+                      <span class="text-slate-500">Độ mạnh mật khẩu:</span>
+                      <span [style.color]="strength.color">{{ strength.label }} ({{ strength.score }}%)</span>
+                    </div>
+                  </div>
+                }
+              </div>
+
+              <div>
+                <label for="signupConfirm" class="block text-xs font-bold text-slate-700 mb-1.5">Xác nhận mật khẩu</label>
+                <div class="relative flex items-center">
+                  <span class="material-symbols-outlined absolute left-3.5 text-slate-400 text-[18px]">lock_reset</span>
+                  <input id="signupConfirm" [type]="passwordVisible() ? 'text' : 'password'" formControlName="confirmPassword" placeholder="Nhập lại mật khẩu để xác nhận" class="w-full h-11 pl-10 pr-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 text-sm font-medium focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
                 </div>
               </div>
 
@@ -175,12 +185,14 @@
               <div class="flex items-center justify-center gap-2 my-4">
                 @for (pin of otpPins; track $index) {
                   <input
+                    [id]="'otp-' + $index"
                     type="text"
                     maxlength="1"
                     class="w-10 h-12 text-center text-lg font-bold rounded-xl bg-slate-50 border border-slate-300 text-blue-600 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
                     [value]="pin"
                     (input)="onOtpInput($index, $event)"
-                    (keydown)="onOtpKeyDown($index, $event)" />
+                    (keydown)="onOtpKeyDown($index, $event)"
+                    (paste)="onOtpPaste($event)" />
                 }
               </div>
 
@@ -191,17 +203,17 @@
 
               @if (mode() === 'OTP_FORGOT') {
                 <div class="text-left space-y-1.5 pt-2" [formGroup]="otpForm">
-                  <label for="otpNewPass" class="block text-xs font-bold text-slate-700">Thiết lập mật khẩu mới</label>
-                  <input id="otpNewPass" type="password" formControlName="newPassword" placeholder="Mật khẩu mới..." class="w-full h-11 px-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-sm font-medium focus:bg-white focus:border-blue-600 outline-none" />
+                  <label for="newPass" class="block text-xs font-bold text-slate-700">Thiết lập mật khẩu mới</label>
+                  <input id="newPass" type="password" formControlName="newPassword" placeholder="Mật khẩu mới..." class="w-full h-11 px-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-sm font-medium focus:bg-white focus:border-blue-600 outline-none" />
                 </div>
               }
 
               @if (mode() === 'OTP_REGISTER') {
-                <button type="button" (click)="onVerifyOtp()" [disabled]="loading()" class="w-full h-12 rounded-xl bg-blue-600 text-white font-bold text-sm shadow-md hover:bg-blue-700 transition-all cursor-pointer">
+                <button type="submit" (click)="onVerifyOtp()" [disabled]="loading()" class="w-full h-12 rounded-xl bg-blue-600 text-white font-bold text-sm shadow-md hover:bg-blue-700 transition-all cursor-pointer">
                   Xác nhận & Đồng bộ
                 </button>
               } @else {
-                <button type="button" (click)="onResetPassword()" [disabled]="loading()" class="w-full h-12 rounded-xl bg-blue-600 text-white font-bold text-sm shadow-md hover:bg-blue-700 transition-all cursor-pointer">
+                <button type="submit" (click)="onResetPassword()" [disabled]="loading()" class="w-full h-12 rounded-xl bg-blue-600 text-white font-bold text-sm shadow-md hover:bg-blue-700 transition-all cursor-pointer">
                   Cập nhật mật khẩu
                 </button>
               }
@@ -212,10 +224,10 @@
           @if (mode() === 'FORGOT') {
             <form [formGroup]="forgotForm" (ngSubmit)="onSendForgotOtp()" class="space-y-4">
               <div>
-                <label for="forgotEmail" class="block text-xs font-bold text-slate-700 mb-1.5">Email tài khoản HUCE</label>
+                <label for="forgotEmail" class="block text-xs font-bold text-slate-700 mb-1.5">Địa chỉ Email đã đăng ký</label>
                 <div class="relative flex items-center">
                   <span class="material-symbols-outlined absolute left-3.5 text-slate-400 text-[18px]">alternate_email</span>
-                  <input id="forgotEmail" type="email" formControlName="email" placeholder="phamthehoai2004hn@huce.edu.vn" class="w-full h-11 pl-10 pr-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 text-sm font-medium focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
+                  <input id="forgotEmail" type="email" formControlName="email" placeholder="email@example.com" class="w-full h-11 pl-10 pr-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 text-sm font-medium focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all" />
                 </div>
               </div>
 
@@ -241,6 +253,9 @@
             } @else if (mode() === 'SIGNUP') {
               <span>Đã có tài khoản? </span>
               <button type="button" (click)="setMode('LOGIN')" class="font-bold text-blue-600 hover:underline cursor-pointer">Đăng nhập ngay</button>
+            } @else if (mode() === 'OTP_REGISTER') {
+              <span>Cần chỉnh sửa thông tin? </span>
+              <button type="button" (click)="setMode('SIGNUP')" class="font-bold text-blue-600 hover:underline cursor-pointer">Quay lại Đăng ký</button>
             } @else {
               <span>Nhớ lại mật khẩu? </span>
               <button type="button" (click)="setMode('LOGIN')" class="font-bold text-blue-600 hover:underline cursor-pointer">Quay lại Đăng nhập</button>
@@ -253,5 +268,4 @@
         </div>
       </div>
     </main>
-  }
 </div>

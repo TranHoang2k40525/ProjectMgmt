@@ -12,7 +12,7 @@
             <div class="flex items-center gap-2">
               <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container-lowest/15 backdrop-blur-md text-on-primary font-label-sm text-label-sm uppercase tracking-wider font-semibold">
                 <span class="material-symbols-outlined text-[14px]">verified_user</span>
-                Tài Khoản Kỹ Sư Agile HUCE
+                Tài Khoản Kỹ Sư Agile
               </span>
             </div>
             
@@ -20,7 +20,7 @@
               Hồ sơ cá nhân & Cài đặt bảo mật tài khoản
             </h1>
             <p class="font-body-md text-body-md text-on-primary-container/90 max-w-2xl">
-              Quản lý định danh kỹ sư, thông tin xác thực đa lớp, quyền điều phối Scrum Sprint và liên kết tài khoản định danh số HUCE.
+              Quản lý định danh kỹ sư, thông tin xác thực đa lớp, quyền điều phối Scrum Sprint và thông tin định danh số.
             </p>
           </div>
 
@@ -73,7 +73,7 @@
                 </span>
                 <span class="flex items-center gap-1">
                   <span class="material-symbols-outlined text-[16px] text-outline">apartment</span>
-                  {{ u.jobTitle }} • Khoa Công nghệ Thông tin HUCE
+                  {{ u.jobTitle || 'Chưa cập nhật chức danh' }}
                 </span>
                 <span class="flex items-center gap-1">
                   <span class="material-symbols-outlined text-[16px] text-outline">security</span>
@@ -178,7 +178,7 @@
                   </div>
                   <div>
                     <h3 class="font-headline-sm text-headline-sm text-on-surface font-bold">Chi tiết hồ sơ định danh</h3>
-                    <p class="font-body-sm text-body-sm text-on-surface-variant">Dữ liệu đồng bộ với cơ sở dữ liệu `UserProfile` & Portal HUCE.</p>
+                    <p class="font-body-sm text-body-sm text-on-surface-variant">Dữ liệu đồng bộ với cơ sở dữ liệu hồ sơ người dùng.</p>
                   </div>
                 </div>
                 <span class="px-3 py-1 rounded-lg bg-surface-container-low text-on-surface-variant font-label-sm text-label-sm font-semibold">
@@ -201,7 +201,7 @@
                 <div class="flex flex-col gap-1.5">
                   <label for="profJobTitle" class="font-label-md text-label-md text-on-surface font-semibold flex items-center justify-between">
                     <span>Chức danh / Vị trí Scrum</span>
-                    <span class="text-outline font-body-sm text-body-sm">Bắt buộc</span>
+                    <span class="text-outline font-body-sm text-body-sm">Không bắt buộc</span>
                   </label>
                   <div class="relative">
                     <span class="material-symbols-outlined absolute left-3.5 top-2.5 text-outline text-[18px]">engineering</span>
@@ -211,31 +211,68 @@
 
                 <div class="flex flex-col gap-1.5 md:col-span-2">
                   <label for="profEmail" class="font-label-md text-label-md text-on-surface font-semibold flex items-center justify-between">
-                    <span>Email Đại học Xây dựng Hà Nội</span>
+                    <span>Email tài khoản</span>
                     <span class="inline-flex items-center gap-1 text-emerald-800 font-label-sm text-label-sm font-semibold bg-emerald-100 px-2.5 py-0.5 rounded-full">
                       <span class="material-symbols-outlined text-[13px]">verified</span>
                       Đã xác thực email
                     </span>
                   </label>
                   <div class="relative flex items-center">
-                    <span class="material-symbols-outlined absolute left-3.5 text-outline text-[18px]">school</span>
+                    <span class="material-symbols-outlined absolute left-3.5 text-outline text-[18px]">mail</span>
                     <input id="profEmail" type="email" formControlName="email" class="w-full pl-10 pr-32 py-2.5 rounded-xl bg-surface-container-high/60 text-on-surface font-body-md text-body-md cursor-not-allowed" />
-                    <span class="absolute right-2 px-2.5 py-1 rounded-lg bg-surface-container-highest text-primary font-label-sm text-label-sm font-bold">HUCE ID SSO</span>
+                    <span class="absolute right-2 px-2.5 py-1 rounded-lg bg-surface-container-highest text-primary font-label-sm text-label-sm font-bold">Email chính</span>
                   </div>
                 </div>
 
-                <div class="flex flex-col gap-1.5 md:col-span-2">
-                  <label for="profAvatar" class="font-label-md text-label-md text-on-surface font-semibold">URL Ảnh đại diện</label>
+                <div class="flex flex-col gap-1.5">
+                  <label for="profPhone" class="font-label-md text-label-md text-on-surface font-semibold">Số điện thoại</label>
                   <div class="relative">
-                    <span class="material-symbols-outlined absolute left-3.5 top-2.5 text-outline text-[18px]">image</span>
-                    <input id="profAvatar" type="text" formControlName="avatarUrl" placeholder="https://lh3.googleusercontent.com/..." class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary-container transition-all" />
+                    <span class="material-symbols-outlined absolute left-3.5 top-2.5 text-outline text-[18px]">phone</span>
+                    <input id="profPhone" type="tel" formControlName="phoneNumber" placeholder="+84 901 234 567" class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary-container transition-all" />
                   </div>
+                </div>
+
+                <div class="flex flex-col gap-1.5">
+                  <label for="profTimezone" class="font-label-md text-label-md text-on-surface font-semibold">Múi giờ</label>
+                  <div class="relative">
+                    <span class="material-symbols-outlined absolute left-3.5 top-2.5 text-outline text-[18px]">schedule</span>
+                    <input id="profTimezone" type="text" formControlName="timezone" placeholder="Asia/Ho_Chi_Minh" class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary-container transition-all" />
+                  </div>
+                </div>
+
+                <div class="flex flex-col gap-1.5">
+                  <label for="profSeniority" class="font-label-md text-label-md text-on-surface font-semibold">Cấp độ chuyên môn</label>
+                  <select id="profSeniority" formControlName="seniorityLevel" class="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-primary-container">
+                    <option value="">Chưa chọn</option>
+                    <option value="Intern">Intern</option>
+                    <option value="Junior">Junior</option>
+                    <option value="Middle">Middle</option>
+                    <option value="Senior">Senior</option>
+                    <option value="Lead">Lead</option>
+                    <option value="Principal">Principal</option>
+                  </select>
+                </div>
+
+                <div class="flex flex-col gap-1.5">
+                  <label for="profExperience" class="font-label-md text-label-md text-on-surface font-semibold">Số năm kinh nghiệm</label>
+                  <input id="profExperience" type="number" min="0" max="80" step="0.5" formControlName="yearsOfExperience" class="w-full px-4 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-primary-container" />
+                </div>
+
+                <div class="flex flex-col gap-1.5 md:col-span-2">
+                  <label for="profBio" class="font-label-md text-label-md text-on-surface font-semibold">Giới thiệu ngắn</label>
+                  <textarea id="profBio" rows="3" maxlength="5000" formControlName="bio" placeholder="Vai trò, kinh nghiệm và định hướng chuyên môn..." class="w-full px-4 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-primary-container"></textarea>
+                </div>
+
+                <div class="flex flex-col gap-1.5 md:col-span-2">
+                  <label for="profAvatar" class="font-label-md text-label-md text-on-surface font-semibold">Ảnh đại diện</label>
+                  <input id="profAvatar" type="file" accept="image/jpeg,image/png,image/webp" (change)="onAvatarSelected($event)" class="w-full px-4 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md file:mr-4 file:rounded-lg file:border-0 file:bg-primary-container file:px-3 file:py-1.5 file:text-white" />
+                  <small class="text-outline">JPEG, PNG hoặc WebP; dung lượng tối đa 5 MB. Backend kiểm tra chữ ký tệp thật.</small>
                 </div>
 
                 <div class="md:col-span-2 pt-4 flex items-center justify-between border-t border-surface-container mt-2">
                   <span class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1">
                     <span class="material-symbols-outlined text-[16px] text-primary">history</span>
-                    Đã đồng bộ với CSDL Scoped RBAC v2.4
+                    Đã đồng bộ thông tin hồ sơ với máy chủ
                   </span>
 
                   <button type="submit" [disabled]="loading() || profileForm.invalid" class="px-5 py-2.5 rounded-xl bg-primary-container hover:bg-primary text-on-primary font-label-lg text-label-lg transition-colors shadow-md flex items-center gap-2 font-bold cursor-pointer disabled:opacity-50">
@@ -250,7 +287,7 @@
               </form>
             </div>
 
-            <!-- Individual Productivity & Story Points Bento Grid Card from Stitch -->
+            <!-- Individual Productivity & Story Points Bento Grid Card -->
             <div class="rounded-2xl bg-surface-container-lowest p-6 shadow-sm border border-outline-variant/30">
               <div class="flex items-center justify-between pb-4 mb-4 border-b border-surface-container">
                 <div class="flex items-center gap-2.5">
@@ -259,46 +296,47 @@
                   </div>
                   <div>
                     <h3 class="font-headline-sm text-headline-sm text-on-surface font-bold">Chỉ số phân bổ & Năng suất cá nhân</h3>
-                    <p class="font-body-sm text-body-sm text-on-surface-variant">Thống kê từ Sprint Backlog và hệ thống dự báo AI của đồ án tốt nghiệp K65</p>
+                    <p class="font-body-sm text-body-sm text-on-surface-variant">Thống kê từ công việc thực tế được giao cho bạn trong dự án</p>
                   </div>
                 </div>
-                <span class="px-3 py-1 rounded-full bg-surface-container-high text-primary font-label-sm text-label-sm font-bold">Sprint 04 Active</span>
+                @if (activeSprint(); as sp) {
+                  <span class="px-3 py-1 rounded-full bg-surface-container-high text-primary font-label-sm text-label-sm font-bold">{{ sp.name }} (Đang chạy)</span>
+                } @else {
+                  <span class="px-3 py-1 rounded-full bg-surface-container-low text-slate-500 font-label-sm text-label-sm font-medium">Chưa có Sprint kích hoạt</span>
+                }
               </div>
 
-              <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div class="p-4 rounded-xl bg-surface-container-low flex flex-col gap-2">
-                  <span class="font-label-sm text-label-sm text-on-surface-variant uppercase font-bold">Story Points hoàn thành</span>
-                  <div class="flex items-baseline gap-2">
-                    <span class="font-display-lg text-display-lg text-primary font-bold">42</span>
-                    <span class="font-body-sm text-body-sm text-emerald-700 font-semibold">+18% vs Sprint 03</span>
+              @if (assignedTasks().length > 0) {
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div class="p-4 rounded-xl bg-surface-container-low flex flex-col gap-2">
+                    <span class="font-label-sm text-label-sm text-on-surface-variant uppercase font-bold">Story Points hoàn thành</span>
+                    <div class="flex items-baseline gap-2">
+                      <span class="font-display-lg text-display-lg text-primary font-bold">{{ completedStoryPoints() }}</span>
+                      <span class="font-body-sm text-body-sm text-slate-500 font-semibold">SP</span>
+                    </div>
                   </div>
-                  <div class="w-full h-1.5 rounded-full bg-surface-container-high overflow-hidden">
-                    <div class="h-full rounded-full bg-primary" style="width: 82%;"></div>
-                  </div>
-                </div>
 
-                <div class="p-4 rounded-xl bg-surface-container-low flex flex-col gap-2">
-                  <span class="font-label-sm text-label-sm text-on-surface-variant uppercase font-bold">Độ chính xác AI Task</span>
-                  <div class="flex items-baseline gap-2">
-                    <span class="font-display-lg text-display-lg text-secondary font-bold">94.6%</span>
-                    <span class="font-body-sm text-body-sm text-on-surface-variant font-mono">Fibonacci</span>
+                  <div class="p-4 rounded-xl bg-surface-container-low flex flex-col gap-2">
+                    <span class="font-label-sm text-label-sm text-on-surface-variant uppercase font-bold">Công việc đã hoàn thành</span>
+                    <div class="flex items-baseline gap-2">
+                      <span class="font-display-lg text-display-lg text-emerald-600 font-bold">{{ completedAssignedTasks().length }}</span>
+                      <span class="font-body-sm text-body-sm text-slate-500">/ {{ assignedTasks().length }} việc</span>
+                    </div>
                   </div>
-                  <div class="w-full h-1.5 rounded-full bg-surface-container-high overflow-hidden">
-                    <div class="h-full rounded-full bg-gradient-to-r from-secondary to-tertiary" style="width: 94%;"></div>
-                  </div>
-                </div>
 
-                <div class="p-4 rounded-xl bg-surface-container-low flex flex-col gap-2">
-                  <span class="font-label-sm text-label-sm text-on-surface-variant uppercase font-bold">Tasks đã rà soát</span>
-                  <div class="flex items-baseline gap-2">
-                    <span class="font-display-lg text-display-lg text-on-surface font-bold">128</span>
-                    <span class="font-body-sm text-body-sm text-on-surface-variant">Issues reviewed</span>
-                  </div>
-                  <div class="w-full h-1.5 rounded-full bg-surface-container-high overflow-hidden">
-                    <div class="h-full rounded-full bg-primary-container" style="width: 68%;"></div>
+                  <div class="p-4 rounded-xl bg-surface-container-low flex flex-col gap-2">
+                    <span class="font-label-sm text-label-sm text-on-surface-variant uppercase font-bold">Tổng công việc được giao</span>
+                    <div class="flex items-baseline gap-2">
+                      <span class="font-display-lg text-display-lg text-on-surface font-bold">{{ assignedTasks().length }}</span>
+                      <span class="font-body-sm text-body-sm text-on-surface-variant">Issues</span>
+                    </div>
                   </div>
                 </div>
-              </div>
+              } @else {
+                <div class="p-6 text-center text-on-surface-variant bg-surface-container-low rounded-xl">
+                  <p class="font-body-sm text-body-sm">Bạn chưa có công việc nào được chỉ định trong dự án hiện tại.</p>
+                </div>
+              }
             </div>
           }
 
@@ -386,6 +424,10 @@
                   </label>
                   <input id="skillRange" type="range" min="10" max="100" step="5" [(ngModel)]="selectedSkillLevel" class="w-full accent-primary h-2 bg-surface-container-high rounded-lg cursor-pointer" />
                 </div>
+                <div class="profile-skill-field min-w-[140px]">
+                  <label for="skillYears" class="block font-label-md text-label-md text-on-surface font-semibold mb-1.5">Số năm kinh nghiệm</label>
+                  <input id="skillYears" name="newSkillYears" data-testid="skill-years-input" type="number" min="0" max="50" step="0.5" [(ngModel)]="selectedSkillYears" class="w-full h-11 px-3.5 rounded-xl bg-surface-container-lowest border border-outline-variant text-on-surface font-body-sm text-body-sm outline-none" />
+                </div>
 
                 <button type="button" (click)="onAddSkill()" [disabled]="!selectedSkillId" class="h-11 px-5 rounded-xl bg-primary-container hover:bg-primary text-on-primary font-label-md text-label-md font-bold transition-all shadow-sm disabled:opacity-50 cursor-pointer">
                   + Thêm Kỹ Năng
@@ -464,6 +506,11 @@
                       </button>
                     }
                   </div>
+                } @empty {
+                  <div class="p-5 rounded-xl bg-surface-container-low border border-outline-variant/20 text-on-surface-variant">
+                    <strong class="block text-on-surface mb-1">Chưa có phiên đăng nhập khác</strong>
+                    <p class="font-body-sm text-body-sm">Danh sách chỉ hiển thị các phiên còn hiệu lực. Các phiên đã thu hồi hoặc hết hạn sẽ không xuất hiện.</p>
+                  </div>
                 }
               </div>
             </div>
@@ -482,7 +529,7 @@
               </div>
               <div>
                 <h3 class="font-headline-sm text-headline-sm text-on-surface font-bold">Tài khoản liên kết</h3>
-                <p class="font-body-sm text-body-sm text-on-surface-variant">Schema ExternalLogin: OAuth2 & SSO</p>
+                <p class="font-body-sm text-body-sm text-on-surface-variant">OAuth2/SSO chỉ hoạt động sau khi cấu hình ClientId và ClientSecret thật.</p>
               </div>
             </div>
 
@@ -498,13 +545,13 @@
                     </svg>
                   </div>
                   <div class="flex flex-col min-w-0">
-                    <span class="font-label-md text-label-md text-on-surface font-semibold truncate">Google Workspace HUCE</span>
+                    <span class="font-label-md text-label-md text-on-surface font-semibold truncate">Google Workspace</span>
                     <span class="font-body-sm text-body-sm text-outline truncate">{{ u.email }}</span>
                   </div>
                 </div>
-                <span class="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-label-sm text-label-sm font-bold flex items-center gap-1 shrink-0">
-                  <span class="material-symbols-outlined text-[13px]">check_circle</span>
-                  Đã kết nối
+                <span class="px-2.5 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm font-bold flex items-center gap-1 shrink-0">
+                  <span class="material-symbols-outlined text-[13px]">link_off</span>
+                  Chưa cấu hình
                 </span>
               </div>
 
@@ -515,11 +562,11 @@
                   </div>
                   <div class="flex flex-col min-w-0">
                     <span class="font-label-md text-label-md text-on-surface font-semibold truncate">GitHub Repo Sync</span>
-                    <span class="font-body-sm text-body-sm text-outline truncate">huce-scrum-master</span>
+                    <span class="font-body-sm text-body-sm text-outline truncate">Chưa liên kết</span>
                   </div>
                 </div>
-                <button type="button" class="px-2.5 py-1 rounded-lg bg-surface-container text-on-surface font-label-sm text-label-sm font-semibold hover:bg-surface-container-high transition-colors shrink-0">
-                  Đồng bộ
+                <button type="button" disabled class="px-2.5 py-1 rounded-lg bg-surface-container text-outline font-label-sm text-label-sm font-semibold shrink-0 opacity-60 cursor-not-allowed">
+                  Chưa hỗ trợ
                 </button>
               </div>
             </div>
@@ -532,8 +579,8 @@
                 <span class="material-symbols-outlined text-[22px]">policy</span>
               </div>
               <div class="flex flex-col">
-                <span class="font-label-md text-label-md font-bold text-on-surface">Chính sách bảo mật HUCE</span>
-                <span class="font-body-sm text-body-sm text-on-surface-variant">Quy chuẩn dữ liệu đề tài NCKH K65</span>
+                <span class="font-label-md text-label-md font-bold text-on-surface">Chính sách bảo mật hệ thống</span>
+                <span class="font-body-sm text-body-sm text-on-surface-variant">Quy chuẩn hệ thống phân quyền Agile</span>
               </div>
             </div>
             <span class="material-symbols-outlined text-outline text-[18px]">arrow_forward</span>

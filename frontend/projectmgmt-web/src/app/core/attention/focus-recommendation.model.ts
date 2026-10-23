@@ -1,4 +1,4 @@
-import { NotificationModel, UserProfileModel } from '../mocks/identity-mock-db';
+import { NotificationModel, UserProfileModel } from '../models/identity.models';
 import { Project, WorkItem } from '../services/project-management.service';
 
 export interface FocusAction {
@@ -15,7 +15,7 @@ export interface FocusAction {
 
 export interface FocusContext {
   user: UserProfileModel | null;
-  project: Project;
+  project: Project | null;
   workItems: WorkItem[];
   notifications: NotificationModel[];
   lastTaskId: string | null;

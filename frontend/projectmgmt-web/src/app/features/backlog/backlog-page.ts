@@ -1,25 +1,46 @@
-import { ChangeDetectionStrategy, Component, HostListener, inject, signal, computed } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, inject, signal, computed, OnInit, AfterViewInit, OnDestroy, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ConnectedPosition, OverlayModule } from '@angular/cdk/overlay';
-import { DragDropModule, CdkDragDrop } from '@angular/cdk/drag-drop';
-import { ProjectManagementService, WorkItem, Sprint } from '../../core/services/project-management.service';
+import { DragDropModule, CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
+import { ActivatedRoute, Router } from '@angular/router';
+import { RealtimeService } from '../../core/realtime/realtime.service';
+import { gsap } from 'gsap';
+import { ProjectManagementService, WorkItem, Sprint, SprintMessage } from '../../core/services/project-management.service';
+import { IdentityService } from '../../core/services/identity.service';
 import { ExcelDataService } from '../../core/services/excel-data.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ContextMenuComponent, ContextMenuItemAction } from '../../shared/components/context-menu.component';
 
+import { NoProjectStateComponent } from '../../shared/components/no-project-state/no-project-state.component';
+
 @Component({
   selector: 'app-backlog-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, OverlayModule, DragDropModule, ContextMenuComponent],
+  imports: [CommonModule, FormsModule, OverlayModule, DragDropModule, ContextMenuComponent, NoProjectStateComponent],
   templateUrl: './backlog-page.html',
   styleUrl: './backlog-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class BacklogPage {
+export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
+  private el = inject<ElementRef<HTMLElement>>(ElementRef);
+  private entranceTween: gsap.core.Tween | null = null;
+  private readonly identityService = inject(IdentityService);
   readonly projectService = inject(ProjectManagementService);
   readonly excelService = inject(ExcelDataService);
   readonly toastService = inject(ToastService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly realtimeService = inject(RealtimeService);
+
+  // Sprint Chat & Real-time Discussion State
+  readonly sprintMessages = signal<SprintMessage[]>([]);
+  readonly isChatLoading = signal<boolean>(false);
+  readonly isSendingMessage = signal<boolean>(false);
+  readonly chatInputText = signal<string>('');
+  private sprintChatUnsubscribe?: () => void;
+
+  readonly projectMembers = computed(() => this.projectService.currentProject()?.members ?? []);
 
   // Search & Filter State
   searchQuery = signal<string>('');
@@ -98,6 +119,7 @@ export class BacklogPage {
   // Inline Sprint Edit State
   editingSprintId = signal<string | null>(null);
   editingSprintName = signal<string>('');
+  editingSprintGoal = signal<string>('');
   editingStartDate = signal<string>('');
   editingEndDate = signal<string>('');
 
@@ -108,6 +130,57 @@ export class BacklogPage {
   readonly sprints = this.projectService.sprints;
   readonly workItems = this.projectService.workItems;
   readonly epics = this.projectService.epics;
+  readonly statusNames = computed(() => {
+    const s = this.projectService.projectStatuses().map(st => st.name);
+    return s.length > 0 ? s : ['To Do', 'In Progress', 'Code Review', 'Done'];
+  });
+  readonly issueTypes = computed(() => {
+    const custom = this.projectService.customIssueTypes().map(t => t.name);
+    return Array.from(new Set(['Story', 'Task', 'Bug', 'Use-Case', 'Epic', 'Sub-task', ...custom]));
+  });
+
+  ngOnInit(): void {
+    const currentProj = this.projectService.currentProject();
+    if (currentProj?.id && (!currentProj.members || currentProj.members.length === 0)) {
+      this.projectService.loadProjectMembers(currentProj.id).subscribe();
+    }
+
+    this.route.queryParams.subscribe(params => {
+      const sprintId = params['sprintId'];
+      const openChat = params['openChat'];
+      if (sprintId && openChat === 'true') {
+        const targetSprint = this.sprints().find(s => s.id === sprintId);
+        if (targetSprint) {
+          this.openSprintDetail(targetSprint);
+        }
+      }
+    });
+  }
+
+  ngAfterViewInit(): void {
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      const sections = this.el.nativeElement.querySelectorAll<HTMLElement>('.sprint-section');
+      if (sections.length) {
+        this.entranceTween = gsap.fromTo(
+          sections,
+          { opacity: 0, y: 16 },
+          {
+            opacity: 1,
+            y: 0,
+            duration: 0.4,
+            stagger: 0.08,
+            ease: 'power2.out',
+            clearProps: 'transform,opacity'
+          }
+        );
+      }
+    }
+  }
+
+  ngOnDestroy(): void {
+    this.entranceTween?.kill();
+    this.closeSprintDetail();
+  }
 
   // Has active filter applied
   readonly hasActiveFilters = computed(() => {
@@ -139,7 +212,10 @@ export class BacklogPage {
     }
 
     if (onlyMine) {
-      items = items.filter(i => i.assigneeName === 'Trần Văn Hoàng');
+      const myName = this.identityService.authState().currentUser?.displayName;
+      if (myName) {
+        items = items.filter(i => i.assigneeName === myName);
+      }
     }
 
     if (assigneeFilter) {
@@ -163,10 +239,14 @@ export class BacklogPage {
 
   // CDK Drag and Drop across Sprints
   onSprintDrop(event: CdkDragDrop<WorkItem[]>, targetSprintId: string, targetSprintName: string): void {
+    if (event.previousContainer === event.container) {
+      const ordered = [...event.container.data]; moveItemInArray(ordered, event.previousIndex, event.currentIndex);
+      this.projectService.reorderWorkItems(ordered.map(i => i.id)); return;
+    }
     const item = event.item.data as WorkItem;
     if (item && item.sprintId !== targetSprintId) {
       this.projectService.updateWorkItemSprint(item.id, targetSprintId, targetSprintName);
-      this.toastService.success('Đã Chuyển Sprint', `Công việc [${item.issueKey}] -> ${targetSprintName}`);
+      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     }
   }
 
@@ -196,14 +276,16 @@ export class BacklogPage {
           };
           const targetStatus = statusMap[val] || val;
           this.projectService.updateWorkItemStatus(item.id, targetStatus);
-          this.toastService.success('Cập Nhật Trạng Thái', `[${item.issueKey}] -> ${targetStatus}`);
+          this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
         }
         break;
 
-      case 'assign':
-        this.projectService.updateWorkItemAssignee(item.id, 'Trần Văn Hoàng');
-        this.toastService.success('Đã Gán Cho Bạn', `[${item.issueKey}] đã giao cho bạn`);
+      case 'assign': {
+        const myName = this.identityService.authState().currentUser?.displayName || 'Tôi';
+        this.projectService.updateWorkItemAssignee(item.id, myName);
+        this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
         break;
+      }
 
       case 'ai-breakdown':
         this.projectService.activeDrawerTask.set(item);
@@ -217,7 +299,7 @@ export class BacklogPage {
 
       case 'copy':
         navigator.clipboard?.writeText?.(`${item.issueKey}: ${item.title}`);
-        this.toastService.success('Đã Sao Chép', `Đã chép [${item.issueKey}] vào clipboard`);
+        this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
         break;
 
       case 'delete':
@@ -260,10 +342,9 @@ export class BacklogPage {
   saveEditingTaskTitle(taskId: string): void {
     const title = this.editingTaskTitle().trim();
     if (title) {
-      this.workItems.update(items =>
-        items.map(item => item.id === taskId ? { ...item, title } : item)
-      );
-      this.toastService.success('Đã Cập Nhật', 'Đã đổi tên công việc thành công.');
+      const item = this.workItems().find(task => task.id === taskId);
+      if (item) this.projectService.updateWorkItem({ ...item, title });
+      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     }
     this.editingTaskId.set(null);
   }
@@ -279,7 +360,7 @@ export class BacklogPage {
     const value = Math.max(0, Math.min(999, Number(this.editingStoryPointsValue()) || 0));
     this.projectService.updateWorkItemStoryPoints(taskId, value);
     this.editingStoryPointsTaskId.set(null);
-    this.toastService.success('Cập Nhật SP', `Đã cập nhật ${value} SP.`);
+    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
   }
 
   updateInlinePriorityNext(taskId: string, currentPriority: WorkItem['priority'], event?: Event): void {
@@ -340,10 +421,183 @@ export class BacklogPage {
     return map[type] || 'task_alt';
   }
 
+  readonly activeSprintDetail = signal<Sprint | null>(null);
+
+  onSprintHeaderClick(sprint: Sprint, event: MouseEvent): void {
+    const target = event.target as HTMLElement;
+    if (target.closest('.sprint-actions') || target.closest('.sprint-edit-row') || target.closest('input') || target.closest('select')) {
+      return;
+    }
+    this.openSprintDetail(sprint);
+  }
+
+  onWorkItemRowClick(item: WorkItem, event: MouseEvent): void {
+    const target = event.target as HTMLElement;
+    if (
+      target.closest('.no-drawer') ||
+      target.closest('input') ||
+      target.closest('select') ||
+      target.closest('textarea') ||
+      target.closest('.cell-select') ||
+      target.closest('.cell-epic') ||
+      target.closest('.cell-priority') ||
+      target.closest('.cell-points') ||
+      target.closest('.cell-status') ||
+      target.closest('.cell-menu') ||
+      target.closest('.edit-title-button')
+    ) {
+      return;
+    }
+    this.openTask(item, event);
+  }
+
+  openSprintDetail(sprint: Sprint, event?: Event): void {
+    if (event) event.stopPropagation();
+    this.activeSprintDetail.set(sprint);
+    this.editingSprintName.set(sprint.name);
+    this.editingSprintGoal.set(sprint.goal || '');
+    this.editingStartDate.set(sprint.startDate || '');
+    this.editingEndDate.set(sprint.endDate || '');
+
+    // Tự động kết nối và tải luồng Trao đổi & Bình luận của Sprint
+    this.loadSprintDiscussion(sprint.id);
+  }
+
+  saveSprintDetail(): void {
+    const sprint = this.activeSprintDetail();
+    if (!sprint) return;
+    const name = this.editingSprintName().trim();
+    if (name) {
+      this.projectService.updateSprintInfo(
+        sprint.id,
+        name,
+        this.editingStartDate(),
+        this.editingEndDate(),
+        this.editingSprintGoal()
+      );
+      this.toastService.success('Cập nhật Sprint', `Đã lưu thông tin chu kỳ "${name}".`);
+    }
+  }
+
+  closeSprintDetail(): void {
+    const sp = this.activeSprintDetail();
+    if (sp) {
+      void this.realtimeService.leaveSprint(sp.id);
+    }
+    if (this.sprintChatUnsubscribe) {
+      this.sprintChatUnsubscribe();
+      this.sprintChatUnsubscribe = undefined;
+    }
+    this.activeSprintDetail.set(null);
+    this.sprintMessages.set([]);
+    this.chatInputText.set('');
+  }
+
+  loadSprintDiscussion(sprintId: string): void {
+    this.isChatLoading.set(true);
+    this.chatInputText.set('');
+
+    void this.realtimeService.joinSprint(sprintId);
+
+    if (this.sprintChatUnsubscribe) {
+      this.sprintChatUnsubscribe();
+    }
+
+    const offMsg = this.realtimeService.on<SprintMessage>('ReceiveSprintMessage', (msg) => {
+      if (msg.sprintId === this.activeSprintDetail()?.id) {
+        this.sprintMessages.update(list => {
+          if (list.some(m => m.id === msg.id)) return list;
+          return [...list, msg];
+        });
+        this.scrollChatToBottom();
+      }
+    });
+
+    const offDel = this.realtimeService.on<string>('SprintMessageDeleted', (msgId) => {
+      this.sprintMessages.update(list => list.filter(m => m.id !== msgId));
+    });
+
+    this.sprintChatUnsubscribe = () => {
+      offMsg();
+      offDel();
+    };
+
+    this.projectService.getSprintMessages(sprintId).subscribe({
+      next: (messages) => {
+        this.sprintMessages.set(messages);
+        this.isChatLoading.set(false);
+        this.scrollChatToBottom();
+      },
+      error: () => {
+        this.isChatLoading.set(false);
+      }
+    });
+  }
+
+  sendSprintChatMessage(): void {
+    const sp = this.activeSprintDetail();
+    const text = this.chatInputText().trim();
+    if (!sp || !text || this.isSendingMessage()) return;
+
+    this.isSendingMessage.set(true);
+    this.projectService.sendSprintMessage(sp.id, text).subscribe({
+      next: (sent) => {
+        this.chatInputText.set('');
+        this.isSendingMessage.set(false);
+        this.sprintMessages.update(list => {
+          if (list.some(m => m.id === sent.id)) return list;
+          return [...list, sent];
+        });
+        this.scrollChatToBottom();
+      },
+      error: (err) => {
+        this.isSendingMessage.set(false);
+        this.toastService.error('Không thể gửi bình luận', err?.error?.message || 'Lỗi kết nối máy chủ.');
+      }
+    });
+  }
+
+  deleteChatMessage(messageId: string): void {
+    const sp = this.activeSprintDetail();
+    if (!sp) return;
+    this.projectService.deleteSprintMessage(sp.id, messageId).subscribe({
+      next: () => {
+        this.sprintMessages.update(list => list.filter(m => m.id !== messageId));
+        this.toastService.info('Xóa bình luận', 'Bình luận đã được xóa khỏi chu kỳ Sprint.');
+      },
+      error: () => {
+        this.toastService.error('Lỗi', 'Không thể xóa bình luận.');
+      }
+    });
+  }
+
+  readonly currentUserInitial = computed(() => {
+    const name = this.identityService.authState().currentUser?.displayName || this.identityService.authState().currentUser?.email;
+    return name ? name.charAt(0).toUpperCase() : 'U';
+  });
+
+  onChatKeydown(event: Event): void {
+    const kEvent = event as KeyboardEvent;
+    if (kEvent.key === 'Enter' && !kEvent.shiftKey) {
+      kEvent.preventDefault();
+      this.sendSprintChatMessage();
+    }
+  }
+
+  private scrollChatToBottom(): void {
+    setTimeout(() => {
+      const container = this.el.nativeElement.querySelector('.sprint-chat-messages');
+      if (container) {
+        container.scrollTop = container.scrollHeight;
+      }
+    }, 50);
+  }
+
   startEditingSprint(sprint: Sprint, event?: Event): void {
     if (event) event.stopPropagation();
     this.editingSprintId.set(sprint.id);
     this.editingSprintName.set(sprint.name);
+    this.editingSprintGoal.set(sprint.goal || '');
     this.editingStartDate.set(sprint.startDate || '');
     this.editingEndDate.set(sprint.endDate || '');
   }
@@ -351,8 +605,8 @@ export class BacklogPage {
   saveEditingSprint(sprintId: string): void {
     const name = this.editingSprintName().trim();
     if (name) {
-      this.projectService.updateSprintInfo(sprintId, name, this.editingStartDate(), this.editingEndDate());
-      this.toastService.success('Đã Cập Nhật Sprint', `Cập nhật thông tin cho ${name}`);
+      this.projectService.updateSprintInfo(sprintId, name, this.editingStartDate(), this.editingEndDate(), this.editingSprintGoal());
+      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     }
     this.editingSprintId.set(null);
   }
@@ -377,8 +631,8 @@ export class BacklogPage {
   }
 
   createSprint(): void {
-    const newSprint = this.projectService.addNewSprint();
-    this.toastService.success('Tạo Sprint Mới', `Đã khởi tạo Sprint ${newSprint.name}`);
+    this.projectService.addNewSprint();
+    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
   }
 
   getAssigneeInitials(name?: string): string {
@@ -416,8 +670,8 @@ export class BacklogPage {
 
   createEpic(): void {
     if (!this.newEpicName.trim()) return;
-    const created = this.projectService.addEpic(this.newEpicName.trim(), this.newEpicColor);
-    this.toastService.success('Đã Tạo Epic Mới', `Epic "${created.name}" [${created.key}] đã sẵn sàng!`);
+    this.projectService.addEpic(this.newEpicName.trim(), this.newEpicColor);
+    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     this.newEpicName = '';
     this.showNewEpicModal.set(false);
   }
@@ -473,8 +727,8 @@ export class BacklogPage {
     const title = this.subtaskTitleMap[parentId];
     if (!title || !title.trim()) return;
 
-    const sub = this.projectService.createSubTask(parentId, title.trim());
-    this.toastService.success('Tạo Sub-task', `Đã thêm công việc con [${sub.issueKey}]`);
+    this.projectService.createSubTask(parentId, title.trim());
+    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     this.subtaskTitleMap[parentId] = '';
     this.activeSubtaskInputId.set(null);
   }
@@ -484,18 +738,20 @@ export class BacklogPage {
     const title = this.inlineTaskTitleMap[sprintId];
     if (!title || !title.trim()) return;
 
-    const created = this.projectService.addWorkItem({
+    const currentUserName = this.identityService.authState().currentUser?.displayName || '';
+    const normalizedSprintId = sprintId === 'sp-backlog' ? undefined : sprintId;
+    this.projectService.addWorkItem({
       title: title.trim(),
-      sprintId,
-      sprintName,
+      sprintId: normalizedSprintId,
+      sprintName: normalizedSprintId ? sprintName : 'Backlog Pool',
       statusName: 'To Do',
       issueType: 'Task',
       priority: 'Medium',
       storyPoints: 3,
-      assigneeName: 'Trần Văn Hoàng'
+      assigneeName: currentUserName
     });
 
-    this.toastService.success('Tạo Công Việc', `Đã thêm [${created.issueKey}] vào ${sprintName}`);
+    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     this.inlineTaskTitleMap[sprintId] = '';
     this.activeInlineSprintId.set(null);
   }
@@ -505,10 +761,10 @@ export class BacklogPage {
     if (event) event.stopPropagation();
     if (sprint.status === 'future') {
       this.projectService.updateSprintStatus(sprint.id, 'active');
-      this.toastService.success('Kích Hoạt Sprint', `Sprint "${sprint.name}" đã bắt đầu.`);
+      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     } else if (sprint.status === 'active') {
       this.projectService.updateSprintStatus(sprint.id, 'completed');
-      this.toastService.success('Hoàn Thành Sprint', `Đã hoàn thành Sprint "${sprint.name}".`);
+      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     } else {
       this.projectService.updateSprintStatus(sprint.id, 'future');
       this.toastService.info('Mở Lại Sprint', `Sprint "${sprint.name}" đưa về kế hoạch.`);
@@ -535,7 +791,7 @@ export class BacklogPage {
   updateInlineStatus(taskId: string, statusName: string, event?: Event): void {
     if (event) event.stopPropagation();
     this.projectService.updateWorkItemStatus(taskId, statusName);
-    this.toastService.success('Cập Nhật Trạng Thái', `Đã đổi sang ${statusName}`);
+    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
   }
 
   updateInlineAssignee(taskId: string, assigneeName: string, event?: Event): void {
@@ -573,8 +829,9 @@ export class BacklogPage {
 
   assignToMe(taskId: string, event?: Event): void {
     if (event) event.stopPropagation();
-    this.projectService.updateWorkItemAssignee(taskId, 'Trần Văn Hoàng');
-    this.toastService.success('Đã Gán Cho Tôi', 'Đã nhận công việc.');
+    const myName = this.identityService.authState().currentUser?.displayName || 'Tôi';
+    this.projectService.updateWorkItemAssignee(taskId, myName);
+    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     this.activeMenuTaskId.set(null);
   }
 
@@ -582,7 +839,7 @@ export class BacklogPage {
     if (event) event.stopPropagation();
     const cloned = this.projectService.cloneWorkItem(taskId);
     if (cloned) {
-      this.toastService.success('Nhân Bản Thành Công', `Đã tạo bản sao [${cloned.issueKey}]`);
+      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     }
     this.activeMenuTaskId.set(null);
   }
@@ -614,15 +871,16 @@ export class BacklogPage {
     const ids = this.selectedTaskIds();
     if (ids.length === 0) return;
     this.projectService.bulkUpdateStatus(ids, newStatus);
-    this.toastService.success('Thao Tác Hàng Loạt', `Đã cập nhật ${ids.length} công việc sang ${newStatus}`);
+    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     this.clearSelection();
   }
 
-  bulkChangeSprint(sprintId: string, sprintName: string): void {
+  bulkChangeSprint(sprintId: string, fallbackSprintName: string = 'Sprint đã chọn'): void {
     const ids = this.selectedTaskIds();
     if (ids.length === 0) return;
+    const sprintName = this.sprints().find(s => s.id === sprintId)?.name ?? fallbackSprintName;
     this.projectService.bulkUpdateSprint(ids, sprintId, sprintName);
-    this.toastService.success('Thao Tác Hàng Loạt', `Đã chuyển ${ids.length} công việc sang ${sprintName}`);
+    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     this.clearSelection();
   }
 
@@ -636,7 +894,7 @@ export class BacklogPage {
 
   // --- Quick Exports & AI ---
   exportExcel(): void {
-    this.excelService.exportToExcel(this.workItems(), 'HUCE_Backlog_Export.csv');
+    this.excelService.exportToExcel(this.workItems(), 'Project_Backlog_Export.csv');
     this.toastService.success('Xuất Dữ Liệu Excel', 'Đã tải xuống file CSV/Excel thành công.');
   }
 

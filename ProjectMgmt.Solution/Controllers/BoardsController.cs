@@ -4,6 +4,8 @@ using ProjectMgmt.Modules.Planning.ProjectManagement.Application.IServices;
 namespace ProjectMgmt.Solution.Controllers;
 
 [Route("api/boards")]
+[Route("api/v1/boards")]
+[TypeFilter(typeof(ProjectMgmt.Solution.Security.ProjectAuthorizationFilter))]
 public class BoardsController : ApiControllerBase
 {
     private readonly IProjectManagementService _service;
@@ -38,4 +40,11 @@ public class BoardsController : ApiControllerBase
         Guid columnId,
         CancellationToken cancellationToken) =>
         FromResult(await _service.DeleteBoardColumnAsync(columnId, cancellationToken));
+
+    [HttpPut("columns/{columnId:guid}")]
+    public async Task<ActionResult<BoardColumnDto>> UpdateColumn(
+        Guid columnId,
+        [FromBody] UpdateBoardColumnRequestDto request,
+        CancellationToken cancellationToken) =>
+        FromResult(await _service.UpdateBoardColumnAsync(columnId, request, cancellationToken));
 }

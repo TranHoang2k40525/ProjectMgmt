@@ -26,7 +26,7 @@ public class ProjectRepository : IProjectRepository
         string projectKey,
         CancellationToken cancellationToken = default) =>
         _dbContext.Projects.SingleOrDefaultAsync(
-            x => x.OrgId == organizationId && x.ProjectKey == projectKey && !x.IsDeleted,
+            x => x.OrgId == organizationId && x.ProjectKey == projectKey,
             cancellationToken);
 
     public async Task<IReadOnlyList<IssueType>> GetIssueTypesAsync(
@@ -150,7 +150,7 @@ public class ProjectRepository : IProjectRepository
         await _dbContext.Boards.SingleOrDefaultAsync(x => x.Id == boardId, cancellationToken);
 
     public async Task<IReadOnlyList<BoardColumn>> GetBoardColumnsAsync(Guid boardId, CancellationToken cancellationToken = default) =>
-        await _dbContext.BoardColumns.AsNoTracking()
+        await _dbContext.BoardColumns
             .Where(x => x.BoardId == boardId)
             .OrderBy(x => x.OrderIndex)
             .ToListAsync(cancellationToken);
