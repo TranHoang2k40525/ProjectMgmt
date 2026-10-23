@@ -30,7 +30,6 @@ public class AccountController : ControllerBase
     }
 
     [HttpPost("register")]
-    [EnableRateLimiting("auth-otp")]
     public async Task<IActionResult> Register([FromBody] AccountDto request)
     {
         try
@@ -61,7 +60,6 @@ public class AccountController : ControllerBase
     }
 
     [HttpPost("otp/send")]
-    [EnableRateLimiting("auth-otp")]
     public async Task<IActionResult> SendOtp([FromBody] AccountDto request)
     {
         try
@@ -94,7 +92,6 @@ public class AccountController : ControllerBase
     }
 
     [HttpPost("otp/verify")]
-    [EnableRateLimiting("auth-otp")]
     public async Task<IActionResult> VerifyOtp([FromBody] AccountDto request)
     {
         try
@@ -125,7 +122,6 @@ public class AccountController : ControllerBase
     }
 
     [HttpPost("forgot-password")]
-    [EnableRateLimiting("auth-otp")]
     public async Task<IActionResult> ForgotPassword([FromBody] AccountDto request)
     {
         try
@@ -140,7 +136,6 @@ public class AccountController : ControllerBase
     }
 
     [HttpPost("reset-password")]
-    [EnableRateLimiting("auth-otp")]
     public async Task<IActionResult> ResetPassword([FromBody] AccountDto request)
     {
         try

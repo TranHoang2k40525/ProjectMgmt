@@ -33,7 +33,7 @@ public sealed class ProjectCustomizationController(PlanningDbContext db, Project
         if (await db.IssueTypes.AnyAsync(t => t.ProjectId == projectId && t.Name == name))
             return Conflict(new { title = "Loại công việc đã tồn tại trong dự án." });
         var type = new IssueType { Id = Guid.NewGuid(), ProjectId = projectId, Name = name,
-            IconKey = input.Icon.Trim(), ColorHex = input.Color, IsSubtask = false, HierarchyLevel = 1,
+            IconKey = input.Icon.Trim(), ColorHex = input.Color, IsSubtask = false, HierarchyLevel = 2,
             OrderIndex = (await db.IssueTypes.Where(t => t.ProjectId == projectId).MaxAsync(t => (int?)t.OrderIndex) ?? 0) + 1 };
         db.IssueTypes.Add(type);
         await db.SaveChangesAsync();

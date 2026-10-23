@@ -49,7 +49,7 @@ public class UsersController : ControllerBase
     /// Hỗ trợ cả /api/users (cũ) và /api/v1/users (mới).
     /// </summary>
     [HttpGet]
-    [HttpGet("~/api/users")]
+    [HttpGet("directory")]
     public async Task<IActionResult> GetAllUsers(CancellationToken cancellationToken)
     {
         try
@@ -60,7 +60,7 @@ public class UsersController : ControllerBase
                 join profile in identity.UserProfiles on user.Id equals profile.UserId
                 where user.IsActive && user.IsEmailVerified
                 orderby profile.DisplayName
-                select new { userId = user.Id, profile.DisplayName, user.Email, profile.AvatarUrl }, cancellationToken));
+                select new { id = user.Id, userId = user.Id, profile.DisplayName, fullName = profile.DisplayName, user.Email, profile.AvatarUrl }, cancellationToken));
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -69,7 +69,6 @@ public class UsersController : ControllerBase
     }
 
     [HttpGet("{userId:guid}/display")]
-    [HttpGet("~/api/users/{userId:guid}/display")]
     public async Task<IActionResult> GetDisplay(
         Guid userId,
         CancellationToken cancellationToken)
@@ -86,7 +85,6 @@ public class UsersController : ControllerBase
     }
 
     [HttpPost("skills/query")]
-    [HttpPost("~/api/users/skills/query")]
     public async Task<IActionResult> GetSkills(
         [FromBody] IReadOnlyCollection<Guid> userIds)
     {

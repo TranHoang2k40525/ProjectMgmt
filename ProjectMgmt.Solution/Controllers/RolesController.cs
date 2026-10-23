@@ -133,6 +133,18 @@ public class RolesController : ControllerBase
                 return Forbidden();
             }
 
+            var db = HttpContext.RequestServices.GetRequiredService<IdentityExperienceDbContext>();
+            var existingRole = await db.Roles.AsNoTracking().FirstOrDefaultAsync(r => r.Id == roleId);
+            if (existingRole is not null && existingRole.IsSystem)
+            {
+                return BadRequest(new RoleDto
+                {
+                    Success = false,
+                    ErrorCode = "RBAC_SYSTEM_ROLE_IMMUTABLE",
+                    Message = "Không được phép thay đổi quyền của vai trò hệ thống."
+                });
+            }
+
             var result = await _roleServices.UpdateRolePermissionsAsync(roleId, request.PermissionIds);
             return result.Success
                 ? Ok(result)
@@ -144,6 +156,61 @@ public class RolesController : ControllerBase
         {
             return InternalError("roles/permissions", exception);
         }
+    }
+
+    [HttpGet("roles/{roleId:guid}/permissions")]
+    public async Task<IActionResult> GetRolePermissions(Guid roleId)
+    {
+        var db = HttpContext.RequestServices.GetRequiredService<IdentityExperienceDbContext>();
+        var role = await db.Roles.AsNoTracking().FirstOrDefaultAsync(r => r.Id == roleId);
+        if (role is null) return NotFound();
+        var perms = await (from rp in db.RolePermissions.AsNoTracking()
+                           join p in db.Permissions.AsNoTracking() on rp.PermissionId equals p.Id
+                           where rp.RoleId == roleId
+                           select new { p.Id, p.Code, p.Description }).ToListAsync();
+        return Ok(new { roleId, permissions = perms });
+    }
+
+    [HttpDelete("roles/{roleId:guid}")]
+    public async Task<IActionResult> DeleteRole(Guid roleId)
+    {
+        if (!await HasSystemPermission("identity.role.manage"))
+        {
+            return Forbidden();
+        }
+
+        var db = HttpContext.RequestServices.GetRequiredService<IdentityExperienceDbContext>();
+        var role = await db.Roles.FirstOrDefaultAsync(r => r.Id == roleId);
+        if (role is null)
+        {
+            return NotFound(new RoleDto { Success = false, ErrorCode = "RBAC_ROLE_NOT_FOUND", Message = "Không tìm thấy vai trò." });
+        }
+
+        if (role.IsSystem)
+        {
+            return BadRequest(new RoleDto { Success = false, ErrorCode = "RBAC_SYSTEM_ROLE_IMMUTABLE", Message = "Không được phép xóa vai trò hệ thống." });
+        }
+
+        var rolePerms = await db.RolePermissions.Where(rp => rp.RoleId == roleId).ToListAsync();
+        db.RolePermissions.RemoveRange(rolePerms);
+        db.Roles.Remove(role);
+        await db.SaveChangesAsync();
+        return Ok(new { deleted = true, roleId });
+    }
+
+    [HttpGet("permissions/check")]
+    public async Task<IActionResult> CheckPermission(
+        [FromQuery] string permissionCode,
+        [FromQuery] string? scopeType,
+        [FromQuery] Guid? scopeId)
+    {
+        if (!_currentUser.UserId.HasValue) return Unauthenticated();
+        var allowed = await _permissions.HasPermissionAsync(
+            _currentUser.UserId.Value,
+            permissionCode ?? string.Empty,
+            string.IsNullOrWhiteSpace(scopeType) ? "System" : scopeType,
+            scopeId);
+        return Ok(new { allowed, permissionCode });
     }
 
     [HttpGet("users/{userId:guid}/roles")]

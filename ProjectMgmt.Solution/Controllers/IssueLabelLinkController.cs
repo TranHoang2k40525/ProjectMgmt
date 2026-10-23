@@ -67,8 +67,26 @@ public class IssueLabelLinkController(
         await DenyAsync(id, "project.read", cancellationToken) ?? FromResult(await labels.GetLinksAsync(id, cancellationToken));
 
     [HttpPost("issues/{id:guid}/links")]
-    public async Task<ActionResult<IssueLinkDto>> CreateLink(Guid id, CreateIssueLinkDto request, CancellationToken cancellationToken) =>
-        await DenyAsync(id, "issue.update", cancellationToken) ?? FromResult(await labels.CreateLinkAsync(id, request, access.UserId, cancellationToken));
+    public async Task<ActionResult<IssueLinkDto>> CreateLink(Guid id, CreateIssueLinkDto request, CancellationToken cancellationToken)
+    {
+        var denied = await DenyAsync(id, "issue.update", cancellationToken);
+        if (denied is not null) return denied;
+        if (request.LinkType is "Blocks" or "IsBlockedBy")
+        {
+            var existing = await labels.GetLinksAsync(request.TargetIssueId, cancellationToken);
+            if (existing.IsSuccess && existing.Value.Any(l => l.TargetIssueId == id && (l.LinkType == "Blocks" || l.LinkType == "IsBlockedBy")))
+            {
+                return Conflict(new ProblemDetails
+                {
+                    Title = "Conflict",
+                    Detail = "Không được phép tạo vòng lặp chặn giữa hai công việc.",
+                    Status = StatusCodes.Status409Conflict,
+                    Extensions = { ["code"] = "ISSUE_LINK_BLOCKING_CYCLE" }
+                });
+            }
+        }
+        return FromResult(await labels.CreateLinkAsync(id, request, access.UserId, cancellationToken));
+    }
 
     [HttpDelete("issue-links/{linkId:guid}")]
     public async Task<ActionResult> DeleteLink(Guid linkId, CancellationToken cancellationToken)

@@ -80,6 +80,36 @@ public class IssuesController(
         return FromResult(await hierarchy.ChangeParentAsync(id, request, access.UserId, cancellationToken));
     }
 
+    [HttpGet("issues/{id:guid}/subtasks")]
+    public async Task<IActionResult> GetSubtasks(
+        Guid id,
+        [FromServices] DeliveryIntelligence.Infrastructure.DeliveryIntelligenceDbContext db,
+        CancellationToken cancellationToken)
+    {
+        var current = await issues.GetAsync(id, cancellationToken);
+        if (current.IsFailure) return NotFound();
+        if (!await access.AllowsAsync(current.Value.ProjectId)) return Forbidden();
+        var items = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync(
+            db.Issues.Where(i => i.ParentId == id && !i.IsDeleted).OrderBy(i => i.RankOrder),
+            cancellationToken);
+        return Ok(items);
+    }
+
+    [HttpGet("epics/{id:guid}/children")]
+    public async Task<IActionResult> GetEpicChildren(
+        Guid id,
+        [FromServices] DeliveryIntelligence.Infrastructure.DeliveryIntelligenceDbContext db,
+        CancellationToken cancellationToken)
+    {
+        var current = await issues.GetAsync(id, cancellationToken);
+        if (current.IsFailure) return NotFound();
+        if (!await access.AllowsAsync(current.Value.ProjectId)) return Forbidden();
+        var items = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync(
+            db.Issues.Where(i => (i.EpicId == id || i.ParentId == id) && !i.IsDeleted).OrderBy(i => i.RankOrder),
+            cancellationToken);
+        return Ok(items);
+    }
+
     [HttpPut("issues/{id:guid}/rank")]
     public async Task<ActionResult<IssueRankDto>> Rank(Guid id, RankIssueDto request, CancellationToken cancellationToken)
     {
