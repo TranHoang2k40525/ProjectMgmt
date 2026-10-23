@@ -11,6 +11,7 @@ import { NotificationDto } from '../api/notification-api.models';
 import { RbacApi } from '../api/rbac.api';
 import { RoleDto } from '../api/rbac-api.models';
 import { RealtimeService } from '../realtime/realtime.service';
+import { ToastService } from './toast.service';
 import { AuthSession, TOKEN_STORE } from '../auth/token-store';
 import {
   ActiveSessionModel,
@@ -40,6 +41,7 @@ export class IdentityService {
   private readonly notificationApi = inject(NotificationApi);
   private readonly rbacApi = inject(RbacApi);
   private readonly realtime = inject(RealtimeService, { optional: true });
+  private readonly toast = inject(ToastService, { optional: true });
   private readonly tokenStore = inject(TOKEN_STORE);
   private readonly skillCatalog = new Map<string, SkillModel>();
   private readonly userSkills = new Map<string, UserSkillModel[]>();
@@ -256,7 +258,7 @@ export class IdentityService {
     }));
   }
 
-  addUserSkill(userId: string, skillId: string, level: number): Observable<UserSkillModel> {
+  addUserSkill(userId: string, skillId: string, level: number, yearsOfExperience?: number | null): Observable<UserSkillModel> {
     const current = this.userSkills.get(userId);
     const source = current ? of(current) : this.getUserSkills(userId);
     return source.pipe(switchMap(existingSkills => {
@@ -268,7 +270,8 @@ export class IdentityService {
         userId,
         skillId,
         skillName: catalogSkill?.name ?? 'Kỹ năng',
-        proficiencyLevel: normalizedLevel * 20
+        proficiencyLevel: normalizedLevel * 20,
+        yearsOfExperience: yearsOfExperience ?? null
       };
       updatedSkills.push(savedSkill);
 
@@ -339,14 +342,16 @@ export class IdentityService {
       userId,
       skillId: skill.skillId!,
       skillName: skill.name!,
-      proficiencyLevel: (skill.proficiencyLevel ?? skill.level ?? 1) * 20
+      proficiencyLevel: (skill.proficiencyLevel ?? skill.level ?? 1) * 20,
+      yearsOfExperience: skill.yearsOfExperience ?? null
     };
   }
 
   private toSkillDtos(skills: UserSkillModel[]): Array<Partial<SkillDto>> {
     return skills.map(skill => ({
       skillId: skill.skillId,
-      proficiencyLevel: this.toBackendSkillLevel(skill.proficiencyLevel)
+      proficiencyLevel: this.toBackendSkillLevel(skill.proficiencyLevel),
+      yearsOfExperience: skill.yearsOfExperience ?? null
     }));
   }
 
@@ -391,7 +396,7 @@ export class IdentityService {
           category: (p.grouping ?? 'System') as PermissionModel['category'],
           module: p.grouping ?? 'System',
           description: p.description ?? ''
-        }));
+        }));
       })
     );
   }
@@ -422,12 +427,18 @@ export class IdentityService {
     );
   }
 
-  createRole(name: string, description: string, permissionCodes: string[]): Observable<RoleModel> {
+  createRole(name: string, description: string, permissionCodes: string[], scope: string = 'Project'): Observable<RoleModel> {
     return this.permissionIds(permissionCodes).pipe(
-      switchMap(permissionIds => this.rbacApi.createRole({ name, scope: 'Project', description, permissionIds })),
+      switchMap(permissionIds => this.rbacApi.createRole({ name, scope, description, permissionIds })),
       map(res => ({ id: res.roleId ?? '', name: res.name ?? name, code: res.name ?? name,
-        scope: res.scope ?? 'Project', description, isSystem: false, permissionCodes }))
+        scope: res.scope ?? scope, description, isSystem: false, permissionCodes }))
     );
+  }
+  assignUserRole(userId: string, roleId: string, scopeType: string = 'System', scopeId?: string): Observable<RoleDto> {
+    return this.rbacApi.assignUserRole(userId, { roleId, scopeType, scopeId });
+  }
+  removeUserRole(userId: string, userRoleId: string): Observable<RoleDto> {
+    return this.rbacApi.removeUserRole(userId, userRoleId);
   }
 
   getProjectMembers(projectId: string): Observable<RoleDto[]> {
@@ -449,6 +460,16 @@ export class IdentityService {
   // ==========================================
   // NOTIFICATIONS
   // ==========================================
+
+  getUnreadCount(): Observable<number> {
+    return this.notificationApi.getUnreadCount().pipe(
+      map(res => {
+        const count = res.unreadCount ?? 0;
+        this.unreadCount.set(count);
+        return count;
+      })
+    );
+  }
 
   getNotifications(): Observable<NotificationModel[]> {
     return this.notificationApi.getInbox(undefined, 1, 50).pipe(
@@ -509,6 +530,7 @@ export class IdentityService {
     this.notifications.update(list => [model, ...list.filter(n => n.id !== model.id)]);
     if (!model.isRead) {
       this.unreadCount.update(c => c + 1);
+      this.toast?.info(model.title, model.message);
     }
   }
 
@@ -536,7 +558,11 @@ export class IdentityService {
       type,
       category,
       isRead: dto.isRead ?? false,
-      createdAt: dto.createdAt ?? new Date().toISOString()
+      createdAt: dto.createdAt ?? new Date().toISOString(),
+      entityType: dto.entityType ?? null,
+      entityId: dto.entityId ?? null,
+      projectId: dto.projectId ?? null,
+      actionUrl: dto.entityType === 'Issue' && dto.entityId ? `/issues/${dto.entityId}` : dto.projectId ? '/project/summary' : undefined
     };
   }
 

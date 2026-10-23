@@ -15,7 +15,7 @@ export interface UserProfileModel {
   timezone?: string | null;
   seniorityLevel?: string | null;
   yearsOfExperience?: number | null;
-  roles?: Array<{ roleId: string; roleName: string; scopeType?: string; scopeId?: string }>;
+  roles?: Array<{ userRoleId?: string; roleId: string; roleName: string; scopeType?: string; scopeId?: string }>;
   isEmailVerified?: boolean;
 }
 
@@ -51,6 +51,7 @@ export interface UserSkillModel {
   skillId: string;
   skillName: string;
   proficiencyLevel: number;
+  yearsOfExperience?: number | null;
 }
 
 export interface NotificationModel {
@@ -63,6 +64,9 @@ export interface NotificationModel {
   isRead: boolean;
   createdAt: string;
   actionUrl?: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  projectId?: string | null;
 }
 
 export interface AiModelConfig {

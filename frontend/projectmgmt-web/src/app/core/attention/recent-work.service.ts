@@ -14,6 +14,7 @@ export class RecentWorkService {
   private readonly destroyRef = inject(DestroyRef);
 
   readonly lastTaskId = signal<string | null>(this.read(TASK_KEY));
+  readonly recentTaskIds = signal<string[]>(this.readList('projectmgmt-recent-tasks'));
   readonly lastRoute = signal<string | null>(this.read(ROUTE_KEY));
 
   constructor() {
@@ -31,6 +32,18 @@ export class RecentWorkService {
   rememberTask(taskId: string): void {
     this.lastTaskId.set(taskId);
     this.write(TASK_KEY, taskId);
+    const next = [taskId, ...this.recentTaskIds().filter(id => id !== taskId)].slice(0, 8);
+    this.recentTaskIds.set(next);
+    this.write('projectmgmt-recent-tasks', JSON.stringify(next));
+  }
+
+  private readList(key: string): string[] {
+    try {
+      const raw = this.read(key);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
   }
 
   private rememberRoute(route: string): void {

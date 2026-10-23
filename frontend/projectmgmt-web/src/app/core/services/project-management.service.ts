@@ -390,8 +390,8 @@ export class ProjectManagementService {
   }
   updateSprintStatus(id: string, status: Sprint['status']): void { this.patchSprint(id, { status }); }
   updateSprintGoal(id: string, goal: string): void { this.patchSprint(id, { goal }); }
-  updateSprintInfo(id: string, name: string, startDate?: string, endDate?: string): void {
-    this.patchSprint(id, { name, ...(startDate ? {startDate} : {}), ...(endDate ? {endDate} : {}) });
+  updateSprintInfo(id: string, name: string, startDate?: string, endDate?: string, goal?: string): void {
+    this.patchSprint(id, { name, ...(startDate ? {startDate} : {}), ...(endDate ? {endDate} : {}), ...(goal !== undefined ? {goal} : {}) });
   }
   moveSprintItemsToBacklog(id: string): void { this.workItems().filter(i => i.sprintId === id).forEach(i => this.updateWorkItemSprint(i.id, '', 'Backlog')); }
   addNewProject(request: { name: string; projectKey: string; type?: string; description?: string }): Project {
@@ -400,7 +400,18 @@ export class ProjectManagementService {
   }
   addWorkItem(request: Partial<WorkItem>): WorkItem {
     if (!this.currentProject().id) throw new Error('Hãy chọn hoặc tạo dự án trước.');
-    if (!request.sprintId && request.sprintName) request = { ...request, sprintId: this.sprints().find(s => s.name === request.sprintName)?.id };
+    if (request.sprintId === 'sp-backlog') request = { ...request, sprintId: undefined };
+    if (!request.sprintId && request.sprintName && request.sprintName !== 'Backlog' && request.sprintName !== 'Backlog Pool') {
+      request = { ...request, sprintId: this.sprints().find(s => s.name === request.sprintName)?.id };
+    }
+    if (request.assigneeName && !request.assigneeId) {
+      const m = this.currentProject().members?.find(x => x.displayName === request.assigneeName);
+      if (m) request = { ...request, assigneeId: m.userId };
+    }
+    if (request.epicName && !request.epicId) {
+      const e = this.epics().find(x => x.name === request.epicName);
+      if (e) request = { ...request, epicId: e.id };
+    }
     const initial = this.projectStatuses().find(s => s.isInitial) ?? this.projectStatuses()[0];
     const item: WorkItem = { ...request, id: crypto.randomUUID(), projectId: this.currentProject().id, issueKey: 'Đang lưu…', title: request.title || 'Công việc mới', statusId: initial?.id ?? '', statusName: request.statusName ?? initial?.name ?? 'To Do', issueType: request.issueType ?? 'Task', priority: request.priority ?? 'Medium', storyPoints: request.storyPoints ?? 0, reporterName: 'Tôi', createdAt: new Date().toISOString(), comments: [], activities: [] };
     this.workItems.update(items => [item, ...items]); this.persist(item, true); return item;
