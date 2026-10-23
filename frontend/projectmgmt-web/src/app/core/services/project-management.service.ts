@@ -144,6 +144,18 @@ export interface Sprint {
   totalStoryPoints: number;
 }
 
+export interface SprintMessage {
+  id: string;
+  sprintId: string;
+  userId: string;
+  senderName: string;
+  senderEmail?: string;
+  senderAvatar?: string;
+  content: string;
+  createdAt: string;
+  isCurrentUser: boolean;
+}
+
 export interface TaskComment {
   id: string;
   authorName: string;
@@ -394,6 +406,15 @@ export class ProjectManagementService {
     this.patchSprint(id, { name, ...(startDate ? {startDate} : {}), ...(endDate ? {endDate} : {}), ...(goal !== undefined ? {goal} : {}) });
   }
   moveSprintItemsToBacklog(id: string): void { this.workItems().filter(i => i.sprintId === id).forEach(i => this.updateWorkItemSprint(i.id, '', 'Backlog')); }
+  getSprintMessages(sprintId: string): Observable<SprintMessage[]> {
+    return this.http.get<SprintMessage[]>(`${environment.apiBaseUrl}/sprints/${sprintId}/messages`);
+  }
+  sendSprintMessage(sprintId: string, content: string): Observable<SprintMessage> {
+    return this.http.post<SprintMessage>(`${environment.apiBaseUrl}/sprints/${sprintId}/messages`, { content });
+  }
+  deleteSprintMessage(sprintId: string, messageId: string): Observable<void> {
+    return this.http.delete<void>(`${environment.apiBaseUrl}/sprints/${sprintId}/messages/${messageId}`);
+  }
   addNewProject(request: { name: string; projectKey: string; type?: string; description?: string }): Project {
     // Retained for callers that stage a project locally; real creation uses createProject().
     return { ...this.emptyProject, ...request, id: crypto.randomUUID() };
@@ -574,7 +595,7 @@ export class ProjectManagementService {
 
   getIssueTypes(projectId: string): Observable<CustomIssueType[]> {
     return this.http.get<{ id: string; name: string; iconKey?: string; colorHex: string }[]>(`${this.baseUrl}/projects/${projectId}/issue-types`).pipe(
-      map(types => types.map(t => ({ id: t.id, name: t.name, icon: t.iconKey ?? '📘', color: t.colorHex })))
+      map(types => types.map(t => ({ id: t.id, name: t.name, icon: t.iconKey ?? 'bookmark', color: t.colorHex })))
     );
   }
 

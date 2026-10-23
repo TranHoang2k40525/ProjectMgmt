@@ -49,7 +49,7 @@ public class ProjectMembersController : ControllerBase
             projectId,
             "member.read",
             "list",
-            async actor => Ok(await _roleServices.GetProjectMembersAsync(projectId)));
+            async (actor, _) => Ok(await _roleServices.GetProjectMembersAsync(projectId)));
     }
 
     [HttpPost]
@@ -59,7 +59,7 @@ public class ProjectMembersController : ControllerBase
             projectId,
             "member.invite",
             "add",
-            async actor =>
+            async (actor, _) =>
             {
                 var result = await _roleServices.AddProjectMemberAsync(
                     actor,
@@ -80,7 +80,7 @@ public class ProjectMembersController : ControllerBase
 
     [HttpPost("invite")]
     public Task<IActionResult> Invite(Guid projectId, InviteRequest request) => ExecuteWithPermission(
-        projectId, "member.invite", "invite", async actor =>
+        projectId, "member.invite", "invite", async (actor, _) =>
         {
             var identity = HttpContext.RequestServices.GetRequiredService<IdentityExperienceDbContext>();
             var normalized = request.Email.Trim().ToUpperInvariant();
@@ -102,8 +102,18 @@ public class ProjectMembersController : ControllerBase
             projectId,
             "member.role.assign",
             "change-role",
-            async actor =>
+            async (actor, projectScope) =>
             {
+                if (projectScope.CreatedByUserId == userId || projectScope.LeadUserId == userId)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new RoleDto
+                    {
+                        Success = false,
+                        ErrorCode = "RBAC_IMMUTABLE_LEAD",
+                        Message = "Không thể thay đổi vai trò của Giám đốc dự án hoặc Người tạo dự án."
+                    });
+                }
+
                 var result = await _roleServices.ChangeProjectMemberRoleAsync(
                     actor,
                     projectId,
@@ -120,8 +130,18 @@ public class ProjectMembersController : ControllerBase
             projectId,
             "member.remove",
             "remove",
-            async actor =>
+            async (actor, projectScope) =>
             {
+                if (projectScope.CreatedByUserId == userId || projectScope.LeadUserId == userId)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new RoleDto
+                    {
+                        Success = false,
+                        ErrorCode = "RBAC_IMMUTABLE_LEAD",
+                        Message = "Không thể xóa Giám đốc dự án hoặc Người tạo dự án khỏi dự án."
+                    });
+                }
+
                 var result = await _roleServices.RemoveProjectMemberAsync(actor, projectId, userId);
                 return result.Success ? Ok(result) : MapWriteFailure(result);
             });
@@ -131,7 +151,7 @@ public class ProjectMembersController : ControllerBase
         Guid projectId,
         string permissionCode,
         string endpoint,
-        Func<Guid, Task<IActionResult>> action)
+        Func<Guid, ProjectScopeInfo, Task<IActionResult>> action)
     {
         try
         {
@@ -174,7 +194,7 @@ public class ProjectMembersController : ControllerBase
                     });
             }
 
-            return await action(_currentUser.UserId.Value);
+            return await action(_currentUser.UserId.Value, project);
         }
         catch (Exception exception)
         {
@@ -197,7 +217,7 @@ public class ProjectMembersController : ControllerBase
             "RBAC_USER_NOT_FOUND" or "RBAC_PROJECT_ROLE_NOT_FOUND" or "RBAC_MEMBER_NOT_FOUND" =>
                 NotFound(result),
             "RBAC_MEMBER_ALREADY_EXISTS" or "RBAC_LAST_PROJECT_MANAGER" => Conflict(result),
-            "RBAC_SELF_ESCALATION_FORBIDDEN" or "RBAC_SELF_CHANGE_FORBIDDEN" =>
+            "RBAC_SELF_ESCALATION_FORBIDDEN" or "RBAC_SELF_CHANGE_FORBIDDEN" or "RBAC_IMMUTABLE_LEAD" =>
                 StatusCode(StatusCodes.Status403Forbidden, result),
             _ => BadRequest(result)
         };

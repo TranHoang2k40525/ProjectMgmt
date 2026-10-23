@@ -1,4 +1,4 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, inject, signal, computed } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, forkJoin, map, of, switchMap, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
@@ -47,6 +47,17 @@ export class IdentityService {
   private readonly userSkills = new Map<string, UserSkillModel[]>();
 
   readonly authState = signal<AuthState>(this.restoreAuthState());
+
+  readonly isSystemAdmin = computed(() => {
+    const user = this.authState().currentUser;
+    const session = this.tokenStore.getSession();
+    const roles = session?.roles ?? [];
+    if (user?.roleName?.toLowerCase().includes('admin')) return true;
+    return roles.some(r => {
+      const lower = r.toLowerCase();
+      return lower === 'admin' || lower === 'systemadmin' || lower === 'system admin';
+    });
+  });
 
   readonly notifications = signal<NotificationModel[]>([]);
   readonly unreadCount = signal<number>(0);
@@ -530,7 +541,7 @@ export class IdentityService {
     this.notifications.update(list => [model, ...list.filter(n => n.id !== model.id)]);
     if (!model.isRead) {
       this.unreadCount.update(c => c + 1);
-      this.toast?.info(model.title, model.message);
+      this.toast?.info(model.title, model.message, model.actionUrl);
     }
   }
 
@@ -545,7 +556,7 @@ export class IdentityService {
     } else if (rawType.includes('AI') || rawType.includes('SUGGESTION')) {
       type = 'AI_SUGGESTION';
       category = 'System';
-    } else if (rawType.includes('ASSIGN') || rawType.includes('TASK') || rawType.includes('PROJECT') || rawType.includes('MEMBER')) {
+    } else if (rawType.includes('CHAT') || rawType.includes('SPRINT') || rawType.includes('ASSIGN') || rawType.includes('TASK') || rawType.includes('PROJECT') || rawType.includes('MEMBER')) {
       type = 'TASK';
       category = 'Assignment';
     }

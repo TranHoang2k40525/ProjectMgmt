@@ -369,6 +369,29 @@ using (var scope = app.Services.CreateScope())
                 await db.SaveChangesAsync();
             }
         }
+
+        try
+        {
+            var planningDb = scope.ServiceProvider.GetRequiredService<Planning.Infrastructure.PlanningDbContext>();
+            await planningDb.Database.ExecuteSqlRawAsync(@"
+CREATE TABLE IF NOT EXISTS SprintMessage (
+    Id char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
+    SprintId char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
+    UserId char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
+    Content text CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
+    CreatedAt datetime(6) NOT NULL,
+    UpdatedAt datetime(6) NULL,
+    IsDeleted tinyint(1) NOT NULL DEFAULT 0,
+    PRIMARY KEY (Id),
+    KEY IX_SprintMessage_SprintId (SprintId),
+    KEY IX_SprintMessage_UserId (UserId)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+");
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not ensure SprintMessage table exists");
+        }
     }
     catch
     {

@@ -20,7 +20,7 @@ import { IssueFormValue, ParentOption, toFormValue, toUpdateRequest, validateIss
       <form class="responsive-modal-panel w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800" (ngSubmit)="save()">
         <header class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800">
           <h2 id="issue-form-title" class="text-base font-bold text-slate-900 dark:text-white">Sửa {{ issue()?.issueKey ?? issueLabel() }}</h2>
-          <button type="button" class="w-8 h-8 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500" (click)="dismissed.emit()" aria-label="Đóng">✕</button>
+          <button type="button" class="w-8 h-8 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 flex items-center justify-center cursor-pointer" (click)="dismissed.emit()" aria-label="Đóng"><span class="material-symbols-outlined text-[18px]">close</span></button>
         </header>
 
         @if (loading()) {

@@ -33,7 +33,9 @@ public class ProjectLookupService : IProjectLookupService
             {
                 ProjectId = project.Id,
                 OrganizationId = project.OrgId,
-                IsArchived = project.IsArchived
+                IsArchived = project.IsArchived,
+                CreatedByUserId = project.CreatedByUserId,
+                LeadUserId = project.LeadUserId
             };
     }
 }

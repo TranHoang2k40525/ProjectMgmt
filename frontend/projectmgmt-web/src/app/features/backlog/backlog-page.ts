@@ -3,8 +3,10 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ConnectedPosition, OverlayModule } from '@angular/cdk/overlay';
 import { DragDropModule, CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
+import { ActivatedRoute, Router } from '@angular/router';
+import { RealtimeService } from '../../core/realtime/realtime.service';
 import { gsap } from 'gsap';
-import { ProjectManagementService, WorkItem, Sprint } from '../../core/services/project-management.service';
+import { ProjectManagementService, WorkItem, Sprint, SprintMessage } from '../../core/services/project-management.service';
 import { IdentityService } from '../../core/services/identity.service';
 import { ExcelDataService } from '../../core/services/excel-data.service';
 import { ToastService } from '../../core/services/toast.service';
@@ -27,6 +29,16 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   readonly projectService = inject(ProjectManagementService);
   readonly excelService = inject(ExcelDataService);
   readonly toastService = inject(ToastService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly realtimeService = inject(RealtimeService);
+
+  // Sprint Chat & Real-time Discussion State
+  readonly sprintMessages = signal<SprintMessage[]>([]);
+  readonly isChatLoading = signal<boolean>(false);
+  readonly isSendingMessage = signal<boolean>(false);
+  readonly chatInputText = signal<string>('');
+  private sprintChatUnsubscribe?: () => void;
 
   readonly projectMembers = computed(() => this.projectService.currentProject()?.members ?? []);
 
@@ -132,6 +144,17 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     if (currentProj?.id && (!currentProj.members || currentProj.members.length === 0)) {
       this.projectService.loadProjectMembers(currentProj.id).subscribe();
     }
+
+    this.route.queryParams.subscribe(params => {
+      const sprintId = params['sprintId'];
+      const openChat = params['openChat'];
+      if (sprintId && openChat === 'true') {
+        const targetSprint = this.sprints().find(s => s.id === sprintId);
+        if (targetSprint) {
+          this.openSprintDetail(targetSprint);
+        }
+      }
+    });
   }
 
   ngAfterViewInit(): void {
@@ -156,6 +179,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.entranceTween?.kill();
+    this.closeSprintDetail();
   }
 
   // Has active filter applied
@@ -395,6 +419,178 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
       'Sub-task': 'subdirectory_arrow_right'
     };
     return map[type] || 'task_alt';
+  }
+
+  readonly activeSprintDetail = signal<Sprint | null>(null);
+
+  onSprintHeaderClick(sprint: Sprint, event: MouseEvent): void {
+    const target = event.target as HTMLElement;
+    if (target.closest('.sprint-actions') || target.closest('.sprint-edit-row') || target.closest('input') || target.closest('select')) {
+      return;
+    }
+    this.openSprintDetail(sprint);
+  }
+
+  onWorkItemRowClick(item: WorkItem, event: MouseEvent): void {
+    const target = event.target as HTMLElement;
+    if (
+      target.closest('.no-drawer') ||
+      target.closest('input') ||
+      target.closest('select') ||
+      target.closest('textarea') ||
+      target.closest('.cell-select') ||
+      target.closest('.cell-epic') ||
+      target.closest('.cell-priority') ||
+      target.closest('.cell-points') ||
+      target.closest('.cell-status') ||
+      target.closest('.cell-menu') ||
+      target.closest('.edit-title-button')
+    ) {
+      return;
+    }
+    this.openTask(item, event);
+  }
+
+  openSprintDetail(sprint: Sprint, event?: Event): void {
+    if (event) event.stopPropagation();
+    this.activeSprintDetail.set(sprint);
+    this.editingSprintName.set(sprint.name);
+    this.editingSprintGoal.set(sprint.goal || '');
+    this.editingStartDate.set(sprint.startDate || '');
+    this.editingEndDate.set(sprint.endDate || '');
+
+    // Tự động kết nối và tải luồng Trao đổi & Bình luận của Sprint
+    this.loadSprintDiscussion(sprint.id);
+  }
+
+  saveSprintDetail(): void {
+    const sprint = this.activeSprintDetail();
+    if (!sprint) return;
+    const name = this.editingSprintName().trim();
+    if (name) {
+      this.projectService.updateSprintInfo(
+        sprint.id,
+        name,
+        this.editingStartDate(),
+        this.editingEndDate(),
+        this.editingSprintGoal()
+      );
+      this.toastService.success('Cập nhật Sprint', `Đã lưu thông tin chu kỳ "${name}".`);
+    }
+  }
+
+  closeSprintDetail(): void {
+    const sp = this.activeSprintDetail();
+    if (sp) {
+      void this.realtimeService.leaveSprint(sp.id);
+    }
+    if (this.sprintChatUnsubscribe) {
+      this.sprintChatUnsubscribe();
+      this.sprintChatUnsubscribe = undefined;
+    }
+    this.activeSprintDetail.set(null);
+    this.sprintMessages.set([]);
+    this.chatInputText.set('');
+  }
+
+  loadSprintDiscussion(sprintId: string): void {
+    this.isChatLoading.set(true);
+    this.chatInputText.set('');
+
+    void this.realtimeService.joinSprint(sprintId);
+
+    if (this.sprintChatUnsubscribe) {
+      this.sprintChatUnsubscribe();
+    }
+
+    const offMsg = this.realtimeService.on<SprintMessage>('ReceiveSprintMessage', (msg) => {
+      if (msg.sprintId === this.activeSprintDetail()?.id) {
+        this.sprintMessages.update(list => {
+          if (list.some(m => m.id === msg.id)) return list;
+          return [...list, msg];
+        });
+        this.scrollChatToBottom();
+      }
+    });
+
+    const offDel = this.realtimeService.on<string>('SprintMessageDeleted', (msgId) => {
+      this.sprintMessages.update(list => list.filter(m => m.id !== msgId));
+    });
+
+    this.sprintChatUnsubscribe = () => {
+      offMsg();
+      offDel();
+    };
+
+    this.projectService.getSprintMessages(sprintId).subscribe({
+      next: (messages) => {
+        this.sprintMessages.set(messages);
+        this.isChatLoading.set(false);
+        this.scrollChatToBottom();
+      },
+      error: () => {
+        this.isChatLoading.set(false);
+      }
+    });
+  }
+
+  sendSprintChatMessage(): void {
+    const sp = this.activeSprintDetail();
+    const text = this.chatInputText().trim();
+    if (!sp || !text || this.isSendingMessage()) return;
+
+    this.isSendingMessage.set(true);
+    this.projectService.sendSprintMessage(sp.id, text).subscribe({
+      next: (sent) => {
+        this.chatInputText.set('');
+        this.isSendingMessage.set(false);
+        this.sprintMessages.update(list => {
+          if (list.some(m => m.id === sent.id)) return list;
+          return [...list, sent];
+        });
+        this.scrollChatToBottom();
+      },
+      error: (err) => {
+        this.isSendingMessage.set(false);
+        this.toastService.error('Không thể gửi bình luận', err?.error?.message || 'Lỗi kết nối máy chủ.');
+      }
+    });
+  }
+
+  deleteChatMessage(messageId: string): void {
+    const sp = this.activeSprintDetail();
+    if (!sp) return;
+    this.projectService.deleteSprintMessage(sp.id, messageId).subscribe({
+      next: () => {
+        this.sprintMessages.update(list => list.filter(m => m.id !== messageId));
+        this.toastService.info('Xóa bình luận', 'Bình luận đã được xóa khỏi chu kỳ Sprint.');
+      },
+      error: () => {
+        this.toastService.error('Lỗi', 'Không thể xóa bình luận.');
+      }
+    });
+  }
+
+  readonly currentUserInitial = computed(() => {
+    const name = this.identityService.authState().currentUser?.displayName || this.identityService.authState().currentUser?.email;
+    return name ? name.charAt(0).toUpperCase() : 'U';
+  });
+
+  onChatKeydown(event: Event): void {
+    const kEvent = event as KeyboardEvent;
+    if (kEvent.key === 'Enter' && !kEvent.shiftKey) {
+      kEvent.preventDefault();
+      this.sendSprintChatMessage();
+    }
+  }
+
+  private scrollChatToBottom(): void {
+    setTimeout(() => {
+      const container = this.el.nativeElement.querySelector('.sprint-chat-messages');
+      if (container) {
+        container.scrollTop = container.scrollHeight;
+      }
+    }, 50);
   }
 
   startEditingSprint(sprint: Sprint, event?: Event): void {

@@ -178,7 +178,7 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
       },
       error: (err) => {
         this.loading.set(false);
-        const errObj = (typeof err === 'object' && err !== null && 'error' in err) ? (err as { error: any }).error : null;
+        const errObj = (typeof err === 'object' && err !== null && 'error' in err) ? (err as { error: { errorCode?: string } }).error : null;
         const errorCode = errObj?.errorCode;
         if (errorCode === 'AUTH_EMAIL_VERIFICATION_PENDING') {
           this.setMode('OTP_REGISTER');

@@ -53,12 +53,12 @@ import { ToastService } from '../../../core/services/toast.service';
                 <div class="flex items-center gap-2 p-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
                   <input type="text" [(ngModel)]="customTypeName" maxlength="60" [disabled]="savingType()" aria-label="Tên loại công việc mới" placeholder="Tên loại mới..." class="h-8 px-2 text-xs rounded border border-slate-300 w-full" />
                   <select [(ngModel)]="customTypeIcon" aria-label="Biểu tượng loại công việc" [disabled]="savingType()" class="h-8 text-xs rounded border border-slate-300">
-                    <option value="⚡">⚡ Epic</option>
-                    <option value="🛡️">🛡️ Security</option>
-                    <option value="🎨">🎨 Design</option>
-                    <option value="📈">📈 Telemetry</option>
-                    <option value="📋">📋 Research</option>
-                    <option value="🧪">🧪 Test</option>
+                    <option value="bolt">Epic (bolt)</option>
+                    <option value="shield">Security (shield)</option>
+                    <option value="palette">Design (palette)</option>
+                    <option value="trending_up">Telemetry (trending_up)</option>
+                    <option value="description">Research (description)</option>
+                    <option value="biotech">Test (biotech)</option>
                   </select>
                   <button (click)="saveCustomIssueType()" [disabled]="savingType() || !customTypeName.trim()" class="px-2 py-1 text-xs bg-primary text-white rounded font-bold shrink-0">{{ savingType() ? 'Đang lưu...' : 'Tạo' }}</button>
                 </div>
@@ -220,7 +220,7 @@ export class CreateTaskModalComponent {
 
   showNewTypeForm = signal<boolean>(false);
   customTypeName = '';
-  customTypeIcon = '⚡';
+  customTypeIcon = 'bolt';
 
   title = '';
   issueType = 'Task';

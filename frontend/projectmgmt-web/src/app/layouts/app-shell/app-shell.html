@@ -208,6 +208,8 @@
 
           <!-- Dynamic Positioned Recent Flyout Dropdown Popup -->
           @if (isRecentFlyoutOpen()) {
+            <!-- Click-outside backdrop to dismiss flyout cleanly -->
+            <div class="fixed inset-0 z-40 bg-transparent" (click)="closeFlyouts()" aria-hidden="true"></div>
             <div
               [class.left-60]="isSidebarExpanded()"
               [class.left-14]="!isSidebarExpanded()"
@@ -250,19 +252,6 @@
           <span class="material-symbols-outlined text-[20px] shrink-0">folder_open</span>
           @if (isSidebarExpanded()) {
             <span class="truncate">Tất cả dự án</span>
-          }
-        </a>
-
-        <!-- Active Project Workspace Indicator: Single space shortcut to eliminate duplicate action buttons -->
-        <a
-          routerLink="/admin/identity"
-          routerLinkActive="bg-primary/10 text-primary font-bold"
-          [title]="!isSidebarExpanded() ? 'Quản trị phân quyền' : 'Quản trị vai trò & phân quyền RBAC'"
-          class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors whitespace-nowrap"
-        >
-          <span class="material-symbols-outlined text-[20px] shrink-0">admin_panel_settings</span>
-          @if (isSidebarExpanded()) {
-            <span class="truncate">Quản trị phân quyền</span>
           }
         </a>
         @if (projectService.hasActiveProject()) {
@@ -516,6 +505,8 @@
   @for (toast of toastService.toasts(); track toast.id) {
     <div
       appMotion="slide"
+      (click)="onToastClick(toast)"
+      [class.cursor-pointer]="!!toast.actionUrl"
       class="pointer-events-auto flex items-start gap-3 p-4 rounded-2xl shadow-xl border backdrop-blur-xl animate-fade-in transition-all"
       [class.bg-emerald-50]="toast.type === 'success'"
       [class.border-emerald-200]="toast.type === 'success'"
@@ -546,7 +537,7 @@
         }
       </div>
 
-      <button (click)="toastService.remove(toast.id)" title="Đóng thông báo" class="text-slate-400 hover:text-slate-600 p-1">
+      <button (click)="$event.stopPropagation(); toastService.remove(toast.id)" title="Đóng thông báo" class="text-slate-400 hover:text-slate-600 p-1">
         <span class="material-symbols-outlined text-[18px]">close</span>
       </button>
     </div>

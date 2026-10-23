@@ -50,6 +50,10 @@ import { ToastService } from '../../core/services/toast.service';
           <span class="material-symbols-outlined text-[18px]">view_kanban</span>
           <span>Cấu hình Board</span>
         </span>
+        <a [routerLink]="['/projects', projectId, 'members']" class="tab-item flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[18px]">badge</span>
+          <span>Thành viên & Phân quyền</span>
+        </a>
       </div>
 
       @if (alertMessage()) {

@@ -1,11 +1,13 @@
 import { Component, ElementRef, OnDestroy, OnInit, inject, signal, computed, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RouterLink, RouterLinkActive } from '@angular/router';
 import { gsap } from 'gsap';
 import { RbacApi } from '../../core/api/rbac.api';
 import { ProjectManagementService, ProjectMember, UserDisplayInfo } from '../../core/services/project-management.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ConfirmDialogService } from '../../core/services/confirm-dialog.service';
+import { IdentityService } from '../../core/services/identity.service';
 import { NoProjectStateComponent } from '../../shared/components/no-project-state/no-project-state.component';
 
 interface ProjectRoleOption {
@@ -18,13 +20,23 @@ interface ProjectRoleOption {
 @Component({
   selector: 'app-project-members-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, NoProjectStateComponent],
+  imports: [CommonModule, FormsModule, RouterLink, RouterLinkActive, NoProjectStateComponent],
   template: `
     @if (!projectService.hasActiveProject()) {
       <app-no-project-state featureName="Thành viên & Phân quyền Nhóm"></app-no-project-state>
     } @else {
     <div class="project-members-page flex flex-col gap-5 max-w-7xl mx-auto px-4 sm:px-6 py-6">
       
+      <!-- Settings Tabs Navigation -->
+      @if (currentProject(); as proj) {
+        <div class="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
+          <a [routerLink]="['/projects', proj.id, 'settings']" routerLinkActive="text-primary font-bold border-b-2 border-primary" [routerLinkActiveOptions]="{ exact: true }" class="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-primary transition-all">Thông tin chung</a>
+          <a [routerLink]="['/projects', proj.id, 'workflow']" routerLinkActive="text-primary font-bold border-b-2 border-primary" class="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-primary transition-all">Cấu hình Workflow</a>
+          <a [routerLink]="['/projects', proj.id, 'board-settings']" routerLinkActive="text-primary font-bold border-b-2 border-primary" class="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-primary transition-all">Cấu hình Board</a>
+          <a [routerLink]="['/projects', proj.id, 'members']" routerLinkActive="text-primary font-bold border-b-2 border-primary" class="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-primary transition-all">Thành viên &amp; Phân quyền</a>
+        </div>
+      }
+
       @if (error) { <p role="alert" class="p-3 rounded bg-red-50 text-red-700 text-xs font-medium">{{ error }}</p> }
 
       <!-- Top Action Bar -->
@@ -48,16 +60,41 @@ interface ProjectRoleOption {
           </p>
         </div>
 
-        <div class="flex items-center gap-3">
-          <button
-            (click)="openInviteModal()"
-            [disabled]="loading() || !currentProject().id"
-            class="px-4 py-2 rounded-lg bg-primary hover:bg-primary-container text-white font-semibold text-xs shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-          >
-            <span class="material-symbols-outlined text-[18px]">person_add</span>
-            Thêm thành viên
-          </button>
+        @if (canManageMembers()) {
+          <div class="flex items-center gap-3">
+            <button
+              (click)="openInviteModal()"
+              [disabled]="loading() || !currentProject().id"
+              class="px-4 py-2 rounded-lg bg-primary hover:bg-primary-container text-white font-semibold text-xs shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              <span class="material-symbols-outlined text-[18px]">person_add</span>
+              Thêm thành viên
+            </button>
+          </div>
+        }
+      </div>
+
+      <!-- Scrum Role Hierarchy Info Banner -->
+      <div class="p-3.5 rounded-xl bg-gradient-to-r from-indigo-50/70 via-purple-50/40 to-slate-50 border border-indigo-100 dark:from-slate-900 dark:via-slate-900 dark:to-slate-850 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+        <div class="flex items-center gap-2.5">
+          <span class="material-symbols-outlined text-indigo-600 dark:text-indigo-400 text-lg">shield_person</span>
+          <div>
+            <span class="font-bold text-slate-800 dark:text-slate-100">Quy tắc Phân quyền Scrum từ trên xuống:</span>
+            <span class="ml-1 inline-flex items-center flex-wrap gap-1.5 text-slate-600 dark:text-slate-400">
+              Chủ tổ chức <span class="material-symbols-outlined text-[15px] text-amber-500" aria-hidden="true">stars</span> →
+              Giám đốc dự án <span class="material-symbols-outlined text-[15px] text-amber-500" aria-hidden="true">verified</span> →
+              Scrum Master <span class="material-symbols-outlined text-[15px] text-purple-500" aria-hidden="true">track_changes</span> →
+              Kỹ sư phát triển &amp; QA <span class="material-symbols-outlined text-[15px] text-blue-500" aria-hidden="true">terminal</span> / <span class="material-symbols-outlined text-[15px] text-cyan-500" aria-hidden="true">biotech</span> →
+              Khách hàng / Viewer <span class="material-symbols-outlined text-[15px] text-slate-400" aria-hidden="true">visibility</span>
+            </span>
+          </div>
         </div>
+        @if (!canManageMembers()) {
+          <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 text-[11px] font-medium">
+            <span class="material-symbols-outlined text-[14px]">lock</span>
+            Chế độ chỉ đọc (Chỉ Lãnh đạo hoặc Scrum Master mới có quyền phân vai trò)
+          </span>
+        }
       </div>
 
       <!-- Filters & Stats Bar -->
@@ -128,32 +165,52 @@ interface ProjectRoleOption {
                   </div>
                 </div>
 
-                <!-- Quick Action Menu -->
-                <button
-                  (click)="confirmRemoveMember(member)"
-                  class="text-slate-400 hover:text-rose-600 transition-colors p-1 rounded-md hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer"
-                  title="Xóa khỏi dự án"
-                >
-                  <span class="material-symbols-outlined text-[18px]">person_remove</span>
-                </button>
+                <!-- Quick Action Menu / Lead Indicator -->
+                @if (isLead(member)) {
+                  <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 flex items-center gap-1 shadow-2xs" title="Giám đốc dự án / Người tạo (Cố định)">
+                    <span class="material-symbols-outlined text-[14px] text-amber-500" aria-hidden="true">verified</span>
+                    <span>Giám đốc</span>
+                  </span>
+                } @else if (canManageMembers()) {
+                  <button
+                    (click)="confirmRemoveMember(member)"
+                    class="text-slate-400 hover:text-rose-600 transition-colors p-1 rounded-md hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer"
+                    title="Xóa khỏi dự án"
+                  >
+                    <span class="material-symbols-outlined text-[18px]">person_remove</span>
+                  </button>
+                }
               </div>
 
               <div class="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800 gap-2">
-                <!-- Role Badge with inline change trigger -->
+                <!-- Role Badge with inline change trigger or read-only display -->
                 <div class="relative inline-block">
-                  <select
-                    [ngModel]="getRoleOptionId(member.role)"
-                    (ngModelChange)="onRoleChange(member, $event)"
-                    class="appearance-none pl-2.5 pr-6 py-1 rounded-full text-xs font-semibold cursor-pointer border transition-all focus:outline-none"
-                    [ngClass]="getRoleBadgeClass(member.role)"
-                  >
-                    @for (role of availableRoles(); track role.id) {
-                      <option [value]="role.id">{{ role.name }}</option>
-                    }
-                  </select>
-                  <span class="material-symbols-outlined absolute right-1.5 top-1/2 -translate-y-1/2 text-[14px] pointer-events-none text-current opacity-70">
-                    expand_more
-                  </span>
+                  @if (canManageMembers() && !isLead(member)) {
+                    <select
+                      [ngModel]="getRoleOptionId(member.role)"
+                      (ngModelChange)="onRoleChange(member, $event)"
+                      class="appearance-none pl-2.5 pr-6 py-1 rounded-full text-xs font-semibold cursor-pointer border transition-all focus:outline-none"
+                      [ngClass]="getRoleBadgeClass(member.role)"
+                      title="Nhấp để thay đổi vai trò"
+                    >
+                      @for (role of availableRoles(); track role.id) {
+                        <option [value]="role.id">{{ role.name }}</option>
+                      }
+                    </select>
+                    <span class="material-symbols-outlined absolute right-1.5 top-1/2 -translate-y-1/2 text-[14px] pointer-events-none text-current opacity-70">
+                      expand_more
+                    </span>
+                  } @else {
+                    <span
+                      class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border"
+                      [ngClass]="getRoleBadgeClass(member.role)"
+                    >
+                      @if (isLead(member)) {
+                        <span class="material-symbols-outlined text-[14px] text-amber-500" aria-hidden="true">stars</span>
+                      }
+                      <span>{{ member.role }}</span>
+                    </span>
+                  }
                 </div>
 
                 <span class="text-[11px] text-slate-400">Tham gia: {{ member.joinedAt }}</span>
@@ -301,6 +358,7 @@ interface ProjectRoleOption {
 })
 export class ProjectMembersPageComponent implements OnInit, OnDestroy {
   readonly projectService = inject(ProjectManagementService);
+  readonly identity = inject(IdentityService);
   private readonly rbac = inject(RbacApi, { optional: true });
   private readonly toastService = inject(ToastService, { optional: true });
   private readonly confirmService = inject(ConfirmDialogService, { optional: true });
@@ -326,6 +384,37 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
   selectedUserId = '';
   selectedRoleId = '';
 
+  readonly canManageMembers = computed(() => {
+    if (this.identity.isSystemAdmin()) return true;
+    const currentUser = this.identity.authState().currentUser;
+    const currentUserId = currentUser?.id;
+    const currentUserName = currentUser?.displayName;
+    const proj = this.currentProject();
+    if (proj) {
+      if (proj.leadUserId && currentUserId && proj.leadUserId.toLowerCase() === currentUserId.toLowerCase()) return true;
+      if (proj.leadName && currentUserName && proj.leadName.toLowerCase() === currentUserName.toLowerCase()) return true;
+    }
+    const myMember = this.members().find(m =>
+      (currentUserId && m.userId && m.userId.toLowerCase() === currentUserId.toLowerCase()) ||
+      (currentUserName && m.displayName && m.displayName.toLowerCase() === currentUserName.toLowerCase())
+    );
+    if (myMember) {
+      const r = myMember.role.toLowerCase();
+      if (r.includes('lead') || r.includes('manager') || r.includes('scrum') || r.includes('owner')) {
+        return true;
+      }
+    }
+    return false;
+  });
+
+  isLead(member: ProjectMember): boolean {
+    const proj = this.currentProject();
+    if (!proj) return false;
+    if (proj.leadUserId && member.userId && proj.leadUserId.toLowerCase() === member.userId.toLowerCase()) return true;
+    if (proj.leadName && member.displayName && proj.leadName.toLowerCase() === member.displayName.toLowerCase()) return true;
+    return member.role === 'Project Lead';
+  }
+
   readonly filteredMembers = computed(() => {
     let list = this.members();
     const query = this.searchQuery().trim().toLowerCase();
@@ -350,10 +439,13 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
     return this.allUsers().filter(u => !existingUserIds.has(u.userId));
   });
 
+  private lastLoadedProjectId = '';
+
   constructor() {
     effect(() => {
       const proj = this.currentProject?.();
-      if (proj && proj.id) {
+      if (proj?.id && proj.id !== this.lastLoadedProjectId) {
+        this.lastLoadedProjectId = proj.id;
         this.loadProjectMembers(proj.id);
       }
     });

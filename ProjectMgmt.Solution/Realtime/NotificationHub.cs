@@ -20,8 +20,29 @@ public class NotificationHub : Hub
         await base.OnConnectedAsync();
     }
 
+    public async Task JoinSprint(string sprintId)
+    {
+        if (!string.IsNullOrWhiteSpace(sprintId))
+        {
+            await Groups.AddToGroupAsync(Context.ConnectionId, SprintGroupName(sprintId));
+        }
+    }
+
+    public async Task LeaveSprint(string sprintId)
+    {
+        if (!string.IsNullOrWhiteSpace(sprintId))
+        {
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, SprintGroupName(sprintId));
+        }
+    }
+
     public static string GroupName(Guid userId)
     {
         return $"user:{userId:D}";
+    }
+
+    public static string SprintGroupName(string sprintId)
+    {
+        return $"sprint:{sprintId}";
     }
 }

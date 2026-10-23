@@ -51,7 +51,7 @@ describe('RBAC administration', () => {
   });
   it('keeps the create role form open when saving fails', () => {
     component.openRoleModal();
-    component.roleForm.setValue({ name: 'Auditor', description: 'Review' });
+    component.roleForm.patchValue({ name: 'Auditor', description: 'Review' });
     service.createRole.mockReturnValue(throwError(() => new Error('forbidden')));
     component.submitNewRole();
     expect(component.showRoleModal).toBe(true);

@@ -7,7 +7,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { IdentityService } from '../../core/services/identity.service';
 import { ProjectManagementService, Project, WorkItem } from '../../core/services/project-management.service';
 import { ExcelDataService } from '../../core/services/excel-data.service';
-import { ToastService } from '../../core/services/toast.service';
+import { ToastService, ToastMessage } from '../../core/services/toast.service';
 import { ConfirmDialogService } from '../../core/services/confirm-dialog.service';
 import { TaskDetailDrawerComponent } from '../../shared/components/task-detail-drawer/task-detail-drawer';
 import { CreateTaskModalComponent } from '../../shared/components/create-task-modal/create-task-modal';
@@ -201,15 +201,15 @@ export class AppShellComponent implements OnDestroy {
   }
 
   openSearchResult(item: WorkItem): void {
+    this.closeFlyouts();
     this.recentWork.rememberTask(item.id);
     this.projectService.activeDrawerTask.set(item);
-    this.closeFlyouts();
   }
 
   openRecentItem(item: WorkItem): void {
+    this.closeFlyouts();
     this.recentWork.rememberTask(item.id);
     this.projectService.activeDrawerTask.set(item);
-    this.closeFlyouts();
   }
 
   openCreateTaskModal(): void {
@@ -268,5 +268,12 @@ export class AppShellComponent implements OnDestroy {
         this.router.navigate(['/auth']);
       }
     });
+  }
+
+  onToastClick(toast: ToastMessage): void {
+    if (toast.actionUrl) {
+      this.toastService.remove(toast.id);
+      void this.router.navigateByUrl(toast.actionUrl);
+    }
   }
 }

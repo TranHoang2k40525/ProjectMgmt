@@ -9,6 +9,8 @@ public class ProjectScopeInfo
     public Guid ProjectId { get; set; }
     public Guid OrganizationId { get; set; }
     public bool IsArchived { get; set; }
+    public Guid CreatedByUserId { get; set; }
+    public Guid LeadUserId { get; set; }
 }
 
 public interface IProjectLookupService
