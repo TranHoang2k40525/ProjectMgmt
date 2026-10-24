@@ -5,13 +5,15 @@ import { Router } from '@angular/router';
 import { IdentityService } from '../../core/services/identity.service';
 import { ProjectManagementService } from '../../core/services/project-management.service';
 import { UserProfileModel, SkillModel, UserSkillModel, ActiveSessionModel } from '../../core/models/identity.models';
+import { AvatarModalComponent } from '../../shared/components/avatar-modal/avatar-modal.component';
+import { resolveAvatarUrl } from '../../core/utils/avatar.utils';
 
 export type ProfileTab = 'GENERAL' | 'SECURITY' | 'SKILLS' | 'SESSIONS';
 
 @Component({
   selector: 'app-profile-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, AvatarModalComponent],
   templateUrl: './profile-page.html',
   styleUrls: ['./profile-page.scss']
 })
@@ -28,6 +30,18 @@ export class ProfilePageComponent implements OnInit {
   readonly errorMsg = signal<string | null>(null);
 
   user = signal<UserProfileModel | null>(null);
+  readonly isAvatarModalOpen = signal(false);
+  readonly resolvedAvatarUrl = computed(() => resolveAvatarUrl(this.user()?.avatarUrl));
+
+  openAvatarModal(): void {
+    this.isAvatarModalOpen.set(true);
+  }
+
+  onAvatarModalUpdated(newAvatarUrl: string): void {
+    this.user.update(user => user ? { ...user, avatarUrl: newAvatarUrl } : user);
+    this.successMsg.set('Cập nhật ảnh đại diện thành công.');
+  }
+
   skillsCatalog = signal<SkillModel[]>([]);
   userSkills = signal<UserSkillModel[]>([]);
   activeSessions = signal<ActiveSessionModel[]>([]);

@@ -42,15 +42,19 @@
         <div class="profile-overview-layout flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           
           <div class="flex flex-col sm:flex-row items-start sm:items-center gap-5">
-            <div class="relative group">
-              @if (u.avatarUrl) {
-                <img [src]="u.avatarUrl" [alt]="u.displayName" class="w-24 h-24 rounded-full object-cover shadow-md ring-4 ring-surface-container-high" />
+            <div class="relative group cursor-pointer" (click)="openAvatarModal()" title="Nhấp để xem hoặc đổi ảnh đại diện">
+              @if (resolvedAvatarUrl()) {
+                <img [src]="resolvedAvatarUrl()" [alt]="u.displayName" class="w-24 h-24 rounded-full object-cover shadow-md ring-4 ring-surface-container-high transition-transform duration-200 group-hover:scale-105" />
               } @else {
-                <div class="w-24 h-24 rounded-full bg-gradient-to-br from-primary-container to-secondary-container text-white text-3xl font-bold flex items-center justify-center shadow-md ring-4 ring-surface-container-high">
+                <div class="w-24 h-24 rounded-full bg-gradient-to-br from-primary-container to-secondary-container text-white text-3xl font-bold flex items-center justify-center shadow-md ring-4 ring-surface-container-high transition-transform duration-200 group-hover:scale-105">
                   {{ u.displayName.charAt(0).toUpperCase() }}
                 </div>
               }
-              <span class="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-emerald-500 ring-2 ring-surface-container-lowest" title="Đang online"></span>
+              <div class="absolute inset-0 rounded-full bg-black/40 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <span class="material-symbols-outlined text-[24px]">photo_camera</span>
+                <span class="text-[10px] font-bold mt-0.5">Đổi ảnh</span>
+              </div>
+              <span class="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-emerald-500 ring-2 ring-surface-container-lowest z-10" title="Đang online"></span>
             </div>
 
             <div class="flex flex-col gap-1 min-w-0">
@@ -592,3 +596,10 @@
     }
   </div>
 </div>
+
+<app-avatar-modal 
+  [(isOpen)]="isAvatarModalOpen" 
+  [user]="user()" 
+  [isCurrentUser]="true"
+  (avatarUpdated)="onAvatarModalUpdated($event)"
+></app-avatar-modal>

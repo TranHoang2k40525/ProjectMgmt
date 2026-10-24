@@ -6,6 +6,8 @@ import { ProjectManagementService } from '../../core/services/project-management
 import { NotificationModel } from '../../core/models/identity.models';
 import { RealtimeService } from '../../core/realtime/realtime.service';
 
+import { ToastService } from '../../core/services/toast.service';
+
 @Component({
   selector: 'app-notifications-page',
   standalone: true,
@@ -17,6 +19,7 @@ export class NotificationsPageComponent implements OnInit {
   private router = inject(Router);
   private identityService = inject(IdentityService);
   private projectService = inject(ProjectManagementService);
+  private toastService = inject(ToastService, { optional: true });
   private realtime = inject(RealtimeService, { optional: true });
 
   readonly notifications = this.identityService.notifications;
@@ -63,6 +66,30 @@ export class NotificationsPageComponent implements OnInit {
       return this.notifications().filter(n => !n.isRead);
     }
     return this.notifications();
+  }
+
+  respondToInvitation(item: NotificationModel, accept: boolean, event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+    }
+    if (!item.projectId) {
+      this.toastService?.error('Lỗi', 'Thông báo không chứa mã dự án.');
+      return;
+    }
+
+    this.identityService.respondProjectInvitation(item.projectId, item.id, accept).subscribe({
+      next: () => {
+        if (accept) {
+          this.toastService?.success('Chấp nhận lời mời', 'Bạn đã tham gia dự án thành công.');
+        } else {
+          this.toastService?.info('Từ chối lời mời', 'Bạn đã từ chối tham gia dự án.');
+        }
+      },
+      error: (err) => {
+        const msg = err?.error?.message || 'Không thể phản hồi lời mời. Vui lòng thử lại sau.';
+        this.toastService?.error('Lỗi', msg);
+      }
+    });
   }
 }
 

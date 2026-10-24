@@ -31,4 +31,15 @@ public interface IRoleServices
         Guid projectId,
         string email,
         string roleName);
+    Task<RoleDto> BatchInviteProjectMembersAsync(
+        Guid actorUserId,
+        Guid projectId,
+        string emails,
+        string? names,
+        string roleName);
+    Task<RoleDto> RespondProjectInvitationAsync(
+        Guid actorUserId,
+        Guid projectId,
+        Guid notificationId,
+        bool accept);
 }

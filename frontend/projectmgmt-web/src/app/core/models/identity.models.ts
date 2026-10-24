@@ -59,7 +59,7 @@ export interface NotificationModel {
   userId: string;
   title: string;
   message: string;
-  type: 'SECURITY' | 'AI_SUGGESTION' | 'TASK' | 'SYSTEM';
+  type: 'SECURITY' | 'AI_SUGGESTION' | 'TASK' | 'SYSTEM' | 'PROJECT_INVITATION' | 'PROJECT_INVITATION_ACCEPTED' | 'PROJECT_INVITATION_DECLINED';
   category: 'System' | 'Assignment' | 'Mention' | 'Security';
   isRead: boolean;
   createdAt: string;
@@ -67,6 +67,9 @@ export interface NotificationModel {
   entityType?: string | null;
   entityId?: string | null;
   projectId?: string | null;
+  actorId?: string | null;
+  rawType?: string | null;
+  responseStatus?: 'ACCEPTED' | 'DECLINED' | null;
 }
 
 export interface AiModelConfig {

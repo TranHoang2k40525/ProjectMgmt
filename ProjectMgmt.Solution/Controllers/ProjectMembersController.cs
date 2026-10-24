@@ -84,6 +84,55 @@ public class ProjectMembersController : ControllerBase
             return result.Success ? StatusCode(201, result) : MapWriteFailure(result);
         });
 
+    public class BatchInviteRequest
+    {
+        [Required] public string Emails { get; set; } = "";
+        public string? Names { get; set; }
+        [Required] public string RoleName { get; set; } = "Developer";
+    }
+
+    [HttpPost("batch-invite")]
+    public Task<IActionResult> BatchInvite(Guid projectId, [FromBody] BatchInviteRequest request) =>
+        ExecuteWithPermission(
+            projectId, "member.invite", "batch-invite", async (actor, _) =>
+            {
+                var result = await _roleServices.BatchInviteProjectMembersAsync(
+                    actor,
+                    projectId,
+                    request.Emails,
+                    request.Names,
+                    request.RoleName);
+                return result.Success ? StatusCode(201, result) : MapWriteFailure(result);
+            });
+
+    public class RespondInvitationRequest
+    {
+        [Required] public Guid NotificationId { get; set; }
+        public bool Accept { get; set; }
+    }
+
+    [HttpPost("respond-invitation")]
+    public async Task<IActionResult> RespondInvitation(Guid projectId, [FromBody] RespondInvitationRequest request)
+    {
+        if (!_currentUser.UserId.HasValue)
+        {
+            return Unauthorized(new RoleDto
+            {
+                Success = false,
+                ErrorCode = "AUTH_UNAUTHENTICATED",
+                Message = "Phiên đăng nhập không hợp lệ."
+            });
+        }
+
+        var result = await _roleServices.RespondProjectInvitationAsync(
+            _currentUser.UserId.Value,
+            projectId,
+            request.NotificationId,
+            request.Accept);
+
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
     [HttpPut("{userId:guid}/role")]
     public async Task<IActionResult> ChangeRole(
         Guid projectId,

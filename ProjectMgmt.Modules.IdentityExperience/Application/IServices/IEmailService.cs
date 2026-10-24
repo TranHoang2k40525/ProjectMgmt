@@ -35,4 +35,18 @@ public interface IEmailService
         string recipientEmail,
         string recipientName,
         Guid projectId);
+
+    Task<bool> SendInvitationAcceptedAsync(
+        string recipientEmail,
+        string recipientName,
+        string memberName,
+        string memberEmail,
+        Guid projectId);
+
+    Task<bool> SendInvitationDeclinedAsync(
+        string recipientEmail,
+        string recipientName,
+        string memberName,
+        string memberEmail,
+        Guid projectId);
 }

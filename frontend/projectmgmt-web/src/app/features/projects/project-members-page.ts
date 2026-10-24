@@ -9,6 +9,7 @@ import { ToastService } from '../../core/services/toast.service';
 import { ConfirmDialogService } from '../../core/services/confirm-dialog.service';
 import { IdentityService } from '../../core/services/identity.service';
 import { NoProjectStateComponent } from '../../shared/components/no-project-state/no-project-state.component';
+import { AvatarModalComponent } from '../../shared/components/avatar-modal/avatar-modal.component';
 
 interface ProjectRoleOption {
   id: string;
@@ -20,7 +21,7 @@ interface ProjectRoleOption {
 @Component({
   selector: 'app-project-members-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, RouterLinkActive, NoProjectStateComponent],
+  imports: [CommonModule, FormsModule, RouterLink, RouterLinkActive, NoProjectStateComponent, AvatarModalComponent],
   template: `
     @if (!projectService.hasActiveProject()) {
       <app-no-project-state featureName="Thành viên & Phân quyền Nhóm"></app-no-project-state>
@@ -152,13 +153,22 @@ interface ProjectRoleOption {
             <div class="member-card p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs hover:shadow-md transition-all flex flex-col justify-between gap-4">
               <div class="flex items-start justify-between gap-3">
                 <div class="flex items-center gap-3 min-w-0">
-                  @if (member.avatarUrl) {
-                    <img [src]="member.avatarUrl" [alt]="member.displayName" class="w-10 h-10 rounded-full object-cover border border-slate-200 dark:border-slate-700 shrink-0" />
-                  } @else {
-                    <div class="w-10 h-10 rounded-full bg-emerald-800 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-xs">
-                      {{ getInitials(member.displayName) }}
+                  <div
+                    (click)="openAvatarModal(member)"
+                    class="relative group cursor-pointer shrink-0"
+                    [title]="isCurrentUser(member) ? 'Xem hoặc đổi ảnh đại diện của bạn' : 'Xem ảnh đại diện'"
+                  >
+                    @if (member.avatarUrl) {
+                      <img [src]="member.avatarUrl" [alt]="member.displayName" class="w-10 h-10 rounded-full object-cover border border-slate-200 dark:border-slate-700 shadow-xs" />
+                    } @else {
+                      <div class="w-10 h-10 rounded-full bg-emerald-800 text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                        {{ getInitials(member.displayName) }}
+                      </div>
+                    }
+                    <div class="absolute inset-0 bg-slate-900/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                      <span class="material-symbols-outlined text-[16px]">{{ isCurrentUser(member) ? 'photo_camera' : 'zoom_in' }}</span>
                     </div>
-                  }
+                  </div>
                   <div class="flex flex-col min-w-0">
                     <span class="text-sm font-bold text-slate-900 dark:text-white truncate">{{ member.displayName }}</span>
                     <span class="text-xs text-slate-500 dark:text-slate-400 truncate">{{ member.email }}</span>
@@ -240,68 +250,136 @@ interface ProjectRoleOption {
         </div>
       }
 
-      <!-- Invite Member Modal -->
+      <!-- Invite Member Modal (Agile Multi-Invite Support) -->
       @if (isInviteModalOpen) {
         <div class="members-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div #modalContent class="members-modal w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col p-6 gap-4">
+          <div #modalContent class="members-modal w-full max-w-xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col p-6 gap-4 max-h-[90vh] overflow-y-auto">
             
             <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div class="flex items-center gap-2">
-                <span class="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 flex items-center justify-center">
-                  <span class="material-symbols-outlined text-[18px]">person_add</span>
+              <div class="flex items-center gap-2.5">
+                <span class="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 flex items-center justify-center">
+                  <span class="material-symbols-outlined text-[20px]">group_add</span>
                 </span>
-                <h3 class="text-base font-bold text-slate-900 dark:text-white">Thêm Thành Viên Dự Án</h3>
+                <div>
+                  <h3 class="text-base font-bold text-slate-900 dark:text-white">Thêm Thành Viên Vào Dự Án</h3>
+                  <p class="text-[11px] text-slate-500">Mời một hoặc nhiều thành viên cùng lúc bằng email (cách nhau bởi dấu ;)</p>
+                </div>
               </div>
-              <button (click)="isInviteModalOpen = false" class="text-slate-400 hover:text-slate-600 rounded-lg p-1">
+              <button (click)="isInviteModalOpen = false" class="text-slate-400 hover:text-slate-600 rounded-lg p-1 cursor-pointer">
                 <span class="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
 
-            <div class="flex flex-col gap-3">
+            <div class="flex flex-col gap-3.5">
+              <!-- Emails Input with ; Support -->
               <div class="flex flex-col gap-1.5">
-                <label for="member-email" class="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Email thành viên <span class="text-rose-500">*</span>
-                </label>
-                <input
+                <div class="flex items-center justify-between">
+                  <label for="member-email" class="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Danh sách Email thành viên <span class="text-rose-500">*</span>
+                  </label>
+                  <span class="text-[11px] text-slate-400">Cách nhau bằng dấu chấm phẩy (;)</span>
+                </div>
+                <textarea
                   id="member-email"
-                  type="email"
-                  [(ngModel)]="newMemberEmail"
-                  placeholder="nguyenvana@huce.edu.vn"
-                  class="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                />
+                  rows="2"
+                  [ngModel]="newMemberEmail"
+                  (ngModelChange)="onEmailsInput($event)"
+                  placeholder="vd: hoang@gmail.com; linh.dev@company.com; tu.qa@outlook.com;"
+                  class="p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none font-mono"
+                ></textarea>
+                <span class="text-[10px] text-slate-400">Tự động xử lý an toàn dấu chấm phẩy thừa, khoảng trắng và các email trùng lặp.</span>
               </div>
 
+              <!-- Names Input with ; Support & Auto-fill -->
               <div class="flex flex-col gap-1.5">
-                <label for="member-name" class="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Họ và tên
-                </label>
+                <div class="flex items-center justify-between">
+                  <label for="member-name" class="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Họ và tên tương ứng (tự động điền)
+                  </label>
+                  <span class="text-[11px] text-slate-400">Có thể chỉnh sửa (cách nhau ;)</span>
+                </div>
                 <input
                   id="member-name"
                   type="text"
-                  [(ngModel)]="newMemberName"
-                  placeholder="Nguyễn Văn A"
-                  class="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  [ngModel]="newMemberName"
+                  (ngModelChange)="onNamesInput($event)"
+                  placeholder="vd: Hoàng; Linh; Tú;"
+                  class="h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                 />
+                <span class="text-[10px] text-slate-400">Hệ thống tự động trích xuất tên trước ký tự &#64; của email. Bạn có thể sửa tên từng người tương ứng.</span>
               </div>
 
+              <!-- Role Select -->
               <div class="flex flex-col gap-1.5">
                 <label for="member-role" class="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Vai trò trong dự án
+                  Vai trò được giao trong dự án
                 </label>
                 <select
                   id="member-role"
                   [(ngModel)]="newMemberRole"
-                  class="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  class="h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary cursor-pointer"
                 >
-                  <option value="Developer">Developer (Phát triển)</option>
-                  <option value="Scrum Master">Scrum Master (Quản trị Sprint)</option>
-                  <option value="Product Owner">Product Owner</option>
-                  <option value="Project Lead">Project Lead (Trưởng dự án)</option>
-                  <option value="QA Engineer">QA Engineer</option>
-                  <option value="Viewer">Viewer (Xem báo cáo)</option>
+                  <option value="Developer">Developer (Kỹ sư phát triển)</option>
+                  <option value="Scrum Master">Scrum Master (Điều phối Sprint)</option>
+                  <option value="Product Owner">Product Owner (Chủ sản phẩm)</option>
+                  <option value="QA Engineer">QA Engineer (Kiểm thử chất lượng)</option>
+                  <option value="Viewer">Viewer (Khách hàng / Người quan sát)</option>
                 </select>
               </div>
 
+              <!-- Live Preview Chips of Parsed Members -->
+              @if (parsedInviteList.length > 0) {
+                <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-col gap-2">
+                  <div class="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
+                    <span class="flex items-center gap-1.5">
+                      <span class="material-symbols-outlined text-[16px] text-primary">preview</span>
+                      Xem trước danh sách mời ({{ validInviteCount }} người hợp lệ)
+                    </span>
+                    @if (parsedInviteList.length !== validInviteCount) {
+                      <span class="text-[11px] text-rose-500 font-semibold">{{ parsedInviteList.length - validInviteCount }} email không hợp lệ</span>
+                    }
+                  </div>
+
+                  <div class="flex flex-wrap gap-2 max-h-36 overflow-y-auto pt-1">
+                    @for (item of parsedInviteList; track item.email; let idx = $index) {
+                      <div
+                        class="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs shadow-2xs"
+                        [class.bg-white]="item.isValid"
+                        [class.dark:bg-slate-900]="item.isValid"
+                        [class.border-slate-200]="item.isValid"
+                        [class.dark:border-slate-700]="item.isValid"
+                        [class.bg-rose-50]="!item.isValid"
+                        [class.dark:bg-rose-950/40]="!item.isValid"
+                        [class.border-rose-200]="!item.isValid"
+                        [class.dark:border-rose-800]="!item.isValid"
+                      >
+                        <span class="w-5 h-5 rounded-full bg-primary/10 text-primary font-bold text-[10px] flex items-center justify-center shrink-0">
+                          {{ getInitials(item.name) }}
+                        </span>
+                        <div class="flex flex-col min-w-0">
+                          <span class="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[130px]">{{ item.name }}</span>
+                          <span class="text-[10px] text-slate-500 dark:text-slate-400 font-mono truncate max-w-[150px]">{{ item.email }}</span>
+                        </div>
+                        @if (item.isValid) {
+                          <span class="material-symbols-outlined text-[14px] text-emerald-600 dark:text-emerald-400" title="Email hợp lệ">check_circle</span>
+                        } @else {
+                          <span class="material-symbols-outlined text-[14px] text-rose-500" title="Email sai định dạng">error</span>
+                        }
+                        <button
+                          type="button"
+                          (click)="removeInviteItem(idx)"
+                          class="text-slate-400 hover:text-rose-500 p-0.5 rounded cursor-pointer"
+                          title="Loại bỏ khỏi danh sách"
+                        >
+                          <span class="material-symbols-outlined text-[14px]">close</span>
+                        </button>
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
+
+              <!-- Existing User Fast Picker -->
               @if (availableUsersToAdd().length > 0) {
                 <div class="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-1.5">
                   <label for="member-user-select" class="text-xs font-medium text-slate-500">
@@ -311,7 +389,7 @@ interface ProjectRoleOption {
                     id="member-user-select"
                     [(ngModel)]="selectedUserId"
                     (ngModelChange)="onUserSelected($event)"
-                    class="h-9 px-2 text-xs rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200"
+                    class="h-9 px-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 cursor-pointer"
                   >
                     <option value="">-- Chọn tài khoản có sẵn --</option>
                     @for (u of availableUsersToAdd(); track u.userId) {
@@ -322,30 +400,50 @@ interface ProjectRoleOption {
               }
             </div>
 
-            <div class="flex items-center justify-end gap-3 mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-              <button
-                (click)="isInviteModalOpen = false"
-                class="px-4 py-2 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-              >
-                Hủy
-              </button>
-              <button
-                (click)="submitInvite()"
-                [disabled]="saving || submitting() || (!newMemberEmail.trim() && !selectedUserId)"
-                class="px-5 py-2 rounded-lg bg-primary hover:bg-primary-container text-white text-xs font-bold transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
-              >
-                @if (saving || submitting()) {
-                  <span class="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                  Đang thêm...
-                } @else {
-                  Thêm thành viên
-                }
-              </button>
+            <div class="flex items-center justify-between mt-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <span class="text-[11px] text-slate-400 flex items-center gap-1">
+                <span class="material-symbols-outlined text-[14px]">send</span>
+                Sẽ gửi link &amp; thư mời qua email và thông báo
+              </span>
+
+              <div class="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  (click)="isInviteModalOpen = false"
+                  class="px-4 py-2 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  (click)="submitInvite()"
+                  [disabled]="saving || submitting() || (validInviteCount === 0 && !selectedUserId)"
+                  class="px-5 py-2 rounded-lg bg-primary hover:bg-primary-container text-white text-xs font-bold transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  @if (saving || submitting()) {
+                    <span class="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                    Đang gửi thư mời...
+                  } @else {
+                    <span class="material-symbols-outlined text-[16px]">mail</span>
+                    <span>Gửi thư mời ({{ validInviteCount > 0 ? validInviteCount : (selectedUserId ? 1 : 0) }})</span>
+                  }
+                </button>
+              </div>
             </div>
 
           </div>
         </div>
       }
+
+      <!-- Avatar Preview & Change Modal -->
+      <app-avatar-modal
+        [isOpen]="isAvatarModalOpen()"
+        [avatarUrl]="avatarModalData().avatarUrl"
+        [displayName]="avatarModalData().displayName"
+        [isCurrentUser]="avatarModalData().isCurrentUser"
+        (closed)="isAvatarModalOpen.set(false)"
+        (avatarChanged)="onAvatarUpdated($event)"
+      ></app-avatar-modal>
 
     </div>
     }
@@ -377,12 +475,20 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
   selectedRoleFilter = signal<string | null>(null);
 
   isInviteModalOpen = false;
+  isNameManuallyEdited = false;
   newMemberName = '';
   newMemberEmail = '';
   newMemberRole: ProjectMember['role'] = 'Developer';
 
   selectedUserId = '';
   selectedRoleId = '';
+
+  readonly isAvatarModalOpen = signal(false);
+  readonly avatarModalData = signal<{ avatarUrl?: string | null; displayName: string; isCurrentUser: boolean }>({
+    avatarUrl: null,
+    displayName: '',
+    isCurrentUser: false
+  });
 
   readonly canManageMembers = computed(() => {
     if (this.identity.isSystemAdmin()) return true;
@@ -513,9 +619,10 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
   }
 
   openInviteModal(): void {
-    this.selectedUserId = '';
-    this.newMemberName = '';
     this.newMemberEmail = '';
+    this.newMemberName = '';
+    this.isNameManuallyEdited = false;
+    this.selectedUserId = '';
     this.error = '';
     this.selectedRoleId = this.availableRoles()[0]?.id || '';
     this.isInviteModalOpen = true;
@@ -531,6 +638,94 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
     });
   }
 
+  openAvatarModal(member: ProjectMember): void {
+    const isMe = this.isCurrentUser(member);
+    this.avatarModalData.set({
+      avatarUrl: member.avatarUrl,
+      displayName: member.displayName,
+      isCurrentUser: isMe
+    });
+    this.isAvatarModalOpen.set(true);
+  }
+
+  isCurrentUser(member: ProjectMember): boolean {
+    const currentUser = this.identity.authState().currentUser;
+    if (!currentUser) return false;
+    if (currentUser.id && member.userId && currentUser.id.toLowerCase() === member.userId.toLowerCase()) return true;
+    if (currentUser.displayName && member.displayName && currentUser.displayName.toLowerCase() === member.displayName.toLowerCase()) return true;
+    return false;
+  }
+
+  onAvatarUpdated(_newUrl: string): void {
+    const projId = this.currentProject()?.id;
+    if (projId) {
+      this.loadProjectMembers(projId);
+      this.projectService.loadWorkspace(projId);
+    }
+    this.identity.getMyProfile().subscribe();
+  }
+
+  onEmailsInput(value: string): void {
+    this.newMemberEmail = value;
+    if (!this.isNameManuallyEdited) {
+      this.autoGenerateNamesFromEmails(value);
+    }
+  }
+
+  onNamesInput(value: string): void {
+    this.newMemberName = value;
+    this.isNameManuallyEdited = value.trim().length > 0;
+  }
+
+  autoGenerateNamesFromEmails(emailStr: string): void {
+    const tokens = emailStr.split(';')
+      .map(t => t.trim())
+      .filter(t => t.length > 0);
+
+    const names = tokens.map(token => {
+      const atIndex = token.indexOf('@');
+      return atIndex > 0 ? token.substring(0, atIndex) : token;
+    });
+
+    this.newMemberName = names.join('; ');
+  }
+
+  get parsedInviteList(): { email: string; name: string; isValid: boolean }[] {
+    const emailTokens = this.newMemberEmail
+      .split(';')
+      .map(e => e.trim())
+      .filter(e => e.length > 0);
+
+    const nameTokens = this.newMemberName
+      .split(';')
+      .map(n => n.trim());
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    return emailTokens.map((email, idx) => {
+      const name = (idx < nameTokens.length && nameTokens[idx])
+        ? nameTokens[idx]
+        : (email.includes('@') ? email.split('@')[0] : email);
+      return {
+        email,
+        name,
+        isValid: emailRegex.test(email)
+      };
+    });
+  }
+
+  get validInviteCount(): number {
+    return this.parsedInviteList.filter(item => item.isValid).length;
+  }
+
+  removeInviteItem(index: number): void {
+    const list = [...this.parsedInviteList];
+    if (index < 0 || index >= list.length) return;
+    list.splice(index, 1);
+    this.newMemberEmail = list.map(item => item.email).join('; ');
+    this.newMemberName = list.map(item => item.name).join('; ');
+  }
+
   onUserSelected(userId: string): void {
     this.selectedUserId = userId;
     const user = this.allUsers().find(u => u.userId === userId);
@@ -544,8 +739,10 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
     if (this.saving || this.submitting()) return;
 
     const projId = this.currentProject()?.id;
+    if (!projId) return;
+
     const resolvedRoleId = this.getRoleOptionId(this.newMemberRole) || this.selectedRoleId;
-    if (projId && this.selectedUserId && resolvedRoleId) {
+    if (this.selectedUserId && resolvedRoleId) {
       this.submitting.set(true);
       this.error = '';
       this.projectService.inviteProjectMember(projId, this.selectedUserId, resolvedRoleId).subscribe({
@@ -569,12 +766,42 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
       return;
     }
 
-    if (this.newMemberEmail.trim()) {
-      this.saving = true;
-      this.error = '';
+    const validItems = this.parsedInviteList.filter(i => i.isValid);
+    if (validItems.length === 0) {
+      this.toastService?.error('Chưa có email hợp lệ', 'Vui lòng nhập ít nhất một địa chỉ email đúng định dạng.');
+      return;
+    }
+
+    const emailsPayload = validItems.map(i => i.email).join(';');
+    const namesPayload = validItems.map(i => i.name).join(';');
+
+    this.saving = true;
+    this.error = '';
+
+    if (this.rbac) {
+      this.rbac.batchInviteProjectMembers(projId, emailsPayload, namesPayload, this.newMemberRole).subscribe({
+        next: (res) => {
+          this.saving = false;
+          this.isInviteModalOpen = false;
+          this.newMemberEmail = '';
+          this.newMemberName = '';
+          this.isNameManuallyEdited = false;
+          this.toastService?.success('Thành công', res.message || `Đã gửi thư mời tới ${validItems.length} thành viên.`);
+          this.loadProjectMembers(projId);
+          this.projectService.loadWorkspace(projId);
+        },
+        error: (err: unknown) => {
+          this.saving = false;
+          const errObj = err as { error?: { message?: string } };
+          const msg = errObj?.error?.message || 'Không thể gửi lời mời. Vui lòng thử lại sau.';
+          this.error = msg;
+          this.toastService?.error('Lỗi mời thành viên', msg);
+        }
+      });
+    } else {
       this.projectService.addProjectMember({
-        displayName: this.newMemberName || this.newMemberEmail,
-        email: this.newMemberEmail,
+        displayName: namesPayload,
+        email: emailsPayload,
         role: this.newMemberRole
       }).subscribe({
         next: () => {
@@ -582,13 +809,11 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
           this.isInviteModalOpen = false;
           this.newMemberName = '';
           this.newMemberEmail = '';
-          if (projId) this.loadProjectMembers(projId);
+          this.loadProjectMembers(projId);
         },
-        error: (e: { title?: string; detail?: string; error?: { message?: string } }) => {
+        error: () => {
           this.saving = false;
-          const msg = e.detail ?? e.title ?? (e as { error?: { message?: string } })?.error?.message ?? 'Không thể thêm thành viên.';
-          this.error = msg;
-          this.toastService?.error('Lỗi', msg);
+          this.toastService?.error('Lỗi', 'Không thể gửi lời mời.');
         }
       });
     }

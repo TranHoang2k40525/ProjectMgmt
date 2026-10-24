@@ -18,17 +18,20 @@ public class RoleServices : IRoleServices
     private readonly IIdentityRepository? _identityRepository;
     private readonly TimeProvider _timeProvider;
     private readonly INotificationServices? _notificationServices;
+    private readonly INotificationRepository? _notificationRepository;
 
     public RoleServices(
         IRbacRepository rbacRepository,
         TimeProvider timeProvider,
         INotificationServices? notificationServices = null,
-        IIdentityRepository? identityRepository = null)
+        IIdentityRepository? identityRepository = null,
+        INotificationRepository? notificationRepository = null)
     {
         _rbacRepository = rbacRepository;
         _timeProvider = timeProvider;
         _notificationServices = notificationServices;
         _identityRepository = identityRepository;
+        _notificationRepository = notificationRepository;
     }
 
     public async Task<RoleDto> GetRolesAsync(string? scope)
@@ -518,5 +521,198 @@ public class RoleServices : IRoleServices
         }
 
         return await AddProjectMemberAsync(actorUserId, projectId, user.Id, role.Id);
+    }
+
+    public async Task<RoleDto> BatchInviteProjectMembersAsync(
+        Guid actorUserId,
+        Guid projectId,
+        string emails,
+        string? names,
+        string roleName)
+    {
+        if (string.IsNullOrWhiteSpace(emails))
+        {
+            return Failure("RBAC_EMAIL_REQUIRED", "Danh sách email không được để trống.");
+        }
+
+        // Tách chuỗi email an toàn bằng dấu chấm phẩy, loại bỏ khoảng trắng và chuỗi rỗng
+        var emailTokens = emails.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(e => !string.IsNullOrWhiteSpace(e))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (emailTokens.Count == 0)
+        {
+            return Failure("RBAC_EMAIL_INVALID", "Không tìm thấy địa chỉ email hợp lệ nào.");
+        }
+
+        // Tách chuỗi tên an toàn bằng dấu chấm phẩy
+        var nameTokens = string.IsNullOrWhiteSpace(names)
+            ? Array.Empty<string>()
+            : names.Split(';', StringSplitOptions.TrimEntries);
+
+        var roles = await _rbacRepository.GetRolesAsync("Project");
+        var role = roles.FirstOrDefault(r => r.Name.Equals(roleName?.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (role is null)
+        {
+            return Failure("RBAC_PROJECT_ROLE_NOT_FOUND", "Vai trò dự án không hợp lệ.");
+        }
+
+        var actorProfile = _identityRepository is not null
+            ? await _identityRepository.GetUserProfileAsync(actorUserId)
+            : null;
+        var actorName = actorProfile?.DisplayName ?? "Quản trị viên dự án";
+
+        var addedMembers = new List<RoleDto>();
+        var errors = new List<string>();
+        var emailRegex = new Regex(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.Compiled);
+
+        for (var i = 0; i < emailTokens.Count; i++)
+        {
+            var email = emailTokens[i];
+            if (!emailRegex.IsMatch(email))
+            {
+                errors.Add($"Email không hợp lệ: {email}");
+                continue;
+            }
+
+            // Lấy tên tương ứng theo thứ tự, nếu không có hoặc rỗng thì tự động lấy phần trước @
+            var displayName = (i < nameTokens.Length && !string.IsNullOrWhiteSpace(nameTokens[i]))
+                ? nameTokens[i].Trim()
+                : email.Split('@')[0];
+
+            try
+            {
+                if (_identityRepository is null)
+                {
+                    errors.Add($"Hệ thống danh tính chưa sẵn sàng cho email {email}.");
+                    continue;
+                }
+
+                // Tìm hoặc tạo mới người dùng
+                var user = await _identityRepository.GetOrCreateUserByEmailAsync(email, displayName);
+
+                // Gán vai trò vào dự án
+                var assignResult = await _rbacRepository.AddProjectMemberAsync(
+                    user.Id,
+                    role.Id,
+                    projectId,
+                    actorUserId,
+                    _timeProvider.GetUtcNow().UtcDateTime);
+
+                if (assignResult.Status != RbacWriteStatus.Created && assignResult.Status != RbacWriteStatus.MemberAlreadyExists)
+                {
+                    errors.Add($"Không thể gán vai trò cho {email}: {assignResult.Status}");
+                    continue;
+                }
+
+                // Gửi Thư mời tham gia dự án (Cả thông báo web và email)
+                await PublishProjectNotificationAsync(
+                    user.Id,
+                    actorUserId,
+                    projectId,
+                    NotificationTypes.ProjectInvitation,
+                    "Thư mời tham gia dự án",
+                    $"{actorName} đã mời bạn tham gia dự án với vai trò {role.Name}.",
+                    role.Name);
+
+                addedMembers.Add(new RoleDto
+                {
+                    UserId = user.Id,
+                    Email = user.Email,
+                    FullName = displayName,
+                    RoleId = role.Id,
+                    RoleName = role.Name,
+                    Success = true
+                });
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"Lỗi xử lý {email}: {ex.Message}");
+            }
+        }
+
+        if (addedMembers.Count == 0)
+        {
+            return Failure("RBAC_INVITE_FAILED", string.Join("; ", errors));
+        }
+
+        var message = $"Đã mời thành công {addedMembers.Count} thành viên tham gia dự án.";
+        if (errors.Count > 0)
+        {
+            message += $" ({errors.Count} email bị bỏ qua: {string.Join(", ", errors)})";
+        }
+
+        return new RoleDto
+        {
+            Success = true,
+            Message = message,
+            Items = addedMembers
+        };
+    }
+
+    public async Task<RoleDto> RespondProjectInvitationAsync(
+        Guid actorUserId,
+        Guid projectId,
+        Guid notificationId,
+        bool accept)
+    {
+        Notification? notification = null;
+        if (_notificationRepository is not null)
+        {
+            notification = await _notificationRepository.MarkReadAsync(
+                actorUserId,
+                notificationId,
+                _timeProvider.GetUtcNow().UtcDateTime);
+        }
+
+        var responderProfile = _identityRepository is not null
+            ? await _identityRepository.GetUserProfileAsync(actorUserId)
+            : null;
+        var responderUser = _identityRepository is not null
+            ? await _identityRepository.GetUserByIdAsync(actorUserId)
+            : null;
+        var responderName = responderProfile?.DisplayName ?? responderUser?.Email ?? "Thành viên";
+        var responderEmail = responderUser?.Email ?? "";
+
+        if (!accept)
+        {
+            // Từ chối tham gia: Gỡ bỏ quyền của thành viên khỏi dự án
+            await _rbacRepository.RemoveProjectMemberAsync(actorUserId, projectId);
+        }
+
+        // Gửi thông báo và email phản hồi cho người đã gửi lời mời (ActorId)
+        var inviterUserId = notification?.ActorId;
+        if (inviterUserId.HasValue && inviterUserId.Value != Guid.Empty && inviterUserId.Value != actorUserId)
+        {
+            var notificationType = accept
+                ? NotificationTypes.ProjectInvitationAccepted
+                : NotificationTypes.ProjectInvitationDeclined;
+
+            var title = accept
+                ? "Lời mời tham gia dự án đã được chấp nhận"
+                : "Lời mời tham gia dự án đã bị từ chối";
+
+            var content = accept
+                ? $"{responderName} ({responderEmail}) đã chấp nhận tham gia dự án."
+                : $"{responderName} ({responderEmail}) đã từ chối tham gia dự án.";
+
+            await PublishProjectNotificationAsync(
+                inviterUserId.Value,
+                actorUserId,
+                projectId,
+                notificationType,
+                title,
+                content,
+                null);
+        }
+
+        return new RoleDto
+        {
+            Success = true,
+            Message = accept
+                ? "Bạn đã chấp nhận tham gia dự án thành công."
+                : "Bạn đã từ chối tham gia dự án."
+        };
     }
 }

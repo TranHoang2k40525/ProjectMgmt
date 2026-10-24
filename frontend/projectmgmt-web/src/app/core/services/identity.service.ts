@@ -545,12 +545,40 @@ export class IdentityService {
     }
   }
 
+  respondProjectInvitation(projectId: string, notificationId: string, accept: boolean): Observable<RoleDto> {
+    return this.rbacApi.respondInvitation(projectId, notificationId, accept).pipe(
+      map(res => {
+        this.notifications.update(list => list.map(item => {
+          if (item.id === notificationId) {
+            return {
+              ...item,
+              isRead: true,
+              responseStatus: accept ? 'ACCEPTED' : 'DECLINED'
+            };
+          }
+          return item;
+        }));
+        this.unreadCount.update(count => Math.max(0, count - 1));
+        return res;
+      })
+    );
+  }
+
   private toNotificationModel(dto: NotificationDto): NotificationModel {
     const rawType = (dto.type ?? 'SYSTEM').toUpperCase();
     let type: NotificationModel['type'] = 'SYSTEM';
     let category: NotificationModel['category'] = 'System';
 
-    if (rawType.includes('SECURITY') || rawType.includes('PASSWORD') || rawType.includes('AUTH')) {
+    if (rawType === 'PROJECTINVITATION' || rawType === 'PROJECT_INVITATION') {
+      type = 'PROJECT_INVITATION';
+      category = 'Assignment';
+    } else if (rawType === 'PROJECTINVITATIONACCEPTED' || rawType === 'PROJECT_INVITATION_ACCEPTED') {
+      type = 'PROJECT_INVITATION_ACCEPTED';
+      category = 'Assignment';
+    } else if (rawType === 'PROJECTINVITATIONDECLINED' || rawType === 'PROJECT_INVITATION_DECLINED') {
+      type = 'PROJECT_INVITATION_DECLINED';
+      category = 'Assignment';
+    } else if (rawType.includes('SECURITY') || rawType.includes('PASSWORD') || rawType.includes('AUTH')) {
       type = 'SECURITY';
       category = 'Security';
     } else if (rawType.includes('AI') || rawType.includes('SUGGESTION')) {
@@ -573,7 +601,10 @@ export class IdentityService {
       entityType: dto.entityType ?? null,
       entityId: dto.entityId ?? null,
       projectId: dto.projectId ?? null,
-      actionUrl: dto.entityType === 'Issue' && dto.entityId ? `/issues/${dto.entityId}` : dto.projectId ? '/project/summary' : undefined
+      actorId: dto.actorId ?? null,
+      rawType: dto.type,
+      responseStatus: null,
+      actionUrl: dto.entityType === 'Issue' && dto.entityId ? `/issues/${dto.entityId}` : dto.projectId ? `/projects/${dto.projectId}` : undefined
     };
   }
 

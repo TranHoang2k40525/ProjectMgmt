@@ -19,6 +19,8 @@ import { MotionOrchestratorService } from '../../core/motion/motion-orchestrator
 import { MotionDirective } from '../../shared/motion/motion.directive';
 import { FocusRecommendationService } from '../../core/attention/focus-recommendation.service';
 import { RecentWorkService } from '../../core/attention/recent-work.service';
+import { AvatarModalComponent } from '../../shared/components/avatar-modal/avatar-modal.component';
+import { resolveAvatarUrl } from '../../core/utils/avatar.utils';
 
 @Component({
   selector: 'app-shell',
@@ -35,7 +37,8 @@ import { RecentWorkService } from '../../core/attention/recent-work.service';
     ExcelImportModalComponent,
     ConfirmDialogComponent,
     RouteTransitionLayerComponent,
-    MotionDirective
+    MotionDirective,
+    AvatarModalComponent
   ],
   templateUrl: './app-shell.html',
   styleUrl: './app-shell.scss'
@@ -100,9 +103,11 @@ export class AppShellComponent implements OnDestroy {
   readonly recentWorkItems = computed(() => {
     const ids = this.recentWork.recentTaskIds();
     const all = this.workItems();
-    const matched = ids.map(id => all.find(i => i.id === id)).filter((x): x is WorkItem => !!x);
+    const matched = ids.map((id: string) => all.find(i => i.id === id)).filter((x: WorkItem | undefined): x is WorkItem => !!x);
     return matched.length > 0 ? matched : all.slice(0, 6);
   });
+
+  ngOnDestroy(): void {}
   @HostListener('document:keydown', ['$event'])
   onGlobalKeydown(event: KeyboardEvent): void {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
@@ -141,8 +146,14 @@ export class AppShellComponent implements OnDestroy {
     });
   }
 
-  ngOnDestroy(): void {
-    this.motion.destroy();
+  readonly isAvatarModalOpen = signal(false);
+
+  readonly currentResolvedAvatarUrl = computed(() => {
+    return resolveAvatarUrl(this.identity.authState().currentUser?.avatarUrl);
+  });
+
+  openCurrentUserAvatarModal(): void {
+    this.isAvatarModalOpen.set(true);
   }
 
   useAvatarFallback(event: Event): void {

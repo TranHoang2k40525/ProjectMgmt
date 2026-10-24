@@ -4,6 +4,7 @@ import { EMPTY, Observable, Subject, catchError, concatMap, defer, finalize, for
 import { ToastService } from './toast.service';
 import { RbacApi } from '../api/rbac.api';
 import { environment } from '../../../environments/environment';
+import { resolveAvatarUrl } from '../utils/avatar.utils';
 
 export interface Organization {
   id: string;
@@ -326,7 +327,7 @@ export class ProjectManagementService {
           const openId = this.activeDrawerTask()?.id;
           if (openId) this.activeDrawerTask.set(data.workItems.find(i => i.id === openId) ?? null);
         }
-        this.currentProject.update(p => ({ ...p, members: (members.members ?? []).map(m => ({ id: m.userId ?? '', userId: m.userId ?? '', displayName: m.fullName ?? m.email ?? '', email: m.email ?? '', role: (m.roleName ?? 'Developer') as ProjectMember['role'], joinedAt: m.grantedAt ?? '', avatarUrl: m.avatarUrl ?? undefined })) }));
+        this.currentProject.update(p => ({ ...p, members: (members.members ?? []).map(m => ({ id: m.userId ?? '', userId: m.userId ?? '', displayName: m.fullName ?? m.email ?? '', email: m.email ?? '', role: (m.roleName ?? 'Developer') as ProjectMember['role'], joinedAt: m.grantedAt ?? '', avatarUrl: resolveAvatarUrl(m.avatarUrl) ?? undefined })) }));
       },
       error: (e: { title?: string }) => { if (this.currentProject().id === projectId) this.saveError.set(e.title ?? 'Không thể tải công việc.'); this.workspaceLoading.set(false); },
       complete: () => this.workspaceLoading.set(false)
@@ -491,7 +492,7 @@ export class ProjectManagementService {
           userId: m.userId || '',
           displayName: m.fullName || m.email || 'Thành viên',
           email: m.email || '',
-          avatarUrl: m.avatarUrl || undefined,
+          avatarUrl: resolveAvatarUrl(m.avatarUrl) || undefined,
           role: this.mapBackendRoleToProjectMemberRole(m.roleName),
           joinedAt: m.grantedAt ? new Date(m.grantedAt).toLocaleDateString('vi-VN') : 'Vừa xong'
         }));
@@ -562,7 +563,10 @@ export class ProjectManagementService {
 
   getUsers(): Observable<UserDisplayInfo[]> {
     return this.http.get<UserDisplayInfo[]>(`${this.baseUrl}/users`).pipe(
-      map(apiUsers => (apiUsers || []).filter(u => !u.userId.startsWith('11111111-0000-0000-0000'))),
+      map(apiUsers => (apiUsers || []).filter(u => !u.userId.startsWith('11111111-0000-0000-0000')).map(u => ({
+        ...u,
+        avatarUrl: resolveAvatarUrl(u.avatarUrl) || undefined
+      }))),
       catchError(err => {
         console.error('Không thể lấy danh sách người dùng từ API:', err);
         return of([]);

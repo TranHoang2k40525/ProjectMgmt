@@ -30,6 +30,47 @@ public class IdentityRepository : IIdentityRepository
         return query.FirstOrDefaultAsync(user => user.NormalizedEmail == normalizedEmail);
     }
 
+    public async Task<User> GetOrCreateUserByEmailAsync(
+        string email,
+        string displayName)
+    {
+        var normalizedEmail = email.Trim().ToUpperInvariant();
+        var existing = await _context.Users.FirstOrDefaultAsync(u => u.NormalizedEmail == normalizedEmail);
+        if (existing is not null)
+        {
+            return existing;
+        }
+
+        var userId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+        var user = new User
+        {
+            Id = userId,
+            Email = email.Trim(),
+            NormalizedEmail = normalizedEmail,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(Guid.NewGuid().ToString("N")),
+            IsEmailVerified = true,
+            IsActive = true,
+            SecurityStamp = Guid.NewGuid(),
+            CreatedAt = now
+        };
+
+        var profile = new UserProfile
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            DisplayName = string.IsNullOrWhiteSpace(displayName) ? email.Split('@')[0] : displayName.Trim(),
+            Timezone = "Asia/Ho_Chi_Minh",
+            CreatedAt = now
+        };
+
+        await _context.Users.AddAsync(user);
+        await _context.UserProfiles.AddAsync(profile);
+        await _context.SaveChangesAsync();
+
+        return user;
+    }
+
     public Task<User?> GetUserByIdAsync(
         Guid userId,
         bool tracking = false)
