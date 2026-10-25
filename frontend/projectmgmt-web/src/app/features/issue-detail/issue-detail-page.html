@@ -24,6 +24,9 @@
       <div class="title-block">
         <p class="meta"><span class="type">{{ task.issueType }}</span><strong>{{ task.issueKey }}</strong>
           <span class="status" [attr.data-category]="statusCategory()">{{ task.statusName }}</span>
+          @if (task.isBlocked) {
+            <span class="status" style="background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5;">BỊ CHẶN</span>
+          }
           @if (task.epicName) { <span class="muted">· Epic: {{ task.epicName }}</span> }</p>
         <h1>{{ task.title }}</h1>
       </div>
@@ -33,6 +36,14 @@
         @if (perms().canDelete) { <button type="button" class="danger" (click)="remove()" [disabled]="busy()">Xóa</button> }
       </div>
     </header>
+    @if (task.isBlocked) {
+      <div class="banner bad" role="alert" style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+        <span><strong>CẢN TRỞ (BLOCKER):</strong> {{ task.blockReason || 'Công việc đang bị ách tắc' }}</span>
+        @if (perms().canUpdate) {
+          <button type="button" (click)="unblockCurrentIssue()" class="close" style="font-size:0.8rem; padding:0.25rem 0.6rem; background:#dc2626; color:white; border-radius:0.375rem;" title="Gỡ cản trở">Gỡ chặn</button>
+        }
+      </div>
+    }
     @if (!perms().canUpdate && permsLoaded()) { <p class="banner info" role="note">Bạn đang xem ở chế độ chỉ đọc.</p> }
     @if (editing()) { <app-issue-form [issueId]="task.id" (saved)="edited()" (dismissed)="editing.set(false)" /> }
 
@@ -95,11 +106,36 @@
             <dt>Ưu tiên</dt><dd>{{ priorityName() }}</dd>
             <dt>Story points</dt><dd>{{ task.storyPoints }}</dd>
             <dt>Ước lượng</dt><dd>{{ estimateHours() === null ? '—' : estimateHours() + ' giờ' }} · Đã làm: {{ (core()?.timeSpentMinutes || 0) }} phút</dd>
+            <dt>Giờ còn lại</dt><dd>{{ (task.remainingHours !== null && task.remainingHours !== undefined) ? task.remainingHours + ' giờ' : '—' }}</dd>
             <dt>Hạn hoàn thành</dt><dd [class.overdue]="isOverdue()">{{ core()?.dueDate ? (core()!.dueDate | date:'dd/MM/yyyy') : '—' }}@if (isOverdue()) { · quá hạn }</dd>
             <dt>Người tạo</dt><dd>{{ task.reporterName || '—' }}</dd>
             <dt>Tạo lúc</dt><dd>{{ task.createdAt | date:'dd/MM/yyyy HH:mm' }}</dd>
             <dt>Cập nhật</dt><dd>{{ task.updatedAt ? (task.updatedAt | date:'dd/MM/yyyy HH:mm') : '—' }}</dd>
           </dl>
+        </section>
+        <section class="card">
+          <h2>Quản lý Cản trở (Blocker)</h2>
+          @if (task.isBlocked) {
+            <p style="color:#b91c1c; font-weight:600; font-size:0.875rem; margin-bottom:0.5rem;">Đang bị chặn: {{ task.blockReason }}</p>
+            @if (perms().canUpdate) {
+              <button type="button" (click)="unblockCurrentIssue()" [disabled]="busy()" style="background:#dc2626; color:white; border-radius:0.375rem; padding:0.35rem 0.75rem; font-weight:600;">Gỡ cản trở</button>
+            }
+          } @else {
+            <p class="muted" style="margin-bottom:0.5rem;">Công việc đang thông suốt.</p>
+            @if (perms().canUpdate) {
+              @if (!showBlockInput()) {
+                <button type="button" (click)="showBlockInput.set(true)" style="border:1px solid #f87171; color:#dc2626; border-radius:0.375rem; padding:0.35rem 0.75rem;">Báo cản trở</button>
+              } @else {
+                <div class="row" style="display:flex; flex-direction:column; gap:0.5rem;">
+                  <input [(ngModel)]="blockReasonText" placeholder="Nhập lý do bị nghẽn…" style="width:100%; padding:0.4rem;" />
+                  <div style="display:flex; gap:0.5rem;">
+                    <button type="button" (click)="blockCurrentIssue()" [disabled]="busy() || !blockReasonText.trim()" style="background:#dc2626; color:white; padding:0.3rem 0.6rem; border-radius:0.375rem;">Xác nhận chặn</button>
+                    <button type="button" (click)="showBlockInput.set(false)" style="padding:0.3rem 0.6rem;">Hủy</button>
+                  </div>
+                </div>
+              }
+            }
+          }
         </section>
         <section class="card"><app-issue-labels [issueId]="task.id" [projectId]="task.projectId" [canWrite]="perms().canManageLabels || perms().canUpdate" (changed)="load()" /></section>
         <section class="card"><app-issue-release-links [issueId]="task.id" [canWrite]="perms().canUpdate" (changed)="refreshHistory()" /></section>

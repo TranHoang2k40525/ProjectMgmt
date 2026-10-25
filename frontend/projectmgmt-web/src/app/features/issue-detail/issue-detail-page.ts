@@ -71,6 +71,8 @@ export class IssueDetailPage implements OnInit {
     return minutes == null ? null : Math.round(minutes / 6) / 10;
   });
   subtaskTitle = '';
+  readonly showBlockInput = signal(false);
+  blockReasonText = '';
 
   constructor() {
     effect(() => {
@@ -181,6 +183,22 @@ export class IssueDetailPage implements OnInit {
         });
       }
     });
+  }
+
+  blockCurrentIssue(): void {
+    const task = this.item();
+    const reason = this.blockReasonText.trim();
+    if (!task || !reason) return;
+    this.run(this.service.blockIssue(task.id, reason), 'Đã đánh dấu cản trở công việc.', () => {
+      this.blockReasonText = '';
+      this.showBlockInput.set(false);
+    });
+  }
+
+  unblockCurrentIssue(): void {
+    const task = this.item();
+    if (!task) return;
+    this.run(this.service.unblockIssue(task.id), 'Đã gỡ cản trở cho công việc.');
   }
 
   private refresh(): void { this.load(); this.service.loadWorkspace(); }

@@ -1,0 +1,624 @@
+<div class="spec-hub-container min-h-screen bg-slate-50 dark:bg-slate-950 font-body text-slate-800 dark:text-slate-100 flex flex-col">
+  <!-- Spec Hub Header Bar -->
+  <header class="spec-hub-header px-4 sm:px-6 py-3.5 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4 sticky top-14 z-20">
+    <div class="flex items-center gap-3 min-w-0">
+      <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+        <span class="material-symbols-outlined text-[24px]">description</span>
+      </div>
+      <div class="flex flex-col min-w-0">
+        <div class="flex items-center gap-2">
+          <h1 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate">Trung tâm Đặc tả &amp; Bóc tách Story (Spec Hub)</h1>
+          <span class="px-2 py-0.5 rounded-full text-xs font-mono font-bold bg-primary/10 text-primary border border-primary/20 shrink-0">Phase 0 Spec-First</span>
+        </div>
+        <p class="text-xs text-slate-500 truncate">Bóc tách User Story trực tiếp từ tài liệu đặc tả, duy trì liên kết 2 chiều với Backlog Scrum</p>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="flex items-center gap-2 shrink-0">
+      <button
+        type="button"
+        (click)="openCreateModal()"
+        class="h-9 px-3.5 rounded-xl bg-primary hover:bg-primary-container text-white text-xs sm:text-sm font-bold shadow-xs hover:shadow transition-all flex items-center gap-1.5 cursor-pointer"
+        title="Tạo mới tài liệu đặc tả"
+      >
+        <span class="material-symbols-outlined text-[18px]">add</span>
+        <span class="hidden sm:inline">Tạo tài liệu mới</span>
+        <span class="sm:hidden">Tạo</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Spec Hub Main Content: 2 Columns Layout -->
+  <div class="flex-1 flex flex-col md:flex-row min-w-0 overflow-hidden">
+    <!-- Left Column: Document List Sidebar -->
+    <aside class="w-full md:w-80 shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col h-auto md:h-[calc(100vh-7rem)] overflow-y-auto">
+      <div class="p-3.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+        <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Danh mục tài liệu ({{ documentsList().length }})</span>
+      </div>
+
+      <div class="p-2 flex flex-col gap-1.5 flex-1 overflow-y-auto">
+        @if (isLoading() && documentsList().length === 0) {
+          <div class="p-6 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
+            <span class="material-symbols-outlined animate-spin text-[24px]">sync</span>
+            <span>Đang nạp tài liệu...</span>
+          </div>
+        } @else if (documentsList().length === 0) {
+          <div class="p-6 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
+            <span class="material-symbols-outlined text-[36px] text-slate-300 dark:text-slate-700">article</span>
+            <span class="font-bold">Chưa có tài liệu đặc tả</span>
+            <p class="text-xs leading-relaxed">Hãy bấm nút "Tạo tài liệu mới" để bắt đầu viết đặc tả kỹ thuật và bóc tách Story.</p>
+          </div>
+        } @else {
+          @for (doc of documentsList(); track doc.id) {
+            <button
+              type="button"
+              (click)="selectDocumentById(doc.id)"
+              [class.bg-primary/10]="selectedDoc()?.id === doc.id"
+              [class.border-primary]="selectedDoc()?.id === doc.id"
+              [class.border-transparent]="selectedDoc()?.id !== doc.id"
+              class="w-full p-3 rounded-xl border text-left hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all flex flex-col gap-1.5 cursor-pointer"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-xs font-mono font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                  v{{ doc.version }}
+                </span>
+                <!-- Status Badge -->
+                @if (doc.status === 'Approved') {
+                  <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[13px]">verified</span>
+                    <span>Đã duyệt</span>
+                  </span>
+                } @else if (doc.status === 'Review') {
+                  <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[13px]">rate_review</span>
+                    <span>Đang duyệt</span>
+                  </span>
+                } @else {
+                  <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                    Bản nháp
+                  </span>
+                }
+              </div>
+
+              <span class="text-sm font-bold text-slate-900 dark:text-white truncate">
+                {{ doc.title }}
+              </span>
+
+              <div class="flex items-center justify-between text-xs text-slate-400 pt-1">
+                <span class="truncate">{{ doc.createdByName }}</span>
+                <span>{{ doc.createdAt | date:'dd/MM/yyyy' }}</span>
+              </div>
+            </button>
+          }
+        }
+      </div>
+    </aside>
+
+    <!-- Right Column: Document Details & Interactive Workspace -->
+    <main class="flex-1 flex flex-col h-auto md:h-[calc(100vh-7rem)] overflow-y-auto bg-slate-50 dark:bg-slate-950 p-4 sm:p-6 min-w-0">
+      @if (selectedDoc(); as doc) {
+        <div class="max-w-5xl w-full mx-auto flex flex-col gap-5">
+          <!-- Document Control Card -->
+          <div class="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col gap-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="px-2.5 py-1 rounded-md text-xs font-mono font-bold bg-primary/10 text-primary border border-primary/20">
+                  Phiên bản v{{ doc.version }}
+                </span>
+                
+                @if (doc.status === 'Approved') {
+                  <span class="px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-[16px]">verified</span>
+                    <span>Đã phê duyệt (PO Sign-off)</span>
+                  </span>
+                } @else if (doc.status === 'Review') {
+                  <span class="px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300 flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-[16px]">rate_review</span>
+                    <span>Đang chờ duyệt &amp; phản biện</span>
+                  </span>
+                } @else {
+                  <span class="px-3 py-1 rounded-full text-xs font-bold bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                    Bản nháp (Draft)
+                  </span>
+                }
+
+                @if (doc.approvedByName) {
+                  <span class="text-xs text-emerald-600 font-medium">Bởi: {{ doc.approvedByName }}</span>
+                }
+              </div>
+
+              <!-- Top Action Buttons -->
+              <div class="flex items-center gap-2 flex-wrap">
+                @if (!isEditing()) {
+                  <button
+                    type="button"
+                    (click)="startEditing()"
+                    class="h-8 px-3 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <span class="material-symbols-outlined text-[16px]">edit</span>
+                    <span>Sửa tài liệu</span>
+                  </button>
+
+                  <!-- Bóc tách Story CTA -->
+                  <button
+                    type="button"
+                    (click)="openExtractStoryModal()"
+                    class="h-8 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer transition-colors"
+                    title="Bóc tách User Story trực tiếp từ đoạn văn bản được chọn"
+                  >
+                    <span class="material-symbols-outlined text-[16px]">bolt</span>
+                    <span>Bóc tách User Story</span>
+                  </button>
+
+                  <!-- Status Transitions -->
+                  @if (doc.status === 'Draft') {
+                    <button
+                      type="button"
+                      (click)="changeDocumentStatus('Review')"
+                      class="h-8 px-3 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer transition-colors"
+                    >
+                      <span class="material-symbols-outlined text-[16px]">rate_review</span>
+                      <span>Gửi duyệt</span>
+                    </button>
+                  }
+
+                  @if (isProjectLeadOrOwner() && doc.status !== 'Approved') {
+                    <button
+                      type="button"
+                      (click)="changeDocumentStatus('Approved')"
+                      class="h-8 px-3 rounded-lg bg-primary hover:bg-primary-container text-white text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer transition-colors"
+                    >
+                      <span class="material-symbols-outlined text-[16px]">verified</span>
+                      <span>Phê duyệt (PO)</span>
+                    </button>
+                  }
+
+                  @if (isProjectLeadOrOwner()) {
+                    <button
+                      type="button"
+                      (click)="deleteCurrentDocument()"
+                      class="h-8 w-8 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 flex items-center justify-center cursor-pointer transition-colors"
+                      title="Xóa tài liệu"
+                    >
+                      <span class="material-symbols-outlined text-[18px]">delete</span>
+                    </button>
+                  }
+                } @else {
+                  <button
+                    type="button"
+                    (click)="cancelEditing()"
+                    class="h-8 px-3 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold cursor-pointer"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="button"
+                    (click)="saveDocumentEdits()"
+                    [disabled]="isSaving()"
+                    class="h-8 px-3.5 rounded-lg bg-primary hover:bg-primary-container text-white text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer transition-colors"
+                  >
+                    <span class="material-symbols-outlined text-[16px]">save</span>
+                    <span>{{ isSaving() ? 'Đang lưu...' : 'Lưu thay đổi' }}</span>
+                  </button>
+                }
+              </div>
+            </div>
+
+            <!-- Title & Metadata -->
+            @if (!isEditing()) {
+              <div class="flex flex-col gap-1">
+                <h2 class="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">{{ doc.title }}</h2>
+                <div class="flex items-center gap-3 text-xs text-slate-500">
+                  <span>Tạo bởi: <strong class="text-slate-700 dark:text-slate-300">{{ doc.createdByName }}</strong></span>
+                  <span>•</span>
+                  <span>Ngày tạo: {{ doc.createdAt | date:'dd/MM/yyyy HH:mm' }}</span>
+                  @if (doc.updatedAt) {
+                    <span>•</span>
+                    <span>Cập nhật: {{ doc.updatedAt | date:'dd/MM/yyyy HH:mm' }}</span>
+                  }
+                </div>
+              </div>
+            } @else {
+              <div class="flex flex-col gap-2">
+                <label class="text-xs font-bold uppercase tracking-wider text-slate-400">Tiêu đề tài liệu đặc tả</label>
+                <input
+                  type="text"
+                  [ngModel]="editTitle()"
+                  (ngModelChange)="editTitle.set($event)"
+                  placeholder="Nhập tiêu đề đặc tả..."
+                  class="h-10 px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-base font-bold focus:outline-none focus:border-primary"
+                />
+              </div>
+            }
+          </div>
+
+          <!-- Document Tabs (Nội dung / User Story đã bóc tách / Bình luận) -->
+          <div class="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800">
+            <button
+              type="button"
+              (click)="activeTab.set('preview')"
+              [class.border-primary]="activeTab() === 'preview'"
+              [class.text-primary]="activeTab() === 'preview'"
+              [class.border-transparent]="activeTab() !== 'preview'"
+              class="pb-2.5 px-3 border-b-2 text-sm font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <span class="material-symbols-outlined text-[18px]">article</span>
+              <span>Nội dung tài liệu</span>
+            </button>
+
+            <button
+              type="button"
+              (click)="activeTab.set('stories')"
+              [class.border-primary]="activeTab() === 'stories'"
+              [class.text-primary]="activeTab() === 'stories'"
+              [class.border-transparent]="activeTab() !== 'stories'"
+              class="pb-2.5 px-3 border-b-2 text-sm font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <span class="material-symbols-outlined text-[18px]">bolt</span>
+              <span>User Stories đã bóc tách ({{ doc.linkedStories?.length ?? 0 }})</span>
+            </button>
+
+            <button
+              type="button"
+              (click)="activeTab.set('comments')"
+              [class.border-primary]="activeTab() === 'comments'"
+              [class.text-primary]="activeTab() === 'comments'"
+              [class.border-transparent]="activeTab() !== 'comments'"
+              class="pb-2.5 px-3 border-b-2 text-sm font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <span class="material-symbols-outlined text-[18px]">forum</span>
+              <span>Ý kiến phản biện ({{ doc.comments?.length ?? 0 }})</span>
+            </button>
+          </div>
+
+          <!-- Tab 1: Nội dung tài liệu -->
+          @if (activeTab() === 'preview') {
+            @if (isEditing()) {
+              <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col gap-2">
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Nội dung văn bản (Định dạng Markdown / Specs)</span>
+                <textarea
+                  rows="20"
+                  [ngModel]="editContent()"
+                  (ngModelChange)="editContent.set($event)"
+                  placeholder="Nhập nội dung đặc tả dự án..."
+                  class="w-full p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 text-slate-800 dark:text-slate-100 font-mono text-sm leading-relaxed focus:outline-none focus:border-primary transition-all"
+                ></textarea>
+              </div>
+            } @else {
+              <div
+                (mouseup)="onTextSelection()"
+                class="p-6 sm:p-8 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs min-h-[400px] flex flex-col gap-4 text-slate-800 dark:text-slate-200 text-sm sm:text-base leading-relaxed select-text"
+              >
+                <!-- Selection Hint Pill -->
+                <div class="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/50 flex items-center justify-between gap-3 text-xs text-blue-700 dark:text-blue-300">
+                  <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[18px]">tips_and_updates</span>
+                    <span><strong>Mẹo bóc tách Story:</strong> Bạn có thể bôi đen bất kỳ đoạn văn bản nào bên dưới, rồi bấm nút <em>"Bóc tách User Story"</em> để chuyển thành công việc Scrum!</span>
+                  </div>
+                  @if (selectedHighlightText()) {
+                    <button
+                      type="button"
+                      (click)="openExtractStoryModal()"
+                      class="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold shrink-0 flex items-center gap-1 cursor-pointer"
+                    >
+                      <span class="material-symbols-outlined text-[15px]">bolt</span>
+                      <span>Bóc tách đoạn vừa bôi</span>
+                    </button>
+                  }
+                </div>
+
+                <!-- Structured Document Text Content -->
+                <div class="whitespace-pre-wrap font-sans text-sm sm:text-base leading-7">
+                  {{ doc.content || 'Tài liệu chưa có nội dung. Bấm "Sửa tài liệu" để nhập đặc tả.' }}
+                </div>
+              </div>
+            }
+          }
+
+          <!-- Tab 2: User Stories đã bóc tách từ tài liệu này -->
+          @if (activeTab() === 'stories') {
+            <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col gap-3">
+              <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                <span class="text-sm font-bold text-slate-900 dark:text-white">Danh sách User Stories liên kết 2 chiều</span>
+                <button
+                  type="button"
+                  (click)="openExtractStoryModal()"
+                  class="h-8 px-3 rounded-lg bg-primary hover:bg-primary-container text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <span class="material-symbols-outlined text-[16px]">add</span>
+                  <span>Bóc tách thêm Story</span>
+                </button>
+              </div>
+
+              <div class="flex flex-col gap-2 pt-2">
+                @for (link of doc.linkedStories; track link.id) {
+                  <div class="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div class="flex flex-col gap-1 min-w-0">
+                      <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 rounded font-mono font-bold text-xs bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                          {{ link.issueKey }}
+                        </span>
+                        <a [routerLink]="['/issues', link.issueId]" class="text-sm font-bold text-slate-900 dark:text-white hover:text-primary transition-colors truncate">
+                          {{ link.title }}
+                        </a>
+                      </div>
+                      @if (link.excerpt) {
+                        <p class="text-xs text-slate-500 italic line-clamp-2">"{{ link.excerpt }}"</p>
+                      }
+                    </div>
+
+                    <div class="flex items-center gap-2 text-xs text-slate-400 shrink-0">
+                      <span>{{ link.createdAt | date:'dd/MM/yyyy HH:mm' }}</span>
+                      <a [routerLink]="['/issues', link.issueId]" class="p-1 text-slate-400 hover:text-primary" title="Mở chi tiết công việc">
+                        <span class="material-symbols-outlined text-[18px]">open_in_new</span>
+                      </a>
+                    </div>
+                  </div>
+                } @empty {
+                  <div class="p-8 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
+                    <span class="material-symbols-outlined text-[32px] text-slate-300 dark:text-slate-700">link_off</span>
+                    <span class="font-bold">Chưa có User Story nào được bóc tách từ tài liệu này</span>
+                    <p class="text-xs">Bôi đen đoạn văn bản trong tài liệu và bấm "Bóc tách User Story" để liên kết vào Backlog.</p>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+
+          <!-- Tab 3: Ý kiến phản biện & Thảo luận -->
+          @if (activeTab() === 'comments') {
+            <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col gap-4">
+              <span class="text-sm font-bold text-slate-900 dark:text-white">Góp ý &amp; Phản biện tài liệu đặc tả</span>
+
+              <!-- New Comment Box -->
+              <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 flex flex-col gap-3">
+                @if (selectedHighlightText()) {
+                  <div class="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 text-xs text-amber-800 dark:text-amber-200 flex items-center justify-between gap-2">
+                    <span class="truncate"><strong>Phản biện đoạn trích:</strong> "{{ selectedHighlightText() }}"</span>
+                    <button type="button" (click)="selectedHighlightText.set('')" class="text-amber-600 hover:text-amber-800">
+                      <span class="material-symbols-outlined text-[16px]">close</span>
+                    </button>
+                  </div>
+                }
+
+                <textarea
+                  rows="3"
+                  [ngModel]="newCommentText()"
+                  (ngModelChange)="newCommentText.set($event)"
+                  placeholder="Nhập ý kiến phản biện hoặc câu hỏi làm rõ yêu cầu kỹ thuật..."
+                  class="w-full p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-sm focus:outline-none focus:border-primary"
+                ></textarea>
+
+                <div class="flex justify-end">
+                  <button
+                    type="button"
+                    (click)="submitComment()"
+                    [disabled]="!newCommentText().trim()"
+                    class="h-9 px-4 rounded-xl bg-primary hover:bg-primary-container disabled:opacity-50 text-white text-xs sm:text-sm font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <span class="material-symbols-outlined text-[18px]">send</span>
+                    <span>Gửi phản biện</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Comments List -->
+              <div class="flex flex-col gap-3 pt-2">
+                @for (c of doc.comments; track c.id) {
+                  <div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 flex flex-col gap-2">
+                    <div class="flex items-center justify-between text-xs">
+                      <span class="font-bold text-slate-800 dark:text-slate-200">{{ c.userName }}</span>
+                      <span class="text-slate-400">{{ c.createdAt | date:'dd/MM/yyyy HH:mm' }}</span>
+                    </div>
+
+                    @if (c.highlightedText) {
+                      <div class="p-2 rounded bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 text-xs font-mono border-l-2 border-amber-500">
+                        "{{ c.highlightedText }}"
+                      </div>
+                    }
+
+                    <p class="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{{ c.content }}</p>
+                  </div>
+                } @empty {
+                  <div class="p-6 text-center text-slate-400 text-xs italic">
+                    Chưa có ý kiến phản biện nào cho tài liệu này.
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      } @else {
+        <!-- Empty Selection Screen -->
+        <div class="h-full flex flex-col items-center justify-center p-8 text-center text-slate-400 gap-3">
+          <div class="w-16 h-16 rounded-2xl bg-slate-200/60 dark:bg-slate-800 flex items-center justify-center">
+            <span class="material-symbols-outlined text-[32px] text-slate-500">description</span>
+          </div>
+          <h2 class="text-lg font-bold text-slate-700 dark:text-slate-200">Chọn hoặc tạo mới tài liệu đặc tả</h2>
+          <p class="text-xs sm:text-sm text-slate-500 max-w-md leading-relaxed">
+            Hệ thống quản lý đặc tả Spec Hub giúp chuyển hóa các bản đặc tả thành các User Story có thể đo lường và đưa trực tiếp vào Backlog của dự án.
+          </p>
+          <button
+            type="button"
+            (click)="openCreateModal()"
+            class="mt-2 h-9 px-4 rounded-xl bg-primary hover:bg-primary-container text-white font-bold text-xs sm:text-sm flex items-center gap-1.5 cursor-pointer"
+          >
+            <span class="material-symbols-outlined text-[18px]">add</span>
+            <span>Tạo tài liệu đặc tả mới</span>
+          </button>
+        </div>
+      }
+    </main>
+  </div>
+</div>
+
+<!-- Modal 1: Tạo tài liệu đặc tả mới -->
+@if (isCreateModalOpen()) {
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+    <div class="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden max-h-[90vh]">
+      <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-[20px] text-primary">post_add</span>
+          <h3 class="text-base font-bold text-slate-900 dark:text-white">Tạo mới tài liệu đặc tả kỹ thuật</h3>
+        </div>
+        <button type="button" (click)="closeCreateModal()" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800">
+          <span class="material-symbols-outlined text-[18px]">close</span>
+        </button>
+      </div>
+
+      <div class="p-6 flex flex-col gap-4 overflow-y-auto">
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-bold uppercase tracking-wider text-slate-500">Tiêu đề tài liệu đặc tả *</label>
+          <input
+            type="text"
+            [ngModel]="newDocTitle()"
+            (ngModelChange)="newDocTitle.set($event)"
+            placeholder="Ví dụ: Bản đặc tả phân hệ Thanh toán & Đặt vé..."
+            class="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm focus:outline-none focus:border-primary"
+          />
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-bold uppercase tracking-wider text-slate-500">Nội dung khung mẫu đặc tả (Markdown)</label>
+          <textarea
+            rows="10"
+            [ngModel]="newDocContent()"
+            (ngModelChange)="newDocContent.set($event)"
+            class="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 text-slate-800 dark:text-slate-200 font-mono text-xs focus:outline-none focus:border-primary leading-relaxed"
+          ></textarea>
+        </div>
+      </div>
+
+      <div class="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex justify-end gap-2">
+        <button type="button" (click)="closeCreateModal()" class="h-9 px-4 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800">
+          Hủy
+        </button>
+        <button
+          type="button"
+          (click)="submitCreateDocument()"
+          [disabled]="isSaving() || !newDocTitle().trim()"
+          class="h-9 px-4 rounded-xl bg-primary hover:bg-primary-container disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer"
+        >
+          <span class="material-symbols-outlined text-[16px]">save</span>
+          <span>{{ isSaving() ? 'Đang tạo...' : 'Lưu tài liệu' }}</span>
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Modal 2: Bóc tách User Story trực tiếp vào Backlog -->
+@if (isExtractModalOpen()) {
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+    <div class="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden max-h-[90vh]">
+      <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-[20px] text-emerald-600">bolt</span>
+          <h3 class="text-base font-bold text-slate-900 dark:text-white">Bóc tách User Story từ Đặc tả vào Backlog</h3>
+        </div>
+        <button type="button" (click)="closeExtractStoryModal()" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800">
+          <span class="material-symbols-outlined text-[18px]">close</span>
+        </button>
+      </div>
+
+      <div class="p-6 flex flex-col gap-4 overflow-y-auto">
+        <!-- Excerpt Preview -->
+        @if (extractExcerpt()) {
+          <div class="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 flex flex-col gap-1">
+            <span class="text-xs font-bold uppercase tracking-wider text-amber-800 dark:text-amber-200">Đoạn trích từ tài liệu đặc tả:</span>
+            <p class="text-xs text-amber-900 dark:text-amber-100 italic line-clamp-3 leading-relaxed">
+              "{{ extractExcerpt() }}"
+            </p>
+          </div>
+        }
+
+        <!-- Title -->
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-bold uppercase tracking-wider text-slate-500">Tiêu đề User Story *</label>
+          <input
+            type="text"
+            [ngModel]="extractStoryTitle()"
+            (ngModelChange)="extractStoryTitle.set($event)"
+            placeholder="Ví dụ: Là người dùng, tôi muốn..."
+            class="h-10 px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm font-semibold focus:outline-none focus:border-primary"
+          />
+        </div>
+
+        <!-- Story Points (Fibonacci) -->
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-bold uppercase tracking-wider text-slate-500">Điểm ước lượng (Story Points)</label>
+          <div class="flex items-center gap-2">
+            @for (pt of [1, 2, 3, 5, 8, 13]; track pt) {
+              <button
+                type="button"
+                (click)="extractStoryPoints.set(pt)"
+                [class.bg-primary]="extractStoryPoints() === pt"
+                [class.text-white]="extractStoryPoints() === pt"
+                [class.bg-slate-100]="extractStoryPoints() !== pt"
+                [class.dark:bg-slate-800]="extractStoryPoints() !== pt"
+                [class.text-slate-700]="extractStoryPoints() !== pt"
+                [class.dark:text-slate-200]="extractStoryPoints() !== pt"
+                class="w-10 h-10 rounded-xl font-mono font-bold text-sm flex items-center justify-center hover:opacity-90 transition-all cursor-pointer"
+              >
+                {{ pt }}
+              </button>
+            }
+          </div>
+        </div>
+
+        <!-- Acceptance Criteria (AC) -->
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-bold uppercase tracking-wider text-slate-500">Tiêu chí chấp nhận (Acceptance Criteria - AC)</label>
+            <button
+              type="button"
+              (click)="addCriterion()"
+              class="text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+            >
+              <span class="material-symbols-outlined text-[15px]">add</span>
+              <span>Thêm AC</span>
+            </button>
+          </div>
+
+          <div class="flex flex-col gap-2">
+            @for (crit of extractCriteria(); track $index; let idx = $index) {
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-mono font-bold text-slate-400 w-6 text-right">#{{ idx + 1 }}</span>
+                <input
+                  type="text"
+                  [ngModel]="crit"
+                  (ngModelChange)="updateCriterion(idx, $event)"
+                  placeholder="Điều kiện hoàn thành, ví dụ: Phải trả về mã lỗi 400 nếu thiếu trường tên..."
+                  class="flex-1 h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs focus:outline-none focus:border-primary"
+                />
+                <button
+                  type="button"
+                  (click)="removeCriterion(idx)"
+                  class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  <span class="material-symbols-outlined text-[16px]">close</span>
+                </button>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+
+      <div class="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex justify-end gap-2">
+        <button type="button" (click)="closeExtractStoryModal()" class="h-9 px-4 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800">
+          Hủy
+        </button>
+        <button
+          type="button"
+          (click)="submitExtractStory()"
+          [disabled]="isSaving() || !extractStoryTitle().trim()"
+          class="h-9 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer"
+        >
+          <span class="material-symbols-outlined text-[16px]">check</span>
+          <span>{{ isSaving() ? 'Đang bóc tách...' : 'Bóc tách & Đẩy vào Backlog' }}</span>
+        </button>
+      </div>
+    </div>
+  </div>
+}

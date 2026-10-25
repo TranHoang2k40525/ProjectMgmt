@@ -1,4 +1,4 @@
-import { Component, DestroyRef, ElementRef, HostListener, OnDestroy, ViewChild, afterNextRender, inject, signal, computed } from '@angular/core';
+import { Component, DestroyRef, ElementRef, HostListener, ViewChild, afterNextRender, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive, RouterOutlet, Router, NavigationEnd } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -43,7 +43,7 @@ import { resolveAvatarUrl } from '../../core/utils/avatar.utils';
   templateUrl: './app-shell.html',
   styleUrl: './app-shell.scss'
 })
-export class AppShellComponent implements OnDestroy {
+export class AppShellComponent {
   @HostListener('window:beforeunload', ['$event'])
   protectPendingChanges(event: BeforeUnloadEvent): void {
     if (this.projectService.pendingSaves() > 0) event.preventDefault();
@@ -68,7 +68,7 @@ export class AppShellComponent implements OnDestroy {
   // Check if current route is inside a Project Context (Show Sub-Header)
   readonly isProjectRoute = computed(() => {
     const url = this.currentUrl();
-    return url.includes('/project/') || url.includes('/board') || url.includes('/backlog') || url.includes('/task-list') || url.includes('/roadmap') || url.includes('/reports') || (url.includes('/projects/') && url.includes('/settings'));
+    return url.includes('/project/') || url.includes('/board') || url.includes('/backlog') || url.includes('/task-list') || url.includes('/roadmap') || url.includes('/reports') || url.includes('/documents') || (url.includes('/projects/') && url.includes('/settings'));
   });
 
   // Header Live Search Signal
@@ -107,7 +107,6 @@ export class AppShellComponent implements OnDestroy {
     return matched.length > 0 ? matched : all.slice(0, 6);
   });
 
-  ngOnDestroy(): void {}
   @HostListener('document:keydown', ['$event'])
   onGlobalKeydown(event: KeyboardEvent): void {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {

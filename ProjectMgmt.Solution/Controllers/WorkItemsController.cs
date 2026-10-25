@@ -29,6 +29,10 @@ public sealed class WorkItemRequest
     public string? SprintId { get; set; }
     public Guid? AssigneeId { get; set; }
     public string? AssigneeName { get; set; }
+    public decimal? EstimatedHours { get; set; }
+    public decimal? RemainingHours { get; set; }
+    public bool? IsBlocked { get; set; }
+    public string? BlockReason { get; set; }
     [Required, MaxLength(30)] public List<string> Labels { get; set; } = [];
 }
 
@@ -174,9 +178,16 @@ public sealed class WorkItemsController(
         issue.Title = request.Title.Trim(); issue.Description = request.Description; issue.StoryPoints = request.StoryPoints;
         issue.StatusId = status.Id; issue.IssueTypeId = type.Id; issue.PriorityId = priority.Id;
         issue.ParentId = request.ParentId; issue.EpicId = epicId; issue.SprintId = sprintId; issue.AssigneeId = assignee; issue.UpdatedAt = DateTime.UtcNow;
+        if (request.EstimatedHours.HasValue) issue.EstimatedHours = request.EstimatedHours.Value;
+        if (request.RemainingHours.HasValue) issue.RemainingHours = request.RemainingHours.Value;
+        if (request.IsBlocked.HasValue)
+        {
+            issue.IsBlocked = request.IsBlocked.Value;
+            issue.BlockReason = request.IsBlocked.Value ? request.BlockReason : null;
+            issue.BlockedAt = request.IsBlocked.Value ? (issue.BlockedAt ?? DateTime.UtcNow) : null;
+        }
         var changedAt = DateTime.UtcNow;
-        // Category thật là ToDo/InProgress/Done (CK_WorkflowStatus_Category); luật mốc thời gian dùng chung với module C.
-        IssueStatusRules.Apply(issue, status.Category, changedAt);
+        IssueStatusRules.Apply(issue, status.IsDone || string.Equals(status.Category, "Done", StringComparison.OrdinalIgnoreCase), status.IsActiveWork || string.Equals(status.Category, "InProgress", StringComparison.OrdinalIgnoreCase), changedAt);
         delivery.ActivityLogs.Add(new ActivityLog { Id = Guid.NewGuid(), IssueId = issue.Id, UserId = access.UserId, Action = id.HasValue ? "Updated" : "Created", FieldName = changingStatus ? "Status" : null, OldValue = changingStatus ? previousCategory : null, NewValue = changingStatus ? status.Name : null, Source = "User", CreatedAt = DateTime.UtcNow });
         if (!id.HasValue) await historyRecorder.RecordStatusAsync(issue, null, null, status.Id, status.Category, access.UserId, changedAt);
         else if (changingStatus) await historyRecorder.RecordStatusAsync(issue, previousStatus, previousCategory, status.Id, status.Category, access.UserId, changedAt);
@@ -314,6 +325,36 @@ public sealed class WorkItemsController(
         return updated.IsSuccess ? Ok() : Invalid(updated.Error.Description);
     }
 
+    public sealed class BlockRequest { [Required, StringLength(500)] public string Reason { get; set; } = ""; }
+
+    [HttpPost("issues/{id:guid}/block")]
+    public async Task<IActionResult> BlockIssue(Guid id, [FromBody] BlockRequest request)
+    {
+        var issue = await delivery.Issues.SingleOrDefaultAsync(i => i.Id == id && !i.IsDeleted);
+        if (issue is null) return NotFound();
+        if (!await access.AllowsAsync(issue.ProjectId, "issue.update")) return Denied();
+        issue.IsBlocked = true;
+        issue.BlockReason = request.Reason.Trim();
+        issue.BlockedAt = DateTime.UtcNow;
+        delivery.ActivityLogs.Add(new ActivityLog { Id = Guid.NewGuid(), IssueId = issue.Id, UserId = access.UserId, Action = "Blocked", FieldName = "BlockReason", NewValue = issue.BlockReason, Source = "User", CreatedAt = DateTime.UtcNow });
+        await delivery.SaveChangesAsync();
+        return Ok((await Views([issue])).Single());
+    }
+
+    [HttpPost("issues/{id:guid}/unblock")]
+    public async Task<IActionResult> UnblockIssue(Guid id)
+    {
+        var issue = await delivery.Issues.SingleOrDefaultAsync(i => i.Id == id && !i.IsDeleted);
+        if (issue is null) return NotFound();
+        if (!await access.AllowsAsync(issue.ProjectId, "issue.update")) return Denied();
+        issue.IsBlocked = false;
+        issue.BlockReason = null;
+        issue.BlockedAt = null;
+        delivery.ActivityLogs.Add(new ActivityLog { Id = Guid.NewGuid(), IssueId = issue.Id, UserId = access.UserId, Action = "Unblocked", Source = "User", CreatedAt = DateTime.UtcNow });
+        await delivery.SaveChangesAsync();
+        return Ok((await Views([issue])).Single());
+    }
+
     private async Task<List<WorkItemView>> Views(List<Issue> issues)
     {
         var ids = issues.Select(i => i.Id).ToList(); var projectIds = issues.Select(i => i.ProjectId).Distinct().ToList();
@@ -334,9 +375,18 @@ public sealed class WorkItemsController(
         string Name(Guid? userId) => userId.HasValue && profiles.TryGetValue(userId.Value, out var p) ? p.DisplayName : "";
         return issues.Select(i => new WorkItemView {
             Id = i.Id, ProjectId = i.ProjectId, IssueKey = $"{projects[i.ProjectId].ProjectKey}-{i.IssueNumber}", Title = i.Title, Description = i.Description,
-            StatusId = i.StatusId, StatusName = statuses[i.StatusId].Name, IssueType = types[i.IssueTypeId].IsSubtask ? "Sub-task" : types[i.IssueTypeId].Name,
+            StatusId = i.StatusId, StatusName = statuses.TryGetValue(i.StatusId, out var st) ? st.Name : "",
+            StatusColor = statuses.TryGetValue(i.StatusId, out var sc) ? sc.ColorHex : "#3B82F6",
+            IsDone = statuses.TryGetValue(i.StatusId, out var sd) && (sd.IsDone || string.Equals(sd.Category, "Done", StringComparison.OrdinalIgnoreCase)),
+            IssueTypeId = i.IssueTypeId,
+            IssueType = types.TryGetValue(i.IssueTypeId, out var it) ? (it.IsSubtask ? "Sub-task" : it.Name) : "Task",
+            IssueTypeIcon = types.TryGetValue(i.IssueTypeId, out var iti) ? (iti.IconKey ?? "task") : "task",
+            IssueTypeColor = types.TryGetValue(i.IssueTypeId, out var itc) ? itc.ColorHex : "#6366F1",
             Priority = i.PriorityId.HasValue && priorities.TryGetValue(i.PriorityId.Value, out var p) ? (p.Name == "Highest" ? "Urgent" : p.Name) : "Medium",
-            StoryPoints = i.StoryPoints ?? 0, ParentId = i.ParentId, AssigneeId = i.AssigneeId, AssigneeName = Name(i.AssigneeId), ReporterName = Name(i.ReporterId),
+            StoryPoints = i.StoryPoints ?? 0,
+            EstimatedHours = i.EstimatedHours, RemainingHours = i.RemainingHours,
+            IsBlocked = i.IsBlocked, BlockReason = i.BlockReason, BlockedAt = i.BlockedAt,
+            ParentId = i.ParentId, AssigneeId = i.AssigneeId, AssigneeName = Name(i.AssigneeId), ReporterName = Name(i.ReporterId),
             SprintId = i.SprintId, SprintName = i.SprintId.HasValue && sprints.TryGetValue(i.SprintId.Value, out var sp) ? sp.Name : "",
             EpicId = i.EpicId, EpicName = i.EpicId.HasValue && epics.TryGetValue(i.EpicId.Value, out var e) ? e.Title : "", EpicColor = "indigo", CreatedAt = i.CreatedAt, UpdatedAt = i.UpdatedAt,
             Labels = labels.Where(l => l.IssueId == i.Id).Select(l => l.Name).ToList(),
@@ -352,8 +402,12 @@ public sealed class WorkItemView
 {
     public Guid Id { get; set; } public Guid ProjectId { get; set; } public string IssueKey { get; set; } = "";
     public string Title { get; set; } = ""; public string? Description { get; set; }
-    public Guid StatusId { get; set; } public string StatusName { get; set; } = ""; public string IssueType { get; set; } = "";
+    public Guid StatusId { get; set; } public string StatusName { get; set; } = ""; public string StatusColor { get; set; } = "#3B82F6";
+    public bool IsDone { get; set; }
+    public Guid IssueTypeId { get; set; } public string IssueType { get; set; } = ""; public string? IssueTypeIcon { get; set; } public string? IssueTypeColor { get; set; }
     public string Priority { get; set; } = ""; public decimal StoryPoints { get; set; }
+    public decimal? EstimatedHours { get; set; } public decimal? RemainingHours { get; set; }
+    public bool IsBlocked { get; set; } public string? BlockReason { get; set; } public DateTime? BlockedAt { get; set; }
     public Guid? ParentId { get; set; } public Guid? AssigneeId { get; set; } public string AssigneeName { get; set; } = ""; public string ReporterName { get; set; } = "";
     public Guid? SprintId { get; set; } public string SprintName { get; set; } = ""; public Guid? EpicId { get; set; } public string EpicName { get; set; } = ""; public string EpicColor { get; set; } = "";
     public DateTime CreatedAt { get; set; } public DateTime? UpdatedAt { get; set; }

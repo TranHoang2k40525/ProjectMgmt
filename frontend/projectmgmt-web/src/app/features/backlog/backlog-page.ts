@@ -5,8 +5,18 @@ import { ConnectedPosition, OverlayModule } from '@angular/cdk/overlay';
 import { DragDropModule, CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { RealtimeService } from '../../core/realtime/realtime.service';
+import { apiErrorMessage } from '../../core/http/api-error-message';
 import { gsap } from 'gsap';
-import { ProjectManagementService, WorkItem, Sprint, SprintMessage } from '../../core/services/project-management.service';
+import {
+  ProjectManagementService,
+  WorkItem,
+  Sprint,
+  SprintMessage,
+  PlanningPokerSession,
+  SprintCloseSummary,
+  SprintReviewItem,
+  SprintRetrospectiveCard
+} from '../../core/services/project-management.service';
 import { IdentityService } from '../../core/services/identity.service';
 import { ExcelDataService } from '../../core/services/excel-data.service';
 import { ToastService } from '../../core/services/toast.service';
@@ -136,7 +146,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   });
   readonly issueTypes = computed(() => {
     const custom = this.projectService.customIssueTypes().map(t => t.name);
-    return Array.from(new Set(['Story', 'Task', 'Bug', 'Use-Case', 'Epic', 'Sub-task', ...custom]));
+    return custom.length > 0 ? custom : ['Story', 'Task', 'Bug', 'Epic', 'Sub-task'];
   });
 
   ngOnInit(): void {
@@ -410,6 +420,8 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   getIssueTypeIcon(type: string): string {
+    const custom = this.projectService.customIssueTypes().find(t => t.name.toLowerCase() === type.toLowerCase());
+    if (custom?.icon) return custom.icon;
     const map: Record<string, string> = {
       'Story': 'bookmark',
       'Task': 'task',
@@ -419,6 +431,216 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
       'Sub-task': 'subdirectory_arrow_right'
     };
     return map[type] || 'task_alt';
+  }
+
+  isItemReady(item: WorkItem): boolean {
+    return (item.storyPoints > 0) && !!item.description?.trim() && !item.isBlocked;
+  }
+
+  // --- Scrum Ceremonies: Planning Poker ---
+  readonly showPokerModal = signal<boolean>(false);
+  readonly activePokerSession = signal<PlanningPokerSession | null>(null);
+  readonly myPokerVote = signal<number | null>(null);
+  readonly pokerPointsOptions = [1, 2, 3, 5, 8, 13, 21];
+
+  openPoker(item: WorkItem, sprintId?: string, event?: Event): void {
+    if (event) event.stopPropagation();
+    const targetSprintId = sprintId || item.sprintId || this.sprints().find(s => s.status === 'active')?.id || this.sprints()[0]?.id;
+    if (!targetSprintId) {
+      this.toastService.warning('Chưa có Sprint', 'Cần có ít nhất một Sprint để mở phòng Planning Poker.');
+      return;
+    }
+    this.projectService.createOrGetPokerSession(targetSprintId, item.id).subscribe({
+      next: (session) => {
+        this.activePokerSession.set(session);
+        this.myPokerVote.set(null);
+        this.showPokerModal.set(true);
+      },
+      error: (err) => this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể mở phòng Planning Poker.'))
+    });
+  }
+
+  votePoker(points: number): void {
+    const session = this.activePokerSession();
+    if (!session) return;
+    this.myPokerVote.set(points);
+    this.projectService.submitPokerVote(session.id, points).subscribe({
+      next: () => {
+        this.toastService.success('Đã Bỏ Phiếu', `Bạn đã chọn ${points} Story Points.`);
+        this.reloadPokerSession(session.id);
+      },
+      error: (err) => this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể gửi phiếu bầu.'))
+    });
+  }
+
+  revealPoker(): void {
+    const session = this.activePokerSession();
+    if (!session) return;
+    this.projectService.revealPokerVotes(session.id).subscribe({
+      next: (revealed) => {
+        this.activePokerSession.set(revealed);
+        this.toastService.info('Lật Bài', 'Tất cả phiếu bầu đã được công khai.');
+      },
+      error: (err) => this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể lật bài.'))
+    });
+  }
+
+  finalizePoker(points: number): void {
+    const session = this.activePokerSession();
+    if (!session) return;
+    this.projectService.finalizePoker(session.id, points).subscribe({
+      next: () => {
+        this.showPokerModal.set(false);
+        this.toastService.success('Chốt Điểm', `Đã áp dụng ${points} SP cho ${session.issueKey || 'công việc'}.`);
+      },
+      error: (err) => this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể chốt điểm.'))
+    });
+  }
+
+  reloadPokerSession(sessionId: string): void {
+    this.projectService.getPokerSession(sessionId).subscribe({
+      next: (s) => this.activePokerSession.set(s)
+    });
+  }
+
+  // --- Scrum Ceremonies: Complete Sprint Rollover Wizard ---
+  readonly showRolloverModal = signal<boolean>(false);
+  readonly rolloverSprint = signal<Sprint | null>(null);
+  readonly closeSummary = signal<SprintCloseSummary | null>(null);
+  rolloverDestination: 'next' | 'backlog' = 'next';
+  selectedNextSprintId: string | null = null;
+  rolloverStep = 1;
+
+  openRolloverWizard(sprint: Sprint, event?: Event): void {
+    if (event) event.stopPropagation();
+    this.rolloverSprint.set(sprint);
+    this.rolloverStep = 1;
+    this.projectService.getSprintCloseSummary(sprint.id).subscribe({
+      next: (summary) => {
+        this.closeSummary.set(summary);
+        this.selectedNextSprintId = summary.nextSprints[0]?.id || null;
+        this.rolloverDestination = summary.nextSprints.length > 0 ? 'next' : 'backlog';
+        this.showRolloverModal.set(true);
+      },
+      error: (err) => this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể lấy thông tin đóng Sprint.'))
+    });
+  }
+
+  confirmCompleteSprint(): void {
+    const sprint = this.rolloverSprint();
+    if (!sprint) return;
+
+    const req = {
+      moveToSprintId: this.rolloverDestination === 'next' ? this.selectedNextSprintId : null,
+      moveToBacklog: this.rolloverDestination === 'backlog'
+    };
+
+    this.projectService.completeSprintAndRollover(sprint.id, req).subscribe({
+      next: (res) => {
+        this.showRolloverModal.set(false);
+        this.toastService.success('Hoàn Thành Sprint', `Đã đóng Sprint "${sprint.name}". Đã chuyển ${res.rolledOverCount} việc dở dang.`);
+      },
+      error: (err) => this.toastService.error('Lỗi Đóng Sprint', apiErrorMessage(err, 'Không thể đóng sprint.'))
+    });
+  }
+
+  // --- Scrum Ceremonies: Sprint Review & PO Sign-off ---
+  readonly showReviewModal = signal<boolean>(false);
+  readonly reviewSprint = signal<Sprint | null>(null);
+  readonly reviewItems = signal<SprintReviewItem[]>([]);
+  rejectReason = '';
+  rejectingItemId: string | null = null;
+
+  openSprintReview(sprint: Sprint, event?: Event): void {
+    if (event) event.stopPropagation();
+    this.reviewSprint.set(sprint);
+    this.projectService.getSprintReviewItems(sprint.id).subscribe({
+      next: (items) => {
+        this.reviewItems.set(items);
+        this.showReviewModal.set(true);
+      },
+      error: (err) => this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể tải danh sách Review.'))
+    });
+  }
+
+  acceptStory(item: SprintReviewItem): void {
+    this.projectService.acceptStory(item.id).subscribe({
+      next: () => {
+        this.reviewItems.update(list => list.map(i => i.id === item.id ? { ...i, isDone: true } : i));
+        this.toastService.success('Đã Nghiệm Thu', `PO đã duyệt hoàn thành "${item.issueKey}".`);
+      },
+      error: (err) => this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể nghiệm thu story.'))
+    });
+  }
+
+  rejectStory(item: SprintReviewItem): void {
+    if (!this.rejectReason.trim()) return;
+    this.projectService.rejectStory(item.id, this.rejectReason).subscribe({
+      next: () => {
+        this.reviewItems.update(list => list.map(i => i.id === item.id ? { ...i, isDone: false } : i));
+        this.rejectingItemId = null;
+        this.rejectReason = '';
+        this.toastService.warning('Từ Chối Nghiệm Thu', `Đã trả lại "${item.issueKey}" với lý do.`);
+      },
+      error: (err) => this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể từ chối story.'))
+    });
+  }
+
+  // --- Scrum Ceremonies: Sprint Retrospective ---
+  readonly showRetroModal = signal<boolean>(false);
+  readonly retroSprint = signal<Sprint | null>(null);
+  readonly retroCards = signal<SprintRetrospectiveCard[]>([]);
+  newRetroCategory: 'WentWell' | 'CouldImprove' | 'ActionItem' = 'WentWell';
+  newRetroContent = '';
+  newRetroIsAnonymous = false;
+
+  openSprintRetro(sprint: Sprint, event?: Event): void {
+    if (event) event.stopPropagation();
+    this.retroSprint.set(sprint);
+    this.loadRetroCards(sprint.id);
+    this.showRetroModal.set(true);
+  }
+
+  loadRetroCards(sprintId: string): void {
+    this.projectService.getRetroCards(sprintId).subscribe({
+      next: (cards) => this.retroCards.set(cards),
+      error: (err) => this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể tải Retrospective cards.'))
+    });
+  }
+
+  addRetroCard(): void {
+    const sprint = this.retroSprint();
+    const content = this.newRetroContent.trim();
+    if (!sprint || !content) return;
+    this.projectService.createRetroCard(sprint.id, this.newRetroCategory, content, this.newRetroIsAnonymous).subscribe({
+      next: (card) => {
+        this.retroCards.update(cards => [...cards, card]);
+        this.newRetroContent = '';
+        this.toastService.success('Đã Thêm Ý Kiến', 'Ý kiến Retrospective đã được ghi nhận.');
+      },
+      error: (err) => this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể tạo ý kiến retro.'))
+    });
+  }
+
+  voteRetro(card: SprintRetrospectiveCard): void {
+    this.projectService.voteRetroCard(card.id).subscribe({
+      next: (res) => {
+        this.retroCards.update(cards => cards.map(c => c.id === card.id ? { ...c, votesCount: res.votesCount } : c));
+      },
+      error: (err) => this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể vote.'))
+    });
+  }
+
+  convertRetroToTask(card: SprintRetrospectiveCard): void {
+    const currentProj = this.projectService.currentProject();
+    if (!currentProj?.id) return;
+    this.projectService.convertRetroCardToTask(card.id, currentProj.id).subscribe({
+      next: (res) => {
+        this.retroCards.update(cards => cards.map(c => c.id === card.id ? { ...c, convertedIssueId: res.task.id, convertedIssueKey: res.task.issueKey } : c));
+        this.toastService.success('Đã Tạo Action Item', `Đã chuyển ý kiến cải tiến thành Task ${res.task.issueKey} trong Backlog.`);
+      },
+      error: (err) => this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể chuyển thành task.'))
+    });
   }
 
   readonly activeSprintDetail = signal<Sprint | null>(null);
@@ -763,8 +985,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
       this.projectService.updateSprintStatus(sprint.id, 'active');
       this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     } else if (sprint.status === 'active') {
-      this.projectService.updateSprintStatus(sprint.id, 'completed');
-      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
+      this.openRolloverWizard(sprint, event);
     } else {
       this.projectService.updateSprintStatus(sprint.id, 'future');
       this.toastService.info('Mở Lại Sprint', `Sprint "${sprint.name}" đưa về kế hoạch.`);

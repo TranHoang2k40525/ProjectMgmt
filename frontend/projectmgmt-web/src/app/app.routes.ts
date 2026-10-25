@@ -27,7 +27,6 @@ export const routes: Routes = [
       { path: 'projects/:id/members', loadComponent: () => import('./features/projects/project-members-page').then(m => m.ProjectMembersPageComponent) },
       { path: 'profile', loadComponent: () => import('./features/identity/profile-page').then(m => m.ProfilePageComponent) },
       { path: 'admin/identity', loadComponent: () => import('./features/identity/rbac-admin-page').then(m => m.RbacAdminPageComponent) },
-      { path: 'admin/ai-governance', loadComponent: () => import('./features/identity/ai-governance-page').then(m => m.AiGovernancePageComponent) },
       { path: 'projects', loadComponent: () => import('./features/projects/projects-page').then(m => m.ProjectsPage) },
       { path: 'projects/new', loadComponent: () => import('./features/projects/project-create-page').then(m => m.ProjectCreatePage) },
       { path: 'projects/:id/settings', loadComponent: () => import('./features/projects/project-settings-page').then(m => m.ProjectSettingsPage) },
@@ -41,9 +40,10 @@ export const routes: Routes = [
       { path: 'list', loadComponent: () => import('./features/task-list/task-list-page').then(m => m.TaskListPageComponent) },
       { path: 'roadmap', loadComponent: () => import('./features/roadmap/roadmap-page').then(m => m.RoadmapPageComponent) },
       { path: 'reports', loadComponent: () => import('./features/reports/reports-page').then(m => m.ReportsPageComponent) },
+      { path: 'documents', loadComponent: () => import('./features/spec-hub/spec-hub-page').then(m => m.SpecHubPageComponent) },
+      { path: 'projects/:id/documents', loadComponent: () => import('./features/spec-hub/spec-hub-page').then(m => m.SpecHubPageComponent) },
       { path: 'issues/:id', loadComponent: () => import('./features/issue-detail/issue-detail-page').then(m => m.IssueDetailPage) },
-      { path: 'notifications', loadComponent: () => import('./features/notifications/notifications-page').then(m => m.NotificationsPageComponent) },
-      { path: 'ai-dataops', loadComponent: () => import('./features/ai-dataops/ai-dataops-page').then(m => m.AiDataOpsPage) }
+      { path: 'notifications', loadComponent: () => import('./features/notifications/notifications-page').then(m => m.NotificationsPageComponent) }
     ]
   },
 

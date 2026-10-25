@@ -442,7 +442,7 @@ interface ProjectRoleOption {
         [displayName]="avatarModalData().displayName"
         [isCurrentUser]="avatarModalData().isCurrentUser"
         (closed)="isAvatarModalOpen.set(false)"
-        (avatarChanged)="onAvatarUpdated($event)"
+        (avatarChanged)="onAvatarUpdated()"
       ></app-avatar-modal>
 
     </div>
@@ -656,7 +656,7 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
     return false;
   }
 
-  onAvatarUpdated(_newUrl: string): void {
+  onAvatarUpdated(): void {
     const projId = this.currentProject()?.id;
     if (projId) {
       this.loadProjectMembers(projId);
@@ -778,7 +778,7 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
     this.saving = true;
     this.error = '';
 
-    if (this.rbac) {
+    if (this.rbac && typeof this.rbac.batchInviteProjectMembers === 'function') {
       this.rbac.batchInviteProjectMembers(projId, emailsPayload, namesPayload, this.newMemberRole).subscribe({
         next: (res) => {
           this.saving = false;
@@ -811,9 +811,11 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
           this.newMemberEmail = '';
           this.loadProjectMembers(projId);
         },
-        error: () => {
+        error: (err: unknown) => {
           this.saving = false;
-          this.toastService?.error('Lỗi', 'Không thể gửi lời mời.');
+          const errObj = err as { detail?: string; error?: { message?: string } };
+          this.error = errObj?.detail || errObj?.error?.message || 'Không thể gửi lời mời.';
+          this.toastService?.error('Lỗi', this.error);
         }
       });
     }
