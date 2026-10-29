@@ -1,5 +1,6 @@
 export const environment = {
   production: true,
   apiBaseUrl: '/api',
-  hubBaseUrl: '/hubs'
+  hubBaseUrl: '/hubs',
+  workspaceDataSource: 'mock' as 'mock' | 'http'
 } as const;
