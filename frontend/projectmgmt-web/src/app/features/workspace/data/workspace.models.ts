@@ -30,6 +30,16 @@ export interface CreateOrganizationRequest {
   slug: string;
 }
 
+/** Tư cách thành viên của người gọi trong một tổ chức (GET /users/me/organization-memberships). */
+export interface OrgMembership {
+  orgId: string;
+  orgName: string;
+  ownerId: string;
+  role: OrgRoleCode;
+  memberCount: number;
+  joinedAt: string;
+}
+
 export interface OrgMember {
   userId: string;
   displayName: string;

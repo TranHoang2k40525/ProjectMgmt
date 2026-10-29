@@ -21,7 +21,7 @@ import {
 
 /**
  * Nguồn dữ liệu của không gian Tổ chức → Dự án. Màn hình chỉ phụ thuộc lớp này;
- * bản cài đặt (mock giả lập DB hoặc HTTP) được chọn trong {@link provideWorkspaceData}.
+ * bản cài đặt là {@link WorkspaceApiDataSource} (HTTP; endpoint backend chưa có do MSW giả lập).
  * Lỗi trả về dạng HttpErrorResponse với body ProblemDetails (`title`, `detail`, `code`).
  */
 export abstract class WorkspaceDataSource {
