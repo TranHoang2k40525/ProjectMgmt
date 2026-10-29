@@ -90,6 +90,20 @@ import { ToastService } from '../../../core/services/toast.service';
             </div>
           </div>
 
+          <!-- Trạng thái: theo workflow của dự án (Scrum, Kanban, Agile + QA... có các giai đoạn khác nhau) -->
+          <div class="flex flex-col gap-1.5">
+            <label for="new-task-status" class="text-sm font-bold uppercase tracking-wider text-slate-500">Trạng thái</label>
+            <select
+              id="new-task-status"
+              [(ngModel)]="statusName"
+              class="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-primary"
+            >
+              @for (status of statuses(); track status.id) {
+                <option [value]="status.name">{{ status.name }}</option>
+              }
+            </select>
+          </div>
+
           <!-- Sprint & Epic Grid -->
           <div class="responsive-form-grid grid grid-cols-2 gap-4">
             <div class="flex flex-col gap-1.5">
@@ -217,6 +231,7 @@ export class CreateTaskModalComponent {
   readonly sprints = this.projectService.sprints;
   readonly customIssueTypes = this.projectService.customIssueTypes;
   readonly projectMembers = computed(() => this.projectService.currentProject()?.members ?? []);
+  readonly statuses = computed(() => [...this.projectService.projectStatuses()].sort((a, b) => a.orderIndex - b.orderIndex));
 
   showNewTypeForm = signal<boolean>(false);
   customTypeName = '';
@@ -230,6 +245,18 @@ export class CreateTaskModalComponent {
   storyPoints = 3;
   assigneeName = '';
   description = '';
+  statusName = '';
+
+  constructor() {
+    // Mặc định: trạng thái khởi đầu của workflow dự án; kiểu "Task" (hoặc kiểu đầu tiên nếu dự án đã đổi tên).
+    const statuses = this.statuses();
+    this.statusName = (statuses.find(status => status.isInitial) ?? statuses[0])?.name ?? '';
+    const types = this.customIssueTypes();
+    if (types.length > 0 && !types.some(type => type.name === this.issueType)) {
+      // Kiểu thứ 3 mặc định là Task (Epic, Story, Task, Bug, Subtask); không có thì lấy kiểu cấp 2 đầu tiên.
+      this.issueType = (types.find(type => type.orderIndex === 3) ?? types.find(type => !type.isSubtask && type.hierarchyLevel === 2) ?? types[0]).name;
+    }
+  }
 
   toggleNewTypeForm(): void {
     this.showNewTypeForm.update(v => !v);
@@ -266,7 +293,7 @@ export class CreateTaskModalComponent {
       sprintName: this.sprintName,
       epicName: this.epicName || undefined,
       epicColor: this.epicName ? 'purple' : undefined,
-      statusName: 'To Do',
+      statusName: this.statusName || undefined,
       assigneeName: this.assigneeName
     });
 
