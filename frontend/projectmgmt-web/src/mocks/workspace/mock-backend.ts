@@ -15,6 +15,7 @@ import {
   WorkflowStatusDef,
   WorkflowTemplate
 } from '../../app/features/workspace/data/workspace.models';
+import { PRESET_TEMPLATES, presetWorkflowTemplates } from '../../app/features/workspace/data/workflow-presets';
 
 /**
  * "Backend giả" cho các endpoint BE chưa có (thành viên & vai trò tổ chức, lời mời, link mời, mẫu workflow của tổ chức,
@@ -67,18 +68,6 @@ export interface Storage {
   load(): string | null;
   save(value: string): void;
 }
-
-const todo = (name: string): WorkflowStatusDef => ({ name, category: 'ToDo' });
-const doing = (name: string): WorkflowStatusDef => ({ name, category: 'InProgress' });
-const done = (name: string): WorkflowStatusDef => ({ name, category: 'Done' });
-
-/** Mẫu có sẵn — cùng tên trạng thái với `ProjectCustomizationController.ApplyTemplate` của backend. */
-export const PRESET_TEMPLATES: readonly { id: string; name: string; managementType: ManagementType; statuses: WorkflowStatusDef[] }[] = [
-  { id: 'preset-scrum-std', name: 'Scrum chuẩn', managementType: 'Scrum', statuses: [todo('To Do'), doing('In Progress'), doing('Code Review'), done('Done')] },
-  { id: 'preset-agile-qa', name: 'Agile + QA', managementType: 'Scrum', statuses: [todo('To Do'), doing('In Progress'), doing('Code Review'), doing('QA Testing'), done('Done')] },
-  { id: 'preset-kanban-simple', name: 'Kanban đơn giản', managementType: 'Kanban', statuses: [todo('To Do'), doing('In Progress'), done('Done')] },
-  { id: 'preset-enterprise', name: 'Enterprise', managementType: 'Scrum', statuses: [todo('Backlog'), doing('Spec Review'), doing('In Progress'), doing('Code Review'), doing('QA Verification'), done('Done')] }
-];
 
 const ROLE_OPTIONS: OrgRoleOption[] = [
   { code: 'Owner', name: 'Chủ tổ chức', description: 'Người tạo tổ chức, toàn quyền cài đặt.', assignable: false },
@@ -297,7 +286,7 @@ export class WorkspaceMockBackend {
     this.requireMember(ctx, orgId);
     const defaultId = this.defaultTemplateId(orgId);
     return [
-      ...PRESET_TEMPLATES.map(preset => ({ ...structuredClone(preset), orgId: null, isPreset: true, isDefault: preset.id === defaultId })),
+      ...presetWorkflowTemplates(defaultId),
       ...this.db.templates.filter(template => template.orgId === orgId)
         .map(template => ({ ...structuredClone(template), isPreset: false, isDefault: template.id === defaultId }))
     ];

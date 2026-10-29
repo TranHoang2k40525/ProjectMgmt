@@ -6,6 +6,7 @@ import { IdentityApi } from '../../../core/api/identity.api';
 import { IdentityService } from '../../../core/services/identity.service';
 import { Project, ProjectManagementService, ProjectStatus } from '../../../core/services/project-management.service';
 import { guessStatusCategory } from '../work-display';
+import { presetWorkflowTemplates } from './workflow-presets';
 import { WorkspaceDataSource } from './workspace-data-source';
 import {
   CreateOrganizationRequest,
@@ -83,7 +84,8 @@ export class WorkspaceApiDataSource extends WorkspaceDataSource {
       orgs: this.projects.getOrganizations(),
       projects: this.projects.getProjects(),
       users: this.users(),
-      memberships: this.http.get<OrgMembership[]>(`${this.base}/users/me/organization-memberships`)
+      // Chỉ bổ sung vai trò & số thành viên: lỗi thì vẫn hiện tổ chức thật, vai trò suy từ chủ tổ chức.
+      memberships: this.http.get<OrgMembership[]>(`${this.base}/users/me/organization-memberships`).pipe(catchError(() => of([])))
     }).pipe(map(({ orgs, projects, users, memberships }) => {
       const byId = new Map<string, OrganizationSummary>();
       const name = (userId: string) => users.find(user => user.id === userId)?.displayName ?? 'Người dùng';
@@ -132,8 +134,9 @@ export class WorkspaceApiDataSource extends WorkspaceDataSource {
 
   // --- Thành viên, lời mời, link mời (endpoint hợp đồng) --------------------------
 
+  /** Lỗi thì dựng từ dữ liệu thật: chủ tổ chức và thành viên các dự án của tổ chức, để vẫn chọn được người khi tạo dự án. */
   listMembers(orgId: string): Observable<OrgMember[]> {
-    return this.http.get<OrgMember[]>(`${this.org(orgId)}/members`);
+    return this.http.get<OrgMember[]>(`${this.org(orgId)}/members`).pipe(catchError(() => this.membersFromProjects(orgId)));
   }
 
   updateMemberRole(orgId: string, userId: string, role: OrgRoleCode): Observable<OrgMember> {
@@ -194,8 +197,9 @@ export class WorkspaceApiDataSource extends WorkspaceDataSource {
 
   // --- Mẫu workflow (endpoint hợp đồng) ---------------------------------------------
 
+  /** Lỗi thì dùng các mẫu có sẵn (backend áp được trực tiếp qua `workflow/template`). */
   listWorkflowTemplates(orgId: string): Observable<WorkflowTemplate[]> {
-    return this.http.get<WorkflowTemplate[]>(`${this.org(orgId)}/workflow-templates`);
+    return this.http.get<WorkflowTemplate[]>(`${this.org(orgId)}/workflow-templates`).pipe(catchError(() => of(presetWorkflowTemplates())));
   }
 
   createWorkflowTemplate(orgId: string, request: SaveWorkflowTemplateRequest): Observable<WorkflowTemplate> {
@@ -306,7 +310,7 @@ export class WorkspaceApiDataSource extends WorkspaceDataSource {
 
   listRecent(orgId?: string): Observable<RecentItem[]> {
     const params = orgId ? new HttpParams().set('orgId', orgId) : new HttpParams();
-    return this.http.get<RecentItem[]>(`${this.base}/users/me/recent`, { params });
+    return this.http.get<RecentItem[]>(`${this.base}/users/me/recent`, { params }).pipe(catchError(() => of([])));
   }
 
   recordVisit(request: RecordVisitRequest): Observable<void> {
@@ -314,6 +318,27 @@ export class WorkspaceApiDataSource extends WorkspaceDataSource {
   }
 
   // --- Hỗ trợ ---------------------------------------------------------------------
+
+  private membersFromProjects(orgId: string): Observable<OrgMember[]> {
+    return forkJoin({ orgs: this.projects.getOrganizations(), list: this.projects.getProjects() }).pipe(
+      switchMap(({ orgs, list }) => {
+        const ownerId = orgs.find(org => org.id === orgId)?.ownerId ?? '';
+        const projectIds = list.filter(project => project.orgId === orgId && !project.isDeleted).map(project => project.id);
+        const memberLists = projectIds.map(id => this.projects.loadProjectMembers(id).pipe(catchError(() => of([]))));
+        return forkJoin({ users: this.users(), lists: memberLists.length ? forkJoin(memberLists) : of([]) }).pipe(map(({ users, lists }) => {
+          const byId = new Map<string, OrgMember>();
+          const add = (userId: string, displayName: string, email: string, avatarUrl: string | null) => {
+            if (!userId || byId.has(userId)) return;
+            byId.set(userId, { userId, displayName, email, avatarUrl, role: userId === ownerId ? 'Owner' : 'Member', joinedAt: '' });
+          };
+          const owner = users.find(user => user.id === ownerId);
+          if (owner) add(owner.id, owner.displayName, '', null);
+          for (const member of lists.flat()) add(member.userId, member.displayName, member.email, member.avatarUrl ?? null);
+          return [...byId.values()];
+        }));
+      })
+    );
+  }
 
   private users(): Observable<UserInfo[]> {
     this.users$ ??= this.projects.getUsers().pipe(
@@ -340,9 +365,32 @@ export class WorkspaceApiDataSource extends WorkspaceDataSource {
     };
   }
 
+  /**
+   * Áp mẫu cho dự án vừa tạo: backend chỉ thêm trạng thái của mẫu và giữ bộ mặc định (Backlog, To Do, In Review…),
+   * nên sau đó bỏ các trạng thái không thuộc mẫu để mỗi loại hình có đúng các giai đoạn của nó. Dự án mới chưa có công việc
+   * nên xóa an toàn (backend vẫn từ chối xóa trạng thái đang có công việc).
+   */
   private applyTemplate(projectId: string, templateId: string, statuses: WorkflowStatusDef[]): Observable<unknown> {
     const presetId = PRESET_BACKEND_IDS[templateId];
-    return presetId ? this.projects.applyWorkflowTemplateToProject(projectId, presetId) : this.applyCustomStatuses(projectId, statuses);
+    // Mẫu có sẵn: backend trả luôn danh sách trạng thái sau khi áp, không cần tải lại.
+    const applied$ = presetId
+      ? this.projects.applyWorkflowTemplateToProject(projectId, presetId)
+      : this.applyCustomStatuses(projectId, statuses).pipe(toArray(), switchMap(() => this.projects.getProjectStatuses(projectId)));
+    return applied$.pipe(switchMap(existing => this.keepOnlyTemplateStatuses(projectId, existing, statuses)));
+  }
+
+  private keepOnlyTemplateStatuses(projectId: string, existing: ProjectStatus[], statuses: WorkflowStatusDef[]): Observable<unknown> {
+    const wanted = statuses.map(status => status.name.toLowerCase());
+    if (wanted.length === 0) return of(undefined);
+    const first = existing.find(status => status.name.toLowerCase() === wanted[0]);
+    const setInitial$ = first && !first.isInitial
+      ? this.projects.updateWorkflowStatus(projectId, first.id, {
+        name: first.name, colorHex: first.colorHex, category: first.category, isInitial: true,
+        isDone: first.isDone, isActiveWork: first.isActiveWork, isCanceled: first.isCanceled
+      })
+      : of(undefined);
+    const extra = existing.filter(status => !wanted.includes(status.name.toLowerCase()));
+    return concat(setInitial$, from(extra).pipe(concatMap(status => this.projects.deleteWorkflowStatus(projectId, status.id))));
   }
 
   /** Mẫu riêng của tổ chức: thêm trạng thái còn thiếu rồi sắp theo thứ tự của mẫu (trạng thái cũ giữ ở cuối). */

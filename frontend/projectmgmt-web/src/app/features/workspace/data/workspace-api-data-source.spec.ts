@@ -37,7 +37,15 @@ describe('WorkspaceApiDataSource', () => {
       createOrganization: vi.fn(),
       createProject: vi.fn(),
       loadProjectMembers: vi.fn(() => of([{ userId: 'me' }, { userId: 'u2' }])),
-      applyWorkflowTemplateToProject: vi.fn(() => of([])),
+      // Áp mẫu trả về trạng thái của dự án sau khi áp: bộ mặc định + trạng thái của mẫu (mẫu chỉ thêm, không bỏ).
+      applyWorkflowTemplateToProject: vi.fn(() => of([
+        { id: 's-backlog', name: 'Backlog', category: 'ToDo', isInitial: true, orderIndex: 1 },
+        { id: 's-todo', name: 'To Do', category: 'ToDo', isInitial: false, orderIndex: 2 },
+        { id: 's-review', name: 'In Review', category: 'InProgress', isInitial: false, orderIndex: 3 },
+        { id: 's-done', name: 'Done', category: 'Done', isInitial: false, isDone: true, orderIndex: 4 }
+      ])),
+      updateWorkflowStatus: vi.fn(() => of({})),
+      deleteWorkflowStatus: vi.fn(() => of(true)),
       getIssueTypes: vi.fn(() => of([{ id: 't-story', name: 'Story', icon: 'book', color: '#111', hierarchyLevel: 2, isSubtask: false }])),
       updateCustomIssueType: vi.fn(() => of({})),
       getRoles: vi.fn(() => of([{ id: 'r-sm', name: 'ScrumMaster', code: 'SCRUMMASTER' }])),
@@ -79,6 +87,32 @@ describe('WorkspaceApiDataSource', () => {
     ]);
   });
 
+  it('still lists real organizations and an empty recent list when the contract endpoints fail', () => {
+    const source = TestBed.inject(WorkspaceApiDataSource);
+    const orgs = collect(source.listOrganizations());
+    http.expectOne(`${API}/users/me/organization-memberships`).flush({}, { status: 404, statusText: 'Not Found' });
+    expect(orgs.error).toBeUndefined();
+    expect(orgs.value?.map(item => [item.id, item.myRole, item.memberCount])).toEqual([['org-1', 'Owner', 1]]);
+
+    const recent = collect(source.listRecent());
+    http.expectOne(`${API}/users/me/recent`).flush({}, { status: 404, statusText: 'Not Found' });
+    expect(recent.value).toEqual([]);
+  });
+
+  it('falls back to project members and preset templates so a project can still be created', () => {
+    pm['loadProjectMembers'].mockReturnValue(of([{ userId: 'u2', displayName: 'Lê Thu Hà', email: 'ha@example.com' }]));
+    const source = TestBed.inject(WorkspaceApiDataSource);
+    const members = collect(source.listMembers('org-1'));
+    http.expectOne(`${API}/organizations/org-1/members`).flush({}, { status: 404, statusText: 'Not Found' });
+    expect(members.value?.map(item => [item.userId, item.displayName, item.role])).toEqual([['me', 'Tôi', 'Owner'], ['u2', 'Lê Thu Hà', 'Member']]);
+
+    const templates = collect(source.listWorkflowTemplates('org-1'));
+    http.expectOne(`${API}/organizations/org-1/workflow-templates`).flush({}, { status: 404, statusText: 'Not Found' });
+    expect(templates.value?.map(item => [item.id, item.isDefault])).toEqual([
+      ['preset-scrum-std', true], ['preset-agile-qa', false], ['preset-kanban-simple', false], ['preset-enterprise', false]
+    ]);
+  });
+
   it('calls the contract endpoints for features the backend does not have yet', () => {
     const source = TestBed.inject(WorkspaceApiDataSource);
     collect(source.inviteByEmail('org-1', ['a@example.com'], 'Member'));
@@ -108,6 +142,9 @@ describe('WorkspaceApiDataSource', () => {
 
     expect(pm['createProject']).toHaveBeenCalledWith(expect.objectContaining({ orgId: 'org-1', projectKey: 'TV', memberUserIds: ['u2'] }));
     expect(pm['applyWorkflowTemplateToProject']).toHaveBeenCalledWith('p-new', 'kanban-simple');
+    // Chỉ giữ trạng thái của mẫu (To Do, Done) và lấy trạng thái đầu của mẫu làm trạng thái khởi đầu.
+    expect(pm['updateWorkflowStatus']).toHaveBeenCalledWith('p-new', 's-todo', expect.objectContaining({ name: 'To Do', isInitial: true }));
+    expect(pm['deleteWorkflowStatus'].mock.calls).toEqual([['p-new', 's-backlog'], ['p-new', 's-review']]);
     expect(pm['changeProjectMemberRole']).toHaveBeenCalledWith('p-new', 'u2', 'r-sm');
     expect(result.value).toMatchObject({ id: 'p-new', workflowTemplateName: 'Kanban đơn giản', managementType: 'Kanban', memberCount: 2, setupWarnings: ['Đổi tên kiểu công việc'] });
   });
