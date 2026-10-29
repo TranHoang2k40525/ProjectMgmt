@@ -20,9 +20,9 @@ public class ProjectManagementService : IProjectManagementService
     // ORGANIZATIONS
     // ==========================================
 
-    public async Task<Result<IReadOnlyList<OrganizationDto>>> GetOrganizationsAsync(CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyList<OrganizationDto>>> GetOrganizationsAsync()
     {
-        var orgs = await _repository.GetOrganizationsAsync(cancellationToken);
+        var orgs = await _repository.GetOrganizationsAsync();
         IReadOnlyList<OrganizationDto> dtos = orgs.Select(x => new OrganizationDto(
             x.Id,
             x.Name,
@@ -35,19 +35,12 @@ public class ProjectManagementService : IProjectManagementService
     }
 
     public Task<Result<OrganizationDto>> CreateOrganizationAsync(
-        CreateOrganizationDto request,
-        CancellationToken cancellationToken = default) =>
-        CreateOrganizationAsync(request, request.OwnerId, cancellationToken);
-
-    public Task<Result<OrganizationDto>> CreateOrganizationAsync(
-        CreateOrganizationDto request,
-        Guid ownerUserId) =>
-        CreateOrganizationAsync(request, ownerUserId, CancellationToken.None);
+        CreateOrganizationDto request) =>
+        CreateOrganizationAsync(request, request.OwnerId);
 
     public async Task<Result<OrganizationDto>> CreateOrganizationAsync(
         CreateOrganizationDto request,
-        Guid ownerUserId,
-        CancellationToken cancellationToken)
+        Guid ownerUserId)
     {
         if (ownerUserId == Guid.Empty)
         {
@@ -79,8 +72,8 @@ public class ProjectManagementService : IProjectManagementService
             CreatedAt = DateTime.UtcNow
         };
 
-        await _repository.AddOrganizationAsync(org, cancellationToken);
-        await _repository.SaveChangesAsync(cancellationToken);
+        await _repository.AddOrganizationAsync(org);
+        await _repository.SaveChangesAsync();
 
         var dto = new OrganizationDto(org.Id, org.Name, org.Slug, org.OwnerId, org.IsActive, org.CreatedAt);
         return Result<OrganizationDto>.Success(dto);
@@ -90,9 +83,9 @@ public class ProjectManagementService : IProjectManagementService
     // PROJECTS
     // ==========================================
 
-    public async Task<Result<IReadOnlyList<ProjectDto>>> GetProjectsAsync(Guid? orgId = null, CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyList<ProjectDto>>> GetProjectsAsync(Guid? orgId = null)
     {
-        var projects = await _repository.GetAllProjectsAsync(orgId, cancellationToken);
+        var projects = await _repository.GetAllProjectsAsync(orgId);
         IReadOnlyList<ProjectDto> dtos = projects.Select(x => new ProjectDto(
             x.Id,
             x.OrgId,
@@ -110,9 +103,9 @@ public class ProjectManagementService : IProjectManagementService
         return Result<IReadOnlyList<ProjectDto>>.Success(dtos);
     }
 
-    public async Task<Result<ProjectDto>> GetProjectByIdAsync(Guid projectId, CancellationToken cancellationToken = default)
+    public async Task<Result<ProjectDto>> GetProjectByIdAsync(Guid projectId)
     {
-        var project = await _repository.GetByIdAsync(projectId, cancellationToken);
+        var project = await _repository.GetByIdAsync(projectId);
         if (project is null || project.IsDeleted)
         {
             return Result<ProjectDto>.Failure(Error.NotFound("PROJECT_NOT_FOUND", $"Project '{projectId}' was not found."));
@@ -136,19 +129,12 @@ public class ProjectManagementService : IProjectManagementService
     }
 
     public Task<Result<ProjectDto>> CreateProjectAsync(
-        CreateProjectRequestDto request,
-        CancellationToken cancellationToken = default) =>
-        CreateProjectAsync(request, request.LeadUserId, cancellationToken);
-
-    public Task<Result<ProjectDto>> CreateProjectAsync(
-        CreateProjectRequestDto request,
-        Guid creatorUserId) =>
-        CreateProjectAsync(request, creatorUserId, CancellationToken.None);
+        CreateProjectRequestDto request) =>
+        CreateProjectAsync(request, request.LeadUserId);
 
     public async Task<Result<ProjectDto>> CreateProjectAsync(
         CreateProjectRequestDto request,
-        Guid creatorUserId,
-        CancellationToken cancellationToken)
+        Guid creatorUserId)
     {
         if (creatorUserId == Guid.Empty)
         {
@@ -169,13 +155,13 @@ public class ProjectManagementService : IProjectManagementService
                 "Project key must start with an uppercase letter and contain 2-10 alphanumeric characters (e.g. PROJ, SCRUM1)."));
         }
 
-        var organization = await _repository.GetOrganizationByIdAsync(request.OrgId, cancellationToken);
+        var organization = await _repository.GetOrganizationByIdAsync(request.OrgId);
         if (organization is null || !organization.IsActive)
         {
             return Result<ProjectDto>.Failure(Error.Validation("PROJECT_ORGANIZATION_INVALID", "Select an active organization."));
         }
 
-        var existingKey = await _repository.GetByKeyAsync(request.OrgId, projectKey, cancellationToken);
+        var existingKey = await _repository.GetByKeyAsync(request.OrgId, projectKey);
         if (existingKey is not null)
         {
             return Result<ProjectDto>.Failure(Error.Conflict(
@@ -183,6 +169,7 @@ public class ProjectManagementService : IProjectManagementService
                 $"Project key '{projectKey}' already exists in this organization."));
         }
 
+        var leadUserId = request.LeadUserId != Guid.Empty ? request.LeadUserId : creatorUserId;
         var project = new Project
         {
             Id = Guid.NewGuid(),
@@ -191,14 +178,14 @@ public class ProjectManagementService : IProjectManagementService
             Name = request.Name.Trim(),
             Description = request.Description,
             CreatedByUserId = creatorUserId,
-            LeadUserId = creatorUserId,
+            LeadUserId = leadUserId,
             IssueCounter = 0,
             IsArchived = false,
             IsDeleted = false,
             CreatedAt = DateTime.UtcNow
         };
 
-        await _repository.AddAsync(project, cancellationToken);
+        await _repository.AddAsync(project);
 
         // ====================================================
         // SEED CẤU HÌNH MẶC ĐỊNH CHO PROJECT MỚI
@@ -216,7 +203,7 @@ public class ProjectManagementService : IProjectManagementService
             new IssueType { Id = Guid.NewGuid(), ProjectId = project.Id, Name = "Bug", ColorHex = "#E5493A", HierarchyLevel = 2, IsSubtask = false, OrderIndex = 4 },
             new IssueType { Id = Guid.NewGuid(), ProjectId = project.Id, Name = "Subtask", ColorHex = "#4BADE8", HierarchyLevel = 1, IsSubtask = true, OrderIndex = 5 }
         };
-        await _repository.AddIssueTypesAsync(issueTypes, cancellationToken);
+        await _repository.AddIssueTypesAsync(issueTypes);
 
         var statusBacklog = new WorkflowStatus { Id = Guid.NewGuid(), ProjectId = project.Id, Name = "Backlog", Category = "ToDo", ColorHex = "#5E6C84", OrderIndex = 1, IsInitial = true };
         var statusToDo = new WorkflowStatus { Id = Guid.NewGuid(), ProjectId = project.Id, Name = "To Do", Category = "ToDo", ColorHex = "#42526E", OrderIndex = 2, IsInitial = false };
@@ -225,7 +212,7 @@ public class ProjectManagementService : IProjectManagementService
         var statusDone = new WorkflowStatus { Id = Guid.NewGuid(), ProjectId = project.Id, Name = "Done", Category = "Done", ColorHex = "#36B37E", OrderIndex = 5, IsInitial = false };
 
         var statuses = new List<WorkflowStatus> { statusBacklog, statusToDo, statusInProgress, statusInReview, statusDone };
-        await _repository.AddWorkflowStatusesAsync(statuses, cancellationToken);
+        await _repository.AddWorkflowStatusesAsync(statuses);
 
         var transitions = new List<WorkflowTransition>
         {
@@ -237,7 +224,7 @@ public class ProjectManagementService : IProjectManagementService
             new WorkflowTransition { Id = Guid.NewGuid(), ProjectId = project.Id, FromStatusId = statusInProgress.Id, ToStatusId = statusToDo.Id, Name = "Stop Work" },
             new WorkflowTransition { Id = Guid.NewGuid(), ProjectId = project.Id, FromStatusId = statusDone.Id, ToStatusId = statusInProgress.Id, Name = "Reopen" }
         };
-        await _repository.AddWorkflowTransitionsAsync(transitions, cancellationToken);
+        await _repository.AddWorkflowTransitionsAsync(transitions);
 
         var defaultBoard = new Board
         {
@@ -248,7 +235,7 @@ public class ProjectManagementService : IProjectManagementService
             IsDefault = true,
             CreatedAt = DateTime.UtcNow
         };
-        await _repository.AddBoardAsync(defaultBoard, cancellationToken);
+        await _repository.AddBoardAsync(defaultBoard);
 
         var boardColumns = new List<BoardColumn>
         {
@@ -257,9 +244,9 @@ public class ProjectManagementService : IProjectManagementService
             new BoardColumn { Id = Guid.NewGuid(), BoardId = defaultBoard.Id, StatusId = statusInReview.Id, Name = "In Review", OrderIndex = 3, WipLimit = 3 },
             new BoardColumn { Id = Guid.NewGuid(), BoardId = defaultBoard.Id, StatusId = statusDone.Id, Name = "Done", OrderIndex = 4, WipLimit = null }
         };
-        await _repository.AddBoardColumnsAsync(boardColumns, cancellationToken);
+        await _repository.AddBoardColumnsAsync(boardColumns);
 
-        await _repository.SaveChangesAsync(cancellationToken);
+        await _repository.SaveChangesAsync();
 
         var dto = new ProjectDto(
             project.Id,
@@ -278,9 +265,9 @@ public class ProjectManagementService : IProjectManagementService
         return Result<ProjectDto>.Success(dto);
     }
 
-    public async Task<Result<ProjectDto>> UpdateProjectAsync(Guid projectId, UpdateProjectRequestDto request, CancellationToken cancellationToken = default)
+    public async Task<Result<ProjectDto>> UpdateProjectAsync(Guid projectId, UpdateProjectRequestDto request)
     {
-        var project = await _repository.GetByIdAsync(projectId, cancellationToken);
+        var project = await _repository.GetByIdAsync(projectId);
         if (project is null || project.IsDeleted)
         {
             return Result<ProjectDto>.Failure(Error.NotFound("PROJECT_NOT_FOUND", $"Project '{projectId}' was not found."));
@@ -300,7 +287,7 @@ public class ProjectManagementService : IProjectManagementService
         project.UpdatedAt = DateTime.UtcNow;
 
         _repository.UpdateProject(project);
-        await _repository.SaveChangesAsync(cancellationToken);
+        await _repository.SaveChangesAsync();
 
         var dto = new ProjectDto(
             project.Id,
@@ -319,9 +306,9 @@ public class ProjectManagementService : IProjectManagementService
         return Result<ProjectDto>.Success(dto);
     }
 
-    public async Task<Result> DeleteProjectAsync(Guid projectId, CancellationToken cancellationToken = default)
+    public async Task<Result> DeleteProjectAsync(Guid projectId)
     {
-        var project = await _repository.GetByIdAsync(projectId, cancellationToken);
+        var project = await _repository.GetByIdAsync(projectId);
         if (project is null || project.IsDeleted)
         {
             return Result.Failure(Error.NotFound("PROJECT_NOT_FOUND", $"Project '{projectId}' was not found."));
@@ -330,7 +317,7 @@ public class ProjectManagementService : IProjectManagementService
         project.IsDeleted = true;
         project.UpdatedAt = DateTime.UtcNow;
         _repository.UpdateProject(project);
-        await _repository.SaveChangesAsync(cancellationToken);
+        await _repository.SaveChangesAsync();
 
         return Result.Success();
     }
@@ -339,15 +326,15 @@ public class ProjectManagementService : IProjectManagementService
     // WORKFLOW TRANSITIONS
     // ==========================================
 
-    public async Task<Result<IReadOnlyList<WorkflowTransitionItemDto>>> GetWorkflowTransitionsAsync(Guid projectId, CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyList<WorkflowTransitionItemDto>>> GetWorkflowTransitionsAsync(Guid projectId)
     {
-        if (!await _repository.ExistsAsync(projectId, cancellationToken))
+        if (!await _repository.ExistsAsync(projectId))
         {
             return Result<IReadOnlyList<WorkflowTransitionItemDto>>.Failure(Error.NotFound("PROJECT_NOT_FOUND", "Project was not found."));
         }
 
-        var transitions = await _repository.GetTransitionsByProjectAsync(projectId, cancellationToken);
-        var statuses = (await _repository.GetStatusesAsync(projectId, cancellationToken)).ToDictionary(x => x.Id, x => x.Name);
+        var transitions = await _repository.GetTransitionsByProjectAsync(projectId);
+        var statuses = (await _repository.GetStatusesAsync(projectId)).ToDictionary(x => x.Id, x => x.Name);
 
         IReadOnlyList<WorkflowTransitionItemDto> dtos = transitions.Select(t => new WorkflowTransitionItemDto(
             t.Id,
@@ -364,15 +351,14 @@ public class ProjectManagementService : IProjectManagementService
 
     public async Task<Result<WorkflowTransitionItemDto>> CreateWorkflowTransitionAsync(
         Guid projectId,
-        CreateWorkflowTransitionRequestDto request,
-        CancellationToken cancellationToken = default)
+        CreateWorkflowTransitionRequestDto request)
     {
         if (request.Name?.Length > 80 || request.RequiredPermissionCode?.Length > 80)
         {
             return Result<WorkflowTransitionItemDto>.Failure(Error.Validation("WORKFLOW_FIELD_TOO_LONG", "Transition name and permission code must not exceed 80 characters."));
         }
 
-        if (!await _repository.ExistsAsync(projectId, cancellationToken))
+        if (!await _repository.ExistsAsync(projectId))
         {
             return Result<WorkflowTransitionItemDto>.Failure(Error.NotFound("PROJECT_NOT_FOUND", "Project was not found."));
         }
@@ -386,7 +372,7 @@ public class ProjectManagementService : IProjectManagementService
         }
 
         // 2. Chặn Status khác project
-        var statuses = (await _repository.GetStatusesAsync(projectId, cancellationToken)).ToDictionary(x => x.Id, x => x.Name);
+        var statuses = (await _repository.GetStatusesAsync(projectId)).ToDictionary(x => x.Id, x => x.Name);
         if (!statuses.ContainsKey(request.FromStatusId) || !statuses.ContainsKey(request.ToStatusId))
         {
             return Result<WorkflowTransitionItemDto>.Failure(Error.Validation(
@@ -395,7 +381,7 @@ public class ProjectManagementService : IProjectManagementService
         }
 
         // 3. Chặn Duplicate Transition
-        var existing = await _repository.GetTransitionAsync(projectId, request.FromStatusId, request.ToStatusId, cancellationToken);
+        var existing = await _repository.GetTransitionAsync(projectId, request.FromStatusId, request.ToStatusId);
         if (existing is not null)
         {
             return Result<WorkflowTransitionItemDto>.Failure(Error.Conflict(
@@ -413,8 +399,8 @@ public class ProjectManagementService : IProjectManagementService
             RequiredPermissionCode = string.IsNullOrWhiteSpace(request.RequiredPermissionCode) ? null : request.RequiredPermissionCode.Trim()
         };
 
-        await _repository.AddWorkflowTransitionAsync(transition, cancellationToken);
-        await _repository.SaveChangesAsync(cancellationToken);
+        await _repository.AddWorkflowTransitionAsync(transition);
+        await _repository.SaveChangesAsync();
 
         var dto = new WorkflowTransitionItemDto(
             transition.Id,
@@ -431,16 +417,15 @@ public class ProjectManagementService : IProjectManagementService
 
     public async Task<Result<WorkflowTransitionItemDto>> UpdateWorkflowTransitionAsync(
         Guid transitionId,
-        UpdateWorkflowTransitionRequestDto request,
-        CancellationToken cancellationToken = default)
+        UpdateWorkflowTransitionRequestDto request)
     {
         if (request.Name?.Length > 80 || request.RequiredPermissionCode?.Length > 80)
         {
             return Result<WorkflowTransitionItemDto>.Failure(Error.Validation("WORKFLOW_FIELD_TOO_LONG", "Transition name and permission code must not exceed 80 characters."));
         }
 
-        var transition = await _repository.GetTransitionByIdAsync(transitionId, cancellationToken);
-        if (transition is null || !await _repository.ExistsAsync(transition.ProjectId, cancellationToken))
+        var transition = await _repository.GetTransitionByIdAsync(transitionId);
+        if (transition is null || !await _repository.ExistsAsync(transition.ProjectId))
         {
             return Result<WorkflowTransitionItemDto>.Failure(Error.NotFound("TRANSITION_NOT_FOUND", $"Transition '{transitionId}' was not found."));
         }
@@ -448,9 +433,9 @@ public class ProjectManagementService : IProjectManagementService
         transition.Name = request.Name;
         transition.RequiredPermissionCode = string.IsNullOrWhiteSpace(request.RequiredPermissionCode) ? null : request.RequiredPermissionCode.Trim();
 
-        await _repository.SaveChangesAsync(cancellationToken);
+        await _repository.SaveChangesAsync();
 
-        var statuses = (await _repository.GetStatusesAsync(transition.ProjectId, cancellationToken)).ToDictionary(x => x.Id, x => x.Name);
+        var statuses = (await _repository.GetStatusesAsync(transition.ProjectId)).ToDictionary(x => x.Id, x => x.Name);
         var dto = new WorkflowTransitionItemDto(
             transition.Id,
             transition.ProjectId,
@@ -464,16 +449,16 @@ public class ProjectManagementService : IProjectManagementService
         return Result<WorkflowTransitionItemDto>.Success(dto);
     }
 
-    public async Task<Result> DeleteWorkflowTransitionAsync(Guid transitionId, CancellationToken cancellationToken = default)
+    public async Task<Result> DeleteWorkflowTransitionAsync(Guid transitionId)
     {
-        var transition = await _repository.GetTransitionByIdAsync(transitionId, cancellationToken);
-        if (transition is null || !await _repository.ExistsAsync(transition.ProjectId, cancellationToken))
+        var transition = await _repository.GetTransitionByIdAsync(transitionId);
+        if (transition is null || !await _repository.ExistsAsync(transition.ProjectId))
         {
             return Result.Failure(Error.NotFound("TRANSITION_NOT_FOUND", $"Transition '{transitionId}' was not found."));
         }
 
         _repository.DeleteWorkflowTransition(transition);
-        await _repository.SaveChangesAsync(cancellationToken);
+        await _repository.SaveChangesAsync();
         return Result.Success();
     }
 
@@ -481,14 +466,14 @@ public class ProjectManagementService : IProjectManagementService
     // BOARDS & COLUMNS
     // ==========================================
 
-    public async Task<Result<IReadOnlyList<BoardDto>>> GetBoardsAsync(Guid projectId, CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyList<BoardDto>>> GetBoardsAsync(Guid projectId)
     {
-        if (!await _repository.ExistsAsync(projectId, cancellationToken))
+        if (!await _repository.ExistsAsync(projectId))
         {
             return Result<IReadOnlyList<BoardDto>>.Failure(Error.NotFound("PROJECT_NOT_FOUND", "Project was not found."));
         }
 
-        var boards = await _repository.GetBoardsByProjectAsync(projectId, cancellationToken);
+        var boards = await _repository.GetBoardsByProjectAsync(projectId);
         IReadOnlyList<BoardDto> dtos = boards.Select(x => new BoardDto(
             x.Id,
             x.ProjectId,
@@ -500,9 +485,9 @@ public class ProjectManagementService : IProjectManagementService
         return Result<IReadOnlyList<BoardDto>>.Success(dtos);
     }
 
-    public async Task<Result<BoardDto>> CreateBoardAsync(Guid projectId, CreateBoardRequestDto request, CancellationToken cancellationToken = default)
+    public async Task<Result<BoardDto>> CreateBoardAsync(Guid projectId, CreateBoardRequestDto request)
     {
-        if (!await _repository.ExistsAsync(projectId, cancellationToken))
+        if (!await _repository.ExistsAsync(projectId))
         {
             return Result<BoardDto>.Failure(Error.NotFound("PROJECT_NOT_FOUND", "Project was not found."));
         }
@@ -517,7 +502,7 @@ public class ProjectManagementService : IProjectManagementService
         {
             return Result<BoardDto>.Failure(Error.Validation("BOARD_TYPE_INVALID", "Board type must be Scrum or Kanban."));
         }
-        var existingBoards = await _repository.GetBoardsByProjectAsync(projectId, cancellationToken);
+        var existingBoards = await _repository.GetBoardsByProjectAsync(projectId);
         if (existingBoards.Any(x => string.Equals(x.Name, request.Name.Trim(), StringComparison.OrdinalIgnoreCase)))
         {
             return Result<BoardDto>.Failure(Error.Conflict("BOARD_NAME_EXISTS", "A board with this name already exists in this project."));
@@ -526,7 +511,7 @@ public class ProjectManagementService : IProjectManagementService
         {
             foreach (var existingBoard in existingBoards.Where(x => x.IsDefault))
             {
-                var trackedBoard = await _repository.GetBoardByIdAsync(existingBoard.Id, cancellationToken);
+                var trackedBoard = await _repository.GetBoardByIdAsync(existingBoard.Id);
                 if (trackedBoard is not null) trackedBoard.IsDefault = false;
             }
         }
@@ -541,23 +526,23 @@ public class ProjectManagementService : IProjectManagementService
             CreatedAt = DateTime.UtcNow
         };
 
-        await _repository.AddBoardAsync(board, cancellationToken);
-        await _repository.SaveChangesAsync(cancellationToken);
+        await _repository.AddBoardAsync(board);
+        await _repository.SaveChangesAsync();
 
         var dto = new BoardDto(board.Id, board.ProjectId, board.Name, board.Type, board.IsDefault, board.CreatedAt);
         return Result<BoardDto>.Success(dto);
     }
 
-    public async Task<Result<IReadOnlyList<BoardColumnDto>>> GetBoardColumnsAsync(Guid boardId, CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyList<BoardColumnDto>>> GetBoardColumnsAsync(Guid boardId)
     {
-        var board = await _repository.GetBoardByIdAsync(boardId, cancellationToken);
-        if (board is null || !await _repository.ExistsAsync(board.ProjectId, cancellationToken))
+        var board = await _repository.GetBoardByIdAsync(boardId);
+        if (board is null || !await _repository.ExistsAsync(board.ProjectId))
         {
             return Result<IReadOnlyList<BoardColumnDto>>.Failure(Error.NotFound("BOARD_NOT_FOUND", $"Board '{boardId}' was not found."));
         }
 
-        var columns = await _repository.GetBoardColumnsAsync(boardId, cancellationToken);
-        var statuses = (await _repository.GetStatusesAsync(board.ProjectId, cancellationToken)).ToDictionary(x => x.Id, x => x.Name);
+        var columns = await _repository.GetBoardColumnsAsync(boardId);
+        var statuses = (await _repository.GetStatusesAsync(board.ProjectId)).ToDictionary(x => x.Id, x => x.Name);
 
         IReadOnlyList<BoardColumnDto> dtos = columns.Select(c => new BoardColumnDto(
             c.Id,
@@ -571,10 +556,10 @@ public class ProjectManagementService : IProjectManagementService
         return Result<IReadOnlyList<BoardColumnDto>>.Success(dtos);
     }
 
-    public async Task<Result<BoardColumnDto>> CreateBoardColumnAsync(Guid boardId, CreateBoardColumnRequestDto request, CancellationToken cancellationToken = default)
+    public async Task<Result<BoardColumnDto>> CreateBoardColumnAsync(Guid boardId, CreateBoardColumnRequestDto request)
     {
-        var board = await _repository.GetBoardByIdAsync(boardId, cancellationToken);
-        if (board is null || !await _repository.ExistsAsync(board.ProjectId, cancellationToken))
+        var board = await _repository.GetBoardByIdAsync(boardId);
+        if (board is null || !await _repository.ExistsAsync(board.ProjectId))
         {
             return Result<BoardColumnDto>.Failure(Error.NotFound("BOARD_NOT_FOUND", $"Board '{boardId}' was not found."));
         }
@@ -586,13 +571,13 @@ public class ProjectManagementService : IProjectManagementService
         }
 
         // 2. Chặn Status sai project
-        var statuses = (await _repository.GetStatusesAsync(board.ProjectId, cancellationToken)).ToDictionary(x => x.Id, x => x.Name);
+        var statuses = (await _repository.GetStatusesAsync(board.ProjectId)).ToDictionary(x => x.Id, x => x.Name);
         if (!statuses.ContainsKey(request.StatusId))
         {
             return Result<BoardColumnDto>.Failure(Error.Validation("COLUMN_STATUS_INVALID", "The selected status does not belong to this board's project."));
         }
 
-        var existingColumns = await _repository.GetBoardColumnsAsync(boardId, cancellationToken);
+        var existingColumns = await _repository.GetBoardColumnsAsync(boardId);
         if (existingColumns.Any(x => x.StatusId == request.StatusId))
         {
             return Result<BoardColumnDto>.Failure(Error.Conflict("COLUMN_STATUS_EXISTS", "This status already has a column on the board."));
@@ -613,8 +598,8 @@ public class ProjectManagementService : IProjectManagementService
             WipLimit = request.WipLimit
         };
 
-        await _repository.AddBoardColumnAsync(column, cancellationToken);
-        await _repository.SaveChangesAsync(cancellationToken);
+        await _repository.AddBoardColumnAsync(column);
+        await _repository.SaveChangesAsync();
 
         var dto = new BoardColumnDto(
             column.Id,
@@ -628,14 +613,14 @@ public class ProjectManagementService : IProjectManagementService
         return Result<BoardColumnDto>.Success(dto);
     }
 
-    public async Task<Result> ReorderBoardColumnsAsync(Guid boardId, ReorderBoardColumnsRequestDto request, CancellationToken cancellationToken = default)
+    public async Task<Result> ReorderBoardColumnsAsync(Guid boardId, ReorderBoardColumnsRequestDto request)
     {
-        var board = await _repository.GetBoardByIdAsync(boardId, cancellationToken);
-        if (board is null || !await _repository.ExistsAsync(board.ProjectId, cancellationToken))
+        var board = await _repository.GetBoardByIdAsync(boardId);
+        if (board is null || !await _repository.ExistsAsync(board.ProjectId))
         {
             return Result.Failure(Error.NotFound("BOARD_NOT_FOUND", "Board was not found."));
         }
-        var columns = await _repository.GetBoardColumnsAsync(boardId, cancellationToken);
+        var columns = await _repository.GetBoardColumnsAsync(boardId);
         if (request.OrderedColumnIds is null
             || request.OrderedColumnIds.Count != columns.Count
             || !columns.Select(x => x.Id).ToHashSet().SetEquals(request.OrderedColumnIds))
@@ -648,18 +633,18 @@ public class ProjectManagementService : IProjectManagementService
             columnMap[request.OrderedColumnIds[i]].OrderIndex = i + 1;
         }
 
-        await _repository.SaveChangesAsync(cancellationToken);
+        await _repository.SaveChangesAsync();
         return Result.Success();
     }
 
-    public async Task<Result<BoardColumnDto>> UpdateBoardColumnAsync(Guid columnId, UpdateBoardColumnRequestDto request, CancellationToken cancellationToken = default)
+    public async Task<Result<BoardColumnDto>> UpdateBoardColumnAsync(Guid columnId, UpdateBoardColumnRequestDto request)
     {
-        var column = await _repository.GetBoardColumnByIdAsync(columnId, cancellationToken);
+        var column = await _repository.GetBoardColumnByIdAsync(columnId);
         if (column is null)
             return Result<BoardColumnDto>.Failure(Error.NotFound("COLUMN_NOT_FOUND", "Column was not found."));
 
-        var board = await _repository.GetBoardByIdAsync(column.BoardId, cancellationToken);
-        if (board is null || !await _repository.ExistsAsync(board.ProjectId, cancellationToken))
+        var board = await _repository.GetBoardByIdAsync(column.BoardId);
+        if (board is null || !await _repository.ExistsAsync(board.ProjectId))
             return Result<BoardColumnDto>.Failure(Error.NotFound("BOARD_NOT_FOUND", "Board was not found."));
 
         var name = string.IsNullOrWhiteSpace(request.Name) ? null : request.Name.Trim();
@@ -668,7 +653,7 @@ public class ProjectManagementService : IProjectManagementService
         if (request.WipLimit.HasValue && request.WipLimit.Value <= 0)
             return Result<BoardColumnDto>.Failure(Error.Validation("WIP_LIMIT_INVALID", "WIP limit must be a positive integer or null."));
 
-        var statuses = await _repository.GetStatusesAsync(board.ProjectId, cancellationToken);
+        var statuses = await _repository.GetStatusesAsync(board.ProjectId);
         var status = statuses.SingleOrDefault(x => x.Id == column.StatusId);
         if (status is null)
             return Result<BoardColumnDto>.Failure(Error.Validation("COLUMN_STATUS_INVALID", "The column status does not belong to this project."));
@@ -676,26 +661,26 @@ public class ProjectManagementService : IProjectManagementService
         // Only presentation and WIP change; mapping and order are preserved.
         column.Name = name;
         column.WipLimit = request.WipLimit;
-        await _repository.SaveChangesAsync(cancellationToken);
+        await _repository.SaveChangesAsync();
         return Result<BoardColumnDto>.Success(new BoardColumnDto(
             column.Id, column.BoardId, column.StatusId, status.Name, column.Name, column.OrderIndex, column.WipLimit));
     }
 
-    public async Task<Result> DeleteBoardColumnAsync(Guid columnId, CancellationToken cancellationToken = default)
+    public async Task<Result> DeleteBoardColumnAsync(Guid columnId)
     {
-        var column = await _repository.GetBoardColumnByIdAsync(columnId, cancellationToken);
+        var column = await _repository.GetBoardColumnByIdAsync(columnId);
         if (column is null)
         {
             return Result.Failure(Error.NotFound("COLUMN_NOT_FOUND", $"Column '{columnId}' was not found."));
         }
 
-        var board = await _repository.GetBoardByIdAsync(column.BoardId, cancellationToken);
-        if (board is null || !await _repository.ExistsAsync(board.ProjectId, cancellationToken))
+        var board = await _repository.GetBoardByIdAsync(column.BoardId);
+        if (board is null || !await _repository.ExistsAsync(board.ProjectId))
         {
             return Result.Failure(Error.NotFound("BOARD_NOT_FOUND", "Board was not found."));
         }
         _repository.DeleteBoardColumn(column);
-        await _repository.SaveChangesAsync(cancellationToken);
+        await _repository.SaveChangesAsync();
         return Result.Success();
     }
 }

@@ -6,6 +6,7 @@ using ProjectMgmt.Solution.Services;
 namespace ProjectMgmt.Solution.Controllers;
 
 [Route("api/v1/organizations")]
+[Route("api/organizations")]
 public class OrganizationsController : ApiControllerBase
 {
     private static readonly Action<ILogger, Exception?> LogCreateFailure =
@@ -17,29 +18,31 @@ public class OrganizationsController : ApiControllerBase
     private readonly IProjectManagementService _service;
     private readonly IWorkspaceProvisioningService _provisioning;
     private readonly ICurrentUserContext _currentUser;
+    private readonly IPermissionEvaluator _permissions;
     private readonly ILogger<OrganizationsController> _logger;
 
     public OrganizationsController(
         IProjectManagementService service,
         IWorkspaceProvisioningService provisioning,
         ICurrentUserContext currentUser,
+        IPermissionEvaluator permissions,
         ILogger<OrganizationsController> logger)
     {
         _service = service;
         _provisioning = provisioning;
         _currentUser = currentUser;
+        _permissions = permissions;
         _logger = logger;
     }
 
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<OrganizationDto>>> GetAll(CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<OrganizationDto>>> GetAll()
     {
-        var result = await _service.GetOrganizationsAsync(cancellationToken);
+        var result = await _service.GetOrganizationsAsync();
         if (!result.IsSuccess) return FromResult(result);
-        var permissions = HttpContext.RequestServices.GetRequiredService<IPermissionEvaluator>();
         var visible = new List<OrganizationDto>();
         foreach (var org in result.Value)
-            if (org.OwnerId == _currentUser.UserId || (_currentUser.UserId.HasValue && await permissions.HasPermissionAsync(_currentUser.UserId.Value, "project.create", "Organization", org.Id))) visible.Add(org);
+            if (org.OwnerId == _currentUser.UserId || (_currentUser.UserId.HasValue && await _permissions.HasPermissionAsync(_currentUser.UserId.Value, "project.create", "Organization", org.Id))) visible.Add(org);
         return Ok(visible);
     }
 

@@ -1,35 +1,41 @@
-import { Component, computed, inject } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, OnDestroy, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
+import { gsap } from 'gsap';
 import { ProjectManagementService } from '../../core/services/project-management.service';
+
+import { NoProjectStateComponent } from '../../shared/components/no-project-state/no-project-state.component';
 
 @Component({
   selector: 'app-project-summary-page',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, NoProjectStateComponent],
   template: `
+    @if (!projectService.hasActiveProject()) {
+      <app-no-project-state featureName="Tổng quan Dự án"></app-no-project-state>
+    } @else {
     <div class="project-summary-page flex flex-col gap-6 animate-fade-in">
       
       <!-- Top Banner Header -->
-      <div class="summary-hero flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shadow-xl relative overflow-hidden">
-        <div class="absolute -right-10 -bottom-10 w-64 h-64 bg-primary/20 rounded-full blur-3xl pointer-events-none"></div>
+      <div class="summary-hero flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-2xl bg-gradient-to-r from-[#1b4332] via-[#2d6a4f] to-[#1b4332] text-white shadow-xl relative overflow-hidden">
+        <div class="absolute -right-10 -bottom-10 w-64 h-64 bg-emerald-400/20 rounded-full blur-3xl pointer-events-none"></div>
 
         <div class="summary-hero-copy flex items-center gap-4 z-10">
-          <div class="w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-md p-1.5 ring-1 ring-white/20 shrink-0 flex items-center justify-center">
-            <img src="assets/images/huce-branding/huce-official-logo.png" alt="HUCE Logo" class="w-full h-full object-contain" />
+          <div class="w-14 h-14 rounded-2xl bg-white/15 backdrop-blur-md ring-1 ring-white/30 shrink-0 flex items-center justify-center text-xl font-bold font-mono text-white shadow-inner">
+            {{ currentProject().projectKey ? currentProject().projectKey.slice(0, 2) : 'PJ' }}
           </div>
           <div class="flex flex-col">
             <div class="flex items-center gap-2">
               <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-white/20 text-white">Scrum Agile</span>
-              <span class="text-xs text-indigo-300">Mã dự án: {{ currentProject()?.projectKey ?? '--' }}</span>
+              <span class="text-xs text-emerald-200">Mã dự án: {{ currentProject().projectKey || '--' }}</span>
             </div>
-            <h1 class="text-xl font-extrabold tracking-tight mt-0.5">{{ currentProject()?.name ?? 'Chưa chọn dự án' }}</h1>
-            <p class="text-xs text-slate-300">{{ currentProject()?.description || 'Nền tảng Quản lý Dự án Agile' }}</p>
+            <h1 class="text-xl font-extrabold tracking-tight mt-0.5">{{ currentProject().name || 'Chưa chọn dự án' }}</h1>
+            <p class="text-xs text-slate-200">{{ currentProject().description || 'Chưa có mô tả dự án.' }}</p>
           </div>
         </div>
 
         <div class="summary-hero-action flex items-center gap-3 z-10">
-          <a routerLink="/board" class="px-4 py-2 rounded-xl bg-primary hover:bg-primary-container text-white text-xs font-bold shadow-md transition-all flex items-center gap-1.5">
+          <a routerLink="/board" class="px-4 py-2 rounded-xl bg-white text-[#1b4332] hover:bg-slate-100 text-xs font-bold shadow-md transition-all flex items-center gap-1.5">
             <span class="material-symbols-outlined text-[18px]">view_kanban</span>
             Mở Bảng Scrum
           </a>
@@ -96,7 +102,7 @@ import { ProjectManagementService } from '../../core/services/project-management
           </div>
           <div class="mt-4 flex items-baseline gap-2">
             <span class="text-3xl font-extrabold text-emerald-500">
-              {{ totalCount() > 0 ? ((completedCount() / totalCount()) * 100 | number:'1.0-0') + '%' : '100%' }}
+              {{ totalCount() > 0 ? ((completedCount() / totalCount()) * 100 | number:'1.0-0') + '%' : '0%' }}
             </span>
             <span class="text-xs text-slate-400">{{ completedCount() }}/{{ totalCount() }} hoàn thành</span>
           </div>
@@ -118,25 +124,30 @@ import { ProjectManagementService } from '../../core/services/project-management
           </div>
 
           <div class="flex flex-col md:flex-row items-center justify-around gap-8 py-4">
-            <!-- Simulated Donut Ring Chart -->
+            <!-- Dynamic Donut Ring Chart -->
             <div class="relative w-44 h-44 flex items-center justify-center">
               <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                <!-- Background Ring -->
                 <path class="text-slate-100 dark:text-slate-800" stroke-width="3.8" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                <!-- Done Segment -->
-                <path class="text-emerald-500" stroke-dasharray="35, 100" stroke-width="3.8" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                <!-- In Progress Segment -->
-                <path class="text-blue-500" stroke-dasharray="25, 100" stroke-dashoffset="-35" stroke-width="3.8" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                @if (donePercent() > 0) {
+                  <!-- Done Segment -->
+                  <path class="text-emerald-500" [attr.stroke-dasharray]="donePercent() + ', 100'" stroke-width="3.8" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                }
+                @if (inProgressPercent() > 0) {
+                  <!-- In Progress Segment -->
+                  <path class="text-blue-500" [attr.stroke-dasharray]="inProgressPercent() + ', 100'" [attr.stroke-dashoffset]="-donePercent()" stroke-width="3.8" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                }
               </svg>
               <div class="absolute flex flex-col items-center justify-center text-center">
                 <span class="text-2xl font-black text-slate-900 dark:text-white">{{ totalCount() }}</span>
-                <span class="text-[10px] text-slate-400 font-medium">Tổng số Work Items</span>
+                <span class="text-[10px] text-slate-400 font-medium">Tổng số công việc</span>
               </div>
             </div>
 
             <!-- Legend Items -->
             <div class="flex flex-col gap-3">
               <div class="flex items-center gap-3">
-                <span class="w-3.5 h-3.5 rounded-md bg-amber-400"></span>
+                <span class="w-3.5 h-3.5 rounded-md bg-slate-400"></span>
                 <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">To Do (Cần làm): {{ toDoCount() }}</span>
               </div>
               <div class="flex items-center gap-3">
@@ -151,6 +162,16 @@ import { ProjectManagementService } from '../../core/services/project-management
                 <span class="w-3.5 h-3.5 rounded-md bg-emerald-500"></span>
                 <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">Done (Hoàn thành): {{ completedCount() }}</span>
               </div>
+            </div>
+          </div>
+
+          <div class="summary-priority-box pt-4 border-t border-slate-100 dark:border-slate-800">
+            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Phân bổ theo Độ ưu tiên</h4>
+            <div class="flex items-center gap-4 text-xs font-medium">
+              <span class="text-red-500 font-semibold">Khẩn cấp (Urgent): {{ urgentCount() }}</span>
+              <span class="text-orange-500 font-semibold">Cao (High): {{ highCount() }}</span>
+              <span class="text-blue-500 font-semibold">Trung bình (Medium): {{ mediumCount() }}</span>
+              <span class="text-slate-500 font-semibold">Thấp (Low): {{ lowCount() }}</span>
             </div>
           </div>
         </div>
@@ -183,6 +204,7 @@ import { ProjectManagementService } from '../../core/services/project-management
       </div>
 
     </div>
+    }
   `,
   styles: [`
     @media (max-width: 1279px) {
@@ -204,18 +226,37 @@ import { ProjectManagementService } from '../../core/services/project-management
     }
   `]
 })
-export class ProjectSummaryPageComponent {
-  private readonly projectService = inject(ProjectManagementService);
+export class ProjectSummaryPageComponent implements AfterViewInit, OnDestroy {
+  private readonly el = inject<ElementRef<HTMLElement>>(ElementRef);
+  readonly projectService = inject(ProjectManagementService);
+  private kpiTween: gsap.core.Tween | null = null;
 
   readonly currentProject = this.projectService.currentProject;
   readonly items = this.projectService.workItems;
-  readonly activeSprint = computed(() => this.projectService.sprints().find(s => s.status === 'active') ?? this.projectService.sprints()[0] ?? null);
+  readonly activeSprint = computed(() => this.projectService.sprints().find(s => s.status === 'active') ?? null);
 
   readonly totalCount = computed(() => this.items().length);
-  readonly completedCount = computed(() => this.items().filter(i => i.statusName === 'Done').length);
-  readonly inProgressCount = computed(() => this.items().filter(i => i.statusName === 'In Progress').length);
+  readonly completedCount = computed(() => {
+    const doneNames = new Set(this.projectService.projectStatuses().filter(s => s.category === 'Done').map(s => s.name));
+    return this.items().filter(i => i.statusName === 'Done' || doneNames.has(i.statusName)).length;
+  });
+  readonly inProgressCount = computed(() => {
+    const inProgNames = new Set(this.projectService.projectStatuses().filter(s => s.category === 'InProgress' && s.name !== 'Code Review').map(s => s.name));
+    return this.items().filter(i => i.statusName === 'In Progress' || inProgNames.has(i.statusName)).length;
+  });
   readonly codeReviewCount = computed(() => this.items().filter(i => i.statusName === 'Code Review').length);
-  readonly toDoCount = computed(() => this.items().filter(i => i.statusName === 'To Do').length);
+  readonly toDoCount = computed(() => {
+    const todoNames = new Set(this.projectService.projectStatuses().filter(s => s.category === 'ToDo').map(s => s.name));
+    return this.items().filter(i => i.statusName === 'To Do' || todoNames.has(i.statusName)).length;
+  });
+
+  readonly donePercent = computed(() => this.totalCount() > 0 ? Math.round((this.completedCount() / this.totalCount()) * 100) : 0);
+  readonly inProgressPercent = computed(() => this.totalCount() > 0 ? Math.round((this.inProgressCount() / this.totalCount()) * 100) : 0);
+
+  readonly urgentCount = computed(() => this.items().filter(i => i.priority === 'Urgent').length);
+  readonly highCount = computed(() => this.items().filter(i => i.priority === 'High').length);
+  readonly mediumCount = computed(() => this.items().filter(i => i.priority === 'Medium').length);
+  readonly lowCount = computed(() => this.items().filter(i => i.priority === 'Low').length);
 
   readonly recentActivities = computed(() => {
     const list: { id: string; actorName: string; action: string; timestamp: string; issueKey: string }[] = [];
@@ -226,4 +267,28 @@ export class ProjectSummaryPageComponent {
     }
     return list.slice(0, 5);
   });
+
+  ngAfterViewInit(): void {
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      const kpis = this.el.nativeElement.querySelectorAll<HTMLElement>('.summary-kpi-grid > div');
+      if (kpis.length) {
+        this.kpiTween = gsap.fromTo(
+          kpis,
+          { opacity: 0, y: 16 },
+          {
+            opacity: 1,
+            y: 0,
+            duration: 0.4,
+            stagger: 0.08,
+            ease: 'power2.out',
+            clearProps: 'transform,opacity'
+          }
+        );
+      }
+    }
+  }
+
+  ngOnDestroy(): void {
+    this.kpiTween?.kill();
+  }
 }

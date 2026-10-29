@@ -40,6 +40,7 @@ public class CreateOrganizationDto
     public string Name { get; set; } = string.Empty;
     public string Slug { get; set; } = string.Empty;
     public Guid OwnerId { get; set; }
+    public List<Guid>? MemberUserIds { get; set; }
 }
 
 public class ProjectDto
@@ -115,6 +116,7 @@ public class CreateProjectRequestDto
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public Guid LeadUserId { get; set; }
+    public List<Guid>? MemberUserIds { get; set; }
 }
 
 public class UpdateProjectRequestDto

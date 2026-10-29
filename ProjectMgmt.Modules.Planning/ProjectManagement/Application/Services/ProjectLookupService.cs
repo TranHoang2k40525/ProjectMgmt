@@ -12,15 +12,15 @@ public class ProjectLookupService : IProjectLookupService
         _repository = repository;
     }
 
-    public async Task<IReadOnlyList<ProjectIssueTypeDto>> GetIssueTypesAsync(Guid projectId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<ProjectIssueTypeDto>> GetIssueTypesAsync(Guid projectId)
     {
-        var types = await _repository.GetIssueTypesAsync(projectId, cancellationToken);
+        var types = await _repository.GetIssueTypesAsync(projectId);
         return types.Select(x => new ProjectIssueTypeDto(x.Id, x.ProjectId, x.Name, x.ColorHex, x.HierarchyLevel, x.IsSubtask, x.OrderIndex)).ToList();
     }
 
-    public async Task<IReadOnlyList<ProjectStatusDto>> GetStatusesAsync(Guid projectId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<ProjectStatusDto>> GetStatusesAsync(Guid projectId)
     {
-        var statuses = await _repository.GetStatusesAsync(projectId, cancellationToken);
+        var statuses = await _repository.GetStatusesAsync(projectId);
         return statuses.Select(x => new ProjectStatusDto(x.Id, x.ProjectId, x.Name, x.Category, x.ColorHex, x.OrderIndex, x.IsInitial)).ToList();
     }
 
@@ -33,7 +33,9 @@ public class ProjectLookupService : IProjectLookupService
             {
                 ProjectId = project.Id,
                 OrganizationId = project.OrgId,
-                IsArchived = project.IsArchived
+                IsArchived = project.IsArchived,
+                CreatedByUserId = project.CreatedByUserId,
+                LeadUserId = project.LeadUserId
             };
     }
 }

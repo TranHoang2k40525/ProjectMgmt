@@ -4,6 +4,7 @@ using ProjectMgmt.Modules.Planning.ProjectManagement.Application.IServices;
 namespace ProjectMgmt.Solution.Controllers;
 
 [Route("api/boards")]
+[Route("api/v1/boards")]
 [TypeFilter(typeof(ProjectMgmt.Solution.Security.ProjectAuthorizationFilter))]
 public class BoardsController : ApiControllerBase
 {
@@ -16,34 +17,29 @@ public class BoardsController : ApiControllerBase
 
     [HttpGet("{boardId:guid}/columns")]
     public async Task<ActionResult<IReadOnlyList<BoardColumnDto>>> GetColumns(
-        Guid boardId,
-        CancellationToken cancellationToken) =>
-        FromResult(await _service.GetBoardColumnsAsync(boardId, cancellationToken));
+        Guid boardId) =>
+        FromResult(await _service.GetBoardColumnsAsync(boardId));
 
     [HttpPost("{boardId:guid}/columns")]
     public async Task<ActionResult<BoardColumnDto>> CreateColumn(
         Guid boardId,
-        [FromBody] CreateBoardColumnRequestDto request,
-        CancellationToken cancellationToken) =>
-        FromResult(await _service.CreateBoardColumnAsync(boardId, request, cancellationToken));
+        [FromBody] CreateBoardColumnRequestDto request) =>
+        FromResult(await _service.CreateBoardColumnAsync(boardId, request));
 
     [HttpPut("{boardId:guid}/columns/reorder")]
     public async Task<IActionResult> ReorderColumns(
         Guid boardId,
-        [FromBody] ReorderBoardColumnsRequestDto request,
-        CancellationToken cancellationToken) =>
-        FromResult(await _service.ReorderBoardColumnsAsync(boardId, request, cancellationToken));
+        [FromBody] ReorderBoardColumnsRequestDto request) =>
+        FromResult(await _service.ReorderBoardColumnsAsync(boardId, request));
 
     [HttpDelete("columns/{columnId:guid}")]
     public async Task<IActionResult> DeleteColumn(
-        Guid columnId,
-        CancellationToken cancellationToken) =>
-        FromResult(await _service.DeleteBoardColumnAsync(columnId, cancellationToken));
+        Guid columnId) =>
+        FromResult(await _service.DeleteBoardColumnAsync(columnId));
 
     [HttpPut("columns/{columnId:guid}")]
     public async Task<ActionResult<BoardColumnDto>> UpdateColumn(
         Guid columnId,
-        [FromBody] UpdateBoardColumnRequestDto request,
-        CancellationToken cancellationToken) =>
-        FromResult(await _service.UpdateBoardColumnAsync(columnId, request, cancellationToken));
+        [FromBody] UpdateBoardColumnRequestDto request) =>
+        FromResult(await _service.UpdateBoardColumnAsync(columnId, request));
 }

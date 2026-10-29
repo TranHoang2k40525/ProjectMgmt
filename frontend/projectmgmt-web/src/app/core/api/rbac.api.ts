@@ -7,7 +7,7 @@ import { RoleDto } from './rbac-api.models';
 @Injectable({ providedIn: 'root' })
 export class RbacApi {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = `${environment.apiBaseUrl}/v1`;
+  private readonly baseUrl = `${environment.apiBaseUrl}`;
 
   getRoles(scope?: string): Observable<RoleDto> {
     let params = new HttpParams();
@@ -56,5 +56,20 @@ export class RbacApi {
 
   removeProjectMember(projectId: string, userId: string): Observable<RoleDto> {
     return this.http.delete<RoleDto>(`${this.baseUrl}/projects/${projectId}/members/${userId}`);
+  }
+
+  batchInviteProjectMembers(projectId: string, emails: string, names: string, roleName: string): Observable<RoleDto> {
+    return this.http.post<RoleDto>(`${this.baseUrl}/projects/${projectId}/members/batch-invite`, {
+      emails,
+      names,
+      roleName
+    });
+  }
+
+  respondInvitation(projectId: string, notificationId: string, accept: boolean): Observable<RoleDto> {
+    return this.http.post<RoleDto>(`${this.baseUrl}/projects/${projectId}/members/respond-invitation`, {
+      notificationId,
+      accept
+    });
   }
 }

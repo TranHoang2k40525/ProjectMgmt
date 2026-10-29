@@ -33,6 +33,26 @@ export class RealtimeService {
     return () => this.connection?.off(eventName, handler);
   }
 
+  async joinSprint(sprintId: string): Promise<void> {
+    if (this.connection && this.connection.state === HubConnectionState.Connected) {
+      try {
+        await this.connection.invoke('JoinSprint', sprintId);
+      } catch {
+        // silent fail
+      }
+    }
+  }
+
+  async leaveSprint(sprintId: string): Promise<void> {
+    if (this.connection && this.connection.state === HubConnectionState.Connected) {
+      try {
+        await this.connection.invoke('LeaveSprint', sprintId);
+      } catch {
+        // silent fail
+      }
+    }
+  }
+
   async disconnect(): Promise<void> {
     await this.connection?.stop();
     this.connection = null;

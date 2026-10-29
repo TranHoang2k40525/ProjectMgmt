@@ -1,4 +1,4 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, inject, signal, computed } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, forkJoin, map, of, switchMap, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
@@ -11,6 +11,7 @@ import { NotificationDto } from '../api/notification-api.models';
 import { RbacApi } from '../api/rbac.api';
 import { RoleDto } from '../api/rbac-api.models';
 import { RealtimeService } from '../realtime/realtime.service';
+import { ToastService } from './toast.service';
 import { AuthSession, TOKEN_STORE } from '../auth/token-store';
 import {
   ActiveSessionModel,
@@ -22,7 +23,7 @@ import {
   SkillModel,
   UserProfileModel,
   UserSkillModel
-} from '../mocks/identity-mock-db';
+} from '../models/identity.models';
 
 export interface AuthState {
   currentUser: UserProfileModel | null;
@@ -40,11 +41,23 @@ export class IdentityService {
   private readonly notificationApi = inject(NotificationApi);
   private readonly rbacApi = inject(RbacApi);
   private readonly realtime = inject(RealtimeService, { optional: true });
+  private readonly toast = inject(ToastService, { optional: true });
   private readonly tokenStore = inject(TOKEN_STORE);
   private readonly skillCatalog = new Map<string, SkillModel>();
   private readonly userSkills = new Map<string, UserSkillModel[]>();
 
   readonly authState = signal<AuthState>(this.restoreAuthState());
+
+  readonly isSystemAdmin = computed(() => {
+    const user = this.authState().currentUser;
+    const session = this.tokenStore.getSession();
+    const roles = session?.roles ?? [];
+    if (user?.roleName?.toLowerCase().includes('admin')) return true;
+    return roles.some(r => {
+      const lower = r.toLowerCase();
+      return lower === 'admin' || lower === 'systemadmin' || lower === 'system admin';
+    });
+  });
 
   readonly notifications = signal<NotificationModel[]>([]);
   readonly unreadCount = signal<number>(0);
@@ -256,7 +269,7 @@ export class IdentityService {
     }));
   }
 
-  addUserSkill(userId: string, skillId: string, level: number): Observable<UserSkillModel> {
+  addUserSkill(userId: string, skillId: string, level: number, yearsOfExperience?: number | null): Observable<UserSkillModel> {
     const current = this.userSkills.get(userId);
     const source = current ? of(current) : this.getUserSkills(userId);
     return source.pipe(switchMap(existingSkills => {
@@ -268,7 +281,8 @@ export class IdentityService {
         userId,
         skillId,
         skillName: catalogSkill?.name ?? 'Kỹ năng',
-        proficiencyLevel: normalizedLevel * 20
+        proficiencyLevel: normalizedLevel * 20,
+        yearsOfExperience: yearsOfExperience ?? null
       };
       updatedSkills.push(savedSkill);
 
@@ -339,14 +353,16 @@ export class IdentityService {
       userId,
       skillId: skill.skillId!,
       skillName: skill.name!,
-      proficiencyLevel: (skill.proficiencyLevel ?? skill.level ?? 1) * 20
+      proficiencyLevel: (skill.proficiencyLevel ?? skill.level ?? 1) * 20,
+      yearsOfExperience: skill.yearsOfExperience ?? null
     };
   }
 
   private toSkillDtos(skills: UserSkillModel[]): Array<Partial<SkillDto>> {
     return skills.map(skill => ({
       skillId: skill.skillId,
-      proficiencyLevel: this.toBackendSkillLevel(skill.proficiencyLevel)
+      proficiencyLevel: this.toBackendSkillLevel(skill.proficiencyLevel),
+      yearsOfExperience: skill.yearsOfExperience ?? null
     }));
   }
 
@@ -365,7 +381,7 @@ export class IdentityService {
   // ==========================================
 
   getUsers(): Observable<UserProfileModel[]> {
-    return this.http.get<UserProfileModel[]>(`${environment.apiBaseUrl}/v1/admin/users`).pipe(
+    return this.http.get<UserProfileModel[]>(`${environment.apiBaseUrl}/admin/users`).pipe(
       map(users => users.map(u => ({ ...u, roleId: u.roles?.[0]?.roleId ?? '',
         roleName: u.roles?.map(r => r.roleName).join(', ') ?? '', twoFactorEnabled: false })))
     );
@@ -384,7 +400,7 @@ export class IdentityService {
   getPermissions(): Observable<PermissionModel[]> {
     return this.rbacApi.getPermissions().pipe(
       map(res => {
-        const perms = (res.items ?? []).map(p => ({
+        return (res.items ?? []).map(p => ({
           id: p.permissionId ?? '',
           code: p.code ?? '',
           name: p.code ?? '',
@@ -392,7 +408,6 @@ export class IdentityService {
           module: p.grouping ?? 'System',
           description: p.description ?? ''
         }));
-        return perms;
       })
     );
   }
@@ -423,12 +438,18 @@ export class IdentityService {
     );
   }
 
-  createRole(name: string, description: string, permissionCodes: string[]): Observable<RoleModel> {
+  createRole(name: string, description: string, permissionCodes: string[], scope: string = 'Project'): Observable<RoleModel> {
     return this.permissionIds(permissionCodes).pipe(
-      switchMap(permissionIds => this.rbacApi.createRole({ name, scope: 'Project', description, permissionIds })),
+      switchMap(permissionIds => this.rbacApi.createRole({ name, scope, description, permissionIds })),
       map(res => ({ id: res.roleId ?? '', name: res.name ?? name, code: res.name ?? name,
-        scope: res.scope ?? 'Project', description, isSystem: false, permissionCodes }))
+        scope: res.scope ?? scope, description, isSystem: false, permissionCodes }))
     );
+  }
+  assignUserRole(userId: string, roleId: string, scopeType: string = 'System', scopeId?: string): Observable<RoleDto> {
+    return this.rbacApi.assignUserRole(userId, { roleId, scopeType, scopeId });
+  }
+  removeUserRole(userId: string, userRoleId: string): Observable<RoleDto> {
+    return this.rbacApi.removeUserRole(userId, userRoleId);
   }
 
   getProjectMembers(projectId: string): Observable<RoleDto[]> {
@@ -450,6 +471,16 @@ export class IdentityService {
   // ==========================================
   // NOTIFICATIONS
   // ==========================================
+
+  getUnreadCount(): Observable<number> {
+    return this.notificationApi.getUnreadCount().pipe(
+      map(res => {
+        const count = res.unreadCount ?? 0;
+        this.unreadCount.set(count);
+        return count;
+      })
+    );
+  }
 
   getNotifications(): Observable<NotificationModel[]> {
     return this.notificationApi.getInbox(undefined, 1, 50).pipe(
@@ -510,7 +541,27 @@ export class IdentityService {
     this.notifications.update(list => [model, ...list.filter(n => n.id !== model.id)]);
     if (!model.isRead) {
       this.unreadCount.update(c => c + 1);
+      this.toast?.info(model.title, model.message, model.actionUrl);
     }
+  }
+
+  respondProjectInvitation(projectId: string, notificationId: string, accept: boolean): Observable<RoleDto> {
+    return this.rbacApi.respondInvitation(projectId, notificationId, accept).pipe(
+      map(res => {
+        this.notifications.update(list => list.map(item => {
+          if (item.id === notificationId) {
+            return {
+              ...item,
+              isRead: true,
+              responseStatus: accept ? 'ACCEPTED' : 'DECLINED'
+            };
+          }
+          return item;
+        }));
+        this.unreadCount.update(count => Math.max(0, count - 1));
+        return res;
+      })
+    );
   }
 
   private toNotificationModel(dto: NotificationDto): NotificationModel {
@@ -518,13 +569,22 @@ export class IdentityService {
     let type: NotificationModel['type'] = 'SYSTEM';
     let category: NotificationModel['category'] = 'System';
 
-    if (rawType.includes('SECURITY') || rawType.includes('PASSWORD') || rawType.includes('AUTH')) {
+    if (rawType === 'PROJECTINVITATION' || rawType === 'PROJECT_INVITATION') {
+      type = 'PROJECT_INVITATION';
+      category = 'Assignment';
+    } else if (rawType === 'PROJECTINVITATIONACCEPTED' || rawType === 'PROJECT_INVITATION_ACCEPTED') {
+      type = 'PROJECT_INVITATION_ACCEPTED';
+      category = 'Assignment';
+    } else if (rawType === 'PROJECTINVITATIONDECLINED' || rawType === 'PROJECT_INVITATION_DECLINED') {
+      type = 'PROJECT_INVITATION_DECLINED';
+      category = 'Assignment';
+    } else if (rawType.includes('SECURITY') || rawType.includes('PASSWORD') || rawType.includes('AUTH')) {
       type = 'SECURITY';
       category = 'Security';
     } else if (rawType.includes('AI') || rawType.includes('SUGGESTION')) {
       type = 'AI_SUGGESTION';
       category = 'System';
-    } else if (rawType.includes('ASSIGN') || rawType.includes('TASK') || rawType.includes('PROJECT') || rawType.includes('MEMBER')) {
+    } else if (rawType.includes('CHAT') || rawType.includes('SPRINT') || rawType.includes('ASSIGN') || rawType.includes('TASK') || rawType.includes('PROJECT') || rawType.includes('MEMBER')) {
       type = 'TASK';
       category = 'Assignment';
     }
@@ -537,7 +597,14 @@ export class IdentityService {
       type,
       category,
       isRead: dto.isRead ?? false,
-      createdAt: dto.createdAt ?? new Date().toISOString()
+      createdAt: dto.createdAt ?? new Date().toISOString(),
+      entityType: dto.entityType ?? null,
+      entityId: dto.entityId ?? null,
+      projectId: dto.projectId ?? null,
+      actorId: dto.actorId ?? null,
+      rawType: dto.type,
+      responseStatus: null,
+      actionUrl: dto.entityType === 'Issue' && dto.entityId ? `/issues/${dto.entityId}` : dto.projectId ? `/projects/${dto.projectId}` : undefined
     };
   }
 
@@ -554,11 +621,11 @@ export class IdentityService {
   }
 
   getActiveSessions(): Observable<ActiveSessionModel[]> {
-    return this.http.get<ActiveSessionModel[]>(`${environment.apiBaseUrl}/v1/users/me/sessions`);
+    return this.http.get<ActiveSessionModel[]>(`${environment.apiBaseUrl}/users/me/sessions`);
   }
 
   revokeSession(sessionId: string): Observable<{ success: boolean }> {
-    return this.http.delete<{ success: boolean; isCurrent: boolean }>(`${environment.apiBaseUrl}/v1/users/me/sessions/${sessionId}`).pipe(
+    return this.http.delete<{ success: boolean; isCurrent: boolean }>(`${environment.apiBaseUrl}/users/me/sessions/${sessionId}`).pipe(
       map(result => {
         if (result.isCurrent) {
           this.tokenStore.clear();

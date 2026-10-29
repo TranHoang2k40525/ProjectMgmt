@@ -1,0 +1,83 @@
+<section aria-labelledby="org-projects-title">
+  <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <h2 id="org-projects-title" [class]="ui.sectionTitle">Dự án của bạn</h2>
+    <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <div class="relative sm:w-72">
+        <label for="project-search" class="sr-only">Tìm dự án theo tên hoặc mã</label>
+        <span class="material-symbols-outlined pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-slate-400" aria-hidden="true">search</span>
+        <input id="project-search" type="search" [class]="ui.input" class="pl-9" placeholder="Tìm theo tên hoặc mã…"
+               [ngModel]="query()" (ngModelChange)="query.set($event)" autocomplete="off" />
+      </div>
+      <button type="button" [class]="ui.primaryButton" (click)="wizardOpen.set(true)">
+        <span class="material-symbols-outlined text-[18px]" aria-hidden="true">add</span>
+        Tạo dự án
+      </button>
+    </div>
+  </div>
+
+  <app-section-state [loading]="loading()" [error]="error()" [rows]="4" (retry)="load()">
+    @if (filtered().length > 0) {
+      <p class="sr-only" aria-live="polite">{{ filtered().length }} dự án</p>
+      <ul class="grid gap-3 md:hidden">
+        @for (project of filtered(); track project.id) {
+          <li>
+            <button type="button" (click)="nav.openProject(project)"
+                    class="w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm hover:border-primary-container dark:border-slate-800 dark:bg-slate-900">
+              <span class="font-mono text-xs font-bold text-primary-container">{{ project.projectKey }}</span>
+              <span class="mt-1 block font-semibold text-slate-900 dark:text-white">{{ project.name }}</span>
+              <span class="mt-1 block text-xs text-slate-500">Phụ trách: {{ project.leadName }} · <span class="tabular-nums">{{ project.memberCount }}</span> thành viên</span>
+            </button>
+          </li>
+        }
+      </ul>
+
+      <div class="hidden overflow-hidden rounded-xl border border-slate-200 bg-white md:block dark:border-slate-800 dark:bg-slate-900">
+        <table class="w-full text-sm">
+          <caption class="sr-only">Danh sách dự án của tổ chức</caption>
+          <thead class="bg-slate-50 text-left text-xs font-bold uppercase text-slate-500 dark:bg-slate-800/60">
+            <tr>
+              <th scope="col" class="px-4 py-2.5">Mã</th>
+              <th scope="col" class="px-4 py-2.5">Tên dự án</th>
+              <th scope="col" class="px-4 py-2.5">Người phụ trách</th>
+              <th scope="col" class="px-4 py-2.5 text-right">Thành viên</th>
+              <th scope="col" class="px-4 py-2.5">Ngày tạo</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+            @for (project of filtered(); track project.id) {
+              <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                <td class="px-4 py-3 font-mono text-xs font-bold text-primary-container">{{ project.projectKey }}</td>
+                <td class="px-4 py-3">
+                  <button type="button" (click)="nav.openProject(project)" class="font-semibold text-slate-900 hover:text-primary-container hover:underline dark:text-white">
+                    {{ project.name }}
+                  </button>
+                  @if (project.description) {
+                    <span class="block max-w-md truncate text-xs text-slate-500">{{ project.description }}</span>
+                  }
+                </td>
+                <td class="px-4 py-3 text-slate-700 dark:text-slate-300">{{ project.leadName }}</td>
+                <td class="px-4 py-3 text-right tabular-nums text-slate-700 dark:text-slate-300">{{ project.memberCount }}</td>
+                <td class="px-4 py-3 tabular-nums text-slate-500">{{ formatDate(project.createdAt) }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    } @else if (projects().length > 0) {
+      <p class="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700" aria-live="polite">
+        Không có dự án nào khớp “{{ query() }}”.
+      </p>
+    } @else {
+      <div class="rounded-2xl border border-dashed border-slate-300 px-6 py-10 text-center dark:border-slate-700">
+        <p class="font-semibold text-slate-800 dark:text-slate-100">Bạn chưa tham gia dự án nào trong tổ chức này</p>
+        <p class="mt-1 text-sm text-slate-500 text-pretty">Tạo dự án mới hoặc nhờ người phụ trách dự án thêm bạn vào.</p>
+        <button type="button" [class]="ui.primaryButton" class="mt-4" (click)="wizardOpen.set(true)">Tạo dự án</button>
+      </div>
+    }
+  </app-section-state>
+</section>
+
+@if (wizardOpen() && context.currentOrg(); as org) {
+  <app-create-project-wizard [orgId]="org.id" (created)="onProjectCreated($event)"
+                             (openProject)="openCreatedProject($event)" (dismissed)="wizardOpen.set(false)" />
+}

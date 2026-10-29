@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.RateLimiting;
 namespace ProjectMgmt.Solution.Controllers;
 
 [Route("api/v1/auth")]
+[Route("api/auth")]
 [ApiController]
 [AllowAnonymous]
 public class AccountController : ControllerBase
@@ -29,7 +30,6 @@ public class AccountController : ControllerBase
     }
 
     [HttpPost("register")]
-    [EnableRateLimiting("auth-otp")]
     public async Task<IActionResult> Register([FromBody] AccountDto request)
     {
         try
@@ -60,7 +60,6 @@ public class AccountController : ControllerBase
     }
 
     [HttpPost("otp/send")]
-    [EnableRateLimiting("auth-otp")]
     public async Task<IActionResult> SendOtp([FromBody] AccountDto request)
     {
         try
@@ -93,7 +92,6 @@ public class AccountController : ControllerBase
     }
 
     [HttpPost("otp/verify")]
-    [EnableRateLimiting("auth-otp")]
     public async Task<IActionResult> VerifyOtp([FromBody] AccountDto request)
     {
         try
@@ -124,7 +122,6 @@ public class AccountController : ControllerBase
     }
 
     [HttpPost("forgot-password")]
-    [EnableRateLimiting("auth-otp")]
     public async Task<IActionResult> ForgotPassword([FromBody] AccountDto request)
     {
         try
@@ -139,7 +136,6 @@ public class AccountController : ControllerBase
     }
 
     [HttpPost("reset-password")]
-    [EnableRateLimiting("auth-otp")]
     public async Task<IActionResult> ResetPassword([FromBody] AccountDto request)
     {
         try
@@ -178,7 +174,7 @@ public class AccountController : ControllerBase
             {
                 Success = false,
                 ErrorCode = "AUTH_EXTERNAL_LOGIN_NOT_CONFIGURED",
-                Message = "Đăng nhập Google/Microsoft chưa được cấu hình ClientId và ClientSecret."
+                Message = "Phương thức đăng nhập qua Google hoặc Microsoft chưa được cấu hình Client ID và Client Secret."
             });
     }
 

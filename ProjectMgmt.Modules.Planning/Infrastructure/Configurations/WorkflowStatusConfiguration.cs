@@ -1,6 +1,5 @@
 using Planning.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Planning.Infrastructure.Configurations;
@@ -12,7 +11,6 @@ public class WorkflowStatusConfiguration : IEntityTypeConfiguration<WorkflowStat
         builder.ToTable("WorkflowStatus", table =>
         {
             table.HasComment("Mỗi Project tự định nghĩa bộ trạng thái riêng");
-            table.HasCheckConstraint("CK_WorkflowStatus_Category", "`Category` IN ('ToDo','InProgress','Done')");
         });
 
         builder.HasCharSet("utf8mb4").UseCollation("utf8mb4_0900_ai_ci");
@@ -37,13 +35,13 @@ public class WorkflowStatusConfiguration : IEntityTypeConfiguration<WorkflowStat
 
         builder.Property(entity => entity.Category)
             .HasColumnName("Category")
-            .HasColumnType("varchar(20)")
-            .HasComment("ToDo / InProgress / Done - chuẩn hóa để tính báo cáo")
+            .HasColumnType("varchar(50)")
+            .HasComment("Nhãn phân loại tự do của người dùng")
             .IsRequired();
 
         builder.Property(entity => entity.ColorHex)
             .HasColumnName("ColorHex")
-            .HasColumnType("char(7)")
+            .HasColumnType("varchar(10)")
             .HasDefaultValue("#8993A4")
             .IsRequired();
 
@@ -58,10 +56,26 @@ public class WorkflowStatusConfiguration : IEntityTypeConfiguration<WorkflowStat
             .HasComment("Trạng thái mặc định khi tạo issue mới")
             .HasDefaultValue(false);
 
+        builder.Property(entity => entity.IsDone)
+            .HasColumnName("IsDone")
+            .HasColumnType("tinyint(1)")
+            .HasComment("Trạng thái đánh dấu hoàn thành")
+            .HasDefaultValue(false);
+
+        builder.Property(entity => entity.IsActiveWork)
+            .HasColumnName("IsActiveWork")
+            .HasColumnType("tinyint(1)")
+            .HasComment("Trạng thái đang thực hiện")
+            .HasDefaultValue(false);
+
+        builder.Property(entity => entity.IsCanceled)
+            .HasColumnName("IsCanceled")
+            .HasColumnType("tinyint(1)")
+            .HasComment("Trạng thái đã hủy")
+            .HasDefaultValue(false);
+
         builder.HasIndex(entity => new { entity.ProjectId, entity.Name }, "UQ_WorkflowStatus_Name").IsUnique();
-
         builder.HasIndex(entity => new { entity.ProjectId, entity.OrderIndex }, "IX_WorkflowStatus_Project_Order");
-
         builder.HasIndex(entity => entity.Name, "IX_WorkflowStatus_Name");
 
         builder.HasOne<Project>()

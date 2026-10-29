@@ -38,9 +38,22 @@ import { ToastService } from '../../core/services/toast.service';
 
       <!-- Navigation Tabs -->
       <div class="settings-tabs">
-        <a [routerLink]="['/projects', projectId, 'settings']" class="tab-item">⚙️ Thông tin chung</a>
-        <a [routerLink]="['/projects', projectId, 'settings', 'workflow']" class="tab-item">🔄 Cấu hình Workflow</a>
-        <span class="tab-item active">📋 Cấu hình Board</span>
+        <a [routerLink]="['/projects', projectId, 'settings']" class="tab-item flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[18px]">tune</span>
+          <span>Thông tin chung</span>
+        </a>
+        <a [routerLink]="['/projects', projectId, 'settings', 'workflow']" class="tab-item flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[18px]">sync_alt</span>
+          <span>Cấu hình Workflow</span>
+        </a>
+        <span class="tab-item active flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[18px]">view_kanban</span>
+          <span>Cấu hình Board</span>
+        </span>
+        <a [routerLink]="['/projects', projectId, 'members']" class="tab-item flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[18px]">badge</span>
+          <span>Thành viên & Phân quyền</span>
+        </a>
       </div>
 
       @if (alertMessage()) {
@@ -154,7 +167,9 @@ import { ToastService } from '../../core/services/toast.service';
 
                     <div class="col-actions">
                       <button type="button" class="btn btn-secondary btn-sm" [disabled]="savingColumn() || savingOrder() || columnsLoading() || submittingCol()" (click)="editColumn(col)">Sửa</button>
-                      <button [disabled]="savingColumn() || savingOrder() || columnsLoading() || submittingCol()" (click)="onDeleteColumn(col)" class="btn-delete" title="Xóa cột">✕</button>
+                      <button [disabled]="savingColumn() || savingOrder() || columnsLoading() || submittingCol()" (click)="onDeleteColumn(col)" class="btn-delete flex items-center justify-center" title="Xóa cột">
+                        <span class="material-symbols-outlined text-[16px]">delete</span>
+                      </button>
                     </div>
                   </div>
                   @if (editingColumnId() === col.id) {

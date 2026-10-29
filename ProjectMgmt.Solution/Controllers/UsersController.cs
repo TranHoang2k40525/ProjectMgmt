@@ -8,6 +8,7 @@ namespace ProjectMgmt.Solution.Controllers;
 
 [ApiController]
 [Authorize]
+[Route("api/users")]
 [Route("api/v1/users")]
 public class UsersController : ControllerBase
 {
@@ -48,44 +49,35 @@ public class UsersController : ControllerBase
     /// Hỗ trợ cả /api/users (cũ) và /api/v1/users (mới).
     /// </summary>
     [HttpGet]
-    [HttpGet("~/api/users")]
-    public async Task<IActionResult> GetAllUsers(CancellationToken cancellationToken)
+    [HttpGet("directory")]
+    public async Task<IActionResult> GetAllUsers()
     {
         try
         {
-            var identity = HttpContext.RequestServices.GetRequiredService<IdentityExperience.Infrastructure.IdentityExperienceDbContext>();
-            return Ok(await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync(
-                from user in identity.Users
-                join profile in identity.UserProfiles on user.Id equals profile.UserId
-                where user.IsActive && user.IsEmailVerified
-                orderby profile.DisplayName
-                select new { userId = user.Id, profile.DisplayName, user.Email, profile.AvatarUrl }, cancellationToken));
+            var users = await _userLookup.GetAllActiveDisplayInfoAsync();
+            return Ok(users);
         }
-        catch (Exception exception) when (exception is not OperationCanceledException)
+        catch (Exception exception)
         {
             return InternalError("users", exception);
         }
     }
 
     [HttpGet("{userId:guid}/display")]
-    [HttpGet("~/api/users/{userId:guid}/display")]
-    public async Task<IActionResult> GetDisplay(
-        Guid userId,
-        CancellationToken cancellationToken)
+    public async Task<IActionResult> GetDisplay(Guid userId)
     {
         try
         {
-            var user = await _userLookup.GetDisplayInfoAsync(userId, cancellationToken);
+            var user = await _userLookup.GetDisplayInfoAsync(userId);
             return user is null ? NotFound() : Ok(user);
         }
-        catch (Exception exception) when (exception is not OperationCanceledException)
+        catch (Exception exception)
         {
             return InternalError("users/display", exception);
         }
     }
 
     [HttpPost("skills/query")]
-    [HttpPost("~/api/users/skills/query")]
     public async Task<IActionResult> GetSkills(
         [FromBody] IReadOnlyCollection<Guid> userIds)
     {

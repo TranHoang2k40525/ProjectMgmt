@@ -77,6 +77,16 @@ public class NotificationEmailDispatcher : INotificationEmailDispatcher
                     user.Email,
                     recipientName,
                     notification.ProjectId.Value),
+                NotificationTypes.ProjectInvitationAccepted => await SendInvitationResponseEmailAsync(
+                    user.Email,
+                    recipientName,
+                    notification,
+                    accepted: true),
+                NotificationTypes.ProjectInvitationDeclined => await SendInvitationResponseEmailAsync(
+                    user.Email,
+                    recipientName,
+                    notification,
+                    accepted: false),
                 _ => false
             };
         }
@@ -89,5 +99,38 @@ public class NotificationEmailDispatcher : INotificationEmailDispatcher
                 exception);
             return false;
         }
+    }
+
+    private async Task<bool> SendInvitationResponseEmailAsync(
+        string recipientEmail,
+        string recipientName,
+        NotificationDto notification,
+        bool accepted)
+    {
+        var memberName = "Thành viên";
+        var memberEmail = "";
+        if (notification.ActorId.HasValue)
+        {
+            var actorUser = await _identityRepository.GetUserByIdAsync(notification.ActorId.Value);
+            var actorProfile = actorUser is not null
+                ? await _identityRepository.GetUserProfileAsync(notification.ActorId.Value)
+                : null;
+            memberName = actorProfile?.DisplayName ?? actorUser?.Email ?? "Thành viên";
+            memberEmail = actorUser?.Email ?? "";
+        }
+
+        return accepted
+            ? await _emailService.SendInvitationAcceptedAsync(
+                recipientEmail,
+                recipientName,
+                memberName,
+                memberEmail,
+                notification.ProjectId!.Value)
+            : await _emailService.SendInvitationDeclinedAsync(
+                recipientEmail,
+                recipientName,
+                memberName,
+                memberEmail,
+                notification.ProjectId!.Value);
     }
 }

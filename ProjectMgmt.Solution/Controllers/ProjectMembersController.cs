@@ -1,18 +1,17 @@
+using System.ComponentModel.DataAnnotations;
 using IdentityExperience.Application.Dto;
 using IdentityExperience.Application.IServices;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ProjectMgmt.IdentityAccess.Contracts;
 using ProjectMgmt.ProjectManagement.Contracts;
-using Microsoft.EntityFrameworkCore;
-using IdentityExperience.Infrastructure;
-using System.ComponentModel.DataAnnotations;
 
 namespace ProjectMgmt.Solution.Controllers;
 
 [ApiController]
 [Authorize]
 [Route("api/v1/projects/{projectId:guid}/members")]
+[Route("api/projects/{projectId:guid}/members")]
 public class ProjectMembersController : ControllerBase
 {
     private static readonly Action<ILogger, string, Exception?> LogEndpointFailure =
@@ -48,7 +47,7 @@ public class ProjectMembersController : ControllerBase
             projectId,
             "member.read",
             "list",
-            async actor => Ok(await _roleServices.GetProjectMembersAsync(projectId)));
+            async (actor, _) => Ok(await _roleServices.GetProjectMembersAsync(projectId)));
     }
 
     [HttpPost]
@@ -58,7 +57,7 @@ public class ProjectMembersController : ControllerBase
             projectId,
             "member.invite",
             "add",
-            async actor =>
+            async (actor, _) =>
             {
                 var result = await _roleServices.AddProjectMemberAsync(
                     actor,
@@ -79,17 +78,60 @@ public class ProjectMembersController : ControllerBase
 
     [HttpPost("invite")]
     public Task<IActionResult> Invite(Guid projectId, InviteRequest request) => ExecuteWithPermission(
-        projectId, "member.invite", "invite", async actor =>
+        projectId, "member.invite", "invite", async (actor, _) =>
         {
-            var identity = HttpContext.RequestServices.GetRequiredService<IdentityExperienceDbContext>();
-            var normalized = request.Email.Trim().ToUpperInvariant();
-            var user = await identity.Users.AsNoTracking().SingleOrDefaultAsync(u => u.NormalizedEmail == normalized && u.IsActive && u.IsEmailVerified);
-            if (user is null) return NotFound(new { message = "Chưa tìm thấy tài khoản đã xác minh với email này." });
-            var role = await identity.Roles.AsNoTracking().SingleOrDefaultAsync(r => r.Scope == "Project" && r.Name == request.RoleName);
-            if (role is null) return BadRequest(new { message = "Vai trò dự án không hợp lệ." });
-            var result = await _roleServices.AddProjectMemberAsync(actor, projectId, user.Id, role.Id);
+            var result = await _roleServices.InviteProjectMemberByEmailAsync(actor, projectId, request.Email, request.RoleName);
             return result.Success ? StatusCode(201, result) : MapWriteFailure(result);
         });
+
+    public class BatchInviteRequest
+    {
+        [Required] public string Emails { get; set; } = "";
+        public string? Names { get; set; }
+        [Required] public string RoleName { get; set; } = "Developer";
+    }
+
+    [HttpPost("batch-invite")]
+    public Task<IActionResult> BatchInvite(Guid projectId, [FromBody] BatchInviteRequest request) =>
+        ExecuteWithPermission(
+            projectId, "member.invite", "batch-invite", async (actor, _) =>
+            {
+                var result = await _roleServices.BatchInviteProjectMembersAsync(
+                    actor,
+                    projectId,
+                    request.Emails,
+                    request.Names,
+                    request.RoleName);
+                return result.Success ? StatusCode(201, result) : MapWriteFailure(result);
+            });
+
+    public class RespondInvitationRequest
+    {
+        [Required] public Guid NotificationId { get; set; }
+        public bool Accept { get; set; }
+    }
+
+    [HttpPost("respond-invitation")]
+    public async Task<IActionResult> RespondInvitation(Guid projectId, [FromBody] RespondInvitationRequest request)
+    {
+        if (!_currentUser.UserId.HasValue)
+        {
+            return Unauthorized(new RoleDto
+            {
+                Success = false,
+                ErrorCode = "AUTH_UNAUTHENTICATED",
+                Message = "Phiên đăng nhập không hợp lệ."
+            });
+        }
+
+        var result = await _roleServices.RespondProjectInvitationAsync(
+            _currentUser.UserId.Value,
+            projectId,
+            request.NotificationId,
+            request.Accept);
+
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
 
     [HttpPut("{userId:guid}/role")]
     public async Task<IActionResult> ChangeRole(
@@ -101,8 +143,18 @@ public class ProjectMembersController : ControllerBase
             projectId,
             "member.role.assign",
             "change-role",
-            async actor =>
+            async (actor, projectScope) =>
             {
+                if (projectScope.CreatedByUserId == userId || projectScope.LeadUserId == userId)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new RoleDto
+                    {
+                        Success = false,
+                        ErrorCode = "RBAC_IMMUTABLE_LEAD",
+                        Message = "Không thể thay đổi vai trò của Giám đốc dự án hoặc Người tạo dự án."
+                    });
+                }
+
                 var result = await _roleServices.ChangeProjectMemberRoleAsync(
                     actor,
                     projectId,
@@ -119,8 +171,18 @@ public class ProjectMembersController : ControllerBase
             projectId,
             "member.remove",
             "remove",
-            async actor =>
+            async (actor, projectScope) =>
             {
+                if (projectScope.CreatedByUserId == userId || projectScope.LeadUserId == userId)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new RoleDto
+                    {
+                        Success = false,
+                        ErrorCode = "RBAC_IMMUTABLE_LEAD",
+                        Message = "Không thể xóa Giám đốc dự án hoặc Người tạo dự án khỏi dự án."
+                    });
+                }
+
                 var result = await _roleServices.RemoveProjectMemberAsync(actor, projectId, userId);
                 return result.Success ? Ok(result) : MapWriteFailure(result);
             });
@@ -130,7 +192,7 @@ public class ProjectMembersController : ControllerBase
         Guid projectId,
         string permissionCode,
         string endpoint,
-        Func<Guid, Task<IActionResult>> action)
+        Func<Guid, ProjectScopeInfo, Task<IActionResult>> action)
     {
         try
         {
@@ -173,7 +235,7 @@ public class ProjectMembersController : ControllerBase
                     });
             }
 
-            return await action(_currentUser.UserId.Value);
+            return await action(_currentUser.UserId.Value, project);
         }
         catch (Exception exception)
         {
@@ -196,7 +258,7 @@ public class ProjectMembersController : ControllerBase
             "RBAC_USER_NOT_FOUND" or "RBAC_PROJECT_ROLE_NOT_FOUND" or "RBAC_MEMBER_NOT_FOUND" =>
                 NotFound(result),
             "RBAC_MEMBER_ALREADY_EXISTS" or "RBAC_LAST_PROJECT_MANAGER" => Conflict(result),
-            "RBAC_SELF_ESCALATION_FORBIDDEN" or "RBAC_SELF_CHANGE_FORBIDDEN" =>
+            "RBAC_SELF_ESCALATION_FORBIDDEN" or "RBAC_SELF_CHANGE_FORBIDDEN" or "RBAC_IMMUTABLE_LEAD" =>
                 StatusCode(StatusCodes.Status403Forbidden, result),
             _ => BadRequest(result)
         };

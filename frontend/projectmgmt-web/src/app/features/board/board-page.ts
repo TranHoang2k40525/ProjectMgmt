@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, inject, signal, computed } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, OnInit, AfterViewInit, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DragDropModule, CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
 import { gsap } from 'gsap';
 import { Flip } from 'gsap/Flip';
+import { apiErrorMessage } from '../../core/http/api-error-message';
 import { ProjectManagementService, WorkItem } from '../../core/services/project-management.service';
 import { IdentityService } from '../../core/services/identity.service';
 import { ToastService } from '../../core/services/toast.service';
@@ -11,23 +12,26 @@ import { ContextMenuComponent, ContextMenuItemAction } from '../../shared/compon
 
 gsap.registerPlugin(Flip);
 
+import { NoProjectStateComponent } from '../../shared/components/no-project-state/no-project-state.component';
+
 @Component({
   selector: 'app-board-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, DragDropModule, ContextMenuComponent],
+  imports: [CommonModule, FormsModule, DragDropModule, ContextMenuComponent, NoProjectStateComponent],
   templateUrl: './board-page.html',
   styleUrl: './board-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class BoardPage implements OnDestroy {
+export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
   private el = inject<ElementRef<HTMLElement>>(ElementRef);
   private flipAnimation: gsap.core.Timeline | null = null;
+  private entranceTween: gsap.core.Tween | null = null;
   private readonly identityService = inject(IdentityService);
   readonly projectService = inject(ProjectManagementService);
   readonly toastService = inject(ToastService);
 
   readonly projectMembers = computed(() => this.projectService.currentProject()?.members ?? []);
-  readonly activeSprint = computed(() => this.projectService.sprints().find(s => s.status === 'active') ?? this.projectService.sprints()[0] ?? null);
+  readonly activeSprint = computed(() => this.projectService.sprints().find(s => s.status === 'active') ?? null);
 
   searchQuery = signal<string>('');
   selectedAssigneeFilter = signal<string | null>(null);
@@ -78,13 +82,120 @@ export class BoardPage implements OnDestroy {
     return list;
   });
 
-  readonly toDoItems = computed(() => this.filteredItems().filter(i => i.statusName === 'To Do'));
-  readonly inProgressItems = computed(() => this.filteredItems().filter(i => i.statusName === 'In Progress'));
-  readonly codeReviewItems = computed(() => this.filteredItems().filter(i => i.statusName === 'Code Review'));
-  readonly doneItems = computed(() => this.filteredItems().filter(i => i.statusName === 'Done'));
+  readonly boardColumns = computed(() => {
+    const statuses = this.projectService.projectStatuses();
+    if (statuses.length === 0) {
+      return [
+        { id: 'st-1', name: 'To Do', colorHex: '#64748B' },
+        { id: 'st-2', name: 'In Progress', colorHex: '#3B82F6' },
+        { id: 'st-3', name: 'Code Review', colorHex: '#8B5CF6' },
+        { id: 'st-4', name: 'Done', colorHex: '#10B981' }
+      ];
+    }
+    return statuses;
+  });
+
+  getColumnItems(statusName: string): WorkItem[] {
+    const all = this.filteredItems().filter(i => (i.statusName || '').trim().toLowerCase() === statusName.trim().toLowerCase());
+    return [...all].sort((a, b) => {
+      if (a.isBlocked && !b.isBlocked) return -1;
+      if (!a.isBlocked && b.isBlocked) return 1;
+      return 0;
+    });
+  }
+
+  readonly issueTypes = computed(() => {
+    const custom = this.projectService.customIssueTypes().map(t => t.name);
+    return custom.length > 0 ? custom : ['Story', 'Task', 'Bug', 'Epic', 'Sub-task'];
+  });
+
+  getIssueTypeIcon(type: string): string {
+    const custom = this.projectService.customIssueTypes().find(t => t.name.toLowerCase() === type.toLowerCase());
+    if (custom?.icon) return custom.icon;
+    const map: Record<string, string> = {
+      'Story': 'bookmark',
+      'Task': 'task',
+      'Bug': 'bug_report',
+      'Use-Case': 'schema',
+      'Epic': 'bolt',
+      'Sub-task': 'subdirectory_arrow_right'
+    };
+    return map[type] || 'task_alt';
+  }
+
+  getIssueTypeColor(type: string): string {
+    const custom = this.projectService.customIssueTypes().find(t => t.name.toLowerCase() === type.toLowerCase());
+    return custom?.color || '#3B82F6';
+  }
+
+  // --- Blocker Management ---
+  readonly showBlockModal = signal<boolean>(false);
+  readonly blockingItem = signal<WorkItem | null>(null);
+  blockReasonInput = '';
+
+  openBlockModal(item: WorkItem, event?: Event): void {
+    if (event) event.stopPropagation();
+    this.blockingItem.set(item);
+    this.blockReasonInput = '';
+    this.showBlockModal.set(true);
+  }
+
+  confirmBlock(): void {
+    const item = this.blockingItem();
+    const reason = this.blockReasonInput.trim();
+    if (!item || !reason) return;
+    this.projectService.blockIssue(item.id, reason).subscribe({
+      next: () => {
+        this.showBlockModal.set(false);
+        this.toastService.warning('Báo Chặn (Blocker)', `Đã gắn cờ cản trở cho ${item.issueKey}`);
+      },
+      error: (err) => this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể báo chặn.'))
+    });
+  }
+
+  unblock(item: WorkItem, event?: Event): void {
+    if (event) event.stopPropagation();
+    this.projectService.unblockIssue(item.id).subscribe({
+      next: () => this.toastService.success('Đã Gỡ Chặn', `Đã mở lại tiến độ cho ${item.issueKey}`),
+      error: (err) => this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể gỡ chặn.'))
+    });
+  }
+
+  readonly toDoItems = computed(() => this.getColumnItems('To Do'));
+  readonly inProgressItems = computed(() => this.getColumnItems('In Progress'));
+  readonly codeReviewItems = computed(() => this.getColumnItems('Code Review'));
+  readonly doneItems = computed(() => this.getColumnItems('Done'));
+
+  ngOnInit(): void {
+    const currentProj = this.projectService.currentProject();
+    if (currentProj?.id && (!currentProj.members || currentProj.members.length === 0)) {
+      this.projectService.loadProjectMembers(currentProj.id).subscribe();
+    }
+  }
+
+  ngAfterViewInit(): void {
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      const columns = this.el.nativeElement.querySelectorAll<HTMLElement>('.board-column');
+      if (columns.length) {
+        this.entranceTween = gsap.fromTo(
+          columns,
+          { opacity: 0, y: 18 },
+          {
+            opacity: 1,
+            y: 0,
+            duration: 0.45,
+            stagger: 0.08,
+            ease: 'power2.out',
+            clearProps: 'transform,opacity'
+          }
+        );
+      }
+    }
+  }
 
   ngOnDestroy(): void {
     this.flipAnimation?.kill();
+    this.entranceTween?.kill();
   }
 
   // CDK Drag & Drop Handler
@@ -200,7 +311,7 @@ export class BoardPage implements OnDestroy {
   // Quick Inline Status Shift
   moveStatus(task: WorkItem, direction: 'prev' | 'next', event?: Event): void {
     if (event) event.stopPropagation();
-    const statuses: string[] = ['To Do', 'In Progress', 'Code Review', 'Done'];
+    const statuses = this.boardColumns().map(s => s.name);
     const idx = statuses.indexOf(task.statusName);
     if (direction === 'next' && idx < statuses.length - 1) {
       const nextStatus = statuses[idx + 1];

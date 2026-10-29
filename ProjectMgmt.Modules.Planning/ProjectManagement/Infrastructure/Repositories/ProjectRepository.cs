@@ -13,160 +13,151 @@ public class ProjectRepository : IProjectRepository
     {
         _dbContext = dbContext;
     }
-    public Task<bool> ExistsAsync(Guid projectId, CancellationToken cancellationToken = default) =>
-        _dbContext.Projects.AsNoTracking().AnyAsync(
-            x => x.Id == projectId && !x.IsDeleted,
-            cancellationToken);
 
-    public Task<Project?> GetByIdAsync(Guid projectId, CancellationToken cancellationToken = default) =>
-        _dbContext.Projects.SingleOrDefaultAsync(x => x.Id == projectId && !x.IsDeleted, cancellationToken);
+    public Task<bool> ExistsAsync(Guid projectId) =>
+        _dbContext.Projects.AsNoTracking().AnyAsync(
+            x => x.Id == projectId && !x.IsDeleted);
+
+    public Task<Project?> GetByIdAsync(Guid projectId) =>
+        _dbContext.Projects.SingleOrDefaultAsync(x => x.Id == projectId && !x.IsDeleted);
 
     public Task<Project?> GetByKeyAsync(
         Guid organizationId,
-        string projectKey,
-        CancellationToken cancellationToken = default) =>
+        string projectKey) =>
         _dbContext.Projects.SingleOrDefaultAsync(
-            x => x.OrgId == organizationId && x.ProjectKey == projectKey,
-            cancellationToken);
+            x => x.OrgId == organizationId && x.ProjectKey == projectKey);
 
     public async Task<IReadOnlyList<IssueType>> GetIssueTypesAsync(
-        Guid projectId,
-        CancellationToken cancellationToken = default) =>
+        Guid projectId) =>
         await _dbContext.IssueTypes.AsNoTracking()
             .Where(x => x.ProjectId == projectId)
             .OrderBy(x => x.OrderIndex)
-            .ToListAsync(cancellationToken);
+            .ToListAsync();
 
     public async Task<IReadOnlyList<WorkflowStatus>> GetStatusesAsync(
-        Guid projectId,
-        CancellationToken cancellationToken = default) =>
+        Guid projectId) =>
         await _dbContext.WorkflowStatuses.AsNoTracking()
             .Where(x => x.ProjectId == projectId)
             .OrderBy(x => x.OrderIndex)
-            .ToListAsync(cancellationToken);
+            .ToListAsync();
 
     public Task<WorkflowTransition?> GetTransitionAsync(
         Guid projectId,
         Guid fromStatusId,
-        Guid toStatusId,
-        CancellationToken cancellationToken = default) =>
+        Guid toStatusId) =>
         _dbContext.WorkflowTransitions.AsNoTracking().SingleOrDefaultAsync(
-            x => x.ProjectId == projectId && x.FromStatusId == fromStatusId && x.ToStatusId == toStatusId,
-            cancellationToken);
+            x => x.ProjectId == projectId && x.FromStatusId == fromStatusId && x.ToStatusId == toStatusId);
 
     public Task<WorkflowStatus?> GetInitialStatusAsync(
-        Guid projectId,
-        CancellationToken cancellationToken = default) =>
+        Guid projectId) =>
         _dbContext.WorkflowStatuses.AsNoTracking()
             .Where(x => x.ProjectId == projectId && x.IsInitial)
             .OrderBy(x => x.OrderIndex)
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync();
 
     public Task<BoardColumnState?> GetBoardColumnStateAsync(
         Guid boardId,
-        Guid statusId,
-        CancellationToken cancellationToken = default) =>
+        Guid statusId) =>
         (from boardColumn in _dbContext.BoardColumns.AsNoTracking()
          join board in _dbContext.Boards.AsNoTracking() on boardColumn.BoardId equals board.Id
          where boardColumn.BoardId == boardId && boardColumn.StatusId == statusId
          select new BoardColumnState(board.ProjectId, boardColumn.WipLimit))
-        .SingleOrDefaultAsync(cancellationToken);
+        .SingleOrDefaultAsync();
 
     public async Task<int> ReserveNextIssueNumberAsync(
-        Guid projectId,
-        CancellationToken cancellationToken = default)
+        Guid projectId)
     {
-        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync();
         var project = await _dbContext.Projects
             .FromSqlInterpolated($"SELECT * FROM `Project` WHERE `Id` = {projectId} FOR UPDATE")
-            .SingleOrDefaultAsync(cancellationToken)
+            .SingleOrDefaultAsync()
             ?? throw new InvalidOperationException($"Project '{projectId}' does not exist.");
 
         project.IssueCounter++;
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+        await _dbContext.SaveChangesAsync();
+        await transaction.CommitAsync();
         return project.IssueCounter;
     }
 
-    public async Task<IReadOnlyList<Organization>> GetOrganizationsAsync(CancellationToken cancellationToken = default) =>
-        await _dbContext.Organizations.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.Name).ToListAsync(cancellationToken);
+    public async Task<IReadOnlyList<Organization>> GetOrganizationsAsync() =>
+        await _dbContext.Organizations.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.Name).ToListAsync();
 
-    public async Task<Organization?> GetOrganizationByIdAsync(Guid orgId, CancellationToken cancellationToken = default) =>
-        await _dbContext.Organizations.SingleOrDefaultAsync(x => x.Id == orgId, cancellationToken);
+    public async Task<Organization?> GetOrganizationByIdAsync(Guid orgId) =>
+        await _dbContext.Organizations.SingleOrDefaultAsync(x => x.Id == orgId);
 
-    public async Task AddOrganizationAsync(Organization organization, CancellationToken cancellationToken = default) =>
-        await _dbContext.Organizations.AddAsync(organization, cancellationToken);
+    public async Task AddOrganizationAsync(Organization organization) =>
+        await _dbContext.Organizations.AddAsync(organization);
 
-    public async Task<IReadOnlyList<Project>> GetAllProjectsAsync(Guid? orgId = null, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<Project>> GetAllProjectsAsync(Guid? orgId = null)
     {
         var query = _dbContext.Projects.AsNoTracking().Where(x => !x.IsDeleted);
         if (orgId.HasValue)
         {
             query = query.Where(x => x.OrgId == orgId.Value);
         }
-        return await query.OrderByDescending(x => x.CreatedAt).ToListAsync(cancellationToken);
+        return await query.OrderByDescending(x => x.CreatedAt).ToListAsync();
     }
 
     public void UpdateProject(Project project) =>
         _dbContext.Projects.Update(project);
 
-    public async Task AddIssueTypesAsync(IEnumerable<IssueType> issueTypes, CancellationToken cancellationToken = default) =>
-        await _dbContext.IssueTypes.AddRangeAsync(issueTypes, cancellationToken);
+    public async Task AddIssueTypesAsync(IEnumerable<IssueType> issueTypes) =>
+        await _dbContext.IssueTypes.AddRangeAsync(issueTypes);
 
-    public async Task AddWorkflowStatusesAsync(IEnumerable<WorkflowStatus> statuses, CancellationToken cancellationToken = default) =>
-        await _dbContext.WorkflowStatuses.AddRangeAsync(statuses, cancellationToken);
+    public async Task AddWorkflowStatusesAsync(IEnumerable<WorkflowStatus> statuses) =>
+        await _dbContext.WorkflowStatuses.AddRangeAsync(statuses);
 
-    public async Task AddWorkflowTransitionsAsync(IEnumerable<WorkflowTransition> transitions, CancellationToken cancellationToken = default) =>
-        await _dbContext.WorkflowTransitions.AddRangeAsync(transitions, cancellationToken);
+    public async Task AddWorkflowTransitionsAsync(IEnumerable<WorkflowTransition> transitions) =>
+        await _dbContext.WorkflowTransitions.AddRangeAsync(transitions);
 
-    public async Task AddBoardAsync(Board board, CancellationToken cancellationToken = default) =>
-        await _dbContext.Boards.AddAsync(board, cancellationToken);
+    public async Task AddBoardAsync(Board board) =>
+        await _dbContext.Boards.AddAsync(board);
 
-    public async Task AddBoardColumnsAsync(IEnumerable<BoardColumn> columns, CancellationToken cancellationToken = default) =>
-        await _dbContext.BoardColumns.AddRangeAsync(columns, cancellationToken);
+    public async Task AddBoardColumnsAsync(IEnumerable<BoardColumn> columns) =>
+        await _dbContext.BoardColumns.AddRangeAsync(columns);
 
-    public async Task<IReadOnlyList<WorkflowTransition>> GetTransitionsByProjectAsync(Guid projectId, CancellationToken cancellationToken = default) =>
+    public async Task<IReadOnlyList<WorkflowTransition>> GetTransitionsByProjectAsync(Guid projectId) =>
         await _dbContext.WorkflowTransitions.AsNoTracking()
             .Where(x => x.ProjectId == projectId)
-            .ToListAsync(cancellationToken);
+            .ToListAsync();
 
-    public async Task<WorkflowTransition?> GetTransitionByIdAsync(Guid transitionId, CancellationToken cancellationToken = default) =>
-        await _dbContext.WorkflowTransitions.SingleOrDefaultAsync(x => x.Id == transitionId, cancellationToken);
+    public async Task<WorkflowTransition?> GetTransitionByIdAsync(Guid transitionId) =>
+        await _dbContext.WorkflowTransitions.SingleOrDefaultAsync(x => x.Id == transitionId);
 
-    public async Task AddWorkflowTransitionAsync(WorkflowTransition transition, CancellationToken cancellationToken = default) =>
-        await _dbContext.WorkflowTransitions.AddAsync(transition, cancellationToken);
+    public async Task AddWorkflowTransitionAsync(WorkflowTransition transition) =>
+        await _dbContext.WorkflowTransitions.AddAsync(transition);
 
     public void DeleteWorkflowTransition(WorkflowTransition transition) =>
         _dbContext.WorkflowTransitions.Remove(transition);
 
-    public async Task<IReadOnlyList<Board>> GetBoardsByProjectAsync(Guid projectId, CancellationToken cancellationToken = default) =>
+    public async Task<IReadOnlyList<Board>> GetBoardsByProjectAsync(Guid projectId) =>
         await _dbContext.Boards.AsNoTracking()
             .Where(x => x.ProjectId == projectId)
             .OrderByDescending(x => x.IsDefault)
             .ThenBy(x => x.Name)
-            .ToListAsync(cancellationToken);
+            .ToListAsync();
 
-    public async Task<Board?> GetBoardByIdAsync(Guid boardId, CancellationToken cancellationToken = default) =>
-        await _dbContext.Boards.SingleOrDefaultAsync(x => x.Id == boardId, cancellationToken);
+    public async Task<Board?> GetBoardByIdAsync(Guid boardId) =>
+        await _dbContext.Boards.SingleOrDefaultAsync(x => x.Id == boardId);
 
-    public async Task<IReadOnlyList<BoardColumn>> GetBoardColumnsAsync(Guid boardId, CancellationToken cancellationToken = default) =>
+    public async Task<IReadOnlyList<BoardColumn>> GetBoardColumnsAsync(Guid boardId) =>
         await _dbContext.BoardColumns
             .Where(x => x.BoardId == boardId)
             .OrderBy(x => x.OrderIndex)
-            .ToListAsync(cancellationToken);
+            .ToListAsync();
 
-    public async Task<BoardColumn?> GetBoardColumnByIdAsync(Guid columnId, CancellationToken cancellationToken = default) =>
-        await _dbContext.BoardColumns.SingleOrDefaultAsync(x => x.Id == columnId, cancellationToken);
+    public async Task<BoardColumn?> GetBoardColumnByIdAsync(Guid columnId) =>
+        await _dbContext.BoardColumns.SingleOrDefaultAsync(x => x.Id == columnId);
 
-    public async Task AddBoardColumnAsync(BoardColumn column, CancellationToken cancellationToken = default) =>
-        await _dbContext.BoardColumns.AddAsync(column, cancellationToken);
+    public async Task AddBoardColumnAsync(BoardColumn column) =>
+        await _dbContext.BoardColumns.AddAsync(column);
 
     public void DeleteBoardColumn(BoardColumn column) =>
         _dbContext.BoardColumns.Remove(column);
 
-    public async Task AddAsync(Project project, CancellationToken cancellationToken = default) =>
-        await _dbContext.Projects.AddAsync(project, cancellationToken);
+    public async Task AddAsync(Project project) =>
+        await _dbContext.Projects.AddAsync(project);
 
-    public async Task SaveChangesAsync(CancellationToken cancellationToken = default) =>
-        await _dbContext.SaveChangesAsync(cancellationToken);
+    public async Task SaveChangesAsync() =>
+        await _dbContext.SaveChangesAsync();
 }

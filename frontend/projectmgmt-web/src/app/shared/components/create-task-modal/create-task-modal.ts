@@ -53,12 +53,12 @@ import { ToastService } from '../../../core/services/toast.service';
                 <div class="flex items-center gap-2 p-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
                   <input type="text" [(ngModel)]="customTypeName" maxlength="60" [disabled]="savingType()" aria-label="Tên loại công việc mới" placeholder="Tên loại mới..." class="h-8 px-2 text-xs rounded border border-slate-300 w-full" />
                   <select [(ngModel)]="customTypeIcon" aria-label="Biểu tượng loại công việc" [disabled]="savingType()" class="h-8 text-xs rounded border border-slate-300">
-                    <option value="⚡">⚡ Epic</option>
-                    <option value="🛡️">🛡️ Security</option>
-                    <option value="🎨">🎨 Design</option>
-                    <option value="📈">📈 Telemetry</option>
-                    <option value="📋">📋 Research</option>
-                    <option value="🧪">🧪 Test</option>
+                    <option value="bolt">Epic (bolt)</option>
+                    <option value="shield">Security (shield)</option>
+                    <option value="palette">Design (palette)</option>
+                    <option value="trending_up">Telemetry (trending_up)</option>
+                    <option value="description">Research (description)</option>
+                    <option value="biotech">Test (biotech)</option>
                   </select>
                   <button (click)="saveCustomIssueType()" [disabled]="savingType() || !customTypeName.trim()" class="px-2 py-1 text-xs bg-primary text-white rounded font-bold shrink-0">{{ savingType() ? 'Đang lưu...' : 'Tạo' }}</button>
                 </div>
@@ -69,7 +69,7 @@ import { ToastService } from '../../../core/services/toast.service';
                   class="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-primary"
                 >
                   @for (t of customIssueTypes(); track t.id) {
-                    <option [value]="t.name">{{ t.icon }} {{ t.name }}</option>
+                    <option [value]="t.name">{{ t.name }}</option>
                   }
                 </select>
               }
@@ -88,6 +88,20 @@ import { ToastService } from '../../../core/services/toast.service';
                 <option value="Urgent">Urgent (Khẩn cấp)</option>
               </select>
             </div>
+          </div>
+
+          <!-- Trạng thái: theo workflow của dự án (Scrum, Kanban, Agile + QA... có các giai đoạn khác nhau) -->
+          <div class="flex flex-col gap-1.5">
+            <label for="new-task-status" class="text-sm font-bold uppercase tracking-wider text-slate-500">Trạng thái</label>
+            <select
+              id="new-task-status"
+              [(ngModel)]="statusName"
+              class="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-primary"
+            >
+              @for (status of statuses(); track status.id) {
+                <option [value]="status.name">{{ status.name }}</option>
+              }
+            </select>
           </div>
 
           <!-- Sprint & Epic Grid -->
@@ -217,10 +231,11 @@ export class CreateTaskModalComponent {
   readonly sprints = this.projectService.sprints;
   readonly customIssueTypes = this.projectService.customIssueTypes;
   readonly projectMembers = computed(() => this.projectService.currentProject()?.members ?? []);
+  readonly statuses = computed(() => [...this.projectService.projectStatuses()].sort((a, b) => a.orderIndex - b.orderIndex));
 
   showNewTypeForm = signal<boolean>(false);
   customTypeName = '';
-  customTypeIcon = '🛡️';
+  customTypeIcon = 'bolt';
 
   title = '';
   issueType = 'Task';
@@ -230,6 +245,18 @@ export class CreateTaskModalComponent {
   storyPoints = 3;
   assigneeName = '';
   description = '';
+  statusName = '';
+
+  constructor() {
+    // Mặc định: trạng thái khởi đầu của workflow dự án; kiểu "Task" (hoặc kiểu đầu tiên nếu dự án đã đổi tên).
+    const statuses = this.statuses();
+    this.statusName = (statuses.find(status => status.isInitial) ?? statuses[0])?.name ?? '';
+    const types = this.customIssueTypes();
+    if (types.length > 0 && !types.some(type => type.name === this.issueType)) {
+      // Kiểu thứ 3 mặc định là Task (Epic, Story, Task, Bug, Subtask); không có thì lấy kiểu cấp 2 đầu tiên.
+      this.issueType = (types.find(type => type.orderIndex === 3) ?? types.find(type => !type.isSubtask && type.hierarchyLevel === 2) ?? types[0]).name;
+    }
+  }
 
   toggleNewTypeForm(): void {
     this.showNewTypeForm.update(v => !v);
@@ -266,7 +293,7 @@ export class CreateTaskModalComponent {
       sprintName: this.sprintName,
       epicName: this.epicName || undefined,
       epicColor: this.epicName ? 'purple' : undefined,
-      statusName: 'To Do',
+      statusName: this.statusName || undefined,
       assigneeName: this.assigneeName
     });
 

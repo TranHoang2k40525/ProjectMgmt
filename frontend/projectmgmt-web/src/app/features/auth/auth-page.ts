@@ -1,9 +1,9 @@
 import { AfterViewInit, Component, ElementRef, OnDestroy, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
+import { safeReturnUrl } from '../../core/guards/auth.guard';
 import { IdentityService } from '../../core/services/identity.service';
-import { SylvaArrivalComponent } from './sylva-arrival/sylva-arrival';
 
 import { gsap } from 'gsap';
 
@@ -12,7 +12,7 @@ export type AuthMode = 'LOGIN' | 'SIGNUP' | 'OTP_REGISTER' | 'FORGOT' | 'OTP_FOR
 @Component({
   selector: 'app-auth-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, SylvaArrivalComponent],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule],
   templateUrl: './auth-page.html',
   styleUrls: ['./auth-page.scss']
 })
@@ -21,17 +21,13 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
   private fb = inject(FormBuilder);
   private identityService = inject(IdentityService);
   private router = inject(Router);
+  private route = inject(ActivatedRoute, { optional: true });
 
   @ViewChild('authPage', { static: true }) private authPage!: ElementRef<HTMLElement>;
   private entryTween: gsap.core.Tween | null = null;
   private modeTween: gsap.core.Tween | null = null;
-  private teardownTimer: ReturnType<typeof setTimeout> | null = null;
-  private focusTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly mode = signal<AuthMode>('LOGIN');
-  readonly panelOpen = signal(true);
-  readonly sceneVisible = signal(false);
-  readonly canReplayArrival = signal(false);
   readonly passwordVisible = signal(false);
   readonly loading = signal<boolean>(false);
   readonly errorMessage = signal<string | null>(null);
@@ -50,15 +46,6 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnInit(): void {
     if (typeof window !== 'undefined') {
-      const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
-      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      const canPlay = !reducedMotion && !connection?.saveData && (navigator.hardwareConcurrency ?? 4) >= 4;
-      this.canReplayArrival.set(canPlay);
-      if (canPlay && sessionStorage.getItem('projectmgmt-sylva-seen') !== '1') {
-        this.panelOpen.set(false);
-        this.sceneVisible.set(true);
-      }
-
       const notice = sessionStorage.getItem('projectmgmt.auth.notice');
       if (notice) {
         this.successMessage.set(notice);
@@ -75,7 +62,8 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
       displayName: ['', [Validators.required, Validators.minLength(2)]],
       email: ['', [Validators.required, Validators.email]],
       phoneNumber: ['', [Validators.pattern(/^\+?[0-9\s()-]{8,20}$/)]],
-      password: ['', [Validators.required, Validators.pattern(AuthPageComponent.strongPasswordPattern)]]
+      password: ['', [Validators.required, Validators.pattern(AuthPageComponent.strongPasswordPattern)]],
+      confirmPassword: ['']
     });
 
     this.forgotForm = this.fb.group({
@@ -89,35 +77,13 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit(): void {
-    if (this.panelOpen()) this.animatePanel();
+    this.animatePanel();
   }
 
   ngOnDestroy(): void {
     this.stopTimer();
-    if (this.teardownTimer) clearTimeout(this.teardownTimer);
-    if (this.focusTimer) clearTimeout(this.focusTimer);
     this.modeTween?.kill();
     this.entryTween?.kill();
-  }
-
-  openAuth(): void {
-    this.panelOpen.set(true);
-    if (typeof window !== 'undefined') sessionStorage.setItem('projectmgmt-sylva-seen', '1');
-    if (this.teardownTimer) clearTimeout(this.teardownTimer);
-    this.teardownTimer = setTimeout(() => this.sceneVisible.set(false), 450);
-    if (this.focusTimer) clearTimeout(this.focusTimer);
-    this.focusTimer = setTimeout(() => {
-      this.animatePanel();
-      this.authPage.nativeElement.querySelector<HTMLInputElement>('#loginEmail')?.focus();
-    }, 0);
-  }
-
-  reopenArrival(): void {
-    if (!this.canReplayArrival()) return;
-    if (this.teardownTimer) clearTimeout(this.teardownTimer);
-    this.entryTween?.kill();
-    this.panelOpen.set(false);
-    this.sceneVisible.set(true);
   }
 
   private animatePanel(): void {
@@ -181,7 +147,8 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
     this.identityService.login(email, password).subscribe({
       next: () => {
         this.loading.set(false);
-        this.router.navigate(['/for-you']);
+        const returnUrl = safeReturnUrl(this.route?.snapshot.queryParamMap.get('returnUrl'));
+        void (returnUrl ? this.router.navigateByUrl(returnUrl) : this.router.navigate(['/for-you']));
       },
       error: (err) => {
         this.loading.set(false);
@@ -192,6 +159,11 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onSignup(): void {
     if (this.signupForm.invalid) return;
+    const { password, confirmPassword } = this.signupForm.value;
+    if (confirmPassword && confirmPassword !== password) {
+      this.errorMessage.set('Mật khẩu xác nhận không khớp với mật khẩu đã nhập.');
+      return;
+    }
     this.loading.set(true);
     this.errorMessage.set(null);
 
@@ -209,6 +181,13 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
       },
       error: (err) => {
         this.loading.set(false);
+        const errObj = (typeof err === 'object' && err !== null && 'error' in err) ? (err as { error: { errorCode?: string } }).error : null;
+        const errorCode = errObj?.errorCode;
+        if (errorCode === 'AUTH_EMAIL_VERIFICATION_PENDING') {
+          this.setMode('OTP_REGISTER');
+          this.successMessage.set('Email này đã được đăng ký nhưng chưa kích hoạt. Vui lòng kiểm tra mã OTP trong hộp thư hoặc bấm "Gửi lại OTP".');
+          return;
+        }
         this.errorMessage.set(this.readError(err, 'Đăng ký không thành công.'));
       }
     });
@@ -228,6 +207,7 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
       },
       error: (err) => {
         this.loading.set(false);
+        this.setMode('OTP_FORGOT');
         this.errorMessage.set(this.readError(err, 'Không thể gửi mã OTP.'));
       }
     });
@@ -258,10 +238,22 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  onOtpPaste(event: ClipboardEvent): void {
+    event.preventDefault();
+    const text = event.clipboardData?.getData('text/plain')?.replace(/\D/g, '') || '';
+    if (!text) return;
+    for (let i = 0; i < 6; i++) {
+      this.otpPins[i] = text[i] || '';
+      const el = document.getElementById(`otp-${i}`) as HTMLInputElement | null;
+      if (el) el.value = this.otpPins[i];
+    }
+    this.otpForm.patchValue({ code: this.otpPins.join('') });
+  }
+
   onVerifyOtp(): void {
     const fullCode = this.otpPins.join('');
     if (fullCode.length < 6) {
-      this.errorMessage.set('Vui lòng nhập đủ 6 chữ số mã OTP.');
+      this.errorMessage.set('Vui lòng nhập đầy đủ 6 chữ số OTP.');
       return;
     }
 
@@ -293,6 +285,10 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
     const newPass = this.otpForm.value.newPassword;
     const fullCode = this.otpPins.join('');
     const email = this.forgotForm.value.email;
+    if (fullCode.length < 6) {
+      this.errorMessage.set('Vui lòng nhập đầy đủ 6 chữ số OTP.');
+      return;
+    }
 
     if (!newPass || !AuthPageComponent.strongPasswordPattern.test(newPass)) {
       this.errorMessage.set('Mật khẩu phải dài 8-128 ký tự và có chữ hoa, chữ thường, số, ký tự đặc biệt.');

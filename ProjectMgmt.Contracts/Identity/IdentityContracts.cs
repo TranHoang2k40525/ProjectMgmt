@@ -2,8 +2,11 @@ namespace ProjectMgmt.IdentityAccess.Contracts;
 
 public class UserDisplayInfo
 {
+    public Guid Id => UserId;
     public Guid UserId { get; set; }
     public string DisplayName { get; set; } = string.Empty;
+    public string FullName => DisplayName;
+    public string? Email { get; set; }
     public string? AvatarUrl { get; set; }
 }
 
@@ -16,9 +19,9 @@ public class UserSkillInfo
 
 public interface IUserLookupService
 {
-    Task<IReadOnlyList<UserDisplayInfo>> GetAllActiveDisplayInfoAsync(CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<UserDisplayInfo>> GetDisplayInfoAsync(IEnumerable<Guid> userIds, CancellationToken cancellationToken = default);
-    Task<UserDisplayInfo?> GetDisplayInfoAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<UserDisplayInfo>> GetAllActiveDisplayInfoAsync();
+    Task<IReadOnlyList<UserDisplayInfo>> GetDisplayInfoAsync(IEnumerable<Guid> userIds);
+    Task<UserDisplayInfo?> GetDisplayInfoAsync(Guid userId);
 }
 
 public interface IUserSkillService

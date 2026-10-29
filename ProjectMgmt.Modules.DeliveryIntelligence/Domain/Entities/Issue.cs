@@ -28,4 +28,11 @@ public class Issue
     public bool IsDeleted { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+
+    // Daily Scrum Blocker Flag & Subtask Hours
+    public bool IsBlocked { get; set; }
+    public string? BlockReason { get; set; }
+    public DateTime? BlockedAt { get; set; }
+    public decimal? EstimatedHours { get; set; }
+    public decimal? RemainingHours { get; set; }
 }

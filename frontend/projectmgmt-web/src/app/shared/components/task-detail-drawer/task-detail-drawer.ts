@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AiBreakdownApi } from '../../../core/api/ai-breakdown.api';
 import { ProjectManagementService, WorkItem } from '../../../core/services/project-management.service';
+import { IdentityService } from '../../../core/services/identity.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { ConfirmDialogService } from '../../../core/services/confirm-dialog.service';
 
@@ -37,7 +38,7 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
               <span class="px-3 py-1 rounded-md text-sm font-mono font-bold bg-primary/10 text-primary border border-primary/20">
                 {{ task.issueKey }}
               </span>
-              <span class="text-sm text-slate-500 font-medium">Dự án {{ task.sprintName || 'Hệ thống Quản lý Dự án Scrum tích hợp AI' }}</span>
+              <span class="text-sm text-slate-500 font-medium">{{ task.sprintName ? ('Sprint: ' + task.sprintName) : (projectService.currentProject().name || 'Dự án') }}</span>
             </div>
 
             <div class="flex items-center gap-2">
@@ -66,12 +67,9 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
                   (ngModelChange)="onFieldChange()"
                   class="px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wider bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 focus:outline-none cursor-pointer"
                 >
-                  <option value="Task">Task</option>
-                  <option value="Story">Story</option>
-                  <option value="Bug">Bug</option>
-                  <option value="Use-Case">Use-Case</option>
-                  <option value="Epic">Epic</option>
-                  <option value="Sub-task">Sub-task</option>
+                  @for (t of availableIssueTypes(); track t) {
+                    <option [value]="t">{{ t }}</option>
+                  }
                 </select>
 
                 <!-- Epic Selector -->
@@ -97,8 +95,44 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
               />
             </div>
 
+            <!-- Blocker Alert & Action -->
+            @if (task.isBlocked) {
+              <div class="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/60 border border-red-300 dark:border-red-800 text-red-800 dark:text-red-200 flex items-center justify-between gap-3 animate-fade-in">
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <span class="material-symbols-outlined text-red-600 dark:text-red-400 text-[22px] shrink-0">block</span>
+                  <div class="flex flex-col min-w-0">
+                    <span class="text-xs font-bold uppercase tracking-wider text-red-600 dark:text-red-400">Đang bị cản trở (Blocker)</span>
+                    <span class="text-sm font-semibold truncate">{{ task.blockReason || 'Không có lý do chi tiết' }}</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  (click)="unblockTask()"
+                  class="h-8 px-3 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-xs shrink-0 flex items-center gap-1 cursor-pointer transition-colors shadow-xs"
+                >
+                  <span class="material-symbols-outlined text-[16px]">check_circle</span>
+                  <span>Gỡ cản trở</span>
+                </button>
+              </div>
+            } @else {
+              <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-dashed border-slate-200 dark:border-slate-800">
+                <span class="text-xs text-slate-500 flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[16px] text-emerald-500">check_circle</span>
+                  <span>Công việc thông suốt</span>
+                </span>
+                <button
+                  type="button"
+                  (click)="openBlockTaskModal()"
+                  class="h-7 px-2.5 rounded-md text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 border border-red-200 dark:border-red-900/60 flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  <span class="material-symbols-outlined text-[14px]">block</span>
+                  <span>Báo cản trở</span>
+                </button>
+              </div>
+            }
+
             <!-- Metadata Quick Control Grid (Min 14px font text-sm) -->
-            <div class="task-meta-grid grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/60">
+            <div class="task-meta-grid grid grid-cols-2 sm:grid-cols-3 gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/60">
               <!-- Status Dropdown -->
               <div class="flex flex-col gap-1.5">
                 <span class="text-sm font-bold uppercase tracking-wider text-slate-400">Trạng thái</span>
@@ -107,10 +141,9 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
                   (ngModelChange)="onFieldChange()"
                   class="h-9 px-3 rounded-lg text-sm font-semibold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary"
                 >
-                  <option value="To Do">To Do</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Code Review">Code Review</option>
-                  <option value="Done">Done</option>
+                  @for (st of availableStatusNames(); track st) {
+                    <option [value]="st">{{ st }}</option>
+                  }
                 </select>
               </div>
 
@@ -153,7 +186,35 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
                   max="21"
                   [(ngModel)]="task.storyPoints"
                   (ngModelChange)="onFieldChange()"
-                  class="h-9 w-20 px-3 rounded-lg text-sm font-mono font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none"
+                  class="h-9 w-full px-3 rounded-lg text-sm font-mono font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none"
+                />
+              </div>
+
+              <!-- Estimated Hours -->
+              <div class="flex flex-col gap-1.5">
+                <span class="text-sm font-bold uppercase tracking-wider text-slate-400">Giờ ước tính</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  [(ngModel)]="task.estimatedHours"
+                  (ngModelChange)="onFieldChange()"
+                  placeholder="0.0h"
+                  class="h-9 w-full px-3 rounded-lg text-sm font-mono font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none"
+                />
+              </div>
+
+              <!-- Remaining Hours -->
+              <div class="flex flex-col gap-1.5">
+                <span class="text-sm font-bold uppercase tracking-wider text-slate-400">Giờ còn lại</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  [(ngModel)]="task.remainingHours"
+                  (ngModelChange)="onFieldChange()"
+                  placeholder="0.0h"
+                  class="h-9 w-full px-3 rounded-lg text-sm font-mono font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none"
                 />
               </div>
             </div>
@@ -208,13 +269,16 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
                     }
                   </div>
 
-                  <div class="space-y-1 pt-1">
-                    <span class="font-bold text-slate-700 dark:text-slate-300">Acceptance Criteria (AC):</span>
-                    <ul class="list-disc list-inside space-y-1 text-slate-600 dark:text-slate-300 pl-1">
-                      <li>AC-1: Đảm bảo kiểm tra Token JWT có chữ ký hợp lệ trước khi cấp quyền API.</li>
-                      <li>AC-2: Phản hồi JSON trả về đúng HTTP 200 OK cùng dữ liệu payload chuẩn hóa.</li>
-                    </ul>
-                  </div>
+                  @if (aiAcceptanceCriteria().length > 0) {
+                    <div class="space-y-1 pt-1">
+                      <span class="font-bold text-slate-700 dark:text-slate-300">Acceptance Criteria (AC):</span>
+                      <ul class="list-disc list-inside space-y-1 text-slate-600 dark:text-slate-300 pl-1">
+                        @for (ac of aiAcceptanceCriteria(); track ac) {
+                          <li>{{ ac }}</li>
+                        }
+                      </ul>
+                    </div>
+                  }
 
                   <div class="flex justify-end gap-2 pt-2 border-t border-purple-100 dark:border-purple-900/50">
                     <button (click)="showAiBreakdownPanel.set(false)" class="px-3 py-1.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium">Hủy</button>
@@ -346,7 +410,7 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
               <!-- Comment Input Box -->
               <div class="flex gap-3">
                 <div class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold shrink-0">
-                  TH
+                  {{ currentUserInitial() }}
                 </div>
                 <div class="flex-1 flex flex-col gap-2">
                   <input
@@ -396,6 +460,44 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
           </div>
 
         </div>
+
+        <!-- Modal Báo Cản Trở (Blocker Dialog) -->
+        @if (isBlockModalOpen()) {
+          <div class="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+            <div class="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-5 flex flex-col gap-4">
+              <div class="flex items-center gap-2 text-red-600 dark:text-red-400">
+                <span class="material-symbols-outlined text-[24px]">block</span>
+                <h3 class="text-base font-bold text-slate-900 dark:text-white">Báo cáo cản trở (Blocker)</h3>
+              </div>
+              <p class="text-xs text-slate-500">Mô tả trở ngại ngăn cản công việc được tiếp tục thực hiện để Scrum Master & Đội ngũ hỗ trợ giải phóng:</p>
+              <textarea
+                rows="3"
+                [ngModel]="blockReasonInput()"
+                (ngModelChange)="blockReasonInput.set($event)"
+                placeholder="Nhập lý do bị nghẽn, người hoặc tài nguyên cần phụ thuộc..."
+                class="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:border-red-500"
+              ></textarea>
+              <div class="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  (click)="closeBlockTaskModal()"
+                  class="h-9 px-3.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  (click)="submitBlockTask()"
+                  [disabled]="!blockReasonInput().trim()"
+                  class="h-9 px-4 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-xs"
+                >
+                  <span class="material-symbols-outlined text-[16px]">check</span>
+                  <span>Xác nhận chặn</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        }
       </div>
     }
   `,
@@ -431,13 +533,19 @@ export class TaskDetailDrawerComponent {
   @Input() task: WorkItem | null = null;
   @Output() dismissed = new EventEmitter<void>();
 
-  private readonly projectService = inject(ProjectManagementService);
+  readonly projectService = inject(ProjectManagementService);
+  private readonly identityService = inject(IdentityService);
   private readonly toastService = inject(ToastService);
   private readonly confirmDialog = inject(ConfirmDialogService);
   private readonly aiApi = inject(AiBreakdownApi, { optional: true });
 
   readonly drawerWidth = signal<number>(640);
   private isResizing = false;
+
+  readonly currentUserInitial = computed(() => {
+    const name = this.identityService.authState().currentUser?.displayName;
+    return name ? name.charAt(0).toUpperCase() : 'U';
+  });
 
   readonly epics = this.projectService.epics;
   newCommentText = '';
@@ -450,10 +558,65 @@ export class TaskDetailDrawerComponent {
   readonly currentGenerationId = signal<string | null>(null);
 
   readonly aiSubtaskSuggestions = signal<Array<{ title: string; points: number; selected: boolean }>>([]);
+  readonly aiAcceptanceCriteria = signal<string[]>([]);
 
   readonly candidateScores = signal<Array<{ name: string; totalScore: number; workloadScore: number; skillScore: number; historyScore: number; capacityScore: number; reason: string }>>([]);
 
+  readonly isBlockModalOpen = signal(false);
+  readonly blockReasonInput = signal('');
+
   readonly projectMembers = computed(() => this.projectService.currentProject()?.members ?? []);
+  readonly availableIssueTypes = computed(() => {
+    const custom = this.projectService.customIssueTypes().map(t => t.name);
+    return custom.length > 0 ? custom : ['Story', 'Task', 'Bug', 'Epic', 'Sub-task'];
+  });
+  readonly availableStatusNames = computed(() => {
+    const dynamic = this.projectService.projectStatuses().map(s => s.name);
+    return dynamic.length > 0 ? dynamic : ['To Do', 'In Progress', 'Code Review', 'Done'];
+  });
+
+  openBlockTaskModal(): void {
+    this.blockReasonInput.set('');
+    this.isBlockModalOpen.set(true);
+  }
+
+  closeBlockTaskModal(): void {
+    this.isBlockModalOpen.set(false);
+  }
+
+  submitBlockTask(): void {
+    if (!this.task || !this.blockReasonInput().trim()) return;
+    const reason = this.blockReasonInput().trim();
+    this.projectService.blockIssue(this.task.id, reason).subscribe({
+      next: () => {
+        if (this.task) {
+          this.task.isBlocked = true;
+          this.task.blockReason = reason;
+        }
+        this.toastService.warning('Báo cản trở', 'Công việc đã được đánh dấu cản trở (Blocker).');
+        this.closeBlockTaskModal();
+      },
+      error: () => {
+        this.toastService.error('Báo cản trở', 'Không thể đánh dấu cản trở.');
+      }
+    });
+  }
+
+  unblockTask(): void {
+    if (!this.task) return;
+    this.projectService.unblockIssue(this.task.id).subscribe({
+      next: () => {
+        if (this.task) {
+          this.task.isBlocked = false;
+          this.task.blockReason = undefined;
+        }
+        this.toastService.success('Gỡ cản trở', 'Đã gỡ bỏ cản trở cho công việc.');
+      },
+      error: () => {
+        this.toastService.error('Gỡ cản trở', 'Không thể gỡ cản trở.');
+      }
+    });
+  }
 
   toggleAiBreakdownPanel(): void {
     this.showAiAssignmentPanel.set(false);
@@ -474,6 +637,11 @@ export class TaskDetailDrawerComponent {
               }))
             );
           }
+          if (res.acceptanceCriteria && res.acceptanceCriteria.length > 0) {
+            this.aiAcceptanceCriteria.set(res.acceptanceCriteria);
+          } else {
+            this.aiAcceptanceCriteria.set([]);
+          }
         },
         error: () => undefined
       });
@@ -482,7 +650,30 @@ export class TaskDetailDrawerComponent {
 
   toggleAiAssignmentPanel(): void {
     this.showAiBreakdownPanel.set(false);
-    this.showAiAssignmentPanel.update(v => !v);
+    const opening = !this.showAiAssignmentPanel();
+    this.showAiAssignmentPanel.set(opening);
+    if (opening) {
+      const members = this.projectMembers();
+      const allWorkItems = this.projectService.workItems();
+      const scores = members.map(m => {
+        const activeTasks = allWorkItems.filter(w => (w.assigneeName === m.displayName || w.assigneeId === m.userId) && w.statusName !== 'Done').length;
+        const workloadScore = Math.max(30, Math.min(100, 100 - activeTasks * 15));
+        const skillScore = m.role === 'Developer' ? 90 : m.role === 'QA Engineer' ? 85 : 80;
+        const historyScore = 85;
+        const capacityScore = Math.max(40, 100 - activeTasks * 10);
+        const totalScore = Math.round(workloadScore * 0.4 + skillScore * 0.3 + historyScore * 0.2 + capacityScore * 0.1);
+        return {
+          name: m.displayName,
+          totalScore,
+          workloadScore,
+          skillScore,
+          historyScore,
+          capacityScore,
+          reason: `Đang phụ trách ${activeTasks} công việc còn mở. Vai trò ${m.role}.`
+        };
+      }).sort((a, b) => b.totalScore - a.totalScore);
+      this.candidateScores.set(scores);
+    }
   }
 
   applyAiBreakdown(): void {
@@ -538,6 +729,18 @@ export class TaskDetailDrawerComponent {
 
   onFieldChange(): void {
     if (this.task) {
+      if (this.task.assigneeName) {
+        const m = this.projectMembers().find(x => x.displayName === this.task?.assigneeName);
+        if (m) this.task.assigneeId = m.userId;
+      } else {
+        this.task.assigneeId = undefined;
+      }
+      if (this.task.epicName) {
+        const e = this.epics().find(x => x.name === this.task?.epicName);
+        if (e) this.task.epicId = e.id;
+      } else {
+        this.task.epicId = undefined;
+      }
       this.projectService.updateWorkItem(this.task);
       this.toastService.info('Đang lưu công việc', 'Vui lòng chờ xác nhận từ máy chủ.');
     }

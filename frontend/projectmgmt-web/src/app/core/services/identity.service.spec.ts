@@ -27,7 +27,7 @@ describe('IdentityService', () => {
     accessToken: 'access-token',
     refreshToken: 'refresh-token',
     userId: '8ea9699e-2cf2-45b2-956e-90e2cdfdb221',
-    email: 'hoang@huce.edu.vn',
+    email: 'hoang@example.com',
     fullName: 'Trần Văn Hoàng',
     roles: ['SystemAdmin']
   };
@@ -36,7 +36,7 @@ describe('IdentityService', () => {
     login: vi.fn(() => of(loginResult)),
     register: vi.fn(() => of({
       success: true,
-      email: 'new@huce.edu.vn',
+      email: 'new@example.com',
       message: 'Vui lòng kiểm tra email.',
       resendAfterSeconds: 60
     })),
@@ -51,7 +51,7 @@ describe('IdentityService', () => {
     getMyProfile: vi.fn(() => of({
       success: true,
       userId: '8ea9699e-2cf2-45b2-956e-90e2cdfdb221',
-      email: 'hoang@huce.edu.vn',
+      email: 'hoang@example.com',
       fullName: 'Trần Văn Hoàng',
       jobTitle: 'Backend Developer',
       timezone: 'Asia/Ho_Chi_Minh'
@@ -59,7 +59,7 @@ describe('IdentityService', () => {
     updateMyProfile: vi.fn((request: { jobTitle?: string }) => of({
       success: true,
       userId: '8ea9699e-2cf2-45b2-956e-90e2cdfdb221',
-      email: 'hoang@huce.edu.vn',
+      email: 'hoang@example.com',
       fullName: 'Trần Văn Hoàng',
       jobTitle: request.jobTitle,
       timezone: 'Asia/Ho_Chi_Minh'
@@ -144,10 +144,10 @@ describe('IdentityService', () => {
   });
 
   it('đăng nhập qua API thật và lưu trọn bộ session', async () => {
-    const result = await firstValueFrom(service.login('hoang@huce.edu.vn', 'StrongPassword@123'));
+    const result = await firstValueFrom(service.login('hoang@example.com', 'StrongPassword@123'));
 
     expect(accountApi.login).toHaveBeenCalledWith({
-      email: 'hoang@huce.edu.vn',
+      email: 'hoang@example.com',
       password: 'StrongPassword@123'
     });
     expect(result.user.displayName).toBe('Trần Văn Hoàng');
@@ -158,35 +158,35 @@ describe('IdentityService', () => {
   it('đăng ký rồi xác minh email với purpose đúng contract backend', async () => {
     await firstValueFrom(service.signup(
       'Nguyễn Văn A',
-      'new@huce.edu.vn',
+      'new@example.com',
       'StrongPassword@123',
       '+84901234567'
     ));
-    await firstValueFrom(service.verifyOtp('new@huce.edu.vn', '123456', 'REGISTER'));
+    await firstValueFrom(service.verifyOtp('new@example.com', '123456', 'REGISTER'));
 
     expect(accountApi.register).toHaveBeenCalledWith({
       fullName: 'Nguyễn Văn A',
-      email: 'new@huce.edu.vn',
+      email: 'new@example.com',
       password: 'StrongPassword@123',
       phoneNumber: '+84901234567'
     });
     expect(accountApi.verifyOtp).toHaveBeenCalledWith({
-      email: 'new@huce.edu.vn',
+      email: 'new@example.com',
       code: '123456',
       purpose: 'VerifyEmail'
     });
   });
 
   it('quên mật khẩu dùng endpoint chống dò tài khoản', async () => {
-    await firstValueFrom(service.sendOtp('member@huce.edu.vn', 'FORGOT_PASSWORD'));
-    expect(accountApi.forgotPassword).toHaveBeenCalledWith('member@huce.edu.vn');
+    await firstValueFrom(service.sendOtp('member@example.com', 'FORGOT_PASSWORD'));
+    expect(accountApi.forgotPassword).toHaveBeenCalledWith('member@example.com');
     expect(accountApi.sendOtp).not.toHaveBeenCalled();
   });
 
   it('đăng xuất thu hồi refresh token và xóa session cục bộ', () => {
     tokenStore.session = {
       accessToken: 'access-token', refreshToken: 'refresh-token', userId: 'u1',
-      email: 'member@huce.edu.vn', fullName: 'Member', roles: []
+      email: 'member@example.com', fullName: 'Member', roles: []
     };
     service.logout();
 

@@ -35,18 +35,20 @@ export class BrowserSessionTokenStore implements TokenStore {
   }
 
   getSession(): AuthSession | null {
-    if (typeof sessionStorage === 'undefined') {
+    if (typeof sessionStorage === 'undefined' && typeof localStorage === 'undefined') {
       return this.inMemorySession;
     }
 
-    const serialized = sessionStorage.getItem(this.key);
+    const serialized = (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(this.key) : null)
+      || (typeof localStorage !== 'undefined' ? localStorage.getItem(this.key) : null);
     if (!serialized) return null;
 
     try {
       const session = JSON.parse(serialized) as Partial<AuthSession>;
       return isValidSession(session) ? session : null;
     } catch {
-      sessionStorage.removeItem(this.key);
+      if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(this.key);
+      if (typeof localStorage !== 'undefined') localStorage.removeItem(this.key);
       return null;
     }
   }
@@ -56,12 +58,18 @@ export class BrowserSessionTokenStore implements TokenStore {
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.setItem(this.key, JSON.stringify(session));
     }
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(this.key, JSON.stringify(session));
+    }
   }
 
   clear(): void {
     this.inMemorySession = null;
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.removeItem(this.key);
+    }
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(this.key);
     }
   }
 }

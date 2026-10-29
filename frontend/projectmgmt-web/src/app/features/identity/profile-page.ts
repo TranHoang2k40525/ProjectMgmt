@@ -1,22 +1,26 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { IdentityService } from '../../core/services/identity.service';
-import { UserProfileModel, SkillModel, UserSkillModel, ActiveSessionModel } from '../../core/mocks/identity-mock-db';
+import { ProjectManagementService } from '../../core/services/project-management.service';
+import { UserProfileModel, SkillModel, UserSkillModel, ActiveSessionModel } from '../../core/models/identity.models';
+import { AvatarModalComponent } from '../../shared/components/avatar-modal/avatar-modal.component';
+import { resolveAvatarUrl } from '../../core/utils/avatar.utils';
 
 export type ProfileTab = 'GENERAL' | 'SECURITY' | 'SKILLS' | 'SESSIONS';
 
 @Component({
   selector: 'app-profile-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, AvatarModalComponent],
   templateUrl: './profile-page.html',
   styleUrls: ['./profile-page.scss']
 })
 export class ProfilePageComponent implements OnInit {
   private static readonly strongPasswordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,128}$/;
   private identityService = inject(IdentityService);
+  readonly projectService = inject(ProjectManagementService);
   private fb = inject(FormBuilder);
   private router = inject(Router);
 
@@ -26,9 +30,33 @@ export class ProfilePageComponent implements OnInit {
   readonly errorMsg = signal<string | null>(null);
 
   user = signal<UserProfileModel | null>(null);
+  readonly isAvatarModalOpen = signal(false);
+  readonly resolvedAvatarUrl = computed(() => resolveAvatarUrl(this.user()?.avatarUrl));
+
+  openAvatarModal(): void {
+    this.isAvatarModalOpen.set(true);
+  }
+
+  onAvatarModalUpdated(newAvatarUrl: string): void {
+    this.user.update(user => user ? { ...user, avatarUrl: newAvatarUrl } : user);
+    this.successMsg.set('Cập nhật ảnh đại diện thành công.');
+  }
+
   skillsCatalog = signal<SkillModel[]>([]);
   userSkills = signal<UserSkillModel[]>([]);
   activeSessions = signal<ActiveSessionModel[]>([]);
+
+  readonly assignedTasks = computed(() => {
+    const u = this.user();
+    if (!u) return [];
+    return this.projectService.workItems().filter(item =>
+      item.assigneeId === u.id || (item.assigneeName && u.displayName && item.assigneeName.trim().toLowerCase() === u.displayName.trim().toLowerCase())
+    );
+  });
+
+  readonly completedAssignedTasks = computed(() => this.assignedTasks().filter(t => t.statusName === 'Done'));
+  readonly completedStoryPoints = computed(() => this.completedAssignedTasks().reduce((sum, t) => sum + (t.storyPoints || 0), 0));
+  readonly activeSprint = computed(() => this.projectService.sprints().find(s => s.status === 'active') ?? null);
 
   // Forms
   profileForm!: FormGroup;
@@ -37,6 +65,7 @@ export class ProfilePageComponent implements OnInit {
   // Selected Skill for adding
   selectedSkillId: string = '';
   selectedSkillLevel: number = 80;
+  selectedSkillYears: number | null = 2;
 
   ngOnInit(): void {
     this.loading.set(true);
@@ -160,12 +189,13 @@ export class ProfilePageComponent implements OnInit {
   onAddSkill(): void {
     if (!this.selectedSkillId || !this.user()) return;
 
-    this.identityService.addUserSkill(this.user()!.id, this.selectedSkillId, this.selectedSkillLevel).subscribe({
+    this.identityService.addUserSkill(this.user()!.id, this.selectedSkillId, this.selectedSkillLevel, this.selectedSkillYears).subscribe({
       next: () => {
         this.loadData(this.user()!.id);
         this.successMsg.set('Đã cập nhật kỹ năng cá nhân!');
         this.selectedSkillId = '';
-      }
+      },
+      error: e => this.errorMsg.set(this.readError(e, 'Không thể cập nhật kỹ năng.'))
     });
   }
 
@@ -173,7 +203,9 @@ export class ProfilePageComponent implements OnInit {
     this.identityService.removeUserSkill(skillId).subscribe({
       next: () => {
         if (this.user()) this.loadData(this.user()!.id);
-      }
+        this.successMsg.set('Đã gỡ kỹ năng khỏi hồ sơ.');
+      },
+      error: e => this.errorMsg.set(this.readError(e, 'Không thể gỡ kỹ năng.'))
     });
   }
 

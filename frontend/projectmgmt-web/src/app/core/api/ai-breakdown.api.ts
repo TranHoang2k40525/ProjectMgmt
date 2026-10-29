@@ -7,7 +7,7 @@ import { AiBreakdownDto, AiPromptTemplateDto } from './ai-breakdown-api.models';
 @Injectable({ providedIn: 'root' })
 export class AiBreakdownApi {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = `${environment.apiBaseUrl}/v1/ai`;
+  private readonly baseUrl = `${environment.apiBaseUrl}/ai`;
 
   generate(issueId: string, projectContext?: string): Observable<AiBreakdownDto> {
     return this.http.post<AiBreakdownDto>(`${this.baseUrl}/breakdown/generate`, {

@@ -62,26 +62,41 @@ public class ProjectOwnershipTests
         var service = new ProjectManagementService(repository);
         var authenticatedUserId = Guid.NewGuid();
 
+        var specifiedLeadId = Guid.NewGuid();
         var result = await service.CreateProjectAsync(
             new CreateProjectRequestDto
             {
                 OrgId = organizationId,
                 ProjectKey = "SCRUM7",
                 Name = "Hệ thống Quản lý Dự án Scrum tích hợp AI",
-                LeadUserId = Guid.NewGuid()
+                LeadUserId = specifiedLeadId
             },
             authenticatedUserId);
 
         Assert.True(result.IsSuccess);
         Assert.NotNull(repository.AddedProject);
         Assert.Equal(authenticatedUserId, repository.AddedProject.CreatedByUserId);
-        Assert.Equal(authenticatedUserId, repository.AddedProject.LeadUserId);
+        Assert.Equal(specifiedLeadId, repository.AddedProject.LeadUserId);
         Assert.Equal(authenticatedUserId, result.Value.CreatedByUserId);
         Assert.Equal(5, repository.AddedIssueTypes.Count);
         Assert.Equal(5, repository.AddedStatuses.Count);
         Assert.Equal(7, repository.AddedTransitions.Count);
         Assert.Single(repository.AddedBoards);
         Assert.Equal(4, repository.AddedBoardColumns.Count);
+
+        // Fallback test when LeadUserId is empty
+        var fallbackResult = await service.CreateProjectAsync(
+            new CreateProjectRequestDto
+            {
+                OrgId = organizationId,
+                ProjectKey = "SCRUM8",
+                Name = "Dự án Scrum Mặc Định",
+                LeadUserId = Guid.Empty
+            },
+            authenticatedUserId);
+
+        Assert.True(fallbackResult.IsSuccess);
+        Assert.Equal(authenticatedUserId, repository.AddedProject.LeadUserId);
     }
 }
 
@@ -98,20 +113,17 @@ public class FakeProjectRepository : IProjectRepository
     public List<BoardColumn> AddedBoardColumns { get; } = [];
     public int SaveCount { get; private set; }
 
-    public Task<bool> ExistsAsync(Guid projectId, CancellationToken cancellationToken = default)
+    public Task<bool> ExistsAsync(Guid projectId)
     {
         return Task.FromResult(ExistingProject?.Id == projectId);
     }
 
-    public Task<Project?> GetByIdAsync(Guid projectId, CancellationToken cancellationToken = default)
+    public Task<Project?> GetByIdAsync(Guid projectId)
     {
         return Task.FromResult(ExistingProject?.Id == projectId ? ExistingProject : null);
     }
 
-    public Task<Project?> GetByKeyAsync(
-        Guid organizationId,
-        string projectKey,
-        CancellationToken cancellationToken = default)
+    public Task<Project?> GetByKeyAsync(Guid organizationId, string projectKey)
     {
         return Task.FromResult(
             ExistingProject?.OrgId == organizationId && ExistingProject.ProjectKey == projectKey
@@ -119,16 +131,12 @@ public class FakeProjectRepository : IProjectRepository
                 : null);
     }
 
-    public Task<IReadOnlyList<IssueType>> GetIssueTypesAsync(
-        Guid projectId,
-        CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<IssueType>> GetIssueTypesAsync(Guid projectId)
     {
         return Task.FromResult<IReadOnlyList<IssueType>>(AddedIssueTypes);
     }
 
-    public Task<IReadOnlyList<WorkflowStatus>> GetStatusesAsync(
-        Guid projectId,
-        CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<WorkflowStatus>> GetStatusesAsync(Guid projectId)
     {
         return Task.FromResult<IReadOnlyList<WorkflowStatus>>(AddedStatuses);
     }
@@ -136,59 +144,44 @@ public class FakeProjectRepository : IProjectRepository
     public Task<WorkflowTransition?> GetTransitionAsync(
         Guid projectId,
         Guid fromStatusId,
-        Guid toStatusId,
-        CancellationToken cancellationToken = default)
+        Guid toStatusId)
     {
         return Task.FromResult<WorkflowTransition?>(null);
     }
 
-    public Task<WorkflowStatus?> GetInitialStatusAsync(
-        Guid projectId,
-        CancellationToken cancellationToken = default)
+    public Task<WorkflowStatus?> GetInitialStatusAsync(Guid projectId)
     {
         return Task.FromResult(AddedStatuses.FirstOrDefault(status => status.IsInitial));
     }
 
-    public Task<BoardColumnState?> GetBoardColumnStateAsync(
-        Guid boardId,
-        Guid statusId,
-        CancellationToken cancellationToken = default)
+    public Task<BoardColumnState?> GetBoardColumnStateAsync(Guid boardId, Guid statusId)
     {
         return Task.FromResult<BoardColumnState?>(null);
     }
 
-    public Task<int> ReserveNextIssueNumberAsync(
-        Guid projectId,
-        CancellationToken cancellationToken = default)
+    public Task<int> ReserveNextIssueNumberAsync(Guid projectId)
     {
         return Task.FromResult(1);
     }
 
-    public Task<IReadOnlyList<Organization>> GetOrganizationsAsync(
-        CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<Organization>> GetOrganizationsAsync()
     {
         IReadOnlyList<Organization> organizations = Organization is null ? [] : [Organization];
         return Task.FromResult(organizations);
     }
 
-    public Task<Organization?> GetOrganizationByIdAsync(
-        Guid orgId,
-        CancellationToken cancellationToken = default)
+    public Task<Organization?> GetOrganizationByIdAsync(Guid orgId)
     {
         return Task.FromResult(Organization?.Id == orgId ? Organization : null);
     }
 
-    public Task AddOrganizationAsync(
-        Organization organization,
-        CancellationToken cancellationToken = default)
+    public Task AddOrganizationAsync(Organization organization)
     {
         AddedOrganizations.Add(organization);
         return Task.CompletedTask;
     }
 
-    public Task<IReadOnlyList<Project>> GetAllProjectsAsync(
-        Guid? orgId = null,
-        CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<Project>> GetAllProjectsAsync(Guid? orgId = null)
     {
         IReadOnlyList<Project> projects = ExistingProject is null ? [] : [ExistingProject];
         return Task.FromResult(projects);
@@ -199,61 +192,47 @@ public class FakeProjectRepository : IProjectRepository
         ExistingProject = project;
     }
 
-    public Task AddIssueTypesAsync(
-        IEnumerable<IssueType> issueTypes,
-        CancellationToken cancellationToken = default)
+    public Task AddIssueTypesAsync(IEnumerable<IssueType> issueTypes)
     {
         AddedIssueTypes.AddRange(issueTypes);
         return Task.CompletedTask;
     }
 
-    public Task AddWorkflowStatusesAsync(
-        IEnumerable<WorkflowStatus> statuses,
-        CancellationToken cancellationToken = default)
+    public Task AddWorkflowStatusesAsync(IEnumerable<WorkflowStatus> statuses)
     {
         AddedStatuses.AddRange(statuses);
         return Task.CompletedTask;
     }
 
-    public Task AddWorkflowTransitionsAsync(
-        IEnumerable<WorkflowTransition> transitions,
-        CancellationToken cancellationToken = default)
+    public Task AddWorkflowTransitionsAsync(IEnumerable<WorkflowTransition> transitions)
     {
         AddedTransitions.AddRange(transitions);
         return Task.CompletedTask;
     }
 
-    public Task AddBoardAsync(Board board, CancellationToken cancellationToken = default)
+    public Task AddBoardAsync(Board board)
     {
         AddedBoards.Add(board);
         return Task.CompletedTask;
     }
 
-    public Task AddBoardColumnsAsync(
-        IEnumerable<BoardColumn> columns,
-        CancellationToken cancellationToken = default)
+    public Task AddBoardColumnsAsync(IEnumerable<BoardColumn> columns)
     {
         AddedBoardColumns.AddRange(columns);
         return Task.CompletedTask;
     }
 
-    public Task<IReadOnlyList<WorkflowTransition>> GetTransitionsByProjectAsync(
-        Guid projectId,
-        CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<WorkflowTransition>> GetTransitionsByProjectAsync(Guid projectId)
     {
         return Task.FromResult<IReadOnlyList<WorkflowTransition>>(AddedTransitions);
     }
 
-    public Task<WorkflowTransition?> GetTransitionByIdAsync(
-        Guid transitionId,
-        CancellationToken cancellationToken = default)
+    public Task<WorkflowTransition?> GetTransitionByIdAsync(Guid transitionId)
     {
         return Task.FromResult(AddedTransitions.FirstOrDefault(item => item.Id == transitionId));
     }
 
-    public Task AddWorkflowTransitionAsync(
-        WorkflowTransition transition,
-        CancellationToken cancellationToken = default)
+    public Task AddWorkflowTransitionAsync(WorkflowTransition transition)
     {
         AddedTransitions.Add(transition);
         return Task.CompletedTask;
@@ -264,36 +243,28 @@ public class FakeProjectRepository : IProjectRepository
         AddedTransitions.Remove(transition);
     }
 
-    public Task<IReadOnlyList<Board>> GetBoardsByProjectAsync(
-        Guid projectId,
-        CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<Board>> GetBoardsByProjectAsync(Guid projectId)
     {
         return Task.FromResult<IReadOnlyList<Board>>(AddedBoards);
     }
 
-    public Task<Board?> GetBoardByIdAsync(Guid boardId, CancellationToken cancellationToken = default)
+    public Task<Board?> GetBoardByIdAsync(Guid boardId)
     {
         return Task.FromResult(AddedBoards.FirstOrDefault(board => board.Id == boardId));
     }
 
-    public Task<IReadOnlyList<BoardColumn>> GetBoardColumnsAsync(
-        Guid boardId,
-        CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<BoardColumn>> GetBoardColumnsAsync(Guid boardId)
     {
         return Task.FromResult<IReadOnlyList<BoardColumn>>(
             AddedBoardColumns.Where(column => column.BoardId == boardId).ToList());
     }
 
-    public Task<BoardColumn?> GetBoardColumnByIdAsync(
-        Guid columnId,
-        CancellationToken cancellationToken = default)
+    public Task<BoardColumn?> GetBoardColumnByIdAsync(Guid columnId)
     {
         return Task.FromResult(AddedBoardColumns.FirstOrDefault(column => column.Id == columnId));
     }
 
-    public Task AddBoardColumnAsync(
-        BoardColumn column,
-        CancellationToken cancellationToken = default)
+    public Task AddBoardColumnAsync(BoardColumn column)
     {
         AddedBoardColumns.Add(column);
         return Task.CompletedTask;
@@ -304,13 +275,13 @@ public class FakeProjectRepository : IProjectRepository
         AddedBoardColumns.Remove(column);
     }
 
-    public Task AddAsync(Project project, CancellationToken cancellationToken = default)
+    public Task AddAsync(Project project)
     {
         AddedProject = project;
         return Task.CompletedTask;
     }
 
-    public Task SaveChangesAsync(CancellationToken cancellationToken = default)
+    public Task SaveChangesAsync()
     {
         SaveCount++;
         return Task.CompletedTask;

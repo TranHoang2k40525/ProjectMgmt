@@ -8,6 +8,9 @@
   (menuClose)="closeAllPopups()"
 ></app-context-menu>
 
+@if (!projectService.hasActiveProject()) {
+  <app-no-project-state featureName="Kế hoạch Sprint & Backlog"></app-no-project-state>
+} @else {
 <section cdkDropListGroup class="backlog-page" aria-labelledby="backlog-title">
   <header class="backlog-toolbar">
     <div class="backlog-heading-row">
@@ -42,7 +45,7 @@
         <div class="overlay-panel filter-panel" role="dialog" aria-label="Bộ lọc công việc">
           <div class="overlay-title"><strong>Bộ lọc công việc</strong><button type="button" class="text-button" (click)="resetFilters()">Xóa bộ lọc</button></div>
           <label><span>Người xử lý</span><select [ngModel]="selectedAssigneeFilter()" (ngModelChange)="selectedAssigneeFilter.set($event)"><option [ngValue]="null">Tất cả người xử lý</option>@for (m of projectMembers(); track m.id) { <option [value]="m.displayName">{{ m.displayName }} ({{ m.role }})</option> }</select></label>
-          <label><span>Loại công việc</span><select [ngModel]="selectedTypeFilter()" (ngModelChange)="selectedTypeFilter.set($event)"><option [ngValue]="null">Tất cả loại công việc</option><option value="Story">Story</option><option value="Task">Task</option><option value="Bug">Bug</option><option value="Use-Case">Use-Case</option><option value="Epic">Epic</option><option value="Sub-task">Sub-task</option></select></label>
+          <label><span>Loại công việc</span><select [ngModel]="selectedTypeFilter()" (ngModelChange)="selectedTypeFilter.set($event)"><option [ngValue]="null">Tất cả loại công việc</option>@for (t of issueTypes(); track t) { <option [value]="t">{{ t }}</option> }</select></label>
           <label><span>Mức độ ưu tiên</span><select [ngModel]="selectedPriorityFilter()" (ngModelChange)="selectedPriorityFilter.set($event)"><option [ngValue]="null">Tất cả mức độ</option><option value="Urgent">Khẩn cấp</option><option value="High">Cao</option><option value="Medium">Trung bình</option><option value="Low">Thấp</option></select></label>
           <label><span>Epic</span><select [ngModel]="selectedEpicFilter()" (ngModelChange)="selectedEpicFilter.set($event)"><option [ngValue]="null">Tất cả Epic</option>@for (epic of epics(); track epic.id) { <option [value]="epic.name">{{ epic.name }}</option> }</select></label>
         </div>
@@ -86,19 +89,22 @@
           (cdkDropListDropped)="onSprintDrop($event, sprint.id, sprint.name)"
           class="sprint-section"
         >
-          <div class="sprint-header">
+          <div class="sprint-header cursor-pointer select-none" (click)="onSprintHeaderClick(sprint, $event)" title="Nhấp để xem và chỉnh sửa chi tiết chu kỳ Sprint">
             <div class="sprint-info">
               @if (editingSprintId() === sprint.id) {
-                <div class="sprint-edit-row"><input type="text" [(ngModel)]="editingSprintName" aria-label="Tên Sprint" /><input type="date" [(ngModel)]="editingStartDate" aria-label="Ngày bắt đầu" /><input type="date" [(ngModel)]="editingEndDate" aria-label="Ngày kết thúc" /><button type="button" class="button button-primary" (click)="saveEditingSprint(sprint.id)">Lưu</button><button type="button" class="button button-secondary" (click)="editingSprintId.set(null)">Hủy</button></div>
+                <div class="sprint-edit-row" (click)="$event.stopPropagation()"><input type="text" [(ngModel)]="editingSprintName" aria-label="Tên Sprint" /><input type="text" [(ngModel)]="editingSprintGoal" placeholder="Mục tiêu Sprint..." aria-label="Mục tiêu Sprint" /><input type="date" [(ngModel)]="editingStartDate" aria-label="Ngày bắt đầu" /><input type="date" [(ngModel)]="editingEndDate" aria-label="Ngày kết thúc" /><button type="button" class="button button-primary" (click)="saveEditingSprint(sprint.id)">Lưu</button><button type="button" class="button button-secondary" (click)="editingSprintId.set(null)">Hủy</button></div>
               } @else {
-                <button type="button" class="sprint-title" (click)="startEditingSprint(sprint, $event)" title="Sửa thông tin Sprint"><strong>{{ sprint.name }}</strong><span>{{ sprint.startDate || 'Chưa có ngày' }} – {{ sprint.endDate || 'Chưa có ngày' }}</span><span class="material-symbols-outlined" aria-hidden="true">edit</span></button>
+                <div class="sprint-title cursor-pointer select-none" (click)="openSprintDetail(sprint, $event)" title="Nhấp để xem chi tiết Sprint"><strong>{{ sprint.name }}</strong><span>{{ sprint.startDate || 'Chưa có ngày' }} – {{ sprint.endDate || 'Chưa có ngày' }}</span><span class="material-symbols-outlined" aria-hidden="true">edit</span></div>
+                <span class="sprint-goal text-xs text-slate-500" data-testid="sprint-goal">{{ sprint.goal || 'Mục tiêu: Hoàn thành hạng mục cam kết' }}</span>
               }
               <span class="sprint-state" [class.state-active]="sprint.status === 'active'" [class.state-completed]="sprint.status === 'completed'" [class.state-future]="sprint.status === 'future'">{{ sprint.status === 'active' ? 'Đang chạy' : (sprint.status === 'completed' ? 'Hoàn thành' : 'Kế hoạch') }}</span>
               <span class="muted-count">{{ sprintTasks.length }} việc</span>
             </div>
-            <div class="sprint-actions">
+            <div class="sprint-actions" (click)="$event.stopPropagation()">
               <div class="avatar-stack" [title]="sprintAssignees.join(', ')" aria-label="Thành viên Sprint">@for (assignee of sprintAssignees; track assignee) { <span>{{ getAssigneeInitials(assignee) }}</span> }</div>
               <span class="points-summary">{{ sprint.totalStoryPoints }} SP</span>
+              <button type="button" class="button button-secondary" (click)="openSprintReview(sprint, $event)" title="Sprint Review & PO Nghiệm Thu"><span class="material-symbols-outlined" aria-hidden="true">fact_check</span><span>Review</span></button>
+              <button type="button" class="button button-secondary" (click)="openSprintRetro(sprint, $event)" title="Sprint Retrospective Cải Tiến"><span class="material-symbols-outlined" aria-hidden="true">rate_review</span><span>Retro</span></button>
               <button type="button" class="button button-secondary" (click)="toggleSprintStatus(sprint, $event)"><span class="material-symbols-outlined" aria-hidden="true">{{ sprint.status === 'future' ? 'play_arrow' : (sprint.status === 'active' ? 'check_circle' : 'restart_alt') }}</span><span>{{ sprint.status === 'future' ? 'Bắt đầu' : (sprint.status === 'active' ? 'Hoàn thành' : 'Mở lại') }}</span></button>
               <button type="button" class="button button-primary" (click)="activeInlineSprintId.set(activeInlineSprintId() === sprint.id ? null : sprint.id)"><span class="material-symbols-outlined" aria-hidden="true">add</span><span>Tạo việc</span></button>
             </div>
@@ -135,7 +141,159 @@
   @if (showNewEpicModal()) {
     <div class="modal-backdrop" role="presentation"><button type="button" class="modal-dismiss" aria-label="Đóng hộp thoại tạo Epic" (click)="showNewEpicModal.set(false)"></button><section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="new-epic-title"><div class="modal-title"><h2 id="new-epic-title">Tạo Epic mới</h2><button type="button" class="icon-button" title="Đóng" (click)="showNewEpicModal.set(false)"><span class="material-symbols-outlined" aria-hidden="true">close</span></button></div><label class="modal-field"><span>Tên Epic</span><input type="text" [(ngModel)]="newEpicName" placeholder="Ví dụ: Mobile App Integration" /></label><div class="modal-actions"><button type="button" class="button button-secondary" (click)="showNewEpicModal.set(false)">Hủy</button><button type="button" class="button button-ai-solid" [disabled]="!newEpicName.trim()" (click)="createEpic()">Tạo Epic</button></div></section></div>
   }
+
+  @if (activeSprintDetail(); as sp) {
+    <div class="modal-backdrop" role="presentation">
+      <button type="button" class="modal-dismiss" aria-label="Đóng hộp thoại chi tiết Sprint" (click)="closeSprintDetail()"></button>
+      <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="sprint-detail-title" style="width: min(680px, 100%); max-height: 90vh; overflow-y: auto;">
+        <div class="modal-title">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="material-symbols-outlined text-primary" aria-hidden="true">sprint</span>
+            <h2 id="sprint-detail-title">Chi tiết Sprint</h2>
+
+          </div>
+          <button type="button" class="icon-button" title="Đóng" (click)="closeSprintDetail()">
+            <span class="material-symbols-outlined" aria-hidden="true">close</span>
+          </button>
+        </div>
+
+        <div style="display: flex; gap: 16px; padding: 10px 14px; background: #f4f5f7; border-radius: 8px; font-size: 13px;">
+          <div>
+            <span style="color: #6b778c; display: block; font-size: 11px;">Trạng thái</span>
+            <span class="sprint-state" [class.state-active]="sp.status === 'active'" [class.state-completed]="sp.status === 'completed'" [class.state-future]="sp.status === 'future'">
+              {{ sp.status === 'active' ? 'Đang chạy' : (sp.status === 'completed' ? 'Hoàn thành' : 'Kế hoạch') }}
+            </span>
+          </div>
+          <div>
+            <span style="color: #6b778c; display: block; font-size: 11px;">Tổng điểm Story Points</span>
+            <strong style="color: #172b4d;">{{ sp.totalStoryPoints || 0 }} SP</strong>
+          </div>
+        </div>
+
+        <label class="modal-field">
+          <span>Tên Sprint *</span>
+          <input type="text" [ngModel]="editingSprintName()" (ngModelChange)="editingSprintName.set($event)" placeholder="Ví dụ: Sprint 1" />
+        </label>
+
+        <label class="modal-field">
+          <span>Mục tiêu Sprint (Sprint Goal)</span>
+          <textarea rows="3" [ngModel]="editingSprintGoal()" (ngModelChange)="editingSprintGoal.set($event)" placeholder="Mục tiêu cam kết của đội ngũ cho chu kỳ này..."></textarea>
+        </label>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <label class="modal-field">
+            <span>Ngày bắt đầu</span>
+            <input type="date" [ngModel]="editingStartDate()" (ngModelChange)="editingStartDate.set($event)" />
+          </label>
+          <label class="modal-field">
+            <span>Ngày kết thúc</span>
+            <input type="date" [ngModel]="editingEndDate()" (ngModelChange)="editingEndDate.set($event)" />
+          </label>
+        </div>
+
+        <div class="modal-actions" style="margin-top: 4px;">
+          <button type="button" class="button button-secondary" (click)="closeSprintDetail()">Đóng</button>
+          <button type="button" class="button button-primary" [disabled]="!editingSprintName().trim()" (click)="saveSprintDetail()">Lưu thông tin</button>
+        </div>
+
+        <!-- Trao đổi & Bình luận Sprint (Tích hợp trực tiếp, Real-time Event-Driven) -->
+        <div class="sprint-discussion-section" style="border-top: 1px solid #e2e8f0; padding-top: 18px; margin-top: 12px; display: flex; flex-direction: column; gap: 14px;">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="material-symbols-outlined text-[20px] text-primary" aria-hidden="true">forum</span>
+              <strong style="font-size: 14px; color: #1e293b; text-transform: uppercase; letter-spacing: 0.04em;">
+                Trao đổi & Bình luận ({{ sprintMessages().length }})
+              </strong>
+            </div>
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              Realtime
+            </span>
+          </div>
+
+          <!-- Comment Input Box -->
+          <div style="display: flex; gap: 10px; align-items: flex-start;">
+            <div style="width: 32px; height: 32px; border-radius: 50%; background: #4f46e5; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0;">
+              {{ currentUserInitial() }}
+            </div>
+            <div style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
+              <textarea
+                rows="2"
+                [ngModel]="chatInputText()"
+                (ngModelChange)="chatInputText.set($event)"
+                (keydown)="onChatKeydown($event)"
+                placeholder="Viết bình luận hoặc trao đổi về chu kỳ Sprint này... (Enter để gửi)"
+                style="width: 100%; resize: vertical; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 12px; font-size: 13px; outline: none; font-family: inherit; line-height: 1.4; background: #fff;"
+              ></textarea>
+              <div style="display: flex; justify-content: flex-end;">
+                <button
+                  type="button"
+                  class="button button-primary"
+                  style="padding: 5px 14px; font-size: 13px; display: inline-flex; align-items: center; gap: 6px;"
+                  [disabled]="!chatInputText().trim() || isSendingMessage()"
+                  (click)="sendSprintChatMessage()"
+                >
+                  @if (isSendingMessage()) {
+                    <span class="material-symbols-outlined text-[16px] animate-spin" aria-hidden="true">progress_activity</span>
+                  } @else {
+                    <span class="material-symbols-outlined text-[16px]" aria-hidden="true">send</span>
+                    <span>Gửi bình luận</span>
+                  }
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Comments List -->
+          <div class="sprint-comments-list sprint-chat-messages" style="display: flex; flex-direction: column; gap: 10px; max-height: 280px; overflow-y: auto; padding-right: 4px;">
+            @if (isChatLoading()) {
+              <div style="display: flex; align-items: center; justify-content: center; padding: 24px; color: #94a3b8; gap: 8px; font-size: 13px;">
+                <span class="material-symbols-outlined animate-spin" aria-hidden="true">progress_activity</span>
+                <span>Đang tải trao đổi...</span>
+              </div>
+            } @else if (sprintMessages().length === 0) {
+              <div style="padding: 16px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; text-align: center; color: #64748b; font-size: 13px;">
+                <span class="material-symbols-outlined text-[28px] text-slate-400 mb-1" aria-hidden="true">chat_bubble_outline</span>
+                <p style="margin: 0; font-weight: 500;">Chưa có trao đổi nào trong Sprint này.</p>
+                <p style="margin: 4px 0 0 0; font-size: 12px; color: #94a3b8;">Bình luận sẽ gửi thông báo tức thời tới các thành viên liên quan.</p>
+              </div>
+            } @else {
+              @for (msg of sprintMessages(); track msg.id) {
+                <div style="display: flex; gap: 10px; padding: 10px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;">
+                  <div style="width: 30px; height: 30px; border-radius: 50%; background: #e0e7ff; color: #4338ca; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; overflow: hidden;">
+                    @if (msg.senderAvatar) {
+                      <img [src]="msg.senderAvatar" [alt]="msg.senderName" style="width: 100%; height: 100%; object-fit: cover;" />
+                    } @else {
+                      <span>{{ getAssigneeInitials(msg.senderName) }}</span>
+                    }
+                  </div>
+                  <div style="flex: 1; display: flex; flex-direction: column; gap: 3px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; font-size: 12px;">
+                      <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="font-weight: 700; color: #1e293b;">{{ msg.senderName }}</span>
+                        @if (msg.isCurrentUser) {
+                          <span style="font-size: 10px; padding: 1px 6px; border-radius: 4px; background: #e0e7ff; color: #4338ca; font-weight: 600;">Bạn</span>
+                        }
+                        <span style="color: #94a3b8;">• {{ msg.createdAt | date:'HH:mm - dd/MM' }}</span>
+                      </div>
+                      @if (msg.isCurrentUser) {
+                        <button type="button" (click)="deleteChatMessage(msg.id)" title="Xóa bình luận" style="background: none; border: none; cursor: pointer; padding: 0; color: #94a3b8; display: flex; align-items: center;">
+                          <span class="material-symbols-outlined text-[15px] hover:text-red-500" aria-hidden="true">delete</span>
+                        </button>
+                      }
+                    </div>
+                    <p style="margin: 0; font-size: 13px; color: #334155; line-height: 1.5; white-space: pre-wrap; word-break: break-word;">{{ msg.content }}</p>
+                  </div>
+                </div>
+              }
+            }
+          </div>
+        </div>
+      </section>
+    </div>
+  }
 </section>
+}
 
 <ng-template #workItemList let-items>
   <div class="work-item-table">
@@ -148,13 +306,28 @@
           [cdkDragData]="item"
           (contextmenu)="onContextMenu($event, item)"
           (dblclick)="startEditingTaskTitle(item, $event)"
-          class="work-item-row interactive-card" 
+          (click)="onWorkItemRowClick(item, $event)"
+          class="work-item-row interactive-card cursor-pointer" 
           [class.is-selected]="isTaskSelected(item.id)"
         >
-          <div class="cell-select no-drawer">@if (subtasks.length > 0) { <button type="button" class="icon-button icon-button-small" [title]="expandedSubtasks()[item.id] ? 'Thu gọn Sub-task' : 'Mở Sub-task'" (click)="toggleSubtasks(item.id, $event)"><span class="material-symbols-outlined" aria-hidden="true">{{ expandedSubtasks()[item.id] ? 'expand_more' : 'chevron_right' }}</span></button> } @else { <input type="checkbox" [checked]="isTaskSelected(item.id)" [attr.aria-label]="'Chọn ' + item.issueKey" (change)="toggleTaskSelection(item.id, $event)" /> }</div>
-          <div class="cell-key"><span class="material-symbols-outlined issue-type-icon" [title]="item.issueType" aria-hidden="true">{{ getIssueTypeIcon(item.issueType) }}</span><strong>{{ item.issueKey }}</strong></div>
-          <div class="cell-title">
+          <div class="cell-select no-drawer flex items-center gap-1.5">
+            <span cdkDragHandle class="material-symbols-outlined drag-handle text-[18px] text-slate-400 hover:text-slate-700 cursor-grab active:cursor-grabbing select-none shrink-0" title="Kéo để sắp xếp hoặc đổi Sprint">drag_indicator</span>
+            <input type="checkbox" [checked]="isTaskSelected(item.id)" [attr.aria-label]="'Chọn ' + item.issueKey" (change)="toggleTaskSelection(item.id, $event)" />
+            @if (subtasks.length > 0) {
+              <button type="button" class="icon-button icon-button-small" [title]="expandedSubtasks()[item.id] ? 'Thu gọn Sub-task' : 'Mở Sub-task'" (click)="toggleSubtasks(item.id, $event)">
+                <span class="material-symbols-outlined" aria-hidden="true">{{ expandedSubtasks()[item.id] ? 'expand_more' : 'chevron_right' }}</span>
+              </button>
+            }
+          </div>
+          <div class="cell-key cursor-pointer" (click)="openTask(item, $event)"><span class="material-symbols-outlined issue-type-icon" [title]="item.issueType" aria-hidden="true">{{ getIssueTypeIcon(item.issueType) }}</span><strong>{{ item.issueKey }}</strong></div>
+          <div class="cell-title flex items-center gap-1.5 flex-wrap">
             @if (editingTaskId() === item.id) { <input class="title-input" type="text" [ngModel]="editingTaskTitle()" (ngModelChange)="editingTaskTitle.set($event)" (click)="$event.stopPropagation()" (keyup.enter)="saveEditingTaskTitle(item.id)" (blur)="saveEditingTaskTitle(item.id)" /> } @else { <button type="button" class="task-title-button" (click)="openTask(item, $event)">{{ item.title }}</button><button type="button" class="edit-title-button" title="Sửa tên công việc" (click)="startEditingTaskTitle(item, $event)"><span class="material-symbols-outlined" aria-hidden="true">edit</span></button> }
+            @if (isItemReady(item)) {
+              <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200" title="Definition of Ready (DoR): Đã ước lượng điểm & đủ mô tả"><span class="material-symbols-outlined text-[12px] text-emerald-600">check_circle</span>Ready</span>
+            }
+            @if (item.isBlocked) {
+              <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200" [title]="item.blockReason"><span class="material-symbols-outlined text-[12px] text-rose-600">block</span>Blocked</span>
+            }
             @if (subtasks.length > 0) { <span class="subtask-count">{{ getSubtaskProgress(item.id).done }}/{{ subtasks.length }} Sub-task</span> }
           </div>
 
@@ -167,12 +340,21 @@
 
           <button type="button" class="cell-priority no-drawer" [class.priority-urgent]="item.priority === 'Urgent'" [class.priority-high]="item.priority === 'High'" title="Bấm để chuyển mức ưu tiên" (click)="updateInlinePriorityNext(item.id, item.priority, $event)">{{ item.priority }}</button>
 
-          <div class="cell-points no-drawer">@if (editingStoryPointsTaskId() === item.id) { <input type="number" min="0" max="999" [ngModel]="editingStoryPointsValue()" (ngModelChange)="editingStoryPointsValue.set($event)" (click)="$event.stopPropagation()" (keyup.enter)="saveStoryPoints(item.id, $event)" (blur)="saveStoryPoints(item.id, $event)" aria-label="Story Points" /> } @else { <button type="button" title="Sửa Story Points" (click)="startEditingStoryPoints(item, $event)">{{ item.storyPoints }}</button> }</div>
+          <div class="cell-points no-drawer flex items-center gap-1">
+            @if (editingStoryPointsTaskId() === item.id) {
+              <input type="number" min="0" max="999" [ngModel]="editingStoryPointsValue()" (ngModelChange)="editingStoryPointsValue.set($event)" (click)="$event.stopPropagation()" (keyup.enter)="saveStoryPoints(item.id, $event)" (blur)="saveStoryPoints(item.id, $event)" aria-label="Story Points" />
+            } @else {
+              <button type="button" title="Sửa Story Points" (click)="startEditingStoryPoints(item, $event)">{{ item.storyPoints }}</button>
+            }
+            <button type="button" class="icon-button icon-button-small" (click)="openPoker(item, undefined, $event)" title="Planning Poker ước lượng online">
+              <span class="material-symbols-outlined text-[15px] text-primary" aria-hidden="true">style</span>
+            </button>
+          </div>
 
           <div class="cell-status no-drawer">
             <button #statusOrigin="cdkOverlayOrigin" cdkOverlayOrigin type="button" class="status-pill" [class.status-todo]="item.statusName === 'To Do'" [class.status-progress]="item.statusName === 'In Progress'" [class.status-review]="item.statusName === 'Code Review'" [class.status-done]="item.statusName === 'Done'" [attr.aria-expanded]="activeStatusDropdownTaskId() === item.id" (click)="toggleStatusDropdown(item.id, $event)"><span>{{ item.statusName }}</span><span class="material-symbols-outlined" aria-hidden="true">expand_more</span></button>
             <ng-template cdkConnectedOverlay [cdkConnectedOverlayOrigin]="statusOrigin" [cdkConnectedOverlayOpen]="activeStatusDropdownTaskId() === item.id" [cdkConnectedOverlayPositions]="endAlignedOverlayPositions" [cdkConnectedOverlayHasBackdrop]="true" cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop" [cdkConnectedOverlayPush]="true" [cdkConnectedOverlayViewportMargin]="12" (backdropClick)="activeStatusDropdownTaskId.set(null)" (detach)="activeStatusDropdownTaskId.set(null)">
-              <div class="overlay-panel option-menu status-menu" role="menu">@for (status of ['To Do', 'In Progress', 'Code Review', 'Done']; track status) { <button type="button" role="menuitem" (click)="updateInlineStatus(item.id, status, $event); activeStatusDropdownTaskId.set(null)"><span class="status-pill" [class.status-todo]="status === 'To Do'" [class.status-progress]="status === 'In Progress'" [class.status-review]="status === 'Code Review'" [class.status-done]="status === 'Done'">{{ status }}</span>@if (item.statusName === status) { <span class="material-symbols-outlined">check</span> }</button> }</div>
+              <div class="overlay-panel option-menu status-menu" role="menu">@for (status of statusNames(); track status) { <button type="button" role="menuitem" (click)="updateInlineStatus(item.id, status, $event); activeStatusDropdownTaskId.set(null)"><span class="status-pill" [class.status-todo]="status === 'To Do'" [class.status-progress]="status === 'In Progress'" [class.status-review]="status === 'Code Review'" [class.status-done]="status === 'Done'">{{ status }}</span>@if (item.statusName === status) { <span class="material-symbols-outlined">check</span> }</button> }</div>
             </ng-template>
           </div>
 
@@ -192,4 +374,365 @@
     }
   </div>
 </ng-template>
+
+<!-- ========================================== -->
+<!-- 1. PLANNING POKER MODAL                     -->
+<!-- ========================================== -->
+@if (showPokerModal() && activePokerSession(); as session) {
+  <div class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-xl w-full p-6 animate-in fade-in zoom-in-95 duration-150">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-primary text-[24px]">style</span>
+          <div>
+            <h3 class="text-base font-bold text-slate-900 dark:text-white">Planning Poker Ước Lượng</h3>
+            <span class="text-xs text-slate-500 font-mono">{{ session.issueKey }}: {{ session.issueTitle }}</span>
+          </div>
+        </div>
+        <button type="button" (click)="showPokerModal.set(false)" class="text-slate-400 hover:text-slate-600">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+
+      <!-- Voting Cards (Fibonacci) -->
+      <div class="py-5">
+        <p class="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-3 text-center">Chọn lá bài Story Points của bạn:</p>
+        <div class="flex flex-wrap items-center justify-center gap-3">
+          @for (pt of pokerPointsOptions; track pt) {
+            <button
+              type="button"
+              (click)="votePoker(pt)"
+              class="w-14 h-20 rounded-xl border-2 font-black text-lg transition-all flex flex-col items-center justify-center shadow-xs cursor-pointer hover:scale-105"
+              [class.border-primary]="myPokerVote() === pt"
+              [class.bg-primary]="myPokerVote() === pt"
+              [class.text-white]="myPokerVote() === pt"
+              [class.border-slate-200]="myPokerVote() !== pt"
+              [class.bg-slate-50]="myPokerVote() !== pt"
+              [class.text-slate-800]="myPokerVote() !== pt"
+            >
+              <span>{{ pt }}</span>
+              <span class="text-[10px] font-normal opacity-70">SP</span>
+            </button>
+          }
+        </div>
+      </div>
+
+      <!-- Team Votes Display -->
+      <div class="bg-slate-50 dark:bg-slate-850 p-4 rounded-xl border border-slate-200 dark:border-slate-800 mb-5">
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-xs font-bold uppercase text-slate-600 dark:text-slate-400">Các thành viên tham gia ({{ session.votes.length }} đã vote)</span>
+          @if (!session.isRevealed) {
+            <button type="button" (click)="revealPoker()" class="btn btn-sm btn-secondary flex items-center gap-1">
+              <span class="material-symbols-outlined text-[16px]">visibility</span>
+              <span>Lật bài</span>
+            </button>
+          }
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          @for (vote of session.votes; track vote.userId) {
+            <div class="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-between text-xs">
+              <span class="font-medium text-slate-700 dark:text-slate-300 truncate">{{ vote.userName || 'Thành viên' }}</span>
+              @if (session.isRevealed) {
+                <span class="font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">{{ vote.storyPoints }} SP</span>
+              } @else {
+                <span class="text-emerald-600 flex items-center gap-0.5" title="Đã úp bài"><span class="material-symbols-outlined text-[16px]">check_circle</span> Đã vote</span>
+              }
+            </div>
+          }
+        </div>
+      </div>
+
+      <!-- Finalize Section -->
+      @if (session.isRevealed) {
+        <div class="p-3 bg-primary/5 border border-primary/20 rounded-xl mb-4 text-center">
+          <p class="text-xs font-bold text-slate-700 mb-2">Chốt Story Points chính thức:</p>
+          <div class="flex items-center justify-center gap-2">
+            @for (pt of pokerPointsOptions; track pt) {
+              <button type="button" (click)="finalizePoker(pt)" class="px-2.5 py-1 rounded-lg bg-primary text-white text-xs font-bold hover:bg-primary-dark">
+                {{ pt }} SP
+              </button>
+            }
+          </div>
+        </div>
+      }
+
+      <div class="flex items-center justify-end">
+        <button type="button" (click)="showPokerModal.set(false)" class="btn btn-secondary">Đóng phòng</button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- ========================================== -->
+<!-- 2. SPRINT ROLLOVER WIZARD MODAL             -->
+<!-- ========================================== -->
+@if (showRolloverModal() && rolloverSprint(); as sprint) {
+  <div class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-lg w-full p-6 animate-in fade-in zoom-in-95 duration-150">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-primary text-[24px]">flag</span>
+          <h3 class="text-base font-bold text-slate-900 dark:text-white">Hoàn Thành Sprint & Chuyển Giao</h3>
+        </div>
+        <button type="button" (click)="showRolloverModal.set(false)" class="text-slate-400 hover:text-slate-600">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+
+      @if (closeSummary(); as sum) {
+        <div class="py-4 space-y-4">
+          <!-- Summary Cards -->
+          <div class="grid grid-cols-2 gap-3">
+            <div class="p-3.5 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/60 text-center">
+              <span class="material-symbols-outlined text-emerald-600 text-[24px]">task_alt</span>
+              <p class="text-xl font-bold text-emerald-700 dark:text-emerald-400">{{ sum.completedStoriesCount }}</p>
+              <span class="text-xs text-emerald-800 font-medium">Hoàn thành ({{ sum.completedPoints }} SP)</span>
+            </div>
+            <div class="p-3.5 rounded-xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/60 text-center">
+              <span class="material-symbols-outlined text-amber-600 text-[24px]">pending_actions</span>
+              <p class="text-xl font-bold text-amber-700 dark:text-amber-400">{{ sum.incompleteStoriesCount }}</p>
+              <span class="text-xs text-amber-800 font-medium">Chưa xong ({{ sum.incompletePoints }} SP)</span>
+            </div>
+          </div>
+
+          @if (sum.incompleteStoriesCount > 0) {
+            <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 space-y-3">
+              <p class="text-xs font-bold text-slate-700 uppercase">Xử lý {{ sum.incompleteStoriesCount }} công việc dang dở:</p>
+              
+              <label class="flex items-start gap-2.5 cursor-pointer">
+                <input type="radio" name="dest" value="next" [(ngModel)]="rolloverDestination" [disabled]="sum.nextSprints.length === 0" class="mt-0.5 text-primary focus:ring-primary" />
+                <div>
+                  <span class="text-sm font-semibold text-slate-800">Chuyển sang Sprint tiếp theo:</span>
+                  @if (sum.nextSprints.length > 0) {
+                    <select [(ngModel)]="selectedNextSprintId" class="mt-1 block w-full text-xs p-1.5 rounded-lg border border-slate-300">
+                      @for (ns of sum.nextSprints; track ns.id) {
+                        <option [value]="ns.id">{{ ns.name }}</option>
+                      }
+                    </select>
+                  } @else {
+                    <p class="text-xs text-slate-400">Không có Sprint kế tiếp khả dụng.</p>
+                  }
+                </div>
+              </label>
+
+              <label class="flex items-start gap-2.5 cursor-pointer pt-2 border-t border-slate-200">
+                <input type="radio" name="dest" value="backlog" [(ngModel)]="rolloverDestination" class="mt-0.5 text-primary focus:ring-primary" />
+                <div>
+                  <span class="text-sm font-semibold text-slate-800">Đưa về Product Backlog</span>
+                  <p class="text-xs text-slate-500">Các công việc sẽ nằm trong danh sách Backlog để PO ưu tiên lại ở Sprint sau.</p>
+                </div>
+              </label>
+            </div>
+          } @else {
+            <div class="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-center text-xs text-emerald-800 font-medium">
+              Tuyệt vời! Toàn bộ 100% các cam kết trong Sprint đã hoàn thành.
+            </div>
+          }
+        </div>
+
+        <div class="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+          <button type="button" (click)="showRolloverModal.set(false)" class="btn btn-secondary">Hủy</button>
+          <button type="button" (click)="confirmCompleteSprint()" class="btn btn-primary">Xác nhận hoàn thành Sprint</button>
+        </div>
+      }
+    </div>
+  </div>
+}
+
+<!-- ========================================== -->
+<!-- 3. SPRINT REVIEW & PO SIGN-OFF MODAL        -->
+<!-- ========================================== -->
+@if (showReviewModal() && reviewSprint(); as sprint) {
+  <div class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-2xl w-full p-6 animate-in fade-in zoom-in-95 duration-150">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-primary text-[24px]">fact_check</span>
+          <div>
+            <h3 class="text-base font-bold text-slate-900 dark:text-white">Sprint Review & PO Nghiệm Thu</h3>
+            <span class="text-xs text-slate-500 font-medium">Sprint: {{ sprint.name }}</span>
+          </div>
+        </div>
+        <button type="button" (click)="showReviewModal.set(false)" class="text-slate-400 hover:text-slate-600">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+
+      <div class="py-4 space-y-3 max-h-[60vh] overflow-y-auto">
+        @for (item of reviewItems(); track item.id) {
+          <div class="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 space-y-2">
+            <div class="flex items-center justify-between gap-3">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="font-mono text-xs font-bold text-primary">{{ item.issueKey }}</span>
+                <span class="font-semibold text-sm text-slate-800 truncate">{{ item.title }}</span>
+                <span class="text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600">{{ item.storyPoints }} SP</span>
+              </div>
+              <div class="flex items-center gap-1.5 shrink-0">
+                @if (item.isDone) {
+                  <span class="px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[14px]">check</span> PO Đã Nghiệm Thu
+                  </span>
+                } @else {
+                  <button type="button" (click)="acceptStory(item)" class="btn btn-sm btn-primary flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[14px]">done_all</span> Nghiệm thu
+                  </button>
+                  <button type="button" (click)="rejectingItemId = item.id" class="btn btn-sm btn-secondary flex items-center gap-1 text-red-600 hover:bg-red-50">
+                    <span class="material-symbols-outlined text-[14px]">close</span> Từ chối
+                  </button>
+                }
+              </div>
+            </div>
+
+            <!-- Acceptance Criteria Checklist -->
+            @if (item.criteria && item.criteria.length > 0) {
+              <div class="p-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 space-y-1">
+                <p class="text-[11px] font-bold text-slate-500 uppercase">Tiêu chí chấp nhận (DoD / Acceptance Criteria):</p>
+                @for (c of item.criteria; track c.id) {
+                  <div class="flex items-center gap-2 text-xs">
+                    <span class="material-symbols-outlined text-[16px]" [class.text-emerald-600]="c.isMet" [class.text-slate-300]="!c.isMet">{{ c.isMet ? 'check_box' : 'check_box_outline_blank' }}</span>
+                    <span [class.line-through]="c.isMet" class="text-slate-700">{{ c.content }}</span>
+                  </div>
+                }
+              </div>
+            }
+
+            @if (rejectingItemId === item.id) {
+              <div class="p-2.5 rounded-lg bg-rose-50 border border-rose-200 flex items-center gap-2">
+                <input type="text" [(ngModel)]="rejectReason" placeholder="Nhập lý do chưa đạt nghiệm thu..." class="text-xs p-1.5 rounded border border-rose-300 flex-1" />
+                <button type="button" (click)="rejectStory(item)" class="btn btn-sm btn-danger">Xác nhận</button>
+                <button type="button" (click)="rejectingItemId = null" class="btn btn-sm btn-secondary">Hủy</button>
+              </div>
+            }
+          </div>
+        }
+      </div>
+
+      <div class="pt-3 border-t border-slate-100 flex items-center justify-end">
+        <button type="button" (click)="showReviewModal.set(false)" class="btn btn-secondary">Đóng</button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- ========================================== -->
+<!-- 4. SPRINT RETROSPECTIVE BOARD MODAL         -->
+<!-- ========================================== -->
+@if (showRetroModal() && retroSprint(); as sprint) {
+  <div class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-4xl w-full p-6 animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[85vh]">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 shrink-0">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-primary text-[24px]">rate_review</span>
+          <div>
+            <h3 class="text-base font-bold text-slate-900 dark:text-white">Sprint Retrospective (Cải Tiến Liên Tục)</h3>
+            <span class="text-xs text-slate-500 font-medium">Sprint: {{ sprint.name }}</span>
+          </div>
+        </div>
+        <button type="button" (click)="showRetroModal.set(false)" class="text-slate-400 hover:text-slate-600">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+
+      <!-- Add New Retro Card Input -->
+      <div class="py-3 flex flex-wrap items-center gap-2 shrink-0 border-b border-slate-100">
+        <select [(ngModel)]="newRetroCategory" class="text-xs p-2 rounded-lg border border-slate-300">
+          <option value="WentWell">Điều làm tốt (Went Well)</option>
+          <option value="CouldImprove">Cần cải thiện (Could Improve)</option>
+          <option value="ActionItem">Hành động khắc phục (Action Item)</option>
+        </select>
+        <input type="text" [(ngModel)]="newRetroContent" placeholder="Chia sẻ ý kiến đóng góp của bạn..." class="text-xs p-2 rounded-lg border border-slate-300 flex-1 min-w-[200px]" (keyup.enter)="addRetroCard()" />
+        <label class="flex items-center gap-1 text-xs text-slate-600 cursor-pointer">
+          <input type="checkbox" [(ngModel)]="newRetroIsAnonymous" class="rounded text-primary focus:ring-primary" />
+          <span>Ẩn danh</span>
+        </label>
+        <button type="button" (click)="addRetroCard()" [disabled]="!newRetroContent.trim()" class="btn btn-sm btn-primary flex items-center gap-1">
+          <span class="material-symbols-outlined text-[16px]">add</span> Đăng ý kiến
+        </button>
+      </div>
+
+      <!-- 3 Columns Board -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3.5 py-4 overflow-y-auto flex-1">
+        <!-- Col 1: Went Well -->
+        <div class="p-3 rounded-xl bg-emerald-50/50 border border-emerald-200 flex flex-col gap-2">
+          <h4 class="text-xs font-bold text-emerald-800 uppercase flex items-center gap-1">
+            <span class="material-symbols-outlined text-[16px]">sentiment_satisfied</span> Điều làm tốt
+          </h4>
+          <div class="space-y-2">
+            @for (card of retroCards(); track card.id) {
+              @if (card.category === 'WentWell') {
+                <div class="p-2.5 rounded-lg bg-white border border-emerald-100 shadow-2xs space-y-1.5 text-xs">
+                  <p class="text-slate-800">{{ card.content }}</p>
+                  <div class="flex items-center justify-between text-[11px] text-slate-400">
+                    <span>{{ card.isAnonymous ? 'Ẩn danh' : (card.authorName || 'Thành viên') }}</span>
+                    <button type="button" (click)="voteRetro(card)" class="flex items-center gap-1 text-emerald-700 font-bold hover:bg-emerald-50 px-1.5 py-0.5 rounded">
+                      <span class="material-symbols-outlined text-[14px]">thumb_up</span> {{ card.votesCount }}
+                    </button>
+                  </div>
+                </div>
+              }
+            }
+          </div>
+        </div>
+
+        <!-- Col 2: Could Improve -->
+        <div class="p-3 rounded-xl bg-amber-50/50 border border-amber-200 flex flex-col gap-2">
+          <h4 class="text-xs font-bold text-amber-800 uppercase flex items-center gap-1">
+            <span class="material-symbols-outlined text-[16px]">error_outline</span> Cần cải thiện
+          </h4>
+          <div class="space-y-2">
+            @for (card of retroCards(); track card.id) {
+              @if (card.category === 'CouldImprove') {
+                <div class="p-2.5 rounded-lg bg-white border border-amber-100 shadow-2xs space-y-1.5 text-xs">
+                  <p class="text-slate-800">{{ card.content }}</p>
+                  <div class="flex items-center justify-between text-[11px] text-slate-400">
+                    <span>{{ card.isAnonymous ? 'Ẩn danh' : (card.authorName || 'Thành viên') }}</span>
+                    <button type="button" (click)="voteRetro(card)" class="flex items-center gap-1 text-amber-700 font-bold hover:bg-amber-50 px-1.5 py-0.5 rounded">
+                      <span class="material-symbols-outlined text-[14px]">thumb_up</span> {{ card.votesCount }}
+                    </button>
+                  </div>
+                </div>
+              }
+            }
+          </div>
+        </div>
+
+        <!-- Col 3: Action Items -->
+        <div class="p-3 rounded-xl bg-blue-50/50 border border-blue-200 flex flex-col gap-2">
+          <h4 class="text-xs font-bold text-blue-800 uppercase flex items-center gap-1">
+            <span class="material-symbols-outlined text-[16px]">rocket_launch</span> Hành động (Action Items)
+          </h4>
+          <div class="space-y-2">
+            @for (card of retroCards(); track card.id) {
+              @if (card.category === 'ActionItem') {
+                <div class="p-2.5 rounded-lg bg-white border border-blue-100 shadow-2xs space-y-1.5 text-xs">
+                  <p class="text-slate-800 font-medium">{{ card.content }}</p>
+                  <div class="flex items-center justify-between pt-1 border-t border-slate-100 text-[11px]">
+                    <button type="button" (click)="voteRetro(card)" class="flex items-center gap-1 text-blue-700 font-bold hover:bg-blue-50 px-1.5 py-0.5 rounded">
+                      <span class="material-symbols-outlined text-[14px]">thumb_up</span> {{ card.votesCount }}
+                    </button>
+                    @if (card.convertedIssueKey) {
+                      <span class="text-emerald-600 font-bold flex items-center gap-0.5">
+                        <span class="material-symbols-outlined text-[14px]">task_alt</span> {{ card.convertedIssueKey }}
+                      </span>
+                    } @else {
+                      <button type="button" (click)="convertRetroToTask(card)" class="px-2 py-0.5 rounded bg-blue-600 text-white font-semibold text-[10px] hover:bg-blue-700">
+                        Chuyển thành Task
+                      </button>
+                    }
+                  </div>
+                </div>
+              }
+            }
+          </div>
+        </div>
+      </div>
+
+      <div class="pt-3 border-t border-slate-100 flex items-center justify-end shrink-0">
+        <button type="button" (click)="showRetroModal.set(false)" class="btn btn-secondary">Đóng</button>
+      </div>
+    </div>
+  </div>
+}
+
 

@@ -1,4 +1,10 @@
+using DeliveryIntelligence.Application.Dto;
+using DeliveryIntelligence.Application.IServices;
+using DeliveryIntelligence.Application.Services;
+using DeliveryIntelligence.Domain.IRepositories;
 using DeliveryIntelligence.Infrastructure;
+using DeliveryIntelligence.Infrastructure.Repositories;
+using FluentValidation;
 using IdentityExperience.Application.IServices;
 using IdentityExperience.Application.Services;
 using IdentityExperience.Domain.IRepositories;
@@ -273,8 +279,125 @@ builder.Services.AddScoped<IProjectManagementService, ProjectManagementService>(
 builder.Services.AddScoped<IProjectLookupService, ProjectLookupService>();
 builder.Services.AddScoped<IUserLookupService, UserLookupService>();
 builder.Services.AddScoped<IUserSkillService, UserLookupService>();
+builder.Services.AddValidatorsFromAssemblyContaining<CreateIssueDtoValidator>();
+builder.Services.AddScoped<IIssueRepository, IssueRepository>();
+builder.Services.AddScoped<IIssueTrackingService, IssueTrackingService>();
+builder.Services.AddScoped<IssueHierarchyLoader>();
+builder.Services.AddScoped<IssueHistoryRecorder>();
+builder.Services.AddScoped<IIssueHistoryService, IssueHistoryService>();
+builder.Services.AddScoped<IIssueHierarchyService, IssueHierarchyService>();
+builder.Services.AddScoped<IssueContractService>();
+builder.Services.AddScoped<ICollaborationRepository, CollaborationRepository>();
+builder.Services.AddScoped<IIssueCollaborationService, IssueCollaborationService>();
+builder.Services.AddScoped<ILabelLinkRepository, LabelLinkRepository>();
+builder.Services.AddScoped<IIssueLabelLinkService, IssueLabelLinkService>();
+builder.Services.AddScoped<IIssueNotifier, IssueNotificationAdapter>();
+builder.Services.AddScoped<ISkillCatalogReader, SkillCatalogAdapter>();
+builder.Services.AddScoped<IRequirementRepository, RequirementRepository>();
+builder.Services.AddScoped<IReleaseLinkRepository, ReleaseLinkRepository>();
+builder.Services.AddScoped<IDataOpsRepository, DataOpsRepository>();
+builder.Services.AddScoped<IDatasetService, DatasetService>();
+builder.Services.AddScoped<IDataCleaningService, DataCleaningService>();
+builder.Services.AddScoped<IDatasetReviewService, DatasetReviewService>();
+builder.Services.AddScoped<IWorkflowValidationService, PlanningWorkflowValidationService>();
+builder.Services.AddScoped<IProjectReleaseLookupService, PlanningReleaseLookupService>();
+builder.Services.AddScoped<IIssueReleaseService, IssueReleaseService>();
+builder.Services.AddScoped<IIssueTransitionService, IssueTransitionService>();
+// IssueReleaseService không đăng ký: cần IProjectReleaseLookupService thật của Planning; IssueReleaseController tự dựng khi có.
+builder.Services.AddScoped<IssueRequirementService>();
+builder.Services.AddScoped<IIssueRequirementService>(services => services.GetRequiredService<IssueRequirementService>());
+builder.Services.AddScoped<ProjectMgmt.IssueTracking.Contracts.IIssueSkillService>(services => services.GetRequiredService<IssueRequirementService>());
+// IssueTransitionService không đăng ký: cần IWorkflowValidationService thật của Planning (ValidateOnBuild sẽ chặn khởi động).
+// IssuesController tự dựng service khi contract đó có trong DI.
+builder.Services.AddSingleton(builder.Configuration.GetSection(AttachmentOptions.SectionName).Get<AttachmentOptions>() ?? new AttachmentOptions());
+builder.Services.AddSingleton<IAttachmentStorage>(services => new DeliveryIntelligence.Infrastructure.Services.LocalAttachmentStorage(
+    Path.Combine(services.GetRequiredService<IWebHostEnvironment>().ContentRootPath, "App_Data", "attachments")));
+builder.Services.AddScoped<ProjectMgmt.IssueTracking.Contracts.IIssueReadService>(services => services.GetRequiredService<IssueContractService>());
+builder.Services.AddScoped<ProjectMgmt.IssueTracking.Contracts.IIssueSprintService>(services => services.GetRequiredService<IssueContractService>());
+// IIssueCreationService chưa đăng ký: cần IIssueNumberGenerator thật từ Planning.
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var db = scope.ServiceProvider.GetRequiredService<IdentityExperienceDbContext>();
+        var skillServices = scope.ServiceProvider.GetRequiredService<ISkillServices>();
+        var roleServices = scope.ServiceProvider.GetRequiredService<IRoleServices>();
+
+        var catalog = await skillServices.GetCatalogAsync(null, null);
+        if (catalog.Items is null || catalog.Items.Count < 3)
+        {
+            await skillServices.CreateCatalogSkillAsync(new IdentityExperience.Application.Dto.SkillDto { Code = "CSHARP_DOTNET", Name = "C# / .NET", Category = "Backend", IsActive = true });
+            await skillServices.CreateCatalogSkillAsync(new IdentityExperience.Application.Dto.SkillDto { Code = "ANGULAR_TS", Name = "Angular / TypeScript", Category = "Frontend", IsActive = true });
+            await skillServices.CreateCatalogSkillAsync(new IdentityExperience.Application.Dto.SkillDto { Code = "MYSQL_DB", Name = "MySQL / Database", Category = "Database", IsActive = true });
+        }
+
+        var adminUser = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == "hoanghaihau989@gmail.com");
+        var sysAdminRole = await db.Roles.AsNoTracking().FirstOrDefaultAsync(r => r.Name == "Admin" || r.Name == "SystemAdmin" || r.Scope == "System");
+        if (adminUser is not null && sysAdminRole is not null)
+        {
+            var hasRole = await db.UserRoles.AnyAsync(ur => ur.UserId == adminUser.Id && ur.RoleId == sysAdminRole.Id && ur.ScopeType == "System");
+            if (!hasRole)
+            {
+                db.UserRoles.Add(new IdentityExperience.Domain.Entities.UserRole
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = adminUser.Id,
+                    RoleId = sysAdminRole.Id,
+                    ScopeType = "System",
+                    ScopeId = null,
+                    GrantedBy = adminUser.Id
+                });
+                await db.SaveChangesAsync();
+            }
+
+            var allPerms = await db.Permissions.AsNoTracking().Select(p => p.Id).ToListAsync();
+            var existingRolePerms = await db.RolePermissions.AsNoTracking().Where(rp => rp.RoleId == sysAdminRole.Id).Select(rp => rp.PermissionId).ToListAsync();
+            var missingPerms = allPerms.Except(existingRolePerms).ToList();
+            if (missingPerms.Count > 0)
+            {
+                foreach (var permId in missingPerms)
+                {
+                    db.RolePermissions.Add(new IdentityExperience.Domain.Entities.RolePermission
+                    {
+                        RoleId = sysAdminRole.Id,
+                        PermissionId = permId
+                    });
+                }
+                await db.SaveChangesAsync();
+            }
+        }
+
+        try
+        {
+            var planningDb = scope.ServiceProvider.GetRequiredService<Planning.Infrastructure.PlanningDbContext>();
+            await planningDb.Database.ExecuteSqlRawAsync(@"
+CREATE TABLE IF NOT EXISTS SprintMessage (
+    Id char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
+    SprintId char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
+    UserId char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
+    Content text CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
+    CreatedAt datetime(6) NOT NULL,
+    UpdatedAt datetime(6) NULL,
+    IsDeleted tinyint(1) NOT NULL DEFAULT 0,
+    PRIMARY KEY (Id),
+    KEY IX_SprintMessage_SprintId (SprintId),
+    KEY IX_SprintMessage_UserId (UserId)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+");
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not ensure SprintMessage table exists");
+        }
+    }
+    catch
+    {
+        // Ignore seed errors on startup
+    }
+}
 
 if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
 {
@@ -340,7 +463,7 @@ if (hasFrontendArtifact)
 
         context.Response.ContentType = "text/html; charset=utf-8";
         await context.Response.SendFileAsync(frontendIndexPath);
-    });
+    }).AllowAnonymous();
 }
 
 app.Run();
