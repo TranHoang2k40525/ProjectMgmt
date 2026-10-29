@@ -61,8 +61,10 @@
                 </td>
                 <td class="px-4 py-3 text-slate-700 dark:text-slate-300">{{ project.leadName }}</td>
                 <td class="px-4 py-3 text-slate-700 dark:text-slate-300">
-                  {{ project.workflowTemplateName }}
-                  <span class="block text-xs text-slate-500">{{ project.managementType }}</span>
+                  {{ project.workflowTemplateName || project.managementType }}
+                  @if (project.workflowTemplateName) {
+                    <span class="block text-xs text-slate-500">{{ project.managementType }}</span>
+                  }
                 </td>
                 <td class="px-4 py-3 text-right tabular-nums text-slate-700 dark:text-slate-300">{{ project.memberCount }}</td>
                 <td class="px-4 py-3 tabular-nums text-slate-500">{{ formatDate(project.createdAt) }}</td>

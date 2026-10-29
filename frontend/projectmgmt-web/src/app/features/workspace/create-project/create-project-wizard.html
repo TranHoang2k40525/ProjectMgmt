@@ -202,6 +202,15 @@
             <p class="max-w-md text-sm text-slate-600 dark:text-slate-300 text-pretty">
               {{ project.name }} dùng mẫu “{{ project.workflowTemplateName }}” và có {{ project.memberCount }} thành viên.
             </p>
+            @if (project.setupWarnings?.length) {
+              <div role="alert" class="w-full max-w-md rounded-lg bg-amber-50 px-3 py-2 text-left text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                <p class="font-semibold">Một số thiết lập chưa áp dụng được:</p>
+                <ul class="mt-1 list-disc pl-5">
+                  @for (warning of project.setupWarnings; track warning) { <li>{{ warning }}</li> }
+                </ul>
+                <p class="mt-1 text-pretty">Bạn có thể chỉnh lại trong Cài đặt dự án (Workflow, Kiểu công việc, Thành viên).</p>
+              </div>
+            }
           </div>
         }
       }

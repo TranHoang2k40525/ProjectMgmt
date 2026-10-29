@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, injec
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { distinctUntilChanged, map, of, switchMap, tap } from 'rxjs';
-import { apiErrorMessage } from '../../../core/http/api-error-message';
+import { workspaceErrorMessage } from '../workspace-error';
 import { ToastService } from '../../../core/services/toast.service';
 import { ORG_ROLE_LABELS } from '../data/workspace.models';
 import { WorkspaceContextService } from '../workspace-context.service';
@@ -93,7 +93,7 @@ export class OrgPageComponent implements OnInit {
       next: () => this.loading.set(false),
       error: error => {
         this.loading.set(false);
-        this.toast.error('Không mở được tổ chức', apiErrorMessage(error, 'Tổ chức không tồn tại hoặc bạn không còn là thành viên.'));
+        this.toast.error('Không mở được tổ chức', workspaceErrorMessage(error, 'Tổ chức không tồn tại hoặc bạn không còn là thành viên.'));
         void this.router.navigate(['/for-you']);
       }
     });

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { forkJoin } from 'rxjs';
-import { apiErrorMessage } from '../../../core/http/api-error-message';
+import { workspaceErrorMessage } from '../workspace-error';
 import { RecentListComponent } from '../components/recent-list';
 import { SectionStateComponent } from '../components/section-state';
 import { UI } from '../components/ui-classes';
@@ -97,7 +97,7 @@ export class OrgOverviewComponent implements OnInit {
         this.loading.set(false);
       },
       error: error => {
-        this.error.set(apiErrorMessage(error, 'Không tải được tổng quan tổ chức.'));
+        this.error.set(workspaceErrorMessage(error, 'Không tải được tổng quan tổ chức.'));
         this.loading.set(false);
       }
     });

@@ -2,7 +2,7 @@ import { DOCUMENT } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
-import { apiErrorMessage } from '../../../../core/http/api-error-message';
+import { workspaceErrorMessage } from '../../workspace-error';
 import { ConfirmDialogService } from '../../../../core/services/confirm-dialog.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import { SectionStateComponent } from '../../components/section-state';
@@ -94,7 +94,7 @@ export class OrgMembersSettingsComponent implements OnInit {
         this.loading.set(false);
       },
       error: error => {
-        this.error.set(apiErrorMessage(error, 'Không tải được thành viên của tổ chức.'));
+        this.error.set(workspaceErrorMessage(error, 'Không tải được thành viên của tổ chức.'));
         this.loading.set(false);
       }
     });
@@ -117,7 +117,7 @@ export class OrgMembersSettingsComponent implements OnInit {
       error: error => {
         this.savingRoleFor.set(null);
         select.value = member.role;
-        this.toast.error('Không đổi được vai trò', apiErrorMessage(error, 'Thử lại sau.'));
+        this.toast.error('Không đổi được vai trò', workspaceErrorMessage(error, 'Thử lại sau.'));
       }
     });
   }
@@ -135,7 +135,7 @@ export class OrgMembersSettingsComponent implements OnInit {
           this.context.reloadCurrent();
           this.toast.success('Đã gỡ thành viên', member.displayName);
         },
-        error: error => this.toast.error('Không gỡ được thành viên', apiErrorMessage(error, 'Thử lại sau.'))
+        error: error => this.toast.error('Không gỡ được thành viên', workspaceErrorMessage(error, 'Thử lại sau.'))
       })
     });
   }
@@ -170,7 +170,7 @@ export class OrgMembersSettingsComponent implements OnInit {
       },
       error: error => {
         this.inviting.set(false);
-        this.inviteError.set(apiErrorMessage(error, 'Không gửi được lời mời. Thử lại sau.'));
+        this.inviteError.set(workspaceErrorMessage(error, 'Không gửi được lời mời. Thử lại sau.'));
       }
     });
   }
@@ -181,7 +181,7 @@ export class OrgMembersSettingsComponent implements OnInit {
         this.invitations.update(list => list.filter(item => item.id !== invitation.id));
         this.toast.info('Đã hủy lời mời', invitation.email);
       },
-      error: error => this.toast.error('Không hủy được lời mời', apiErrorMessage(error, 'Thử lại sau.'))
+      error: error => this.toast.error('Không hủy được lời mời', workspaceErrorMessage(error, 'Thử lại sau.'))
     });
   }
 
@@ -216,7 +216,7 @@ export class OrgMembersSettingsComponent implements OnInit {
           },
           error: error => {
             this.linkBusy.set(false);
-            this.toast.error('Không tắt được link mời', apiErrorMessage(error, 'Thử lại sau.'));
+            this.toast.error('Không tắt được link mời', workspaceErrorMessage(error, 'Thử lại sau.'));
           }
         });
       }
@@ -260,7 +260,7 @@ export class OrgMembersSettingsComponent implements OnInit {
       },
       error: error => {
         this.linkBusy.set(false);
-        this.toast.error('Không tạo được link mời', apiErrorMessage(error, 'Thử lại sau.'));
+        this.toast.error('Không tạo được link mời', workspaceErrorMessage(error, 'Thử lại sau.'));
       }
     });
   }

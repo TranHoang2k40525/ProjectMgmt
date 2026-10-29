@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { apiErrorMessage } from '../../../core/http/api-error-message';
+import { workspaceErrorMessage } from '../workspace-error';
 import { IdentityService } from '../../../core/services/identity.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { InvitationListComponent, InvitationResponse } from '../components/invitation-list';
@@ -65,7 +65,7 @@ export class WorkspaceHomePageComponent implements OnInit {
         this.workLoading.set(false);
       },
       error: error => {
-        this.workError.set(apiErrorMessage(error, 'Không tải được công việc của bạn.'));
+        this.workError.set(workspaceErrorMessage(error, 'Không tải được công việc của bạn.'));
         this.workLoading.set(false);
       }
     });
@@ -81,7 +81,7 @@ export class WorkspaceHomePageComponent implements OnInit {
         this.recentLoading.set(false);
       },
       error: error => {
-        this.recentError.set(apiErrorMessage(error, 'Không tải được mục gần đây.'));
+        this.recentError.set(workspaceErrorMessage(error, 'Không tải được mục gần đây.'));
         this.recentLoading.set(false);
       }
     });
@@ -93,7 +93,7 @@ export class WorkspaceHomePageComponent implements OnInit {
     this.context.refreshOrganizations().subscribe({
       next: () => this.orgsLoading.set(false),
       error: error => {
-        this.orgsError.set(apiErrorMessage(error, 'Không tải được danh sách tổ chức.'));
+        this.orgsError.set(workspaceErrorMessage(error, 'Không tải được danh sách tổ chức.'));
         this.orgsLoading.set(false);
       }
     });
@@ -115,7 +115,7 @@ export class WorkspaceHomePageComponent implements OnInit {
       },
       error: error => {
         this.respondingId.set(null);
-        this.toast.error('Không trả lời được lời mời', apiErrorMessage(error, 'Thử lại sau.'));
+        this.toast.error('Không trả lời được lời mời', workspaceErrorMessage(error, 'Thử lại sau.'));
       }
     });
   }

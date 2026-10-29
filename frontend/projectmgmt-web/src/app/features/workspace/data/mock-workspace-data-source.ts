@@ -35,7 +35,29 @@ export const MOCK_WORKSPACE_LATENCY = new InjectionToken<number>('MOCK_WORKSPACE
   factory: () => 180
 });
 
-const STORAGE_PREFIX = 'pm-workspace-db-v1:';
+/**
+ * `seed`: tạo dữ liệu mẫu cho người dùng mới (chế độ demo 'mock').
+ * Chế độ 'hybrid' tắt seed và dùng khóa lưu riêng: kho này chỉ giữ phần backend chưa có,
+ * còn tổ chức, dự án, người dùng được đồng bộ từ API thật qua {@link MockWorkspaceDataSource.syncReal}.
+ */
+export interface MockWorkspaceOptions {
+  seed: boolean;
+  storagePrefix: string;
+}
+
+export const MOCK_WORKSPACE_OPTIONS = new InjectionToken<MockWorkspaceOptions>('MOCK_WORKSPACE_OPTIONS', {
+  providedIn: 'root',
+  factory: () => ({ seed: true, storagePrefix: 'pm-workspace-db-v1:' })
+});
+
+/** Dữ liệu thật đưa vào kho phụ ở chế độ hybrid. */
+export interface RealWorkspaceSnapshot {
+  users: { id: string; displayName: string; email: string; avatarUrl: string | null }[];
+  organizations: { id: string; name: string; slug: string; ownerId: string; createdAt: string }[];
+  /** Dự án người dùng hiện tại truy cập được (API thật đã lọc theo quyền). */
+  projects: { id: string; orgId: string; projectKey: string; name: string; description: string | null; leadUserId: string; type?: string; createdAt: string }[];
+  workItems?: { id: string; projectId: string; issueKey: string; title: string; statusName: string; statusCategory: Db['workItems'][number]['statusCategory']; dueDate: string | null }[];
+}
 const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const MAX_INVITE_EMAILS = 20;
 const MAX_RECENT = 8;
@@ -62,6 +84,13 @@ function newToken(): string {
   return token;
 }
 
+function emptyDb(me: WorkspaceUser): Db {
+  return {
+    version: 1, users: [me], organizations: [], orgMembers: [], invitations: [], inviteLinks: [], workflowTemplates: [],
+    projects: [], projectMembers: [], issueTypes: [], workItems: [], recentVisits: []
+  };
+}
+
 function clone<T>(value: T): T {
   return value === undefined ? value : JSON.parse(JSON.stringify(value)) as T;
 }
@@ -74,6 +103,7 @@ function clone<T>(value: T): T {
 export class MockWorkspaceDataSource extends WorkspaceDataSource {
   private readonly identity = inject(IdentityService);
   private readonly latency = inject(MOCK_WORKSPACE_LATENCY);
+  private readonly options = inject(MOCK_WORKSPACE_OPTIONS);
   private db: Db | null = null;
   private dbOwnerId = '';
 
@@ -444,7 +474,108 @@ export class MockWorkspaceDataSource extends WorkspaceDataSource {
     return this.run(db => this.touch(db, request.kind, request.id));
   }
 
+  /**
+   * Chế độ hybrid: thay tổ chức/dự án/người dùng trong kho phụ bằng dữ liệu thật, giữ phần chỉ kho phụ có
+   * (thành viên, lời mời, link mời, mẫu workflow, mẫu đã dùng của dự án, Gần đây).
+   */
+  syncReal(snapshot: RealWorkspaceSnapshot): void {
+    const db = this.load();
+    const me = this.me();
+    for (const user of snapshot.users) {
+      const existing = db.users.find(item => item.id === user.id);
+      if (existing) Object.assign(existing, user); else db.users.push({ ...user });
+    }
+
+    const realOrgIds = new Set(snapshot.organizations.map(org => org.id));
+    db.organizations = snapshot.organizations.map(org => {
+      const previous = db.organizations.find(item => item.id === org.id);
+      return { ...org, defaultTemplateId: previous?.defaultTemplateId ?? PRESET_WORKFLOW_TEMPLATES[0].id };
+    });
+    db.orgMembers = db.orgMembers.filter(member => realOrgIds.has(member.orgId));
+    for (const org of snapshot.organizations) {
+      this.ensureMember(db, org.id, org.ownerId, 'Owner');
+      this.ensureMember(db, org.id, me.id, 'Member');
+    }
+
+    const previousProjects = new Map(db.projects.map(project => [project.id, project]));
+    db.projects = snapshot.projects.filter(project => realOrgIds.has(project.orgId)).map(project => {
+      const previous = previousProjects.get(project.id);
+      const managementType = previous?.managementType ?? (project.type?.toLowerCase().includes('kanban') ? 'Kanban' : 'Scrum');
+      return {
+        id: project.id,
+        orgId: project.orgId,
+        projectKey: project.projectKey,
+        name: project.name,
+        description: project.description,
+        leadUserId: project.leadUserId,
+        workflowTemplateId: previous?.workflowTemplateId ?? '',
+        workflowTemplateName: previous?.workflowTemplateName ?? '',
+        managementType,
+        statuses: previous?.statuses ?? [],
+        issueCounter: previous?.issueCounter ?? 0,
+        createdAt: project.createdAt
+      };
+    });
+    const projectIds = new Set(db.projects.map(project => project.id));
+    db.projectMembers = db.projectMembers.filter(member => projectIds.has(member.projectId));
+    for (const project of db.projects) {
+      if (!db.projectMembers.some(member => member.projectId === project.id && member.userId === me.id)) {
+        db.projectMembers.push({ projectId: project.id, userId: me.id, role: 'Developer' });
+      }
+    }
+
+    if (snapshot.workItems) {
+      db.workItems = snapshot.workItems.filter(item => projectIds.has(item.projectId)).map(item => ({
+        id: item.id,
+        projectId: item.projectId,
+        number: Number(item.issueKey.split('-').pop()) || 0,
+        title: item.title,
+        assigneeId: me.id,
+        statusName: item.statusName,
+        statusCategory: item.statusCategory,
+        priority: 'Medium',
+        dueDate: item.dueDate
+      }));
+    }
+    this.persist(db);
+  }
+
+  /** Ghi thành viên dự án thật vào kho phụ để tổ chức có danh sách thành viên khi backend chưa có API. */
+  addKnownMembers(orgId: string, projectId: string, userIds: string[]): void {
+    const db = this.load();
+    if (!db.organizations.some(org => org.id === orgId)) return;
+    for (const userId of userIds) {
+      this.ensureMember(db, orgId, userId, 'Member');
+      if (!db.projectMembers.some(member => member.projectId === projectId && member.userId === userId)) {
+        db.projectMembers.push({ projectId, userId, role: 'Developer' });
+      }
+    }
+    this.persist(db);
+  }
+
+  /** Lưu mẫu workflow mà wizard đã dùng cho dự án thật vừa tạo (backend chưa lưu thông tin này). */
+  rememberProjectTemplate(projectId: string, templateId: string, orgId: string): void {
+    const db = this.load();
+    const project = db.projects.find(item => item.id === projectId);
+    const template = this.findTemplate(db, orgId, templateId);
+    if (!project || !template) return;
+    project.workflowTemplateId = template.id;
+    project.workflowTemplateName = template.name;
+    project.managementType = template.managementType;
+    project.statuses = clone(template.statuses);
+    this.persist(db);
+  }
+
   // --- hạ tầng -------------------------------------------------------------
+
+  private ensureMember(db: Db, orgId: string, userId: string, role: OrgRoleCode): void {
+    const existing = this.memberRow(db, orgId, userId);
+    if (existing) {
+      if (role === 'Owner') existing.role = 'Owner';
+      return;
+    }
+    db.orgMembers.push({ orgId, userId, role, joinedAt: new Date().toISOString() });
+  }
 
   /** Lời gọi chỉ đọc: không ghi lại localStorage. */
   private read<T>(work: (db: Db) => T): Observable<T> {
@@ -474,7 +605,7 @@ export class MockWorkspaceDataSource extends WorkspaceDataSource {
   private load(): Db {
     const me = this.me();
     if (this.db && this.dbOwnerId === me.id) return this.db;
-    const db = this.readStored(me.id) ?? createWorkspaceSeed(me);
+    const db = this.readStored(me.id) ?? (this.options.seed ? createWorkspaceSeed(me) : emptyDb(me));
     const self = db.users.find(user => user.id === me.id);
     if (self) Object.assign(self, me); else db.users.unshift(me);
     this.db = db;
@@ -484,7 +615,7 @@ export class MockWorkspaceDataSource extends WorkspaceDataSource {
 
   private readStored(userId: string): Db | null {
     try {
-      const raw = typeof localStorage === 'undefined' ? null : localStorage.getItem(STORAGE_PREFIX + userId);
+      const raw = typeof localStorage === 'undefined' ? null : localStorage.getItem(this.options.storagePrefix + userId);
       const parsed = raw ? JSON.parse(raw) as Db : null;
       return parsed?.version === 1 ? parsed : null;
     } catch {
@@ -494,7 +625,7 @@ export class MockWorkspaceDataSource extends WorkspaceDataSource {
 
   private persist(db: Db): void {
     try {
-      if (typeof localStorage !== 'undefined') localStorage.setItem(STORAGE_PREFIX + this.dbOwnerId, JSON.stringify(db));
+      if (typeof localStorage !== 'undefined') localStorage.setItem(this.options.storagePrefix + this.dbOwnerId, JSON.stringify(db));
     } catch {
       /* Bộ nhớ trình duyệt bị chặn hoặc đầy: dữ liệu vẫn dùng được trong phiên hiện tại. */
     }

@@ -1,7 +1,6 @@
-import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { apiErrorMessage } from '../../../core/http/api-error-message';
+import { workspaceErrorMessage } from '../workspace-error';
 import { ToastService } from '../../../core/services/toast.service';
 import { UI } from '../components/ui-classes';
 import { WorkspaceDataSource } from '../data/workspace-data-source';
@@ -79,10 +78,10 @@ export class InviteAcceptPageComponent implements OnInit {
         this.preview.set(preview);
         this.loading.set(false);
       },
-      error: (error: HttpErrorResponse) => {
-        this.loadError.set(error.status === 404
+      error: (error: { status?: number }) => {
+        this.loadError.set(error?.status === 404
           ? 'Link có thể đã bị thu hồi hoặc tắt. Hãy xin người mời gửi link mới.'
-          : apiErrorMessage(error, 'Không mở được lời mời. Thử lại sau.'));
+          : workspaceErrorMessage(error, 'Không mở được lời mời. Thử lại sau.'));
         this.loading.set(false);
       }
     });
@@ -100,7 +99,7 @@ export class InviteAcceptPageComponent implements OnInit {
       },
       error: error => {
         this.joining.set(false);
-        this.actionError.set(apiErrorMessage(error, 'Không tham gia được. Thử lại sau.'));
+        this.actionError.set(workspaceErrorMessage(error, 'Không tham gia được. Thử lại sau.'));
       }
     });
   }

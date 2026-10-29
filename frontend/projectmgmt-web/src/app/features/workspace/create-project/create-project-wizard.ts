@@ -1,9 +1,8 @@
 import { DOCUMENT } from '@angular/common';
-import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
-import { apiErrorMessage } from '../../../core/http/api-error-message';
+import { workspaceErrorCode, workspaceErrorMessage } from '../workspace-error';
 import { ModalShellComponent } from '../components/modal-shell';
 import { UI } from '../components/ui-classes';
 import { WorkspaceDataSource } from '../data/workspace-data-source';
@@ -129,7 +128,7 @@ export class CreateProjectWizardComponent implements OnInit {
         this.loading.set(false);
       },
       error: error => {
-        this.loadError.set(apiErrorMessage(error, 'Không tải được thành viên và mẫu workflow của tổ chức.'));
+        this.loadError.set(workspaceErrorMessage(error, 'Không tải được thành viên và mẫu workflow của tổ chức.'));
         this.loading.set(false);
       }
     });
@@ -242,7 +241,7 @@ export class CreateProjectWizardComponent implements OnInit {
         },
         error: error => {
           this.busy.set(false);
-          this.stepError.set(apiErrorMessage(error, 'Không kiểm tra được mã dự án. Thử lại.'));
+          this.stepError.set(workspaceErrorMessage(error, 'Không kiểm tra được mã dự án. Thử lại.'));
         }
       });
     } else if (this.step() === 2 && this.validateStep2()) {
@@ -279,7 +278,7 @@ export class CreateProjectWizardComponent implements OnInit {
         this.step.set('done');
         this.created.emit(project);
       },
-      error: (error: HttpErrorResponse) => {
+      error: (error: unknown) => {
         this.busy.set(false);
         this.routeSubmitError(error);
       }
@@ -287,9 +286,9 @@ export class CreateProjectWizardComponent implements OnInit {
   }
 
   /** Lỗi từ server được đưa về đúng bước và đúng trường để người dùng sửa. */
-  private routeSubmitError(error: HttpErrorResponse): void {
-    const message = apiErrorMessage(error, 'Không tạo được dự án. Thử lại sau.');
-    const code: string = error.error?.code ?? '';
+  private routeSubmitError(error: unknown): void {
+    const message = workspaceErrorMessage(error, 'Không tạo được dự án. Thử lại sau.');
+    const code = workspaceErrorCode(error);
     if (code.startsWith('PROJECT_KEY')) {
       this.keyError.set(message);
       this.step.set(1);

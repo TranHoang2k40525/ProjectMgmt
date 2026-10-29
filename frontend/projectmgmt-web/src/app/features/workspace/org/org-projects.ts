@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { apiErrorMessage } from '../../../core/http/api-error-message';
+import { workspaceErrorMessage } from '../workspace-error';
 import { SectionStateComponent } from '../components/section-state';
 import { CreateProjectWizardComponent } from '../create-project/create-project-wizard';
 import { ToastService } from '../../../core/services/toast.service';
@@ -69,7 +69,7 @@ export class OrgProjectsComponent implements OnInit {
         this.loading.set(false);
       },
       error: error => {
-        this.error.set(apiErrorMessage(error, 'Không tải được danh sách dự án.'));
+        this.error.set(workspaceErrorMessage(error, 'Không tải được danh sách dự án.'));
         this.loading.set(false);
       }
     });

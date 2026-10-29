@@ -120,6 +120,8 @@ export interface WorkspaceProject {
   managementType: ManagementType;
   memberCount: number;
   createdAt: string;
+  /** Chỉ có khi vừa tạo: các bước thiết lập sau khi tạo dự án chưa áp dụng được (dự án vẫn đã được tạo). */
+  setupWarnings?: string[];
 }
 
 export interface IssueTypeNameSetting {

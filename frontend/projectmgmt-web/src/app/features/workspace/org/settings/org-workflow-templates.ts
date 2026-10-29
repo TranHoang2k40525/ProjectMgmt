@@ -2,7 +2,7 @@ import { DOCUMENT, NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Observable } from 'rxjs';
-import { apiErrorMessage } from '../../../../core/http/api-error-message';
+import { workspaceErrorMessage } from '../../workspace-error';
 import { ConfirmDialogService } from '../../../../core/services/confirm-dialog.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import { ModalShellComponent } from '../../components/modal-shell';
@@ -73,7 +73,7 @@ export class OrgWorkflowTemplatesComponent implements OnInit {
         this.loading.set(false);
       },
       error: error => {
-        this.error.set(apiErrorMessage(error, 'Không tải được mẫu workflow.'));
+        this.error.set(workspaceErrorMessage(error, 'Không tải được mẫu workflow.'));
         this.loading.set(false);
       }
     });
@@ -99,7 +99,7 @@ export class OrgWorkflowTemplatesComponent implements OnInit {
       },
       error: error => {
         this.busyId.set(null);
-        this.toast.error('Không đặt được mẫu mặc định', apiErrorMessage(error, 'Thử lại sau.'));
+        this.toast.error('Không đặt được mẫu mặc định', workspaceErrorMessage(error, 'Thử lại sau.'));
       }
     });
   }
@@ -121,7 +121,7 @@ export class OrgWorkflowTemplatesComponent implements OnInit {
           },
           error: error => {
             this.busyId.set(null);
-            this.toast.error('Không xóa được mẫu', apiErrorMessage(error, 'Thử lại sau.'));
+            this.toast.error('Không xóa được mẫu', workspaceErrorMessage(error, 'Thử lại sau.'));
           }
         });
       }
@@ -201,7 +201,7 @@ export class OrgWorkflowTemplatesComponent implements OnInit {
       },
       error: error => {
         this.saving.set(false);
-        this.saveError.set(apiErrorMessage(error, 'Không lưu được mẫu workflow.'));
+        this.saveError.set(workspaceErrorMessage(error, 'Không lưu được mẫu workflow.'));
       }
     });
   }

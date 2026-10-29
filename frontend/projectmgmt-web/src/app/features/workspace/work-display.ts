@@ -62,6 +62,14 @@ export function dueBucketOf(dueDate: string | null, today: Date = new Date()): D
   return dueDate < todayKey ? 'overdue' : dueDate === todayKey ? 'today' : 'upcoming';
 }
 
+/** API "Dành cho bạn" chỉ trả tên trạng thái; đoán nhóm theo tên phổ biến để nhóm và tô màu. */
+export function guessStatusCategory(statusName: string | null | undefined): StatusCategory {
+  const name = (statusName ?? '').toLowerCase();
+  if (/done|closed|resolved|hoàn thành|xong|đóng/.test(name)) return 'Done';
+  if (/progress|review|test|qa|verif|doing|đang|kiểm/.test(name)) return 'InProgress';
+  return 'ToDo';
+}
+
 export function formatDueDate(dueDate: string | null): string {
   if (!dueDate) return 'Chưa có hạn';
   const [year, month, day] = dueDate.split('-');

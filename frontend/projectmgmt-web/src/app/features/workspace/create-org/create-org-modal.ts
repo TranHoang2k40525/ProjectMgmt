@@ -1,8 +1,7 @@
 import { DOCUMENT } from '@angular/common';
-import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, inject, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { apiErrorMessage } from '../../../core/http/api-error-message';
+import { workspaceErrorCode, workspaceErrorMessage } from '../workspace-error';
 import { ModalShellComponent } from '../components/modal-shell';
 import { UI } from '../components/ui-classes';
 import { WorkspaceDataSource } from '../data/workspace-data-source';
@@ -96,11 +95,12 @@ export class CreateOrgModalComponent {
         this.saving.set(false);
         this.created.emit(org);
       },
-      error: (error: HttpErrorResponse) => {
+      error: (error: unknown) => {
         this.saving.set(false);
-        const message = apiErrorMessage(error, 'Không tạo được tổ chức. Thử lại sau.');
-        if (error.error?.code?.startsWith('ORG_SLUG')) this.slugError.set(message);
-        else if (error.error?.code === 'ORG_NAME_INVALID') this.nameError.set(message);
+        const message = workspaceErrorMessage(error, 'Không tạo được tổ chức. Thử lại sau.');
+        const code = workspaceErrorCode(error);
+        if (code.startsWith('ORG_SLUG')) this.slugError.set(message);
+        else if (code === 'ORG_NAME_INVALID') this.nameError.set(message);
         else this.formError.set(message);
       }
     });
