@@ -463,7 +463,7 @@ if (hasFrontendArtifact)
 
         context.Response.ContentType = "text/html; charset=utf-8";
         await context.Response.SendFileAsync(frontendIndexPath);
-    });
+    }).AllowAnonymous();
 }
 
 app.Run();

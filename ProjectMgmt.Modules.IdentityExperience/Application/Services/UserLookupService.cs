@@ -16,17 +16,16 @@ public class UserLookupService : IUserLookupService, IUserSkillService
         _skillRepository = skillRepository;
     }
 
-    public async Task<IReadOnlyList<UserDisplayInfo>> GetAllActiveDisplayInfoAsync(
-        CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<UserDisplayInfo>> GetAllActiveDisplayInfoAsync()
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        var profiles = await _profileRepository.GetAllActiveProfilesAsync(cancellationToken);
+        var profiles = await _profileRepository.GetAllActiveProfilesAsync();
         if (profiles.Count > 0)
         {
             return profiles.Select(p => new UserDisplayInfo
             {
                 UserId = p.UserId,
                 DisplayName = !string.IsNullOrWhiteSpace(p.DisplayName) ? p.DisplayName : p.Email,
+                Email = p.Email,
                 AvatarUrl = p.AvatarUrl
             }).ToList();
         }
@@ -35,14 +34,12 @@ public class UserLookupService : IUserLookupService, IUserSkillService
     }
 
     public async Task<IReadOnlyList<UserDisplayInfo>> GetDisplayInfoAsync(
-        IEnumerable<Guid> userIds,
-        CancellationToken cancellationToken = default)
+        IEnumerable<Guid> userIds)
     {
-        cancellationToken.ThrowIfCancellationRequested();
         var results = new List<UserDisplayInfo>();
         foreach (var userId in userIds.Distinct())
         {
-            var user = await GetDisplayInfoAsync(userId, cancellationToken);
+            var user = await GetDisplayInfoAsync(userId);
             if (user is not null)
             {
                 results.Add(user);
@@ -53,10 +50,8 @@ public class UserLookupService : IUserLookupService, IUserSkillService
     }
 
     public async Task<UserDisplayInfo?> GetDisplayInfoAsync(
-        Guid userId,
-        CancellationToken cancellationToken = default)
+        Guid userId)
     {
-        cancellationToken.ThrowIfCancellationRequested();
         var details = await _profileRepository.GetProfileDetailsAsync(userId);
         if (details is not null)
         {

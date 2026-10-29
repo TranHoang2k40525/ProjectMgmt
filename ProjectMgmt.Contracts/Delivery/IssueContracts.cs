@@ -44,16 +44,16 @@ public record IssueAssignmentChangeDto(
 /// <summary>DeliveryIntelligence (C) cung cấp; Planning/AI đọc Issue qua DTO, không đọc DbContext của C.</summary>
 public interface IIssueReadService
 {
-    Task<IssueSummaryDto?> GetByIdAsync(Guid issueId, CancellationToken cancellationToken = default);
+    Task<IssueSummaryDto?> GetByIdAsync(Guid issueId);
 
-    Task<IReadOnlyList<IssueSummaryDto>> GetBySprintAsync(Guid sprintId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<IssueSummaryDto>> GetBySprintAsync(Guid sprintId);
 
     /// <summary>Issue đang mở (chưa có ResolvedAt) giao cho người dùng, mọi Project.</summary>
-    Task<IReadOnlyList<IssueSummaryDto>> GetOpenByAssigneeAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<IssueSummaryDto>> GetOpenByAssigneeAsync(Guid userId);
 
-    Task<IReadOnlyList<IssueStatusChangeDto>> GetStatusHistoryAsync(Guid issueId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<IssueStatusChangeDto>> GetStatusHistoryAsync(Guid issueId);
 
-    Task<IReadOnlyList<IssueAssignmentChangeDto>> GetAssignmentHistoryAsync(Guid issueId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<IssueAssignmentChangeDto>> GetAssignmentHistoryAsync(Guid issueId);
 }
 
 /// <summary>
@@ -66,14 +66,12 @@ public interface IIssueSprintService
         Guid projectId,
         IReadOnlyCollection<Guid> issueIds,
         Guid sprintId,
-        Guid actorUserId,
-        CancellationToken cancellationToken = default);
+        Guid actorUserId);
 
     Task<Result<int>> ReturnToBacklogAsync(
         Guid projectId,
         IReadOnlyCollection<Guid> issueIds,
-        Guid actorUserId,
-        CancellationToken cancellationToken = default);
+        Guid actorUserId);
 }
 
 public record IssueRequiredSkillDto(Guid IssueId, Guid SkillId, int MinLevel, decimal Weight, string Source);
@@ -81,5 +79,5 @@ public record IssueRequiredSkillDto(Guid IssueId, Guid SkillId, int MinLevel, de
 /// <summary>Kỹ năng yêu cầu của Issue cho AI phân công (B) — đọc theo lô, không lộ entity.</summary>
 public interface IIssueSkillService
 {
-    Task<IReadOnlyList<IssueRequiredSkillDto>> GetRequiredSkillsAsync(IEnumerable<Guid> issueIds, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<IssueRequiredSkillDto>> GetRequiredSkillsAsync(IEnumerable<Guid> issueIds);
 }

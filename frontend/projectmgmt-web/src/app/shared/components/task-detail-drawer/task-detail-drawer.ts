@@ -95,8 +95,44 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
               />
             </div>
 
+            <!-- Blocker Alert & Action -->
+            @if (task.isBlocked) {
+              <div class="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/60 border border-red-300 dark:border-red-800 text-red-800 dark:text-red-200 flex items-center justify-between gap-3 animate-fade-in">
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <span class="material-symbols-outlined text-red-600 dark:text-red-400 text-[22px] shrink-0">block</span>
+                  <div class="flex flex-col min-w-0">
+                    <span class="text-xs font-bold uppercase tracking-wider text-red-600 dark:text-red-400">Đang bị cản trở (Blocker)</span>
+                    <span class="text-sm font-semibold truncate">{{ task.blockReason || 'Không có lý do chi tiết' }}</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  (click)="unblockTask()"
+                  class="h-8 px-3 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-xs shrink-0 flex items-center gap-1 cursor-pointer transition-colors shadow-xs"
+                >
+                  <span class="material-symbols-outlined text-[16px]">check_circle</span>
+                  <span>Gỡ cản trở</span>
+                </button>
+              </div>
+            } @else {
+              <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-dashed border-slate-200 dark:border-slate-800">
+                <span class="text-xs text-slate-500 flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[16px] text-emerald-500">check_circle</span>
+                  <span>Công việc thông suốt</span>
+                </span>
+                <button
+                  type="button"
+                  (click)="openBlockTaskModal()"
+                  class="h-7 px-2.5 rounded-md text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 border border-red-200 dark:border-red-900/60 flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  <span class="material-symbols-outlined text-[14px]">block</span>
+                  <span>Báo cản trở</span>
+                </button>
+              </div>
+            }
+
             <!-- Metadata Quick Control Grid (Min 14px font text-sm) -->
-            <div class="task-meta-grid grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/60">
+            <div class="task-meta-grid grid grid-cols-2 sm:grid-cols-3 gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/60">
               <!-- Status Dropdown -->
               <div class="flex flex-col gap-1.5">
                 <span class="text-sm font-bold uppercase tracking-wider text-slate-400">Trạng thái</span>
@@ -150,7 +186,35 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
                   max="21"
                   [(ngModel)]="task.storyPoints"
                   (ngModelChange)="onFieldChange()"
-                  class="h-9 w-20 px-3 rounded-lg text-sm font-mono font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none"
+                  class="h-9 w-full px-3 rounded-lg text-sm font-mono font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none"
+                />
+              </div>
+
+              <!-- Estimated Hours -->
+              <div class="flex flex-col gap-1.5">
+                <span class="text-sm font-bold uppercase tracking-wider text-slate-400">Giờ ước tính</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  [(ngModel)]="task.estimatedHours"
+                  (ngModelChange)="onFieldChange()"
+                  placeholder="0.0h"
+                  class="h-9 w-full px-3 rounded-lg text-sm font-mono font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none"
+                />
+              </div>
+
+              <!-- Remaining Hours -->
+              <div class="flex flex-col gap-1.5">
+                <span class="text-sm font-bold uppercase tracking-wider text-slate-400">Giờ còn lại</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  [(ngModel)]="task.remainingHours"
+                  (ngModelChange)="onFieldChange()"
+                  placeholder="0.0h"
+                  class="h-9 w-full px-3 rounded-lg text-sm font-mono font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none"
                 />
               </div>
             </div>
@@ -396,6 +460,44 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
           </div>
 
         </div>
+
+        <!-- Modal Báo Cản Trở (Blocker Dialog) -->
+        @if (isBlockModalOpen()) {
+          <div class="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+            <div class="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-5 flex flex-col gap-4">
+              <div class="flex items-center gap-2 text-red-600 dark:text-red-400">
+                <span class="material-symbols-outlined text-[24px]">block</span>
+                <h3 class="text-base font-bold text-slate-900 dark:text-white">Báo cáo cản trở (Blocker)</h3>
+              </div>
+              <p class="text-xs text-slate-500">Mô tả trở ngại ngăn cản công việc được tiếp tục thực hiện để Scrum Master & Đội ngũ hỗ trợ giải phóng:</p>
+              <textarea
+                rows="3"
+                [ngModel]="blockReasonInput()"
+                (ngModelChange)="blockReasonInput.set($event)"
+                placeholder="Nhập lý do bị nghẽn, người hoặc tài nguyên cần phụ thuộc..."
+                class="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:border-red-500"
+              ></textarea>
+              <div class="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  (click)="closeBlockTaskModal()"
+                  class="h-9 px-3.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  (click)="submitBlockTask()"
+                  [disabled]="!blockReasonInput().trim()"
+                  class="h-9 px-4 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-xs"
+                >
+                  <span class="material-symbols-outlined text-[16px]">check</span>
+                  <span>Xác nhận chặn</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        }
       </div>
     }
   `,
@@ -460,15 +562,61 @@ export class TaskDetailDrawerComponent {
 
   readonly candidateScores = signal<Array<{ name: string; totalScore: number; workloadScore: number; skillScore: number; historyScore: number; capacityScore: number; reason: string }>>([]);
 
+  readonly isBlockModalOpen = signal(false);
+  readonly blockReasonInput = signal('');
+
   readonly projectMembers = computed(() => this.projectService.currentProject()?.members ?? []);
   readonly availableIssueTypes = computed(() => {
     const custom = this.projectService.customIssueTypes().map(t => t.name);
-    return Array.from(new Set(['Task', 'Story', 'Bug', 'Use-Case', 'Epic', 'Sub-task', ...custom]));
+    return custom.length > 0 ? custom : ['Story', 'Task', 'Bug', 'Epic', 'Sub-task'];
   });
   readonly availableStatusNames = computed(() => {
     const dynamic = this.projectService.projectStatuses().map(s => s.name);
     return dynamic.length > 0 ? dynamic : ['To Do', 'In Progress', 'Code Review', 'Done'];
   });
+
+  openBlockTaskModal(): void {
+    this.blockReasonInput.set('');
+    this.isBlockModalOpen.set(true);
+  }
+
+  closeBlockTaskModal(): void {
+    this.isBlockModalOpen.set(false);
+  }
+
+  submitBlockTask(): void {
+    if (!this.task || !this.blockReasonInput().trim()) return;
+    const reason = this.blockReasonInput().trim();
+    this.projectService.blockIssue(this.task.id, reason).subscribe({
+      next: () => {
+        if (this.task) {
+          this.task.isBlocked = true;
+          this.task.blockReason = reason;
+        }
+        this.toastService.warning('Báo cản trở', 'Công việc đã được đánh dấu cản trở (Blocker).');
+        this.closeBlockTaskModal();
+      },
+      error: () => {
+        this.toastService.error('Báo cản trở', 'Không thể đánh dấu cản trở.');
+      }
+    });
+  }
+
+  unblockTask(): void {
+    if (!this.task) return;
+    this.projectService.unblockIssue(this.task.id).subscribe({
+      next: () => {
+        if (this.task) {
+          this.task.isBlocked = false;
+          this.task.blockReason = undefined;
+        }
+        this.toastService.success('Gỡ cản trở', 'Đã gỡ bỏ cản trở cho công việc.');
+      },
+      error: () => {
+        this.toastService.error('Gỡ cản trở', 'Không thể gỡ cản trở.');
+      }
+    });
+  }
 
   toggleAiBreakdownPanel(): void {
     this.showAiAssignmentPanel.set(false);

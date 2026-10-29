@@ -16,5 +16,5 @@ public interface IProfileRepository
         string avatarUrl,
         DateTime nowUtc);
 
-    Task<IReadOnlyList<ActiveUserProfile>> GetAllActiveProfilesAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<ActiveUserProfile>> GetAllActiveProfilesAsync();
 }

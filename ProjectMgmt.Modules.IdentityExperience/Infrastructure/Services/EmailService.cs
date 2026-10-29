@@ -132,6 +132,62 @@ public class EmailService : IEmailService
                 null));
     }
 
+    public Task<bool> SendInvitationAcceptedAsync(
+        string recipientEmail,
+        string recipientName,
+        string memberName,
+        string memberEmail,
+        Guid projectId)
+    {
+        var safeRecipient = WebUtility.HtmlEncode(recipientName);
+        var safeMember = WebUtility.HtmlEncode(memberName);
+        var safeEmail = WebUtility.HtmlEncode(memberEmail);
+        var body = $$"""
+            <!doctype html>
+            <html lang="vi">
+            <body style="font-family:Arial,sans-serif;color:#111;line-height:1.6">
+              <p>Xin chào {{safeRecipient}},</p>
+              <p>Thành viên <strong>{{safeMember}}</strong> ({{safeEmail}}) đã <strong>chấp nhận</strong> lời mời tham gia dự án của bạn.</p>
+              <p>Mã dự án: <strong>{{projectId}}</strong>.</p>
+              <p>Họ đã chính thức tham gia vào nhóm làm việc trên hệ thống.</p>
+            </body>
+            </html>
+            """;
+
+        return SendMessageAsync(
+            recipientEmail,
+            "Lời mời tham gia dự án đã được chấp nhận",
+            body);
+    }
+
+    public Task<bool> SendInvitationDeclinedAsync(
+        string recipientEmail,
+        string recipientName,
+        string memberName,
+        string memberEmail,
+        Guid projectId)
+    {
+        var safeRecipient = WebUtility.HtmlEncode(recipientName);
+        var safeMember = WebUtility.HtmlEncode(memberName);
+        var safeEmail = WebUtility.HtmlEncode(memberEmail);
+        var body = $$"""
+            <!doctype html>
+            <html lang="vi">
+            <body style="font-family:Arial,sans-serif;color:#111;line-height:1.6">
+              <p>Xin chào {{safeRecipient}},</p>
+              <p>Thành viên <strong>{{safeMember}}</strong> ({{safeEmail}}) đã <strong>từ chối</strong> lời mời tham gia dự án.</p>
+              <p>Mã dự án: <strong>{{projectId}}</strong>.</p>
+              <p>Bạn có thể liên hệ trực tiếp với thành viên hoặc gửi lại lời mời nếu cần thiết.</p>
+            </body>
+            </html>
+            """;
+
+        return SendMessageAsync(
+            recipientEmail,
+            "Lời mời tham gia dự án đã bị từ chối",
+            body);
+    }
+
     private async Task<bool> SendMessageAsync(
         string recipientEmail,
         string subject,

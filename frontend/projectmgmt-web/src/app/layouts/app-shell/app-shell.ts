@@ -1,4 +1,4 @@
-import { Component, DestroyRef, ElementRef, HostListener, OnDestroy, ViewChild, afterNextRender, inject, signal, computed } from '@angular/core';
+import { Component, DestroyRef, ElementRef, HostListener, ViewChild, afterNextRender, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive, RouterOutlet, Router, NavigationEnd } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -19,6 +19,8 @@ import { MotionOrchestratorService } from '../../core/motion/motion-orchestrator
 import { MotionDirective } from '../../shared/motion/motion.directive';
 import { FocusRecommendationService } from '../../core/attention/focus-recommendation.service';
 import { RecentWorkService } from '../../core/attention/recent-work.service';
+import { AvatarModalComponent } from '../../shared/components/avatar-modal/avatar-modal.component';
+import { resolveAvatarUrl } from '../../core/utils/avatar.utils';
 
 @Component({
   selector: 'app-shell',
@@ -35,12 +37,13 @@ import { RecentWorkService } from '../../core/attention/recent-work.service';
     ExcelImportModalComponent,
     ConfirmDialogComponent,
     RouteTransitionLayerComponent,
-    MotionDirective
+    MotionDirective,
+    AvatarModalComponent
   ],
   templateUrl: './app-shell.html',
   styleUrl: './app-shell.scss'
 })
-export class AppShellComponent implements OnDestroy {
+export class AppShellComponent {
   @HostListener('window:beforeunload', ['$event'])
   protectPendingChanges(event: BeforeUnloadEvent): void {
     if (this.projectService.pendingSaves() > 0) event.preventDefault();
@@ -65,7 +68,7 @@ export class AppShellComponent implements OnDestroy {
   // Check if current route is inside a Project Context (Show Sub-Header)
   readonly isProjectRoute = computed(() => {
     const url = this.currentUrl();
-    return url.includes('/project/') || url.includes('/board') || url.includes('/backlog') || url.includes('/task-list') || url.includes('/roadmap') || url.includes('/reports') || (url.includes('/projects/') && url.includes('/settings'));
+    return url.includes('/project/') || url.includes('/board') || url.includes('/backlog') || url.includes('/task-list') || url.includes('/roadmap') || url.includes('/reports') || url.includes('/documents') || (url.includes('/projects/') && url.includes('/settings'));
   });
 
   // Header Live Search Signal
@@ -100,9 +103,10 @@ export class AppShellComponent implements OnDestroy {
   readonly recentWorkItems = computed(() => {
     const ids = this.recentWork.recentTaskIds();
     const all = this.workItems();
-    const matched = ids.map(id => all.find(i => i.id === id)).filter((x): x is WorkItem => !!x);
+    const matched = ids.map((id: string) => all.find(i => i.id === id)).filter((x: WorkItem | undefined): x is WorkItem => !!x);
     return matched.length > 0 ? matched : all.slice(0, 6);
   });
+
   @HostListener('document:keydown', ['$event'])
   onGlobalKeydown(event: KeyboardEvent): void {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
@@ -141,8 +145,14 @@ export class AppShellComponent implements OnDestroy {
     });
   }
 
-  ngOnDestroy(): void {
-    this.motion.destroy();
+  readonly isAvatarModalOpen = signal(false);
+
+  readonly currentResolvedAvatarUrl = computed(() => {
+    return resolveAvatarUrl(this.identity.authState().currentUser?.avatarUrl);
+  });
+
+  openCurrentUserAvatarModal(): void {
+    this.isAvatarModalOpen.set(true);
   }
 
   useAvatarFallback(event: Event): void {

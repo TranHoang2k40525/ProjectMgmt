@@ -79,7 +79,12 @@
               "buildTarget": "projectmgmt-web:build:development"
             }
           },
-          "defaultConfiguration": "development"
+          "defaultConfiguration": "development",
+          "options": {
+            "allowedHosts": [
+              "all"
+            ]
+          }
         },
         "test": {
           "builder": "@angular/build:unit-test"

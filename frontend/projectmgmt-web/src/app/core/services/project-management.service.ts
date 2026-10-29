@@ -4,6 +4,7 @@ import { EMPTY, Observable, Subject, catchError, concatMap, defer, finalize, for
 import { ToastService } from './toast.service';
 import { RbacApi } from '../api/rbac.api';
 import { environment } from '../../../environments/environment';
+import { resolveAvatarUrl } from '../utils/avatar.utils';
 
 export interface Organization {
   id: string;
@@ -65,10 +66,123 @@ export interface UpdateProjectRequest {
 
 export interface ProjectStatus {
   id: string;
+  projectId?: string;
   name: string;
-  category: string;
+  category?: string;
+  colorHex?: string;
   isInitial: boolean;
+  isDone?: boolean;
+  isActiveWork?: boolean;
+  isCanceled?: boolean;
   orderIndex: number;
+}
+
+export interface ProjectLabel {
+  id: string;
+  projectId: string;
+  name: string;
+  colorHex: string;
+}
+
+export interface SpecDocumentComment {
+  id: string;
+  documentId: string;
+  userId: string;
+  userName?: string;
+  highlightedText?: string;
+  selectedText?: string;
+  content: string;
+  isResolved?: boolean;
+  createdAt: string;
+}
+
+export interface SpecStoryLink {
+  id: string;
+  documentId: string;
+  issueId: string;
+  issueKey?: string;
+  title?: string;
+  issueTitle?: string;
+  excerpt?: string;
+  statusName?: string;
+  highlightedSnippet?: string;
+  createdAt: string;
+}
+
+export interface SpecDocument {
+  id: string;
+  projectId: string;
+  title: string;
+  content: string;
+  version: number;
+  status: 'Draft' | 'Review' | 'Approved' | 'Deprecated';
+  createdById: string;
+  createdByName?: string;
+  approvedById?: string;
+  approvedByName?: string;
+  approvedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  linkedStoryCount?: number;
+  comments?: SpecDocumentComment[];
+  linkedStories?: SpecStoryLink[];
+}
+
+export interface PlanningPokerVote {
+  id: string;
+  sessionId: string;
+  userId: string;
+  userName?: string;
+  storyPoints: number;
+  votedAt: string;
+}
+
+export interface PlanningPokerSession {
+  id: string;
+  sprintId: string;
+  issueId: string;
+  issueKey?: string;
+  issueTitle?: string;
+  isRevealed: boolean;
+  finalStoryPoints?: number | null;
+  createdAt: string;
+  votes: PlanningPokerVote[];
+}
+
+export interface SprintReviewItem {
+  id: string;
+  issueKey: string;
+  title: string;
+  statusName: string;
+  storyPoints: number;
+  assigneeName?: string;
+  isDone: boolean;
+  criteria: { id: string; content: string; isMet: boolean }[];
+}
+
+export interface SprintRetrospectiveCard {
+  id: string;
+  sprintId: string;
+  category: 'WentWell' | 'CouldImprove' | 'ActionItem';
+  content: string;
+  isAnonymous: boolean;
+  userId?: string;
+  authorName?: string;
+  votesCount: number;
+  convertedIssueId?: string;
+  convertedIssueKey?: string;
+  createdAt: string;
+}
+
+export interface SprintCloseSummary {
+  sprintId: string;
+  sprintName: string;
+  completedStoriesCount: number;
+  completedPoints: number;
+  incompleteStoriesCount: number;
+  incompletePoints: number;
+  incompleteStories: { id: string; issueKey: string; title: string; storyPoints: number }[];
+  nextSprints: { id: string; name: string }[];
 }
 
 export interface WorkflowTransition {
@@ -183,9 +297,12 @@ export interface EpicItem {
 export interface CustomIssueType {
   id: string;
   name: string;
-  icon: string; // Emoji or SVG icon identifier
-  color: string; // Tailwind color name or hex code
+  icon: string; // Material symbols icon identifier
+  color: string; // Hex code or Tailwind color
   description?: string;
+  hierarchyLevel?: number;
+  isSubtask?: boolean;
+  orderIndex?: number;
   isCustom?: boolean;
 }
 
@@ -206,9 +323,19 @@ export interface WorkItem {
   description?: string;
   statusId: string;
   statusName: string;
-  issueType: string; // Story, Task, Bug, Epic, Sub-task, Use-Case or Custom Name
+  statusColor?: string;
+  isDone?: boolean;
+  issueTypeId?: string;
+  issueType: string; // Dynamic issue type name
+  issueTypeIcon?: string;
+  issueTypeColor?: string;
   priority: 'Low' | 'Medium' | 'High' | 'Urgent';
   storyPoints: number;
+  estimatedHours?: number | null;
+  remainingHours?: number | null;
+  isBlocked?: boolean;
+  blockReason?: string | null;
+  blockedAt?: string | null;
   assigneeId?: string;
   assigneeName?: string;
   assigneeAvatar?: string;
@@ -243,6 +370,9 @@ export class ProjectManagementService {
 
   // Issue Types Signal (Standard Scrum Types)
   readonly customIssueTypes = signal<CustomIssueType[]>([]);
+
+  // Project Labels Signal
+  readonly projectLabels = signal<ProjectLabel[]>([]);
 
   // Active Project Statuses Signal (Default Scrum workflow)
   readonly projectStatuses = signal<ProjectStatus[]>([
@@ -326,7 +456,7 @@ export class ProjectManagementService {
           const openId = this.activeDrawerTask()?.id;
           if (openId) this.activeDrawerTask.set(data.workItems.find(i => i.id === openId) ?? null);
         }
-        this.currentProject.update(p => ({ ...p, members: (members.members ?? []).map(m => ({ id: m.userId ?? '', userId: m.userId ?? '', displayName: m.fullName ?? m.email ?? '', email: m.email ?? '', role: (m.roleName ?? 'Developer') as ProjectMember['role'], joinedAt: m.grantedAt ?? '', avatarUrl: m.avatarUrl ?? undefined })) }));
+        this.currentProject.update(p => ({ ...p, members: (members.members ?? []).map(m => ({ id: m.userId ?? '', userId: m.userId ?? '', displayName: m.fullName ?? m.email ?? '', email: m.email ?? '', role: (m.roleName ?? 'Developer') as ProjectMember['role'], joinedAt: m.grantedAt ?? '', avatarUrl: resolveAvatarUrl(m.avatarUrl) ?? undefined })) }));
       },
       error: (e: { title?: string }) => { if (this.currentProject().id === projectId) this.saveError.set(e.title ?? 'Không thể tải công việc.'); this.workspaceLoading.set(false); },
       complete: () => this.workspaceLoading.set(false)
@@ -334,7 +464,18 @@ export class ProjectManagementService {
   }
 
   private persist(item: WorkItem, create = false): void {
-    const body = { ...item, parentId: item.parentId || null, epicId: item.epicId || null, assigneeId: item.assigneeId || null, sprintId: item.sprintId || null, labels: item.labels ?? [] };
+    const body = {
+      ...item,
+      parentId: item.parentId || null,
+      epicId: item.epicId || null,
+      assigneeId: item.assigneeId || null,
+      sprintId: item.sprintId || null,
+      labels: item.labels ?? [],
+      isBlocked: item.isBlocked,
+      blockReason: item.blockReason,
+      estimatedHours: item.estimatedHours,
+      remainingHours: item.remainingHours
+    };
     const url = create ? `${this.baseUrl}/projects/${item.projectId}/issues` : `${this.baseUrl}/issues/${item.id}`;
     this.enqueue(() => create ? this.http.post(url, body) : this.http.put(url, body));
   }
@@ -491,7 +632,7 @@ export class ProjectManagementService {
           userId: m.userId || '',
           displayName: m.fullName || m.email || 'Thành viên',
           email: m.email || '',
-          avatarUrl: m.avatarUrl || undefined,
+          avatarUrl: resolveAvatarUrl(m.avatarUrl) || undefined,
           role: this.mapBackendRoleToProjectMemberRole(m.roleName),
           joinedAt: m.grantedAt ? new Date(m.grantedAt).toLocaleDateString('vi-VN') : 'Vừa xong'
         }));
@@ -562,7 +703,10 @@ export class ProjectManagementService {
 
   getUsers(): Observable<UserDisplayInfo[]> {
     return this.http.get<UserDisplayInfo[]>(`${this.baseUrl}/users`).pipe(
-      map(apiUsers => (apiUsers || []).filter(u => !u.userId.startsWith('11111111-0000-0000-0000'))),
+      map(apiUsers => (apiUsers || []).filter(u => !u.userId.startsWith('11111111-0000-0000-0000')).map(u => ({
+        ...u,
+        avatarUrl: resolveAvatarUrl(u.avatarUrl) || undefined
+      }))),
       catchError(err => {
         console.error('Không thể lấy danh sách người dùng từ API:', err);
         return of([]);
@@ -594,20 +738,310 @@ export class ProjectManagementService {
   }
 
   getIssueTypes(projectId: string): Observable<CustomIssueType[]> {
-    return this.http.get<{ id: string; name: string; iconKey?: string; colorHex: string }[]>(`${this.baseUrl}/projects/${projectId}/issue-types`).pipe(
-      map(types => types.map(t => ({ id: t.id, name: t.name, icon: t.iconKey ?? 'bookmark', color: t.colorHex })))
+    return this.http.get<{ id: string; name: string; icon?: string; iconKey?: string; color?: string; colorHex?: string; hierarchyLevel?: number; isSubtask?: boolean; orderIndex?: number; isCustom?: boolean }[]>(`${this.baseUrl}/projects/${projectId}/issue-types`).pipe(
+      map(types => types.map(t => ({
+        id: t.id,
+        name: t.name,
+        icon: t.icon ?? t.iconKey ?? 'task',
+        color: t.color ?? t.colorHex ?? '#6366F1',
+        hierarchyLevel: t.hierarchyLevel,
+        isSubtask: t.isSubtask,
+        orderIndex: t.orderIndex,
+        isCustom: t.isCustom
+      }))),
+      catchError(() => of([]))
     );
   }
 
-  addCustomIssueType(name: string, icon: string, color: string): Observable<CustomIssueType> {
+  addCustomIssueType(name: string, icon: string, color: string, isSubtask?: boolean, hierarchyLevel?: number): Observable<CustomIssueType> {
     const projectId = this.currentProject().id;
-    return this.http.post<CustomIssueType>(`${this.baseUrl}/projects/${projectId}/issue-types`, { name, icon, color }).pipe(
+    const body: Record<string, unknown> = { name, icon, color };
+    if (isSubtask !== undefined) body['isSubtask'] = isSubtask;
+    if (hierarchyLevel !== undefined) body['hierarchyLevel'] = hierarchyLevel;
+    return this.http.post<CustomIssueType>(`${this.baseUrl}/projects/${projectId}/issue-types`, body).pipe(
       tap(type => { if (this.currentProject().id === projectId) this.customIssueTypes.update(types => [...types, type]); })
     );
   }
 
+  updateCustomIssueType(projectId: string, id: string, name: string, icon: string, color: string, isSubtask = false, hierarchyLevel = 2): Observable<CustomIssueType> {
+    return this.http.put<CustomIssueType>(`${this.baseUrl}/projects/${projectId}/issue-types/${id}`, { name, icon, color, isSubtask, hierarchyLevel }).pipe(
+      tap(updated => {
+        if (this.currentProject().id === projectId) {
+          this.customIssueTypes.update(types => types.map(t => t.id === id ? updated : t));
+        }
+      })
+    );
+  }
+
+  deleteCustomIssueType(projectId: string, id: string): Observable<boolean> {
+    return this.http.delete<void>(`${this.baseUrl}/projects/${projectId}/issue-types/${id}`).pipe(
+      tap(() => {
+        if (this.currentProject().id === projectId) {
+          this.customIssueTypes.update(types => types.filter(t => t.id !== id));
+        }
+      }),
+      map(() => true)
+    );
+  }
+
+  // --- Project Labels CRUD ---
+  getProjectLabels(projectId: string): Observable<ProjectLabel[]> {
+    return this.http.get<ProjectLabel[]>(`${this.baseUrl}/projects/${projectId}/labels`).pipe(
+      catchError(() => of([]))
+    );
+  }
+
+  loadProjectLabels(projectId: string): void {
+    this.getProjectLabels(projectId).subscribe(labels => this.projectLabels.set(labels));
+  }
+
+  createProjectLabel(projectId: string, name: string, colorHex: string): Observable<ProjectLabel> {
+    return this.http.post<ProjectLabel>(`${this.baseUrl}/projects/${projectId}/labels`, { name, colorHex }).pipe(
+      tap(label => {
+        if (this.currentProject().id === projectId) {
+          this.projectLabels.update(labels => [...labels, label]);
+        }
+      })
+    );
+  }
+
+  updateProjectLabel(id: string, name: string, colorHex: string): Observable<ProjectLabel> {
+    return this.http.put<ProjectLabel>(`${this.baseUrl}/labels/${id}`, { name, colorHex }).pipe(
+      tap(updated => {
+        this.projectLabels.update(labels => labels.map(l => l.id === id ? updated : l));
+      })
+    );
+  }
+
+  deleteProjectLabel(id: string): Observable<boolean> {
+    return this.http.delete<void>(`${this.baseUrl}/labels/${id}`).pipe(
+      tap(() => {
+        this.projectLabels.update(labels => labels.filter(l => l.id !== id));
+      }),
+      map(() => true)
+    );
+  }
+
+  // --- Dynamic Workflow Statuses ---
   getProjectStatuses(projectId: string): Observable<ProjectStatus[]> {
     return this.http.get<ProjectStatus[]>(`${this.baseUrl}/projects/${projectId}/statuses`);
+  }
+
+  createWorkflowStatus(projectId: string, input: { name: string; colorHex?: string; category?: string; isInitial?: boolean; isDone?: boolean; isActiveWork?: boolean; isCanceled?: boolean }): Observable<ProjectStatus> {
+    return this.http.post<ProjectStatus>(`${this.baseUrl}/projects/${projectId}/statuses`, {
+      name: input.name,
+      colorHex: input.colorHex ?? '#3B82F6',
+      category: input.category ?? (input.isDone ? 'Done' : input.isInitial ? 'ToDo' : 'InProgress'),
+      isInitial: !!input.isInitial,
+      isDone: !!input.isDone,
+      isActiveWork: !!input.isActiveWork,
+      isCanceled: !!input.isCanceled
+    }).pipe(
+      tap(status => {
+        if (this.currentProject().id === projectId) {
+          this.projectStatuses.update(statuses => [...statuses, status]);
+        }
+      })
+    );
+  }
+
+  updateWorkflowStatus(projectId: string, id: string, input: { name: string; colorHex?: string; category?: string; isInitial?: boolean; isDone?: boolean; isActiveWork?: boolean; isCanceled?: boolean }): Observable<ProjectStatus> {
+    return this.http.put<ProjectStatus>(`${this.baseUrl}/projects/${projectId}/statuses/${id}`, {
+      name: input.name,
+      colorHex: input.colorHex ?? '#3B82F6',
+      category: input.category,
+      isInitial: !!input.isInitial,
+      isDone: !!input.isDone,
+      isActiveWork: !!input.isActiveWork,
+      isCanceled: !!input.isCanceled
+    }).pipe(
+      tap(updated => {
+        if (this.currentProject().id === projectId) {
+          this.projectStatuses.update(statuses => statuses.map(s => s.id === id ? updated : s));
+        }
+      })
+    );
+  }
+
+  deleteWorkflowStatus(projectId: string, id: string): Observable<boolean> {
+    return this.http.delete<void>(`${this.baseUrl}/projects/${projectId}/statuses/${id}`).pipe(
+      tap(() => {
+        if (this.currentProject().id === projectId) {
+          this.projectStatuses.update(statuses => statuses.filter(s => s.id !== id));
+        }
+      }),
+      map(() => true)
+    );
+  }
+
+  reorderWorkflowStatuses(projectId: string, orderedStatusIds: string[]): Observable<boolean> {
+    return this.http.put<void>(`${this.baseUrl}/projects/${projectId}/statuses/reorder`, { orderedStatusIds }).pipe(
+      tap(() => {
+        if (this.currentProject().id === projectId) {
+          this.projectStatuses.update(statuses => {
+            const map = new Map(statuses.map(s => [s.id, s]));
+            return orderedStatusIds.map((id, idx) => {
+              const s = map.get(id);
+              return s ? { ...s, orderIndex: idx + 1 } : null!;
+            }).filter(Boolean);
+          });
+        }
+      }),
+      map(() => true)
+    );
+  }
+
+  // --- Blocker Management ---
+  blockIssue(id: string, reason: string): Observable<WorkItem> {
+    return this.http.post<WorkItem>(`${this.baseUrl}/issues/${id}/block`, { reason }).pipe(
+      tap(updated => {
+        this.workItems.update(items => items.map(i => i.id === id ? { ...i, ...updated, isBlocked: true, blockReason: reason } : i));
+        if (this.activeDrawerTask()?.id === id) {
+          this.activeDrawerTask.update(curr => curr ? { ...curr, ...updated, isBlocked: true, blockReason: reason } : null);
+        }
+      })
+    );
+  }
+
+  unblockIssue(id: string): Observable<WorkItem> {
+    return this.http.post<WorkItem>(`${this.baseUrl}/issues/${id}/unblock`, {}).pipe(
+      tap(updated => {
+        this.workItems.update(items => items.map(i => i.id === id ? { ...i, ...updated, isBlocked: false, blockReason: null, blockedAt: null } : i));
+        if (this.activeDrawerTask()?.id === id) {
+          this.activeDrawerTask.update(curr => curr ? { ...curr, ...updated, isBlocked: false, blockReason: null, blockedAt: null } : null);
+        }
+      })
+    );
+  }
+
+  // --- Spec Hub (Project Documents) ---
+  getProjectDocuments(projectId: string): Observable<SpecDocument[]> {
+    return this.http.get<SpecDocument[]>(`${this.baseUrl}/projects/${projectId}/documents`).pipe(
+      catchError(() => of([]))
+    );
+  }
+
+  getProjectDocument(id: string): Observable<SpecDocument> {
+    return this.http.get<SpecDocument>(`${this.baseUrl}/documents/${id}`);
+  }
+
+  getDocument(id: string): Observable<SpecDocument> {
+    return this.getProjectDocument(id);
+  }
+
+  createProjectDocument(projectId: string, title: string, content: string): Observable<SpecDocument> {
+    return this.http.post<SpecDocument>(`${this.baseUrl}/projects/${projectId}/documents`, { title, content });
+  }
+
+  updateProjectDocument(id: string, title: string, content: string): Observable<SpecDocument> {
+    return this.http.put<SpecDocument>(`${this.baseUrl}/documents/${id}`, { title, content });
+  }
+
+  updateProjectDocumentStatus(id: string, status: string): Observable<SpecDocument> {
+    return this.http.put<SpecDocument>(`${this.baseUrl}/documents/${id}/status`, { status });
+  }
+
+  deleteProjectDocument(id: string): Observable<boolean> {
+    return this.http.delete<void>(`${this.baseUrl}/documents/${id}`).pipe(map(() => true));
+  }
+
+  addDocumentComment(documentId: string, content: string, selectedText?: string): Observable<SpecDocumentComment> {
+    return this.http.post<SpecDocumentComment>(`${this.baseUrl}/documents/${documentId}/comments`, { content, selectedText });
+  }
+
+  extractStoryFromDoc(
+    documentId: string,
+    title: string,
+    excerpt?: string,
+    storyPoints = 3,
+    acceptanceCriteria: string[] = []
+  ): Observable<{ issueId: string; issueKey: string; title: string; storyPoints: number; linkedExcerpt?: string }> {
+    return this.http.post<{ issueId: string; issueKey: string; title: string; storyPoints: number; linkedExcerpt?: string }>(
+      `${this.baseUrl}/documents/${documentId}/extract-story`,
+      { title, excerpt, storyPoints, acceptanceCriteria }
+    );
+  }
+
+  // --- Scrum Ceremonies: Planning Poker, Review, Retro, Rollover ---
+  createOrGetPokerSession(sprintId: string, issueId: string): Observable<PlanningPokerSession> {
+    return this.http.post<PlanningPokerSession>(`${this.baseUrl}/sprints/${sprintId}/poker/sessions`, { issueId });
+  }
+
+  getPokerSession(sessionId: string): Observable<PlanningPokerSession> {
+    return this.http.get<PlanningPokerSession>(`${this.baseUrl}/poker/sessions/${sessionId}`);
+  }
+
+  submitPokerVote(sessionId: string, points: number): Observable<PlanningPokerVote> {
+    return this.http.post<PlanningPokerVote>(`${this.baseUrl}/poker/sessions/${sessionId}/vote`, { points });
+  }
+
+  revealPokerVotes(sessionId: string): Observable<PlanningPokerSession> {
+    return this.http.post<PlanningPokerSession>(`${this.baseUrl}/poker/sessions/${sessionId}/reveal`, {});
+  }
+
+  finalizePoker(sessionId: string, points: number): Observable<PlanningPokerSession> {
+    return this.http.post<PlanningPokerSession>(`${this.baseUrl}/poker/sessions/${sessionId}/finalize`, { points }).pipe(
+      tap(session => {
+        this.workItems.update(items => items.map(i => i.id === session.issueId ? { ...i, storyPoints: points } : i));
+        if (this.activeDrawerTask()?.id === session.issueId) {
+          this.activeDrawerTask.update(curr => curr ? { ...curr, storyPoints: points } : null);
+        }
+      })
+    );
+  }
+
+  getSprintReviewItems(sprintId: string): Observable<SprintReviewItem[]> {
+    return this.http.get<SprintReviewItem[]>(`${this.baseUrl}/sprints/${sprintId}/review-items`);
+  }
+
+  acceptStory(issueId: string, feedback?: string): Observable<WorkItem> {
+    return this.http.post<WorkItem>(`${this.baseUrl}/issues/${issueId}/accept-story`, { feedback }).pipe(
+      tap(updated => {
+        this.workItems.update(items => items.map(i => i.id === issueId ? { ...i, ...updated, isDone: true } : i));
+      })
+    );
+  }
+
+  rejectStory(issueId: string, reason: string): Observable<WorkItem> {
+    return this.http.post<WorkItem>(`${this.baseUrl}/issues/${issueId}/reject-story`, { reason }).pipe(
+      tap(updated => {
+        this.workItems.update(items => items.map(i => i.id === issueId ? { ...i, ...updated, isDone: false } : i));
+      })
+    );
+  }
+
+  getRetroCards(sprintId: string): Observable<SprintRetrospectiveCard[]> {
+    return this.http.get<SprintRetrospectiveCard[]>(`${this.baseUrl}/sprints/${sprintId}/retro-cards`);
+  }
+
+  createRetroCard(sprintId: string, category: 'WentWell' | 'CouldImprove' | 'ActionItem', content: string, isAnonymous: boolean): Observable<SprintRetrospectiveCard> {
+    return this.http.post<SprintRetrospectiveCard>(`${this.baseUrl}/sprints/${sprintId}/retro-cards`, { category, content, isAnonymous });
+  }
+
+  voteRetroCard(cardId: string): Observable<{ id: string; votesCount: number }> {
+    return this.http.post<{ id: string; votesCount: number }>(`${this.baseUrl}/retro-cards/${cardId}/vote`, {});
+  }
+
+  convertRetroCardToTask(cardId: string, projectId: string): Observable<{ task: WorkItem }> {
+    return this.http.post<{ task: WorkItem }>(`${this.baseUrl}/retro-cards/${cardId}/convert-to-task`, { projectId }).pipe(
+      tap(res => {
+        if (res?.task) {
+          this.workItems.update(items => [res.task, ...items]);
+        }
+      })
+    );
+  }
+
+  getSprintCloseSummary(sprintId: string): Observable<SprintCloseSummary> {
+    return this.http.get<SprintCloseSummary>(`${this.baseUrl}/sprints/${sprintId}/close-summary`);
+  }
+
+  completeSprintAndRollover(sprintId: string, req: { moveToSprintId?: string | null; moveToBacklog: boolean }): Observable<{ success: boolean; closedSprintId: string; rolledOverCount: number }> {
+    return this.http.post<{ success: boolean; closedSprintId: string; rolledOverCount: number }>(`${this.baseUrl}/sprints/${sprintId}/complete-and-rollover`, req).pipe(
+      tap(() => {
+        this.loadWorkspace(this.currentProject().id);
+      })
+    );
   }
 
   applyWorkflowTemplateToProject(projectId: string, templateId: string): Observable<ProjectStatus[]> {

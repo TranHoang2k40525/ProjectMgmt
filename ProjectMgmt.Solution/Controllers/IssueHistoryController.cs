@@ -16,26 +16,26 @@ public class IssueHistoryController(
 {
     [HttpGet("history")]
     [HttpGet("activity-log")]
-    public async Task<ActionResult<PagedResultDto<ActivityDto>>> Activity(Guid id, int page = 1, int pageSize = 20, CancellationToken cancellationToken = default) =>
-        await DenyAsync(id, cancellationToken) ?? FromResult(await history.GetActivityAsync(id, page, pageSize, cancellationToken));
+    public async Task<ActionResult<PagedResultDto<ActivityDto>>> Activity(Guid id, int page = 1, int pageSize = 20) =>
+        await DenyAsync(id) ?? FromResult(await history.GetActivityAsync(id, page, pageSize));
 
     [HttpGet("status-history")]
-    public async Task<ActionResult<IReadOnlyList<StatusChangeDto>>> Statuses(Guid id, CancellationToken cancellationToken) =>
-        await DenyAsync(id, cancellationToken) ?? FromResult(await history.GetStatusHistoryAsync(id, cancellationToken));
+    public async Task<ActionResult<IReadOnlyList<StatusChangeDto>>> Statuses(Guid id) =>
+        await DenyAsync(id) ?? FromResult(await history.GetStatusHistoryAsync(id));
 
     [HttpGet("assignment-history")]
-    public async Task<ActionResult<IReadOnlyList<AssignmentChangeDto>>> Assignments(Guid id, CancellationToken cancellationToken) =>
-        await DenyAsync(id, cancellationToken) ?? FromResult(await history.GetAssignmentHistoryAsync(id, cancellationToken));
+    public async Task<ActionResult<IReadOnlyList<AssignmentChangeDto>>> Assignments(Guid id) =>
+        await DenyAsync(id) ?? FromResult(await history.GetAssignmentHistoryAsync(id));
 
-    private async Task<ActionResult?> DenyAsync(Guid issueId, CancellationToken cancellationToken)
+    private async Task<ActionResult?> DenyAsync(Guid issueId)
     {
-        var issue = await issues.GetAsync(issueId, cancellationToken);
+        var issue = await issues.GetAsync(issueId);
         if (issue.IsFailure) return FromResult(Result.Failure(issue.Error));
         return await access.AllowsAsync(issue.Value.ProjectId)
             ? null
             : StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
             {
-                Title = "Forbidden",
+                Title = "Không có quyền truy cập",
                 Detail = "Bạn không có quyền thực hiện thao tác này.",
                 Status = StatusCodes.Status403Forbidden,
                 Extensions = { ["code"] = "PROJECT_PERMISSION_DENIED" }

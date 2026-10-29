@@ -507,6 +507,28 @@ public class FakeEmailService : IEmailService
         RecipientEmail = recipientEmail;
         return Task.FromResult(DeliverySucceeds);
     }
+
+    public Task<bool> SendInvitationAcceptedAsync(
+        string recipientEmail,
+        string recipientName,
+        string memberName,
+        string memberEmail,
+        Guid projectId)
+    {
+        RecipientEmail = recipientEmail;
+        return Task.FromResult(DeliverySucceeds);
+    }
+
+    public Task<bool> SendInvitationDeclinedAsync(
+        string recipientEmail,
+        string recipientName,
+        string memberName,
+        string memberEmail,
+        Guid projectId)
+    {
+        RecipientEmail = recipientEmail;
+        return Task.FromResult(DeliverySucceeds);
+    }
 }
 
 public class FakeTokenService : ITokenService
@@ -567,6 +589,21 @@ public class FakeIdentityRepository : IIdentityRepository
         bool tracking = false)
     {
         return Task.FromResult(User);
+    }
+
+    public Task<User> GetOrCreateUserByEmailAsync(string email, string displayName)
+    {
+        if (User is not null) return Task.FromResult(User);
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = email,
+            NormalizedEmail = email.ToUpperInvariant(),
+            IsEmailVerified = true,
+            IsActive = true
+        };
+        User = user;
+        return Task.FromResult(user);
     }
 
     public Task<User?> GetUserByIdAsync(Guid userId, bool tracking = false)

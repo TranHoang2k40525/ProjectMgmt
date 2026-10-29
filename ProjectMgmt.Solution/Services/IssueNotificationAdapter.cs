@@ -25,7 +25,7 @@ public class IssueNotificationAdapter : IIssueNotifier
         _logger = logger;
     }
 
-    public async Task NotifyAsync(IssueNotification notification, CancellationToken cancellationToken = default)
+    public async Task NotifyAsync(IssueNotification notification)
     {
         ArgumentNullException.ThrowIfNull(notification);
         foreach (var recipient in notification.RecipientUserIds)
