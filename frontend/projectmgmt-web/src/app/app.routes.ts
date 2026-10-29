@@ -20,7 +20,7 @@ export const routes: Routes = [
     loadComponent: () => import('./layouts/app-shell/app-shell').then(m => m.AppShellComponent),
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'for-you' },
-      { path: 'for-you', loadComponent: () => import('./features/for-you/for-you-page').then(m => m.ForYouPageComponent) },
+      { path: 'for-you', loadComponent: () => import('./features/workspace/home/home-page').then(m => m.WorkspaceHomePageComponent) },
       { path: 'project/summary', loadComponent: () => import('./features/projects/project-summary-page').then(m => m.ProjectSummaryPageComponent) },
       { path: 'projects/:id/summary', loadComponent: () => import('./features/projects/project-summary-page').then(m => m.ProjectSummaryPageComponent) },
       { path: 'project/members', loadComponent: () => import('./features/projects/project-members-page').then(m => m.ProjectMembersPageComponent) },
