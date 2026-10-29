@@ -29,6 +29,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 })
 export class OrgSettingsComponent {
   readonly items = [
-    { path: 'members', label: 'Thành viên', icon: 'group' }
+    { path: 'members', label: 'Thành viên', icon: 'group' },
+    { path: 'workflows', label: 'Mẫu workflow', icon: 'account_tree' }
   ];
 }

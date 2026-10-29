@@ -57,7 +57,8 @@ export const routes: Routes = [
             loadComponent: () => import('./features/workspace/org/settings/org-settings').then(m => m.OrgSettingsComponent),
             children: [
               { path: '', pathMatch: 'full', redirectTo: 'members' },
-              { path: 'members', loadComponent: () => import('./features/workspace/org/settings/org-members-settings').then(m => m.OrgMembersSettingsComponent) }
+              { path: 'members', loadComponent: () => import('./features/workspace/org/settings/org-members-settings').then(m => m.OrgMembersSettingsComponent) },
+              { path: 'workflows', loadComponent: () => import('./features/workspace/org/settings/org-workflow-templates').then(m => m.OrgWorkflowTemplatesComponent) }
             ]
           }
         ]
