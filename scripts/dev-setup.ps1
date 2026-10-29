@@ -72,11 +72,17 @@ if (-not $SkipMigrations) {
     @{ Project = 'ProjectMgmt.Modules.Planning/Infrastructure'; Context = 'PlanningDbContext' },
     @{ Project = 'ProjectMgmt.Modules.DeliveryIntelligence/Infrastructure'; Context = 'DeliveryIntelligenceDbContext' }
   )
+  # Backend đang chạy thì khóa file dll, không build lại được: dùng bản build hiện có.
+  $efArgs = @()
+  if (Get-Process -Name 'ProjectMgmt.Solution' -ErrorAction SilentlyContinue) {
+    Write-Warn 'Backend đang chạy nên không build lại; migration dùng bản build hiện có.'
+    $efArgs = @('--no-build')
+  }
   Push-Location $repoRoot
   try {
     foreach ($module in $modules) {
       Write-Step "Migration $($module.Context)"
-      & dotnet ef database update --project $module.Project --startup-project ProjectMgmt.Solution --context $module.Context |
+      & dotnet ef database update --project $module.Project --startup-project ProjectMgmt.Solution --context $module.Context @efArgs |
         Select-String -Pattern 'Applying migration|Done|No migrations|error' |
         ForEach-Object { Write-Host "    $_" }
       if ($LASTEXITCODE -ne 0) { throw "Migration $($module.Context) thất bại." }

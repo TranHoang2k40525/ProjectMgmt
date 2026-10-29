@@ -158,11 +158,34 @@ if ($seedOwners.Count -gt 0) {
   $thesis = Invoke-Api POST '/v1/organizations' @{ name = 'Nhóm Đồ án Tốt nghiệp'; slug = 'nhom-do-an-tot-nghiep' } $owner
   Write-Ok "$($lab.name), $($thesis.name)"
 
-  function New-Project($org, [string]$key, [string]$name, [string]$description, [string[]]$members, [string]$template) {
+  # Trạng thái của từng mẫu, cùng tên với ProjectCustomizationController.ApplyTemplate.
+  $templateStatuses = @{
+    'scrum-std' = @('To Do', 'In Progress', 'Code Review', 'Done')
+    'agile-qa' = @('To Do', 'In Progress', 'Code Review', 'QA Testing', 'Done')
+    'kanban-simple' = @('To Do', 'In Progress', 'Done')
+  }
+
+  function New-Project($org,[string]$key, [string]$name, [string]$description, [string[]]$members, [string]$template) {
     $project = Invoke-Api POST '/v1/projects' @{
       orgId = $org.id; projectKey = $key; name = $name; description = $description; leadUserId = $ownerId; memberUserIds = $members
     } $owner
-    if ($template) { Invoke-Api POST "/v1/projects/$($project.id)/workflow/template" @{ templateId = $template } $owner | Out-Null }
+    if ($template) {
+      # Áp mẫu chỉ thêm trạng thái; bỏ các trạng thái mặc định không thuộc mẫu (giống wizard tạo dự án) để mỗi loại hình
+      # có đúng các giai đoạn của nó, và lấy trạng thái đầu của mẫu làm trạng thái khởi đầu.
+      # PowerShell 5.1 trả mảng JSON thành một object: ForEach-Object để tách ra từng trạng thái.
+      $statuses = @(Invoke-Api POST "/v1/projects/$($project.id)/workflow/template" @{ templateId = $template } $owner | ForEach-Object { $_ })
+      $wanted = $templateStatuses[$template]
+      $first = $statuses | Where-Object { $_.name -eq $wanted[0] } | Select-Object -First 1
+      if ($first -and -not $first.isInitial) {
+        Invoke-Api PUT "/v1/projects/$($project.id)/statuses/$($first.id)" @{
+          name = $first.name; colorHex = $first.colorHex; category = $first.category; isInitial = $true
+          isDone = [bool]$first.isDone; isActiveWork = [bool]$first.isActiveWork; isCanceled = [bool]$first.isCanceled
+        } $owner | Out-Null
+      }
+      foreach ($status in $statuses | Where-Object { $wanted -notcontains $_.name }) {
+        Invoke-Api DELETE "/v1/projects/$($project.id)/statuses/$($status.id)" $null $owner | Out-Null
+      }
+    }
     Write-Ok "Dự án $key · $name"
     return $project
   }
@@ -186,7 +209,11 @@ if ($seedOwners.Count -gt 0) {
   $dueDates = @()
   function New-Issue($project, [hashtable]$fields, $dueInDays = $null) {
     $body = @{ title = $fields.Title; issueType = $fields.Type; statusName = $fields.Status; priority = $fields.Priority; storyPoints = $fields.Points; labels = @() }
-    if ($fields.Assignee) { $body.assigneeId = $fields.Assignee }
+    # Backend chỉ nhận người xử lý khi có cả tên hiển thị (assigneeName) khớp với assigneeId.
+    if ($fields.Assignee) {
+      $body.assigneeId = $fields.Assignee
+      $body.assigneeName = ($users | Where-Object { $_.Id -eq $fields.Assignee }).Name
+    }
     if ($fields.Sprint) { $body.sprintId = $fields.Sprint }
     if ($fields.Parent) { $body.parentId = $fields.Parent }
     if ($fields.Epic) { $body.epicId = $fields.Epic }
@@ -198,13 +225,13 @@ if ($seedOwners.Count -gt 0) {
 
   $epic = New-Issue $ctsv @{ Title = 'Tra cứu học tập'; Type = 'Epic'; Status = 'In Progress'; Priority = 'High'; Points = 0 }
   $story = New-Issue $ctsv @{ Title = 'Sinh viên xem bảng điểm theo học kỳ'; Type = 'Story'; Status = 'In Progress'; Priority = 'High'; Points = 5; Assignee = $ownerId; Sprint = $ctsvSprint.id; Epic = $epic.id; Description = 'Lọc theo học kỳ, hiển thị GPA.' } -2
-  New-Issue $ctsv @{ Title = 'API lấy điểm theo học kỳ'; Type = 'Subtask'; Status = 'In Review'; Priority = 'High'; Points = 2; Assignee = $devId; Sprint = $ctsvSprint.id; Parent = $story.id } 0 | Out-Null
+  New-Issue $ctsv @{ Title = 'API lấy điểm theo học kỳ'; Type = 'Subtask'; Status = 'Code Review'; Priority = 'High'; Points = 2; Assignee = $devId; Sprint = $ctsvSprint.id; Parent = $story.id } 0 | Out-Null
   New-Issue $ctsv @{ Title = 'Màn hình bảng điểm trên di động'; Type = 'Subtask'; Status = 'To Do'; Priority = 'Medium'; Points = 2; Assignee = $ownerId; Sprint = $ctsvSprint.id; Parent = $story.id } 1 | Out-Null
   New-Issue $ctsv @{ Title = 'Lịch học theo tuần'; Type = 'Story'; Status = 'To Do'; Priority = 'Medium'; Points = 3; Assignee = $devId; Sprint = $ctsvSprint.id; Epic = $epic.id } 3 | Out-Null
   New-Issue $ctsv @{ Title = 'Sửa lỗi hiển thị lịch thi trùng phòng'; Type = 'Bug'; Status = 'In Progress'; Priority = 'Highest'; Points = 1; Assignee = $qaId; Sprint = $ctsvSprint.id } -1 | Out-Null
   New-Issue $ctsv @{ Title = 'Kiểm thử đăng nhập SSO'; Type = 'Task'; Status = 'Done'; Priority = 'Medium'; Points = 2; Assignee = $qaId; Sprint = $ctsvSprint.id } -4 | Out-Null
-  New-Issue $ctsv @{ Title = 'Xuất hóa đơn học phí PDF'; Type = 'Story'; Status = 'Backlog'; Priority = 'Medium'; Points = 5; Assignee = $ownerId } 10 | Out-Null
-  New-Issue $ctsv @{ Title = 'Tối ưu truy vấn bảng điểm'; Type = 'Task'; Status = 'Backlog'; Priority = 'Low'; Points = 3 } | Out-Null
+  New-Issue $ctsv @{ Title = 'Xuất hóa đơn học phí PDF'; Type = 'Story'; Status = 'To Do'; Priority = 'Medium'; Points = 5; Assignee = $ownerId } 10 | Out-Null
+  New-Issue $ctsv @{ Title = 'Tối ưu truy vấn bảng điểm'; Type = 'Task'; Status = 'To Do'; Priority = 'Low'; Points = 3 } | Out-Null
 
   New-Issue $dpht @{ Title = 'Form đặt phòng theo khung giờ'; Type = 'Task'; Status = 'In Progress'; Priority = 'High'; Points = 3; Assignee = $ownerId } 1 | Out-Null
   New-Issue $dpht @{ Title = 'Thông báo xác nhận qua email'; Type = 'Task'; Status = 'To Do'; Priority = 'Medium'; Points = 2; Assignee = $qaId } 6 | Out-Null
