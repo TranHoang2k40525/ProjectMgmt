@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { distinctUntilChanged, map, switchMap, tap } from 'rxjs';
+import { distinctUntilChanged, map, of, switchMap, tap } from 'rxjs';
 import { apiErrorMessage } from '../../../core/http/api-error-message';
 import { ToastService } from '../../../core/services/toast.service';
 import { ORG_ROLE_LABELS } from '../data/workspace.models';
@@ -80,11 +80,14 @@ export class OrgPageComponent implements OnInit {
     this.route.paramMap.pipe(
       map(params => params.get('orgId') ?? ''),
       distinctUntilChanged(),
-      tap(orgId => {
-        this.loading.set(true);
-        if (this.context.currentOrg()?.id !== orgId) this.context.currentOrg.set(null);
+      tap(() => this.loading.set(true)),
+      // Guard Cài đặt có thể vừa mở tổ chức này; dùng lại thay vì tải và ghi "Gần đây" lần nữa.
+      switchMap(orgId => {
+        const current = this.context.currentOrg();
+        if (current?.id === orgId) return of(current);
+        this.context.currentOrg.set(null);
+        return this.context.openOrganization(orgId);
       }),
-      switchMap(orgId => this.context.openOrganization(orgId)),
       takeUntilDestroyed(this.destroyRef)
     ).subscribe({
       next: () => this.loading.set(false),

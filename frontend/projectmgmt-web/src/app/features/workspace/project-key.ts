@@ -1,11 +1,12 @@
 export const PROJECT_KEY_PATTERN = /^[A-Z][A-Z0-9]{1,9}$/;
+export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_KEY_LENGTH = 10;
 
 /** Bỏ dấu tiếng Việt (kể cả đ/Đ) để dùng cho mã, slug và tìm kiếm. */
 export function stripDiacritics(value: string): string {
   return value
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/đ/g, 'd')
     .replace(/Đ/g, 'D');
 }

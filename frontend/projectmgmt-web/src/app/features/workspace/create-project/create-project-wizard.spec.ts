@@ -132,6 +132,16 @@ describe('CreateProjectWizardComponent', () => {
     wizard.requestClose();
     expect(dismissed).not.toHaveBeenCalled();
     expect(wizard.confirmingClose()).toBe(true);
+    // Esc / Đóng lần nữa khi đang hỏi thì quay lại nhập tiếp, không bỏ dữ liệu.
+    wizard.requestClose();
+    expect(wizard.confirmingClose()).toBe(false);
+    expect(dismissed).not.toHaveBeenCalled();
+  });
+
+  it('closes without asking when nothing was entered', () => {
+    const wizard = create();
+    const dismissed = vi.fn();
+    wizard.dismissed.subscribe(dismissed);
     wizard.requestClose();
     expect(dismissed).toHaveBeenCalledTimes(1);
   });

@@ -314,7 +314,12 @@ export class CreateProjectWizardComponent implements OnInit {
 
   /** Đã nhập dữ liệu thì hỏi lại ngay trong wizard (hộp xác nhận nằm trong vùng giữ focus của modal). */
   requestClose(): void {
-    if (this.step() === 'done' || !this.isDirty() || this.confirmingClose()) {
+    if (this.confirmingClose()) {
+      // Esc hoặc Đóng lần nữa khi đang hỏi: quay lại nhập tiếp, không bỏ dữ liệu ngoài ý muốn.
+      this.confirmingClose.set(false);
+      return;
+    }
+    if (this.step() === 'done' || !this.isDirty()) {
       this.dismissed.emit();
       return;
     }

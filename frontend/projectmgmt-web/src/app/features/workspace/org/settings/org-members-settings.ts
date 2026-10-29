@@ -1,5 +1,5 @@
 import { DOCUMENT } from '@angular/common';
-import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
 import { apiErrorMessage } from '../../../../core/http/api-error-message';
@@ -33,6 +33,7 @@ export class OrgMembersSettingsComponent implements OnInit {
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmDialogService);
   private readonly document = inject(DOCUMENT);
+  private copiedTimer: ReturnType<typeof setTimeout> | undefined;
   protected readonly context = inject(WorkspaceContextService);
   protected readonly ui = UI;
   protected readonly roleLabels = ORG_ROLE_LABELS;
@@ -65,6 +66,10 @@ export class OrgMembersSettingsComponent implements OnInit {
 
   private get orgId(): string {
     return this.context.currentOrg()?.id ?? '';
+  }
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => clearTimeout(this.copiedTimer));
   }
 
   ngOnInit(): void {
@@ -262,6 +267,7 @@ export class OrgMembersSettingsComponent implements OnInit {
 
   private markCopied(): void {
     this.copied.set(true);
-    setTimeout(() => this.copied.set(false), 2000);
+    clearTimeout(this.copiedTimer);
+    this.copiedTimer = setTimeout(() => this.copied.set(false), 2000);
   }
 }

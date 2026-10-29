@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Injectable, InjectionToken, inject } from '@angular/core';
 import { Observable, defer, of, switchMap, throwError, timer } from 'rxjs';
 import { IdentityService } from '../../../core/services/identity.service';
-import { isValidProjectKey } from '../project-key';
+import { EMAIL_PATTERN, isValidProjectKey } from '../project-key';
 import { MockWorkspaceDb, PRESET_WORKFLOW_TEMPLATES, createWorkspaceSeed } from './mock-workspace-seed';
 import { WorkspaceDataSource } from './workspace-data-source';
 import {
@@ -36,7 +36,6 @@ export const MOCK_WORKSPACE_LATENCY = new InjectionToken<number>('MOCK_WORKSPACE
 });
 
 const STORAGE_PREFIX = 'pm-workspace-db-v1:';
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const MAX_INVITE_EMAILS = 20;
 const MAX_RECENT = 8;
@@ -79,7 +78,7 @@ export class MockWorkspaceDataSource extends WorkspaceDataSource {
   private dbOwnerId = '';
 
   listOrganizations(): Observable<OrganizationSummary[]> {
-    return this.run(db => {
+    return this.read(db => {
       const me = this.me();
       return db.organizations
         .filter(org => this.memberRow(db, org.id, me.id))
@@ -89,7 +88,7 @@ export class MockWorkspaceDataSource extends WorkspaceDataSource {
   }
 
   getOrganization(orgId: string): Observable<OrganizationSummary> {
-    return this.run(db => this.toOrgSummary(db, this.requireMemberOrg(db, orgId)));
+    return this.read(db => this.toOrgSummary(db, this.requireMemberOrg(db, orgId)));
   }
 
   createOrganization(request: CreateOrganizationRequest): Observable<OrganizationSummary> {
@@ -111,7 +110,7 @@ export class MockWorkspaceDataSource extends WorkspaceDataSource {
   }
 
   listMembers(orgId: string): Observable<OrgMember[]> {
-    return this.run(db => {
+    return this.read(db => {
       this.requireMemberOrg(db, orgId);
       const rank: Record<OrgRoleCode, number> = { Owner: 0, Admin: 1, Member: 2 };
       return db.orgMembers
@@ -144,7 +143,7 @@ export class MockWorkspaceDataSource extends WorkspaceDataSource {
   }
 
   listRoles(): Observable<OrgRoleOption[]> {
-    return this.run(() => [
+    return this.read(() => [
       { code: 'Owner', name: 'Chủ tổ chức', description: 'Người tạo tổ chức, toàn quyền cài đặt.', assignable: false },
       { code: 'Admin', name: 'Quản trị', description: 'Quản lý dự án và hỗ trợ thành viên.', assignable: true },
       { code: 'Member', name: 'Thành viên', description: 'Tham gia các dự án được thêm vào.', assignable: true }
@@ -176,7 +175,7 @@ export class MockWorkspaceDataSource extends WorkspaceDataSource {
   }
 
   listInvitations(orgId: string): Observable<OrgInvitation[]> {
-    return this.run(db => {
+    return this.read(db => {
       this.requireOwnerOrg(db, orgId);
       return db.invitations
         .filter(invite => invite.orgId === orgId && invite.status === 'Pending')
@@ -202,7 +201,7 @@ export class MockWorkspaceDataSource extends WorkspaceDataSource {
   }
 
   listMyInvitations(): Observable<MyInvitation[]> {
-    return this.run(db => {
+    return this.read(db => {
       const email = this.me().email.toLowerCase();
       return db.invitations
         .filter(invite => invite.email === email && invite.status === 'Pending')
@@ -230,7 +229,7 @@ export class MockWorkspaceDataSource extends WorkspaceDataSource {
   }
 
   getInviteLink(orgId: string): Observable<InviteLink | null> {
-    return this.run(db => {
+    return this.read(db => {
       this.requireOwnerOrg(db, orgId);
       const link = db.inviteLinks.find(item => item.orgId === orgId && item.isActive);
       return link ? { token: link.token, orgId, role: link.role, createdAt: link.createdAt } : null;
@@ -256,7 +255,7 @@ export class MockWorkspaceDataSource extends WorkspaceDataSource {
   }
 
   getInviteByToken(token: string): Observable<InviteLinkPreview> {
-    return this.run(db => {
+    return this.read(db => {
       const link = this.activeLink(db, token);
       const org = this.orgRow(db, link.orgId);
       return {
@@ -279,7 +278,7 @@ export class MockWorkspaceDataSource extends WorkspaceDataSource {
   }
 
   listWorkflowTemplates(orgId: string): Observable<WorkflowTemplate[]> {
-    return this.run(db => {
+    return this.read(db => {
       const org = this.requireMemberOrg(db, orgId);
       const presets: WorkflowTemplate[] = PRESET_WORKFLOW_TEMPLATES.map(preset => ({
         ...clone(preset), orgId: null, isPreset: true, isDefault: preset.id === org.defaultTemplateId
@@ -331,7 +330,7 @@ export class MockWorkspaceDataSource extends WorkspaceDataSource {
   }
 
   listProjects(orgId: string): Observable<WorkspaceProject[]> {
-    return this.run(db => {
+    return this.read(db => {
       this.requireMemberOrg(db, orgId);
       const me = this.me();
       return db.projects
@@ -342,7 +341,7 @@ export class MockWorkspaceDataSource extends WorkspaceDataSource {
   }
 
   isProjectKeyAvailable(orgId: string, projectKey: string): Observable<boolean> {
-    return this.run(db => {
+    return this.read(db => {
       this.requireMemberOrg(db, orgId);
       return !this.keyTaken(db, orgId, projectKey);
     });
@@ -401,7 +400,7 @@ export class MockWorkspaceDataSource extends WorkspaceDataSource {
   }
 
   listMyWork(orgId?: string): Observable<WorkItemSummary[]> {
-    return this.run(db => {
+    return this.read(db => {
       const me = this.me();
       const visibleOrgIds = new Set(db.orgMembers.filter(member => member.userId === me.id).map(member => member.orgId));
       return db.workItems
@@ -427,7 +426,7 @@ export class MockWorkspaceDataSource extends WorkspaceDataSource {
   }
 
   listRecent(orgId?: string): Observable<RecentItem[]> {
-    return this.run(db => {
+    return this.read(db => {
       const me = this.me();
       const isMember = (id: string) => !!this.memberRow(db, id, me.id);
       const items: RecentItem[] = [];
@@ -447,12 +446,17 @@ export class MockWorkspaceDataSource extends WorkspaceDataSource {
 
   // --- hạ tầng -------------------------------------------------------------
 
-  private run<T>(work: (db: Db) => T): Observable<T> {
+  /** Lời gọi chỉ đọc: không ghi lại localStorage. */
+  private read<T>(work: (db: Db) => T): Observable<T> {
+    return this.run(work, false);
+  }
+
+  private run<T>(work: (db: Db) => T, mutates = true): Observable<T> {
     const result$ = defer(() => {
       try {
         const db = this.load();
         const value = work(db);
-        this.persist(db);
+        if (mutates) this.persist(db);
         return of(clone(value));
       } catch (error) {
         return throwError(() => error);

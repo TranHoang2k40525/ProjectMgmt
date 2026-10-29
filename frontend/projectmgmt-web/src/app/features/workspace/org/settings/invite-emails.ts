@@ -1,6 +1,5 @@
 import { InviteEmailOutcome } from '../../data/workspace.models';
-
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import { EMAIL_PATTERN } from '../../project-key';
 export const MAX_INVITE_EMAILS = 20;
 
 export interface ParsedEmails {

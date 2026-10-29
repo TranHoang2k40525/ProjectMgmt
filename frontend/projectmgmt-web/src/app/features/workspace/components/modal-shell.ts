@@ -14,7 +14,7 @@ let nextModalId = 0;
   selector: 'app-modal-shell',
   imports: [A11yModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '(document:keydown.escape)': 'requestClose()' },
+  host: { '(document:keydown.escape)': 'onEscape($event)' },
   template: `
     <div class="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4">
       <button type="button" tabindex="-1" aria-hidden="true" class="absolute inset-0 w-full h-full bg-slate-900/50 border-0 cursor-default"
@@ -63,5 +63,11 @@ export class ModalShellComponent {
 
   requestClose(): void {
     this.closeRequested.emit();
+  }
+
+  /** Esc trên ô select dùng để đóng danh sách lựa chọn, không đóng modal. */
+  onEscape(event: Event): void {
+    if ((event.target as HTMLElement | null)?.tagName === 'SELECT') return;
+    this.requestClose();
   }
 }
