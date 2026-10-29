@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import { inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
+import { orgOwnerGuard } from './features/workspace/guards/org-owner.guard';
 import { WorkspaceContextService } from './features/workspace/workspace-context.service';
 
 /** /projects và /projects/new đưa về tổ chức mở gần nhất; chưa có thì về trang chủ để chọn tổ chức. */
@@ -49,9 +50,19 @@ export const routes: Routes = [
         children: [
           { path: '', pathMatch: 'full', redirectTo: 'overview' },
           { path: 'overview', loadComponent: () => import('./features/workspace/org/org-overview').then(m => m.OrgOverviewComponent) },
-          { path: 'projects', loadComponent: () => import('./features/workspace/org/org-projects').then(m => m.OrgProjectsComponent) }
+          { path: 'projects', loadComponent: () => import('./features/workspace/org/org-projects').then(m => m.OrgProjectsComponent) },
+          {
+            path: 'settings',
+            canActivate: [orgOwnerGuard],
+            loadComponent: () => import('./features/workspace/org/settings/org-settings').then(m => m.OrgSettingsComponent),
+            children: [
+              { path: '', pathMatch: 'full', redirectTo: 'members' },
+              { path: 'members', loadComponent: () => import('./features/workspace/org/settings/org-members-settings').then(m => m.OrgMembersSettingsComponent) }
+            ]
+          }
         ]
       },
+      { path: 'invite/:token', loadComponent: () => import('./features/workspace/invite/invite-accept-page').then(m => m.InviteAcceptPageComponent) },
       { path: 'projects/:id/settings', loadComponent: () => import('./features/projects/project-settings-page').then(m => m.ProjectSettingsPage) },
       { path: 'projects/:id/settings/workflow', loadComponent: () => import('./features/projects/workflow-settings-page').then(m => m.WorkflowSettingsPage) },
       { path: 'projects/:id/workflow', loadComponent: () => import('./features/projects/workflow-settings-page').then(m => m.WorkflowSettingsPage) },
