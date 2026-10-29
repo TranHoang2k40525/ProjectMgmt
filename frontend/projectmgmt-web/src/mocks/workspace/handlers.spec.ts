@@ -14,6 +14,8 @@ const contexts: Record<string, MockContext> = {
 const API = `${environment.apiBaseUrl}/v1`;
 
 let stored: string | null = null;
+/** Dự án thật mỗi người thấy qua GET /projects (theo token). */
+let projectsByToken: Record<string, { orgId: string }[]> = {};
 let handlers = createHandlers();
 
 /** Backend thật được thay bằng ngữ cảnh cố định theo token. */
@@ -22,7 +24,9 @@ function createHandlers() {
     backend: new WorkspaceMockBackend({ load: () => stored, save: value => (stored = value) }),
     context: request => Promise.resolve(contexts[request.headers.get('Authorization') ?? '']),
     memberIds: () => Promise.resolve(null),
-    get: () => Promise.reject(new Error('không gọi backend thật trong test'))
+    get: <T>(request: Request, path: string) => path === '/projects'
+      ? Promise.resolve((projectsByToken[request.headers.get('Authorization') ?? ''] ?? []) as T)
+      : Promise.reject(new Error('không gọi backend thật trong test'))
   });
 }
 
@@ -41,8 +45,18 @@ async function call(token: string, method: string, path: string, body?: unknown)
 describe('workspace MSW handlers', () => {
   beforeEach(() => {
     stored = null;
+    projectsByToken = {};
     handlers = createHandlers();
   });
+
+  it('counts a member of a project in the organization as an organization member', async () => {
+    await call('owner', 'GET', '/users/me/organization-memberships');
+    expect((await call('bob', 'GET', '/users/me/organization-memberships')).json).toEqual([]);
+
+    projectsByToken['Bearer bob'] = [{ orgId: 'org-lab' }];
+    const memberships = await call('bob', 'GET', '/users/me/organization-memberships');
+    expect(memberships.json).toMatchObject([{ orgId: 'org-lab', orgName: 'HUCE Lab', role: 'Member' }]);
+  }, 10_000);
 
   it('serves the contract endpoints with ProblemDetails errors', async () => {
     const members = await call('owner', 'GET', '/organizations/org-lab/members');

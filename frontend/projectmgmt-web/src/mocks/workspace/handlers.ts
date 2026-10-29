@@ -91,8 +91,11 @@ export function createWorkspaceHandlers(deps: WorkspaceHandlerDeps) {
 
   return [
     // Tư cách thành viên của người gọi (gồm tổ chức được mời vào mà GET /organizations thật chưa trả về).
+    // Ở trong một dự án của tổ chức cũng là thành viên tổ chức (wizard chỉ thêm người của tổ chức vào dự án).
     http.get(`${API}/users/me/organization-memberships`, route(async args => {
       await Promise.all(args.ctx.visibleOrgs.map(org => enrichMembers(args, org.id)));
+      const myProjects = await deps.get<{ orgId: string }[]>(args.request, '/projects').catch(() => []);
+      new Set(myProjects.map(project => project.orgId)).forEach(orgId => deps.backend.addKnownMembers(orgId, [args.ctx.me.id]));
       return deps.backend.myMemberships(args.ctx);
     })),
 
