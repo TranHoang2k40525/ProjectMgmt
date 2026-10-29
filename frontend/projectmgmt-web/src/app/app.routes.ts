@@ -1,5 +1,19 @@
 import { Routes } from '@angular/router';
+import { inject } from '@angular/core';
+import { Router } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
+import { WorkspaceContextService } from './features/workspace/workspace-context.service';
+
+/** /projects và /projects/new đưa về tổ chức mở gần nhất; chưa có thì về trang chủ để chọn tổ chức. */
+function projectsOfLastOrg(create: boolean) {
+  return () => {
+    const orgId = inject(WorkspaceContextService).lastOrgId();
+    const router = inject(Router);
+    return orgId
+      ? router.createUrlTree(['/orgs', orgId, 'projects'], create ? { queryParams: { create: 1 } } : {})
+      : router.createUrlTree(['/for-you']);
+  };
+}
 
 export const routes: Routes = [
   // 1. Standalone Auth Route
@@ -27,8 +41,17 @@ export const routes: Routes = [
       { path: 'projects/:id/members', loadComponent: () => import('./features/projects/project-members-page').then(m => m.ProjectMembersPageComponent) },
       { path: 'profile', loadComponent: () => import('./features/identity/profile-page').then(m => m.ProfilePageComponent) },
       { path: 'admin/identity', loadComponent: () => import('./features/identity/rbac-admin-page').then(m => m.RbacAdminPageComponent) },
-      { path: 'projects', loadComponent: () => import('./features/projects/projects-page').then(m => m.ProjectsPage) },
-      { path: 'projects/new', loadComponent: () => import('./features/projects/project-create-page').then(m => m.ProjectCreatePage) },
+      { path: 'projects', pathMatch: 'full', redirectTo: projectsOfLastOrg(false) },
+      { path: 'projects/new', pathMatch: 'full', redirectTo: projectsOfLastOrg(true) },
+      {
+        path: 'orgs/:orgId',
+        loadComponent: () => import('./features/workspace/org/org-page').then(m => m.OrgPageComponent),
+        children: [
+          { path: '', pathMatch: 'full', redirectTo: 'overview' },
+          { path: 'overview', loadComponent: () => import('./features/workspace/org/org-overview').then(m => m.OrgOverviewComponent) },
+          { path: 'projects', loadComponent: () => import('./features/workspace/org/org-projects').then(m => m.OrgProjectsComponent) }
+        ]
+      },
       { path: 'projects/:id/settings', loadComponent: () => import('./features/projects/project-settings-page').then(m => m.ProjectSettingsPage) },
       { path: 'projects/:id/settings/workflow', loadComponent: () => import('./features/projects/workflow-settings-page').then(m => m.WorkflowSettingsPage) },
       { path: 'projects/:id/workflow', loadComponent: () => import('./features/projects/workflow-settings-page').then(m => m.WorkflowSettingsPage) },

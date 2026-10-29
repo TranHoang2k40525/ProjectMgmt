@@ -36,6 +36,32 @@ export function groupWorkByDue(items: readonly WorkItemSummary[], today: Date = 
     .map(key => ({ key, label: BUCKET_LABELS[key], items: buckets[key] }));
 }
 
+export interface WorkGroup {
+  key: string;
+  label: string;
+  /** Nhóm theo hạn thì là loại hạn, nhóm theo dự án thì null. */
+  due: DueBucket | null;
+  items: WorkItemSummary[];
+}
+
+/** Nhóm việc chưa xong theo dự án (giữ thứ tự hạn trong từng dự án). */
+export function groupWorkByProject(items: readonly WorkItemSummary[]): WorkGroup[] {
+  const groups = new Map<string, WorkGroup>();
+  for (const item of items) {
+    if (item.statusCategory === 'Done') continue;
+    const group = groups.get(item.projectId) ?? { key: item.projectId, label: item.projectName, due: null, items: [] };
+    group.items.push(item);
+    groups.set(item.projectId, group);
+  }
+  return [...groups.values()];
+}
+
+export function dueBucketOf(dueDate: string | null, today: Date = new Date()): DueBucket {
+  if (!dueDate) return 'noDue';
+  const todayKey = localDateKey(today);
+  return dueDate < todayKey ? 'overdue' : dueDate === todayKey ? 'today' : 'upcoming';
+}
+
 export function formatDueDate(dueDate: string | null): string {
   if (!dueDate) return 'Chưa có hạn';
   const [year, month, day] = dueDate.split('-');

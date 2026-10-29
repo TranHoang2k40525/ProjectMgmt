@@ -257,12 +257,12 @@
         <a
           routerLink="/projects"
           routerLinkActive="bg-primary/10 text-primary font-bold"
-          [title]="!isSidebarExpanded() ? 'Tất cả Dự án' : 'Xem danh mục toàn bộ các không gian dự án'"
+          [title]="!isSidebarExpanded() ? 'Dự án' : 'Dự án của tổ chức đang mở'"
           class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors whitespace-nowrap"
         >
           <span class="material-symbols-outlined text-[20px] shrink-0">folder_open</span>
           @if (isSidebarExpanded()) {
-            <span class="truncate">Tất cả dự án</span>
+            <span class="truncate">Dự án</span>
           }
         </a>
         @if (projectService.hasActiveProject()) {
