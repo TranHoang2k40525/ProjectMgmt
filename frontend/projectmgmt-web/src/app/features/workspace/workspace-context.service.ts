@@ -34,6 +34,13 @@ export class WorkspaceContextService {
     }));
   }
 
+  /** Tải lại số liệu của tổ chức đang mở (sau khi tạo dự án, đổi thành viên…), không ghi "Gần đây". */
+  reloadCurrent(): void {
+    const org = this.currentOrg();
+    if (!org) return;
+    this.data.getOrganization(org.id).subscribe({ next: fresh => this.upsert(fresh), error: () => undefined });
+  }
+
   /** Cập nhật tổ chức trong danh sách sau khi tạo mới, nhận lời mời hoặc số liệu thay đổi. */
   upsert(org: OrganizationSummary): void {
     this.organizations.update(orgs => {

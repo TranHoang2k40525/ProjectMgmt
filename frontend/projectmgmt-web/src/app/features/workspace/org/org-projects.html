@@ -8,6 +8,10 @@
         <input id="project-search" type="search" [class]="ui.input" class="pl-9" placeholder="Tìm theo tên hoặc mã…"
                [ngModel]="query()" (ngModelChange)="query.set($event)" autocomplete="off" />
       </div>
+      <button type="button" [class]="ui.primaryButton" (click)="wizardOpen.set(true)">
+        <span class="material-symbols-outlined text-[18px]" aria-hidden="true">add</span>
+        Tạo dự án
+      </button>
     </div>
   </div>
 
@@ -75,7 +79,13 @@
       <div class="rounded-2xl border border-dashed border-slate-300 px-6 py-10 text-center dark:border-slate-700">
         <p class="font-semibold text-slate-800 dark:text-slate-100">Bạn chưa tham gia dự án nào trong tổ chức này</p>
         <p class="mt-1 text-sm text-slate-500 text-pretty">Tạo dự án mới hoặc nhờ người phụ trách dự án thêm bạn vào.</p>
+        <button type="button" [class]="ui.primaryButton" class="mt-4" (click)="wizardOpen.set(true)">Tạo dự án</button>
       </div>
     }
   </app-section-state>
 </section>
+
+@if (wizardOpen() && context.currentOrg(); as org) {
+  <app-create-project-wizard [orgId]="org.id" (created)="onProjectCreated($event)"
+                             (openProject)="openCreatedProject($event)" (dismissed)="wizardOpen.set(false)" />
+}

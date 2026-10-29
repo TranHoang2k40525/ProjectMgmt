@@ -13,7 +13,7 @@ export const UI = {
   textarea:
     'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-container focus:border-transparent aria-[invalid=true]:border-red-500 dark:bg-slate-950 dark:border-slate-700 dark:text-slate-100',
   select:
-    'h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary-container dark:bg-slate-950 dark:border-slate-700 dark:text-slate-100',
+    'h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary-container disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:bg-slate-950 dark:border-slate-700 dark:text-slate-100 dark:disabled:bg-slate-800',
   label: 'block text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1',
   hint: 'mt-1 text-xs text-slate-500 text-pretty',
   fieldError: 'mt-1 text-xs font-medium text-red-700 dark:text-red-400',
