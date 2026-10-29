@@ -1,7 +1,8 @@
 <app-modal-shell heading="Tạo dự án" size="lg" description="Thiết lập thông tin, loại hình quản lý và thành viên cho dự án mới."
                  (closeRequested)="requestClose()">
+  <p class="sr-only" aria-live="polite">{{ stepAnnouncement() }}</p>
   @if (step() !== 'done') {
-    <ol class="mb-5 grid grid-cols-3 gap-2" aria-label="Các bước tạo dự án">
+    <ol class="mb-5 grid grid-cols-[auto_auto_auto] sm:grid-cols-3 gap-2" aria-label="Các bước tạo dự án">
       @for (item of steps; track item.id) {
         <li [attr.aria-current]="stepState(item.id) === 'current' ? 'step' : null"
             class="flex items-center gap-2 rounded-lg border px-2.5 py-2 text-xs sm:text-sm dark:border-slate-700"
@@ -18,7 +19,7 @@
               {{ item.id }}
             }
           </span>
-          <span class="min-w-0 truncate font-semibold text-slate-800 dark:text-slate-100">{{ item.label }}</span>
+          <span class="min-w-0 truncate font-semibold text-slate-800 dark:text-slate-100" [class]="stepState(item.id) === 'current' ? 'inline' : 'hidden sm:inline'">{{ item.label }}</span>
         </li>
       }
     </ol>
@@ -28,7 +29,7 @@
     <div class="space-y-3" aria-busy="true">
       <span class="sr-only">Đang tải thành viên và mẫu workflow…</span>
       @for (row of [1, 2, 3]; track row) {
-        <div class="h-12 rounded-lg bg-slate-100 dark:bg-slate-800 animate-pulse"></div>
+        <div class="h-12 rounded-lg bg-slate-100 dark:bg-slate-800 motion-safe:animate-pulse"></div>
       }
     </div>
   } @else if (loadError()) {
@@ -42,7 +43,7 @@
         <div class="space-y-4">
           <div>
             <label for="wizard-name" [class]="ui.label">Tên dự án</label>
-            <input id="wizard-name" [class]="ui.input" [ngModel]="name()" (ngModelChange)="onNameChange($event)" maxlength="100" required
+            <input id="wizard-name" cdkFocusInitial [class]="ui.input" [ngModel]="name()" (ngModelChange)="onNameChange($event)" maxlength="100" required
                    placeholder="Ví dụ: Hệ thống quản lý thư viện"
                    [attr.aria-invalid]="!!nameError()" [attr.aria-describedby]="nameError() ? 'wizard-name-error' : null" />
             @if (nameError()) { <p id="wizard-name-error" [class]="ui.fieldError">{{ nameError() }}</p> }

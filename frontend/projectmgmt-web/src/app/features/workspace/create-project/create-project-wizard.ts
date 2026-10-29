@@ -1,3 +1,4 @@
+import { DOCUMENT } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -41,6 +42,7 @@ export const ISSUE_TYPE_HINTS: Readonly<Record<IssueTypeCode, string>> = {
 export class CreateProjectWizardComponent implements OnInit {
   private readonly data = inject(WorkspaceDataSource);
   private readonly context = inject(WorkspaceContextService);
+  private readonly document = inject(DOCUMENT);
 
   readonly orgId = input.required<string>();
   readonly created = output<WorkspaceProject>();
@@ -101,6 +103,11 @@ export class CreateProjectWizardComponent implements OnInit {
     return this.members().filter(member => !exclude.has(member.userId) && matchesSearch(`${member.displayName} ${member.email}`, query));
   });
   readonly leadName = computed(() => this.members().find(member => member.userId === this.leadUserId())?.displayName ?? '');
+  readonly stepAnnouncement = computed(() => {
+    const step = this.step();
+    if (step === 'done') return `Đã tạo dự án ${this.createdProject()?.projectKey ?? ''}`;
+    return `Bước ${step} trên 3: ${this.steps[step - 1].label}`;
+  });
   readonly isDirty = computed(() =>
     this.name().trim().length > 0 || this.description().trim().length > 0 || this.selected().size > 0 || this.issueTypesCustomized());
 
@@ -163,7 +170,9 @@ export class CreateProjectWizardComponent implements OnInit {
     this.keyError.set(isValidProjectKey(this.projectKey()) ? '' : 'Mã gồm 2–10 chữ in hoa hoặc số, bắt đầu bằng chữ.');
     this.leadError.set(this.members().some(member => member.userId === this.leadUserId()) ? '' : 'Chọn người phụ trách trong tổ chức.');
     if (this.description().trim().length > 1000) this.stepError.set('Mô tả tối đa 1000 ký tự.');
-    return !this.nameError() && !this.keyError() && !this.leadError() && this.description().trim().length <= 1000;
+    const firstInvalid = this.nameError() ? 'wizard-name' : this.keyError() ? 'wizard-key' : this.leadError() ? 'wizard-lead' : null;
+    if (firstInvalid) this.focus(firstInvalid);
+    return !firstInvalid && this.description().trim().length <= 1000;
   }
 
   // --- Bước 2 ---------------------------------------------------------------
@@ -182,8 +191,10 @@ export class CreateProjectWizardComponent implements OnInit {
       this.step2Error.set('Chọn một mẫu workflow cho dự án.');
       return false;
     }
-    if (this.issueTypeErrors().some(error => error)) {
+    const invalidIndex = this.issueTypeErrors().findIndex(error => error);
+    if (invalidIndex >= 0) {
       this.step2Error.set('Kiểm tra lại tên các kiểu công việc.');
+      this.focus(`wizard-type-${this.issueTypes()[invalidIndex].code}`);
       return false;
     }
     this.step2Error.set('');
@@ -224,7 +235,10 @@ export class CreateProjectWizardComponent implements OnInit {
         next: available => {
           this.busy.set(false);
           if (available) this.step.set(2);
-          else this.keyError.set(`Mã ${this.projectKey()} đã được dùng trong tổ chức. Chọn mã khác.`);
+          else {
+            this.keyError.set(`Mã ${this.projectKey()} đã được dùng trong tổ chức. Chọn mã khác.`);
+            this.focus('wizard-key');
+          }
         },
         error: error => {
           this.busy.set(false);
@@ -305,6 +319,10 @@ export class CreateProjectWizardComponent implements OnInit {
       return;
     }
     this.confirmingClose.set(true);
+  }
+
+  private focus(id: string): void {
+    setTimeout(() => this.document.getElementById(id)?.focus());
   }
 
   stepState(id: 1 | 2 | 3): 'done' | 'current' | 'todo' {

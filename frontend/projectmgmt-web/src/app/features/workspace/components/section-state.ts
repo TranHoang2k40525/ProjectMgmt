@@ -10,7 +10,7 @@ import { UI } from './ui-classes';
       <div class="space-y-2" aria-busy="true">
         <span class="sr-only">Đang tải…</span>
         @for (row of rowsArray(); track $index) {
-          <div class="h-11 rounded-xl bg-slate-100 dark:bg-slate-800 animate-pulse"></div>
+          <div class="h-11 rounded-xl bg-slate-100 dark:bg-slate-800 motion-safe:animate-pulse"></div>
         }
       </div>
     } @else if (error()) {

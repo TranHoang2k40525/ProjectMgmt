@@ -18,7 +18,7 @@ import { WorkspaceNavigation } from '../workspace-navigation';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="grid gap-6 lg:grid-cols-3">
-      <section [class]="ui.card" class="lg:col-span-2" aria-labelledby="org-for-you">
+      <section [class]="ui.card" class="min-w-0 lg:col-span-2" aria-labelledby="org-for-you">
         <h2 id="org-for-you" [class]="ui.sectionTitle" class="mb-3">Dành cho bạn</h2>
 
         @if (context.isOwner() && pendingInvites() > 0) {
@@ -33,7 +33,7 @@ import { WorkspaceNavigation } from '../workspace-navigation';
         <app-section-state [loading]="loading()" [error]="error()" [rows]="4" (retry)="load()">
           @if (ledProjects().length > 0) {
             <div class="mb-4">
-              <h3 class="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Dự án bạn phụ trách</h3>
+              <h3 class="mb-2 text-xs font-bold uppercase text-slate-500">Dự án bạn phụ trách</h3>
               <ul class="flex flex-wrap gap-2">
                 @for (project of ledProjects(); track project.id) {
                   <li>
@@ -52,7 +52,7 @@ import { WorkspaceNavigation } from '../workspace-navigation';
         </app-section-state>
       </section>
 
-      <section [class]="ui.card" aria-labelledby="org-recent">
+      <section [class]="ui.card" class="min-w-0" aria-labelledby="org-recent">
         <h2 id="org-recent" [class]="ui.sectionTitle" class="mb-3">Gần đây</h2>
         <app-section-state [loading]="loading()" [error]="error()" [rows]="5" (retry)="load()">
           <app-recent-list [items]="recent()" (selected)="nav.openRecent($event)"

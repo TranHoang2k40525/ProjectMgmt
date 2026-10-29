@@ -180,7 +180,12 @@ export class OrgWorkflowTemplatesComponent implements OnInit {
     const draft = this.draft();
     if (!draft || this.saving()) return;
     this.showErrors.set(true);
-    if (!isDraftValid(draft)) return;
+    if (!isDraftValid(draft)) {
+      const errors = validateDraft(draft);
+      const statusIndex = errors.statuses.findIndex(error => error);
+      this.focusLater(errors.name ? 'template-name' : statusIndex >= 0 ? `status-name-${statusIndex}` : 'template-name');
+      return;
+    }
     this.saving.set(true);
     this.saveError.set('');
     const request = toRequest(draft);

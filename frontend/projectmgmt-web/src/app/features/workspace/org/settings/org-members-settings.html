@@ -80,7 +80,7 @@
       }
 
       @if (invitations().length > 0) {
-        <h3 class="mt-5 mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Đang chờ phản hồi ({{ invitations().length }})</h3>
+        <h3 class="mt-5 mb-2 text-xs font-bold uppercase text-slate-500">Đang chờ phản hồi ({{ invitations().length }})</h3>
         <ul class="divide-y divide-slate-100 rounded-xl border border-slate-200 dark:divide-slate-800 dark:border-slate-700">
           @for (invitation of invitations(); track invitation.id) {
             <li class="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center">
@@ -107,7 +107,8 @@
             {{ copied() ? 'Đã sao chép' : 'Sao chép' }}
           </button>
         </div>
-        <p class="mt-2 text-xs text-slate-500" aria-live="polite">
+        <span class="sr-only" aria-live="polite">{{ copied() ? 'Đã sao chép link mời' : '' }}</span>
+        <p class="mt-2 text-xs text-slate-500">
           Người tham gia bằng link nhận vai trò <strong>{{ roleLabels[link.role] }}</strong>.
         </p>
       } @else {

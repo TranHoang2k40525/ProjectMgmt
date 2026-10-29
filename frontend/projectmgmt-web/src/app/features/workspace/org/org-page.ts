@@ -23,7 +23,7 @@ import { WorkspaceContextService } from '../workspace-context.service';
       </nav>
 
       @if (loading() && !org()) {
-        <div class="h-24 rounded-2xl bg-slate-100 dark:bg-slate-800 animate-pulse" aria-busy="true"><span class="sr-only">Đang tải tổ chức…</span></div>
+        <div class="h-24 rounded-2xl bg-slate-100 dark:bg-slate-800 motion-safe:animate-pulse" aria-busy="true"><span class="sr-only">Đang tải tổ chức…</span></div>
       } @else if (org(); as current) {
         <header class="flex flex-col sm:flex-row sm:items-center gap-4 mb-5">
           <span class="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-primary-container text-2xl font-bold text-white" aria-hidden="true">

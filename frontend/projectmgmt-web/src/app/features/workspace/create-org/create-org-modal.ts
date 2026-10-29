@@ -1,3 +1,4 @@
+import { DOCUMENT } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, inject, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -18,7 +19,7 @@ import { suggestSlug } from '../project-key';
       <form id="create-org-form" (ngSubmit)="submit()" novalidate class="space-y-4">
         <div>
           <label for="org-name" [class]="ui.label">Tên tổ chức</label>
-          <input id="org-name" name="name" [class]="ui.input" [ngModel]="name()" (ngModelChange)="onNameChange($event)"
+          <input id="org-name" name="name" cdkFocusInitial [class]="ui.input" [ngModel]="name()" (ngModelChange)="onNameChange($event)"
                  maxlength="100" autocomplete="organization" required
                  [attr.aria-invalid]="!!nameError()" [attr.aria-describedby]="nameError() ? 'org-name-error' : null" />
           @if (nameError()) {
@@ -51,6 +52,7 @@ import { suggestSlug } from '../project-key';
 })
 export class CreateOrgModalComponent {
   private readonly data = inject(WorkspaceDataSource);
+  private readonly document = inject(DOCUMENT);
 
   readonly created = output<OrganizationSummary>();
   readonly dismissed = output<void>();
@@ -82,7 +84,10 @@ export class CreateOrgModalComponent {
     const slug = this.slug().trim();
     this.nameError.set(name.length < 2 ? 'Nhập tên tổ chức (ít nhất 2 ký tự).' : '');
     this.slugError.set(/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug) && slug.length >= 2 ? '' : 'Đường dẫn chỉ gồm chữ thường, số và dấu gạch nối (2–60 ký tự).');
-    if (this.nameError() || this.slugError()) return;
+    if (this.nameError() || this.slugError()) {
+      this.document.getElementById(this.nameError() ? 'org-name' : 'org-slug')?.focus();
+      return;
+    }
 
     this.saving.set(true);
     this.formError.set('');

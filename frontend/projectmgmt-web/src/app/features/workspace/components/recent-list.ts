@@ -21,7 +21,7 @@ import { RECENT_ICONS, RECENT_KIND_LABELS, timeAgo } from '../work-display';
                   <span class="sr-only">{{ kindLabels[item.kind] }}: </span>{{ item.subtitle }}
                 </span>
               </span>
-              <span class="shrink-0 text-[11px] text-slate-400 tabular-nums">{{ ago(item) }}</span>
+              <span class="shrink-0 text-[11px] text-slate-500 tabular-nums">{{ ago(item) }}</span>
             </button>
           </li>
         }

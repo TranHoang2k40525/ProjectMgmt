@@ -9,7 +9,7 @@ import { WorkGroup, dueBucketOf, formatDueDate, groupWorkByDue, groupWorkByProje
   template: `
     @for (bucket of buckets(); track bucket.key) {
       <section class="mb-4 last:mb-0" [attr.aria-labelledby]="headingId + bucket.key">
-        <h3 [id]="headingId + bucket.key" class="flex items-center gap-2 text-xs font-bold uppercase tracking-wide mb-2"
+        <h3 [id]="headingId + bucket.key" class="flex items-center gap-2 text-xs font-bold uppercase mb-2"
             [class.text-red-700]="bucket.due === 'overdue'" [class.text-slate-500]="bucket.due !== 'overdue'">
           {{ bucket.label }}
           <span class="tabular-nums rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] text-slate-600 dark:text-slate-300">{{ bucket.items.length }}</span>

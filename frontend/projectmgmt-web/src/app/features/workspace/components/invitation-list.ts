@@ -17,7 +17,7 @@ export interface InvitationResponse {
       @for (invitation of invitations(); track invitation.id) {
         <li class="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900 dark:bg-amber-950/30">
           <span class="material-symbols-outlined text-amber-700 dark:text-amber-300" aria-hidden="true">mail</span>
-          <p class="flex-1 min-w-0 text-sm text-slate-800 dark:text-slate-100 text-pretty">
+          <p class="flex-1 min-w-0 break-words text-sm text-slate-800 dark:text-slate-100 text-pretty">
             <strong>{{ invitation.invitedByName }}</strong> mời bạn vào <strong>{{ invitation.orgName }}</strong>
             với vai trò {{ roleLabels[invitation.role] }}
             <span class="text-slate-500"> · {{ ago(invitation) }}</span>

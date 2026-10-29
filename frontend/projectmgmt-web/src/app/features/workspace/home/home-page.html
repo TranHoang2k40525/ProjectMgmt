@@ -11,7 +11,7 @@
   </header>
 
   <div class="grid gap-6 lg:grid-cols-3">
-    <section [class]="ui.card" class="lg:col-span-2" aria-labelledby="home-for-you">
+    <section [class]="ui.card" class="min-w-0 lg:col-span-2" aria-labelledby="home-for-you">
       <h2 id="home-for-you" [class]="ui.sectionTitle" class="mb-3">Dành cho bạn</h2>
       @if (invitations().length > 0) {
         <div class="mb-4">
@@ -23,7 +23,7 @@
       </app-section-state>
     </section>
 
-    <section [class]="ui.card" aria-labelledby="home-recent">
+    <section [class]="ui.card" class="min-w-0" aria-labelledby="home-recent">
       <h2 id="home-recent" [class]="ui.sectionTitle" class="mb-3">Gần đây</h2>
       <app-section-state [loading]="recentLoading()" [error]="recentError()" [rows]="5" (retry)="loadRecent()">
         <app-recent-list [items]="recent()" (selected)="nav.openRecent($event)" />

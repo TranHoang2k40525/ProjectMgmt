@@ -82,7 +82,7 @@
       <div class="grid gap-4 sm:grid-cols-[1fr_auto]">
         <div>
           <label for="template-name" [class]="ui.label">Tên mẫu</label>
-          <input id="template-name" name="name" [class]="ui.input" maxlength="60" [ngModel]="current.name" (ngModelChange)="updateDraft({ name: $event })"
+          <input id="template-name" name="name" cdkFocusInitial [class]="ui.input" maxlength="60" [ngModel]="current.name" (ngModelChange)="updateDraft({ name: $event })"
                  [attr.aria-invalid]="showErrors() && !!draftErrors().name" [attr.aria-describedby]="showErrors() && draftErrors().name ? 'template-name-error' : null" />
           @if (showErrors() && draftErrors().name) { <p id="template-name-error" [class]="ui.fieldError">{{ draftErrors().name }}</p> }
         </div>

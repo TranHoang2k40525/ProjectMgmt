@@ -17,8 +17,8 @@ import { WorkspaceContextService } from '../workspace-context.service';
     <div class="mx-auto flex w-full max-w-lg flex-col px-4 py-10 sm:py-16">
       <section [class]="ui.card" class="text-center" aria-labelledby="invite-title" [attr.aria-busy]="loading()">
         @if (loading()) {
-          <div class="mx-auto mb-4 size-14 rounded-2xl bg-slate-100 dark:bg-slate-800 animate-pulse"></div>
-          <div class="mx-auto h-6 w-2/3 rounded bg-slate-100 dark:bg-slate-800 animate-pulse"></div>
+          <div class="mx-auto mb-4 size-14 rounded-2xl bg-slate-100 dark:bg-slate-800 motion-safe:animate-pulse"></div>
+          <div class="mx-auto h-6 w-2/3 rounded bg-slate-100 dark:bg-slate-800 motion-safe:animate-pulse"></div>
           <h1 id="invite-title" class="sr-only">Đang mở lời mời…</h1>
         } @else if (preview(); as invite) {
           <span class="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl bg-primary-container text-2xl font-bold text-white" aria-hidden="true">
