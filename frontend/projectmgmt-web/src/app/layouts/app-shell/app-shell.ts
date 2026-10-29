@@ -21,6 +21,12 @@ import { FocusRecommendationService } from '../../core/attention/focus-recommend
 import { RecentWorkService } from '../../core/attention/recent-work.service';
 import { AvatarModalComponent } from '../../shared/components/avatar-modal/avatar-modal.component';
 import { resolveAvatarUrl } from '../../core/utils/avatar.utils';
+import { CreateOrgModalComponent } from '../../features/workspace/create-org/create-org-modal';
+import { RecentListComponent } from '../../features/workspace/components/recent-list';
+import { WorkspaceDataSource } from '../../features/workspace/data/workspace-data-source';
+import { ORG_ROLE_LABELS, OrganizationSummary, RecentItem } from '../../features/workspace/data/workspace.models';
+import { WorkspaceContextService } from '../../features/workspace/workspace-context.service';
+import { WorkspaceNavigation } from '../../features/workspace/workspace-navigation';
 
 @Component({
   selector: 'app-shell',
@@ -38,7 +44,9 @@ import { resolveAvatarUrl } from '../../core/utils/avatar.utils';
     ConfirmDialogComponent,
     RouteTransitionLayerComponent,
     MotionDirective,
-    AvatarModalComponent
+    AvatarModalComponent,
+    CreateOrgModalComponent,
+    RecentListComponent
   ],
   templateUrl: './app-shell.html',
   styleUrl: './app-shell.scss'
@@ -58,6 +66,9 @@ export class AppShellComponent {
   private readonly destroyRef = inject(DestroyRef);
   private readonly motion = inject(MotionOrchestratorService);
   private readonly recentWork = inject(RecentWorkService);
+  private readonly workspace = inject(WorkspaceContextService);
+  private readonly workspaceData = inject(WorkspaceDataSource);
+  private readonly workspaceNav = inject(WorkspaceNavigation);
 
   @ViewChild('pageBody', { read: ElementRef })
   private pageBody?: ElementRef<HTMLElement>;
@@ -88,24 +99,29 @@ export class AppShellComponent {
   // Computed Expanded State
   readonly isSidebarExpanded = computed(() => !this.isSidebarCollapsed());
 
-  readonly isSpacesSectionExpanded = signal<boolean>(true);
   readonly isCreateTaskModalOpen = signal<boolean>(false);
   readonly isCreateProjectModalOpen = signal<boolean>(false);
   readonly isExcelImportModalOpen = signal<boolean>(false);
+  readonly isCreateOrgOpen = signal<boolean>(false);
 
   // Flyout Popups State
   readonly isRecentFlyoutOpen = signal<boolean>(false);
 
-  // Projects & Recent Work Items
+  // Sidebar 2 cấp: trang chủ (Tổ chức) và tổ chức đang xem (Dự án, Cài đặt)
   readonly projectsList = this.projectService.allProjectsList;
   readonly activeProject = this.projectService.currentProject;
   readonly workItems = this.projectService.workItems;
-  readonly recentWorkItems = computed(() => {
-    const ids = this.recentWork.recentTaskIds();
-    const all = this.workItems();
-    const matched = ids.map((id: string) => all.find(i => i.id === id)).filter((x: WorkItem | undefined): x is WorkItem => !!x);
-    return matched.length > 0 ? matched : all.slice(0, 6);
+  readonly organizations = this.workspace.organizations;
+  readonly orgRoleLabels = ORG_ROLE_LABELS;
+  readonly recentItems = signal<RecentItem[]>([]);
+  /** Tổ chức đang xem: theo URL /orgs/:id, hoặc tổ chức của dự án đang mở khi ở trong màn dự án / công việc. */
+  readonly currentOrgId = computed(() => {
+    const url = this.currentUrl();
+    const match = /^\/orgs\/([^/?#]+)/.exec(url);
+    if (match) return decodeURIComponent(match[1]);
+    return this.isProjectRoute() || url.startsWith('/issues/') ? this.activeProject().orgId || null : null;
   });
+  readonly sidebarOrg = computed(() => this.organizations().find(org => org.id === this.currentOrgId()) ?? null);
 
   @HostListener('document:keydown', ['$event'])
   onGlobalKeydown(event: KeyboardEvent): void {
@@ -117,6 +133,7 @@ export class AppShellComponent {
   }
 
   constructor() {
+    this.workspace.refreshOrganizations().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ error: () => undefined });
     this.projectService.getProjects().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       error: () => this.toastService.error('Dự án', 'Không thể tải dự án. Mở danh sách dự án để thử lại.')
     });
@@ -172,12 +189,38 @@ export class AppShellComponent {
     this.isMobileSearchOpen.update(value => !value);
   }
 
-  toggleSpacesSection(): void {
-    this.isSpacesSectionExpanded.update(val => !val);
+  /** Cài đặt tổ chức chỉ hiện với người tạo tổ chức. */
+  isOrgOwner(org: OrganizationSummary): boolean {
+    return org.ownerId === this.workspace.currentUserId();
+  }
+
+  projectsOf(orgId: string): Project[] {
+    return this.projectsList().filter(project => project.orgId === orgId && !project.isDeleted);
+  }
+
+  openProject(project: Project): void {
+    this.closeFlyouts();
+    this.workspaceNav.openProject(project);
+  }
+
+  onOrgCreated(org: OrganizationSummary): void {
+    this.isCreateOrgOpen.set(false);
+    this.workspace.upsert(org);
+    this.toastService.success('Đã tạo tổ chức', org.name);
+    this.workspaceNav.openOrganization(org.id);
   }
 
   toggleRecentFlyout(): void {
-    this.isRecentFlyoutOpen.update(val => !val);
+    const opening = !this.isRecentFlyoutOpen();
+    this.isRecentFlyoutOpen.set(opening);
+    if (opening) {
+      this.workspaceData.listRecent(this.sidebarOrg()?.id).subscribe({ next: items => this.recentItems.set(items), error: () => this.recentItems.set([]) });
+    }
+  }
+
+  openRecent(item: RecentItem): void {
+    this.closeFlyouts();
+    this.workspaceNav.openRecent(item);
   }
 
   closeFlyouts(): void {
@@ -203,20 +246,7 @@ export class AppShellComponent {
     });
   }
 
-  selectProjectSpace(proj: Project): void {
-    this.projectService.selectProject(proj);
-    this.closeFlyouts();
-    this.toastService.info('Chuyển Không Gian Dự Án', `Đã mở không gian làm việc ${proj.name} (${proj.projectKey})`);
-    this.router.navigate(['/project/summary']);
-  }
-
   openSearchResult(item: WorkItem): void {
-    this.closeFlyouts();
-    this.recentWork.rememberTask(item.id);
-    this.projectService.activeDrawerTask.set(item);
-  }
-
-  openRecentItem(item: WorkItem): void {
     this.closeFlyouts();
     this.recentWork.rememberTask(item.id);
     this.projectService.activeDrawerTask.set(item);

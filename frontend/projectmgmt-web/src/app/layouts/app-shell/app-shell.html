@@ -181,204 +181,170 @@
   >
     <div class="flex flex-col gap-3 overflow-x-hidden">
       
-      <!-- Primary Global Nav Links -->
-      <nav class="flex flex-col gap-1">
-        <!-- For You -->
-        <a
-          routerLink="/for-you"
-          routerLinkActive="bg-primary/10 text-primary font-bold"
-          [title]="!isSidebarExpanded() ? 'Dành cho bạn' : 'Xem trang cá nhân & công việc được giao'"
-          class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors whitespace-nowrap"
-        >
-          <span class="material-symbols-outlined text-[20px] shrink-0">account_circle</span>
-          @if (isSidebarExpanded()) {
-            <span class="truncate">Dành cho bạn</span>
-          }
-          @if (currentUrl() !== '/for-you' && focus.primary().score > 20) {
-            <span class="nav-guidance-dot" title="Có việc tiếp theo được gợi ý"></span>
-          }
-        </a>
-
-        <!-- Recent (With Flyout Dropdown Trigger) -->
-        <div class="relative">
-          <button
-            (click)="toggleRecentFlyout()"
-            [title]="!isSidebarExpanded() ? 'Gần đây' : 'Xem công việc vừa truy cập gần đây'"
-            class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left whitespace-nowrap cursor-pointer"
-          >
-            <div class="flex items-center gap-3 min-w-0">
-              <span class="material-symbols-outlined text-[20px] shrink-0">schedule</span>
-              @if (isSidebarExpanded()) {
-                <span class="truncate">Gần đây</span>
-              }
-            </div>
+      <!-- Điều hướng theo 2 cấp: trang chủ (Dành cho bạn, Gần đây, Tổ chức) và tổ chức (Dành cho bạn, Gần đây, Dự án, Cài đặt) -->
+      <nav class="flex flex-col gap-1" [attr.aria-label]="sidebarOrg() ? 'Điều hướng tổ chức' : 'Điều hướng chính'">
+        @if (sidebarOrg(); as org) {
+          <a routerLink="/for-you" title="Về trang chủ" class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-primary dark:hover:bg-slate-800 whitespace-nowrap">
+            <span class="material-symbols-outlined text-[18px] shrink-0" aria-hidden="true">arrow_back</span>
+            @if (isSidebarExpanded()) { <span class="truncate">Trang chủ</span> }
+          </a>
+          <a [routerLink]="['/orgs', org.id, 'overview']" [title]="org.name" class="flex items-center gap-2.5 px-3 py-2 mb-1 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800">
+            <span class="w-8 h-8 rounded-lg bg-primary-container text-white flex items-center justify-center font-bold text-sm shrink-0" aria-hidden="true">{{ org.name.charAt(0).toUpperCase() }}</span>
             @if (isSidebarExpanded()) {
-              <span class="material-symbols-outlined text-[16px] text-slate-400 shrink-0">chevron_right</span>
-            }
-          </button>
-
-          <!-- Dynamic Positioned Recent Flyout Dropdown Popup -->
-          @if (isRecentFlyoutOpen()) {
-            <!-- Click-outside backdrop to dismiss flyout cleanly -->
-            <div class="fixed inset-0 z-40 bg-transparent" (click)="closeFlyouts()" aria-hidden="true"></div>
-            <div
-              [class.left-60]="isSidebarExpanded()"
-              [class.left-14]="!isSidebarExpanded()"
-              class="fixed top-16 z-50 w-72 sm:w-80 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-4 flex flex-col gap-3 animate-fade-in transition-all"
-            >
-              <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
-                <span class="text-sm font-bold text-slate-900 dark:text-white">Mở gần đây</span>
-                <button (click)="closeFlyouts()" title="Đóng" class="text-slate-400 hover:text-slate-600">
-                  <span class="material-symbols-outlined text-[16px]">close</span>
-                </button>
-              </div>
-
-              <div class="flex flex-col gap-1 max-h-60 overflow-y-auto">
-                @for (item of recentWorkItems(); track item.id) {
-                  <button
-                    data-testid="recent-flyout-item"
-                    (click)="openRecentItem(item)"
-                    [title]="item.issueKey + ': ' + item.title"
-                    class="flex items-center gap-2.5 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-left transition-colors cursor-pointer"
-                  >
-                    <span class="material-symbols-outlined text-[18px] text-primary">check_box</span>
-                    <div class="flex flex-col truncate">
-                      <span class="text-xs font-bold text-slate-900 dark:text-white truncate">{{ item.title }}</span>
-                      <span class="text-xs text-slate-400 font-mono">{{ item.issueKey }} • {{ item.sprintName }}</span>
-                    </div>
-                  </button>
-                }
-              </div>
-            </div>
-          }
-        </div>
-
-        <!-- Tất cả dự án (Global Projects Directory) -->
-        <a
-          routerLink="/projects"
-          routerLinkActive="bg-primary/10 text-primary font-bold"
-          [title]="!isSidebarExpanded() ? 'Dự án' : 'Dự án của tổ chức đang mở'"
-          class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors whitespace-nowrap"
-        >
-          <span class="material-symbols-outlined text-[20px] shrink-0">folder_open</span>
-          @if (isSidebarExpanded()) {
-            <span class="truncate">Dự án</span>
-          }
-        </a>
-        @if (projectService.hasActiveProject()) {
-          <div class="border-t border-slate-200/60 dark:border-slate-800 pt-2 mt-2">
-            @if (isSidebarExpanded()) {
-              <div class="px-3 py-1 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                <span>Dự án đang làm</span>
-                <span class="w-2 h-2 rounded-full bg-emerald-500" title="Đang kích hoạt"></span>
-              </div>
-              <a
-                routerLink="/project/summary"
-                routerLinkActive="bg-primary/10 text-primary font-bold"
-                [title]="'Không gian dự án: ' + activeProject().name + ' (' + activeProject().projectKey + ')'"
-                class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors group"
-              >
-                <span class="w-6 h-6 rounded-md bg-primary text-white flex items-center justify-center font-mono font-bold text-xs shrink-0 shadow-2xs">
-                  {{ activeProject().projectKey.slice(0, 2) || '--' }}
-                </span>
-                <span class="truncate flex-1 group-hover:text-primary transition-colors">{{ activeProject().name }}</span>
-                <span class="material-symbols-outlined text-[16px] text-slate-400 group-hover:text-primary shrink-0">chevron_right</span>
-              </a>
+              <span class="min-w-0">
+                <span class="block truncate text-sm font-bold text-slate-900 dark:text-white">{{ org.name }}</span>
+                <span class="block truncate text-[11px] text-slate-500">{{ orgRoleLabels[org.myRole] }}</span>
+              </span>
             } @else {
-              <a
-                routerLink="/project/summary"
-                [title]="activeProject().name + ' (' + activeProject().projectKey + ')'"
-                class="w-full flex justify-center py-2 text-primary"
-              >
-                <span class="w-7 h-7 rounded-lg bg-primary text-white flex items-center justify-center font-mono font-bold text-xs shadow-2xs">
-                  {{ activeProject().projectKey.slice(0, 2) || '--' }}
-                </span>
-              </a>
+              <span class="sr-only">{{ org.name }}</span>
+            }
+          </a>
+
+          <a [routerLink]="['/orgs', org.id, 'overview']" routerLinkActive="bg-primary/10 text-primary font-bold" ariaCurrentWhenActive="page"
+             [title]="'Dành cho bạn trong ' + org.name" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors whitespace-nowrap">
+            <span class="material-symbols-outlined text-[20px] shrink-0" aria-hidden="true">account_circle</span>
+            @if (isSidebarExpanded()) { <span class="truncate">Dành cho bạn</span> }
+          </a>
+          <ng-container [ngTemplateOutlet]="recentNav" />
+
+          <a [routerLink]="['/orgs', org.id, 'projects']" routerLinkActive="bg-primary/10 text-primary font-bold" ariaCurrentWhenActive="page"
+             title="Danh sách dự án của tổ chức" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors whitespace-nowrap">
+            <span class="material-symbols-outlined text-[20px] shrink-0" aria-hidden="true">folder_open</span>
+            @if (isSidebarExpanded()) { <span class="truncate">Dự án</span> }
+          </a>
+          @if (isSidebarExpanded()) {
+            <ul aria-label="Dự án bạn tham gia" class="ml-6 mb-1 flex flex-col gap-0.5 border-l border-slate-200 dark:border-slate-800 pl-2">
+              @for (proj of projectsOf(org.id); track proj.id) {
+                <li>
+                  <button type="button" (click)="openProject(proj)" [title]="proj.name + ' (' + proj.projectKey + ')'"
+                          [attr.aria-current]="isProjectRoute() && activeProject().id === proj.id ? 'true' : null"
+                          [class.bg-primary/10]="isProjectRoute() && activeProject().id === proj.id" [class.text-primary]="isProjectRoute() && activeProject().id === proj.id"
+                          class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 whitespace-nowrap text-left cursor-pointer group">
+                    <span class="w-6 h-6 rounded-md bg-primary text-white flex items-center justify-center font-mono font-bold text-[11px] shrink-0" aria-hidden="true">{{ proj.projectKey.slice(0, 2) }}</span>
+                    <span class="truncate flex-1 group-hover:text-primary">{{ proj.name }}</span>
+                  </button>
+                </li>
+              } @empty {
+                <li class="px-2 py-1.5 text-xs text-slate-400">Chưa tham gia dự án nào</li>
+              }
+              <li>
+                <a [routerLink]="['/orgs', org.id, 'projects']" [queryParams]="{ create: 1 }" class="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 whitespace-nowrap text-slate-500 hover:text-primary">
+                  <span class="material-symbols-outlined text-[16px]" aria-hidden="true">add</span>
+                  Tạo dự án
+                </a>
+              </li>
+            </ul>
+          }
+
+          @if (isOrgOwner(org)) {
+            <a [routerLink]="['/orgs', org.id, 'settings']" routerLinkActive="bg-primary/10 text-primary font-bold"
+               title="Cài đặt tổ chức (chỉ chủ tổ chức)" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors whitespace-nowrap">
+              <span class="material-symbols-outlined text-[20px] shrink-0" aria-hidden="true">settings</span>
+              @if (isSidebarExpanded()) { <span class="truncate">Cài đặt</span> }
+            </a>
+            @if (isSidebarExpanded()) {
+              <ul aria-label="Cài đặt tổ chức" class="ml-6 flex flex-col gap-0.5 border-l border-slate-200 dark:border-slate-800 pl-2">
+                <li>
+                  <a [routerLink]="['/orgs', org.id, 'settings', 'members']" routerLinkActive="bg-primary/10 !text-primary" ariaCurrentWhenActive="page" class="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 whitespace-nowrap">
+                    <span class="material-symbols-outlined text-[16px]" aria-hidden="true">group</span>
+                    Thành viên &amp; phân quyền
+                  </a>
+                </li>
+                <li>
+                  <a [routerLink]="['/orgs', org.id, 'settings', 'workflows']" routerLinkActive="bg-primary/10 !text-primary" ariaCurrentWhenActive="page" class="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 whitespace-nowrap">
+                    <span class="material-symbols-outlined text-[16px]" aria-hidden="true">account_tree</span>
+                    Quy trình workflow
+                  </a>
+                </li>
+              </ul>
+            }
+          }
+        } @else {
+          <a routerLink="/for-you" routerLinkActive="bg-primary/10 text-primary font-bold" ariaCurrentWhenActive="page"
+             [title]="!isSidebarExpanded() ? 'Dành cho bạn' : 'Công việc của bạn trên mọi tổ chức'" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors whitespace-nowrap">
+            <span class="material-symbols-outlined text-[20px] shrink-0" aria-hidden="true">account_circle</span>
+            @if (isSidebarExpanded()) { <span class="truncate">Dành cho bạn</span> }
+            @if (currentUrl() !== '/for-you' && focus.primary().score > 20) {
+              <span class="nav-guidance-dot" title="Có việc tiếp theo được gợi ý"></span>
+            }
+          </a>
+          <ng-container [ngTemplateOutlet]="recentNav" />
+
+          <div class="flex items-center justify-between px-3 pt-3 pb-1 border-t border-slate-200/60 dark:border-slate-800 mt-2">
+            @if (isSidebarExpanded()) {
+              <span id="sidebar-orgs-heading" class="text-xs font-bold uppercase tracking-wider text-slate-400">Tổ chức ({{ organizations().length }})</span>
+              <button type="button" (click)="isCreateOrgOpen.set(true)" title="Tạo tổ chức" aria-label="Tạo tổ chức"
+                      class="w-6 h-6 rounded hover:bg-primary/20 hover:text-primary text-slate-500 flex items-center justify-center transition-colors cursor-pointer">
+                <span class="material-symbols-outlined text-[18px]" aria-hidden="true">add</span>
+              </button>
+            } @else {
+              <span class="w-full flex justify-center text-slate-400" title="Tổ chức">
+                <span class="material-symbols-outlined text-[18px]" aria-hidden="true">corporate_fare</span>
+              </span>
             }
           </div>
-        } @else {
-          <!-- Onboarding hint when no active project exists -->
-          @if (isSidebarExpanded()) {
-            <div class="mx-1 my-3 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-dashed border-slate-200 dark:border-slate-700 text-center flex flex-col items-center gap-2">
-              <span class="material-symbols-outlined text-[22px] text-slate-400">folder_off</span>
-              <span class="text-xs font-bold text-slate-700 dark:text-slate-200">Chưa chọn dự án</span>
-              <p class="text-[11px] text-slate-500 leading-tight">Chọn hoặc tạo dự án để mở không gian Scrum &amp; Backlog.</p>
-              <a
-                routerLink="/projects/new"
-                class="w-full mt-1 py-1.5 px-2 rounded-lg bg-primary hover:bg-primary-container text-white font-bold text-xs transition-colors flex items-center justify-center gap-1 cursor-pointer"
-              >
-                <span class="material-symbols-outlined text-[16px]">add</span>
-                <span>Tạo dự án mới</span>
-              </a>
-            </div>
-          }
-        }
-
-        <!-- Collapsible Accordion Header for Spaces / Dự án -->
-        <div class="flex items-center justify-between px-3 pt-3 pb-1 border-t border-slate-200/60 dark:border-slate-800 mt-2">
-          @if (isSidebarExpanded()) {
-            <button
-              (click)="toggleSpacesSection()"
-              title="Thu/Mở danh sách Dự án"
-              class="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
-            >
-              <span class="material-symbols-outlined text-[16px]">
-                {{ isSpacesSectionExpanded() ? 'expand_more' : 'chevron_right' }}
-              </span>
-              <span>Không gian làm việc ({{ projectsList().length }})</span>
-            </button>
-          } @else {
-            <button
-              (click)="toggleSpacesSection()"
-              title="Thu/Mở danh sách Dự án"
-              class="w-full flex justify-center text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
-            >
-              <span class="material-symbols-outlined text-[18px]">folder</span>
-            </button>
-          }
-          @if (isSidebarExpanded()) {
-            <button
-              (click)="openCreateProjectModal()"
-              title="Tạo dự án mới"
-              class="w-6 h-6 rounded hover:bg-primary/20 hover:text-primary text-slate-500 flex items-center justify-center transition-colors cursor-pointer"
-            >
-              <span class="material-symbols-outlined text-[18px]">add</span>
-            </button>
-          }
-        </div>
-
-        <!-- Active Project Spaces List (Single Line Layout + Font size 14px) -->
-        @if (isSpacesSectionExpanded()) {
-          @for (proj of projectsList(); track proj.id) {
-            <button
-              (click)="selectProjectSpace(proj)"
-              [class.bg-primary/10]="activeProject().id === proj.id"
-              [class.text-primary]="activeProject().id === proj.id"
-              [title]="proj.name + ' (' + proj.projectKey + ')'"
-              class="w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all text-left whitespace-nowrap overflow-hidden cursor-pointer group"
-            >
-              <div class="flex items-center gap-2.5 min-w-0 flex-1">
-                <span class="w-6 h-6 rounded-md bg-primary text-white flex items-center justify-center font-mono font-bold text-xs shrink-0 shadow-2xs">
-                  {{ proj.projectKey.slice(0, 2) }}
-                </span>
-                @if (isSidebarExpanded()) {
-                  <span class="truncate text-xs font-semibold text-slate-800 dark:text-slate-200 group-hover:text-primary transition-colors">
-                    {{ proj.name }}
-                  </span>
-                }
-              </div>
-              @if (isSidebarExpanded() && activeProject().id === proj.id) {
-                <span class="w-2 h-2 rounded-full bg-primary shrink-0"></span>
-              }
-            </button>
-          }
-          @if (projectsList().length === 0 && isSidebarExpanded()) {
-            <div class="px-3 py-2 text-xs text-slate-400 text-center italic">
-              Chưa có dự án nào
+          <ul [attr.aria-labelledby]="isSidebarExpanded() ? 'sidebar-orgs-heading' : null" [attr.aria-label]="isSidebarExpanded() ? null : 'Tổ chức'" class="flex flex-col gap-0.5">
+            @for (org of organizations(); track org.id) {
+              <li>
+                <a [routerLink]="['/orgs', org.id, 'overview']" [title]="org.name"
+                   class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-100 hover:text-primary dark:hover:bg-slate-800 whitespace-nowrap">
+                  <span class="w-6 h-6 rounded-md bg-primary-container text-white flex items-center justify-center font-bold text-xs shrink-0" aria-hidden="true">{{ org.name.charAt(0).toUpperCase() }}</span>
+                  @if (isSidebarExpanded()) {
+                    <span class="truncate flex-1">{{ org.name }}</span>
+                    <span class="text-[11px] font-medium text-slate-400 tabular-nums">{{ org.projectCount }} dự án</span>
+                  } @else {
+                    <span class="sr-only">{{ org.name }}</span>
+                  }
+                </a>
+              </li>
+            }
+          </ul>
+          @if (organizations().length === 0 && isSidebarExpanded()) {
+            <div class="mx-1 my-2 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-dashed border-slate-200 dark:border-slate-700 text-center flex flex-col items-center gap-2">
+              <span class="material-symbols-outlined text-[22px] text-slate-400" aria-hidden="true">corporate_fare</span>
+              <span class="text-xs font-bold text-slate-700 dark:text-slate-200">Chưa có tổ chức</span>
+              <p class="text-[11px] text-slate-500 leading-tight text-pretty">Tạo tổ chức để mời nhóm và bắt đầu dự án, hoặc mở link mời bạn nhận được.</p>
+              <button type="button" (click)="isCreateOrgOpen.set(true)"
+                      class="w-full mt-1 py-1.5 px-2 rounded-lg bg-primary hover:bg-primary-container text-white font-bold text-xs transition-colors flex items-center justify-center gap-1 cursor-pointer">
+                <span class="material-symbols-outlined text-[16px]" aria-hidden="true">add</span>
+                <span>Tạo tổ chức</span>
+              </button>
             </div>
           }
         }
       </nav>
+
+      <!-- Gần đây: dùng chung cho cả 2 cấp; ở trong tổ chức chỉ hiện mục của tổ chức đó -->
+      <ng-template #recentNav>
+        <div class="relative">
+          <button type="button" (click)="toggleRecentFlyout()" [attr.aria-expanded]="isRecentFlyoutOpen()"
+                  [title]="sidebarOrg() ? 'Gần đây trong ' + sidebarOrg()!.name : 'Tổ chức, dự án và công việc bạn mở gần đây'"
+                  class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left whitespace-nowrap cursor-pointer">
+            <span class="flex items-center gap-3 min-w-0">
+              <span class="material-symbols-outlined text-[20px] shrink-0" aria-hidden="true">schedule</span>
+              @if (isSidebarExpanded()) { <span class="truncate">Gần đây</span> }
+            </span>
+            @if (isSidebarExpanded()) {
+              <span class="material-symbols-outlined text-[16px] text-slate-400 shrink-0" aria-hidden="true">chevron_right</span>
+            }
+          </button>
+          @if (isRecentFlyoutOpen()) {
+            <div class="fixed inset-0 z-40 bg-transparent" (click)="closeFlyouts()" aria-hidden="true"></div>
+            <div [class.left-60]="isSidebarExpanded()" [class.left-14]="!isSidebarExpanded()"
+                 class="fixed top-16 z-50 w-72 sm:w-80 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-4 flex flex-col gap-3 animate-fade-in transition-all">
+              <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                <span class="text-sm font-bold text-slate-900 dark:text-white truncate">{{ sidebarOrg() ? 'Gần đây · ' + sidebarOrg()!.name : 'Mở gần đây' }}</span>
+                <button type="button" (click)="closeFlyouts()" title="Đóng" aria-label="Đóng" class="text-slate-400 hover:text-slate-600">
+                  <span class="material-symbols-outlined text-[16px]" aria-hidden="true">close</span>
+                </button>
+              </div>
+              <div class="max-h-72 overflow-y-auto">
+                <app-recent-list [items]="recentItems()" [emptyText]="sidebarOrg() ? 'Dự án và công việc bạn mở trong tổ chức này sẽ hiện ở đây.' : 'Tổ chức, dự án và công việc bạn mở sẽ hiện ở đây.'" (selected)="openRecent($event)" />
+              </div>
+            </div>
+          }
+        </div>
+      </ng-template>
 
     </div>
 
@@ -496,6 +462,10 @@
   <app-create-task-modal
     (dismissed)="closeCreateTaskModal()"
   ></app-create-task-modal>
+}
+
+@if (isCreateOrgOpen()) {
+  <app-create-org-modal (created)="onOrgCreated($event)" (dismissed)="isCreateOrgOpen.set(false)" />
 }
 
 <!-- Reusable Global Create Project Modal -->

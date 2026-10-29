@@ -1,5 +1,5 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { Observable, tap } from 'rxjs';
+import { Observable, finalize, shareReplay, tap } from 'rxjs';
 import { IdentityService } from '../../core/services/identity.service';
 import { WorkspaceDataSource } from './data/workspace-data-source';
 import { OrganizationSummary, RecentKind } from './data/workspace.models';
@@ -20,8 +20,16 @@ export class WorkspaceContextService {
     return !!org && org.ownerId === this.currentUserId();
   });
 
+  private refreshing$: Observable<OrganizationSummary[]> | null = null;
+
+  /** App shell và trang chủ cùng gọi khi mở: dùng chung một lượt tải đang chạy. */
   refreshOrganizations(): Observable<OrganizationSummary[]> {
-    return this.data.listOrganizations().pipe(tap(orgs => this.organizations.set(orgs)));
+    this.refreshing$ ??= this.data.listOrganizations().pipe(
+      tap(orgs => this.organizations.set(orgs)),
+      finalize(() => (this.refreshing$ = null)),
+      shareReplay({ bufferSize: 1, refCount: false })
+    );
+    return this.refreshing$;
   }
 
   /** Mở tổ chức: đặt làm tổ chức hiện tại, nhớ cho lần sau và ghi vào "Gần đây". */

@@ -70,7 +70,7 @@ export class OrgPageComponent implements OnInit {
   readonly org = this.context.currentOrg;
   readonly tabs = computed(() => {
     const base = [
-      { path: 'overview', label: 'Tổng quan', icon: 'dashboard' },
+      { path: 'overview', label: 'Dành cho bạn', icon: 'account_circle' },
       { path: 'projects', label: 'Dự án', icon: 'folder' }
     ];
     return this.context.isOwner() ? [...base, { path: 'settings', label: 'Cài đặt', icon: 'settings' }] : base;
