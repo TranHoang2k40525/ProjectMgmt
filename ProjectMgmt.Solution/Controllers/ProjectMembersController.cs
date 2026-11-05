@@ -10,7 +10,6 @@ namespace ProjectMgmt.Solution.Controllers;
 
 [ApiController]
 [Authorize]
-[Route("api/v1/projects/{projectId:guid}/members")]
 [Route("api/projects/{projectId:guid}/members")]
 public class ProjectMembersController : ControllerBase
 {

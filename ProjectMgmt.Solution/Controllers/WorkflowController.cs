@@ -35,7 +35,6 @@ public sealed class CreateTransitionInput
 }
 
 [Route("api")]
-[Route("api/v1")]
 [TypeFilter(typeof(ProjectAuthorizationFilter))]
 public class WorkflowController(
     IProjectManagementService service,

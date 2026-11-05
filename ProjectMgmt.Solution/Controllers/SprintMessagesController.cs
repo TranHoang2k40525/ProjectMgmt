@@ -17,7 +17,6 @@ namespace ProjectMgmt.Solution.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/sprints/{sprintId:guid}/messages")]
-[Route("api/v1/sprints/{sprintId:guid}/messages")]
 public sealed class SprintMessagesController(
     PlanningDbContext planning,
     IIssueReadService issueReader,

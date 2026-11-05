@@ -69,6 +69,7 @@ export const routes: Routes = [
       { path: 'projects/:id/workflow', loadComponent: () => import('./features/projects/workflow-settings-page').then(m => m.WorkflowSettingsPage) },
       { path: 'projects/:id/settings/board', loadComponent: () => import('./features/projects/board-settings-page').then(m => m.BoardSettingsPage) },
       { path: 'projects/:id/boards', loadComponent: () => import('./features/projects/board-settings-page').then(m => m.BoardSettingsPage) },
+      { path: 'projects/:id/board-settings', redirectTo: 'projects/:id/settings/board' },
       { path: 'backlog', loadComponent: () => import('./features/backlog/backlog-page').then(m => m.BacklogPage) },
       { path: 'board', loadComponent: () => import('./features/board/board-page').then(m => m.BoardPage) },
       { path: 'task-list', loadComponent: () => import('./features/task-list/task-list-page').then(m => m.TaskListPageComponent) },

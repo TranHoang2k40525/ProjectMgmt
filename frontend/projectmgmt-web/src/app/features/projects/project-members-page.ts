@@ -10,6 +10,7 @@ import { ConfirmDialogService } from '../../core/services/confirm-dialog.service
 import { IdentityService } from '../../core/services/identity.service';
 import { NoProjectStateComponent } from '../../shared/components/no-project-state/no-project-state.component';
 import { AvatarModalComponent } from '../../shared/components/avatar-modal/avatar-modal.component';
+import { resolveAvatarUrl } from '../../core/utils/avatar.utils';
 
 interface ProjectRoleOption {
   id: string;
@@ -28,13 +29,38 @@ interface ProjectRoleOption {
     } @else {
     <div class="project-members-page flex flex-col gap-5 max-w-7xl mx-auto px-4 sm:px-6 py-6">
       
+      <!-- Breadcrumb Navigation -->
+      <div class="breadcrumb flex items-center gap-1.5 text-xs text-slate-500">
+        <a routerLink="/projects" class="hover:text-primary hover:underline">Dự án</a>
+        <span class="material-symbols-outlined text-[14px]">chevron_right</span>
+        @if (currentProject(); as proj) {
+          <a routerLink="/project/summary" class="hover:text-primary hover:underline">{{ proj.name }} ({{ proj.projectKey }})</a>
+          <span class="material-symbols-outlined text-[14px]">chevron_right</span>
+          <a [routerLink]="['/projects', proj.id, 'settings']" class="hover:text-primary hover:underline">Cài đặt</a>
+          <span class="material-symbols-outlined text-[14px]">chevron_right</span>
+        }
+        <span class="font-medium text-slate-800 dark:text-slate-200">Thành viên &amp; Phân quyền</span>
+      </div>
+
       <!-- Settings Tabs Navigation -->
       @if (currentProject(); as proj) {
         <div class="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
-          <a [routerLink]="['/projects', proj.id, 'settings']" routerLinkActive="text-primary font-bold border-b-2 border-primary" [routerLinkActiveOptions]="{ exact: true }" class="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-primary transition-all">Thông tin chung</a>
-          <a [routerLink]="['/projects', proj.id, 'workflow']" routerLinkActive="text-primary font-bold border-b-2 border-primary" class="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-primary transition-all">Cấu hình Workflow</a>
-          <a [routerLink]="['/projects', proj.id, 'board-settings']" routerLinkActive="text-primary font-bold border-b-2 border-primary" class="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-primary transition-all">Cấu hình Board</a>
-          <a [routerLink]="['/projects', proj.id, 'members']" routerLinkActive="text-primary font-bold border-b-2 border-primary" class="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-primary transition-all">Thành viên &amp; Phân quyền</a>
+          <a [routerLink]="['/projects', proj.id, 'settings']" routerLinkActive="text-primary font-bold border-b-2 border-primary" [routerLinkActiveOptions]="{ exact: true }" class="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-primary transition-all flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-[18px]">tune</span>
+            <span>Thông tin chung</span>
+          </a>
+          <a [routerLink]="['/projects', proj.id, 'settings', 'workflow']" routerLinkActive="text-primary font-bold border-b-2 border-primary" class="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-primary transition-all flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-[18px]">sync_alt</span>
+            <span>Cấu hình Workflow</span>
+          </a>
+          <a [routerLink]="['/projects', proj.id, 'settings', 'board']" routerLinkActive="text-primary font-bold border-b-2 border-primary" class="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-primary transition-all flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-[18px]">view_kanban</span>
+            <span>Cấu hình Board</span>
+          </a>
+          <a [routerLink]="['/projects', proj.id, 'members']" routerLinkActive="text-primary font-bold border-b-2 border-primary" class="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-primary transition-all flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-[18px]">badge</span>
+            <span>Thành viên &amp; Phân quyền</span>
+          </a>
         </div>
       }
 
@@ -159,7 +185,7 @@ interface ProjectRoleOption {
                     [title]="isCurrentUser(member) ? 'Xem hoặc đổi ảnh đại diện của bạn' : 'Xem ảnh đại diện'"
                   >
                     @if (member.avatarUrl) {
-                      <img [src]="member.avatarUrl" [alt]="member.displayName" class="w-10 h-10 rounded-full object-cover border border-slate-200 dark:border-slate-700 shadow-xs" />
+                      <img [src]="getAvatarUrl(member.avatarUrl)" [alt]="member.displayName" class="w-10 h-10 rounded-full object-cover border border-slate-200 dark:border-slate-700 shadow-xs" />
                     } @else {
                       <div class="w-10 h-10 rounded-full bg-emerald-800 text-white flex items-center justify-center font-bold text-sm shadow-xs">
                         {{ getInitials(member.displayName) }}
@@ -438,7 +464,7 @@ interface ProjectRoleOption {
       <!-- Avatar Preview & Change Modal -->
       <app-avatar-modal
         [isOpen]="isAvatarModalOpen()"
-        [avatarUrl]="avatarModalData().avatarUrl"
+        [avatarUrl]="avatarModalData().avatarUrl ?? null"
         [displayName]="avatarModalData().displayName"
         [isCurrentUser]="avatarModalData().isCurrentUser"
         (closed)="isAvatarModalOpen.set(false)"
@@ -512,6 +538,10 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
     }
     return false;
   });
+
+  getAvatarUrl(raw?: string | null): string | null {
+    return resolveAvatarUrl(raw);
+  }
 
   isLead(member: ProjectMember): boolean {
     const proj = this.currentProject();

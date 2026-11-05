@@ -7,6 +7,7 @@ import { ProjectManagementService, WorkItem } from '../../../core/services/proje
 import { IdentityService } from '../../../core/services/identity.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { ConfirmDialogService } from '../../../core/services/confirm-dialog.service';
+import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
 
 @Component({
   selector: 'app-task-detail-drawer',
@@ -33,39 +34,39 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
           </div>
           
           <!-- Drawer Top Navigation Header -->
-          <div class="task-drawer-header flex items-center justify-between px-6 py-4 border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40">
-            <div class="flex items-center gap-3">
-              <span class="px-3 py-1 rounded-md text-sm font-mono font-bold bg-primary/10 text-primary border border-primary/20">
+          <div class="task-drawer-header flex items-center justify-between px-6 py-3.5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+            <div class="flex items-center gap-2.5">
+              <span class="px-2.5 py-0.5 rounded text-xs font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                 {{ task.issueKey }}
               </span>
-              <span class="text-sm text-slate-500 font-medium">{{ task.sprintName ? ('Sprint: ' + task.sprintName) : (projectService.currentProject().name || 'Dự án') }}</span>
+              <span class="text-xs text-slate-500 font-medium">{{ task.sprintName ? ('Sprint: ' + task.sprintName) : (projectService.currentProject().name || 'Dự án') }}</span>
             </div>
 
-            <div class="flex items-center gap-2">
-              <button (click)="cloneTask()" class="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 transition-colors" title="Nhân bản công việc">
-                <span class="material-symbols-outlined text-[20px]">content_copy</span>
+            <div class="flex items-center gap-1">
+              <button (click)="cloneTask()" class="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-700 transition-colors" title="Nhân bản">
+                <span class="material-symbols-outlined text-[18px]">content_copy</span>
               </button>
-              <button (click)="deleteTask()" class="p-1.5 rounded-lg hover:bg-red-50 text-red-500 transition-colors" title="Xóa công việc">
-                <span class="material-symbols-outlined text-[20px]">delete</span>
+              <button (click)="deleteTask()" class="p-1 rounded hover:bg-rose-50 text-slate-500 hover:text-rose-600 transition-colors" title="Xóa">
+                <span class="material-symbols-outlined text-[18px]">delete</span>
               </button>
-              <div class="h-4 w-px bg-slate-200 dark:bg-slate-800"></div>
-              <button (click)="dismissed.emit()" class="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 transition-colors">
-                <span class="material-symbols-outlined text-[20px]">close</span>
+              <div class="h-3.5 w-px bg-slate-200 dark:bg-slate-800 mx-1"></div>
+              <button (click)="dismissed.emit()" class="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-700 transition-colors">
+                <span class="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
           </div>
 
           <!-- Drawer Main Content Body -->
-          <div class="task-drawer-body flex-1 overflow-y-auto p-6 flex flex-col gap-6">
+          <div class="task-drawer-body flex-1 overflow-y-auto p-6 flex flex-col gap-5 bg-white dark:bg-slate-900">
             
-            <!-- Issue Title & Type -->
+            <!-- Issue Title & Type Bar -->
             <div class="flex flex-col gap-2">
               <div class="flex items-center gap-2 flex-wrap">
                 <!-- Issue Type Selector -->
                 <select
                   [(ngModel)]="task.issueType"
                   (ngModelChange)="onFieldChange()"
-                  class="px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wider bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 focus:outline-none cursor-pointer"
+                  class="h-7 px-2.5 rounded text-xs font-semibold bg-white text-slate-700 dark:bg-slate-900 dark:text-slate-200 border border-slate-200 dark:border-slate-700 focus:outline-none focus:border-slate-900 cursor-pointer transition-colors"
                 >
                   @for (t of availableIssueTypes(); track t) {
                     <option [value]="t">{{ t }}</option>
@@ -76,70 +77,71 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
                 <select
                   [(ngModel)]="task.epicName"
                   (ngModelChange)="onFieldChange()"
-                  class="px-2.5 py-1 rounded text-xs font-bold uppercase bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 focus:outline-none cursor-pointer"
+                  class="h-7 px-2.5 rounded text-xs font-medium bg-white text-slate-600 dark:bg-slate-900 dark:text-slate-300 border border-slate-200 dark:border-slate-700 focus:outline-none focus:border-slate-900 cursor-pointer transition-colors"
                 >
-                  <option value="">+ Gán nhãn Epic</option>
+                  <option value="">Gán Epic</option>
                   @for (epic of epics(); track epic.id) {
                     <option [value]="epic.name">{{ epic.name }}</option>
                   }
                 </select>
 
-                <span class="text-xs text-slate-400">Tạo ngày {{ task.createdAt }}</span>
+                <span class="text-xs text-slate-400 ml-auto font-mono">{{ task.createdAt | date:'dd/MM/yyyy HH:mm' }}</span>
               </div>
 
               <input
                 type="text"
                 [(ngModel)]="task.title"
                 (ngModelChange)="onFieldChange()"
-                class="text-xl font-bold text-slate-900 dark:text-white bg-transparent border-b border-transparent hover:border-slate-300 focus:border-primary focus:outline-none py-1 transition-all"
+                placeholder="Tên công việc"
+                class="text-lg font-semibold text-slate-900 dark:text-white bg-transparent border-b border-transparent hover:border-slate-200 focus:border-slate-900 focus:outline-none py-1 transition-all"
               />
             </div>
 
-            <!-- Blocker Alert & Action -->
+            <!-- Blocker Status Bar -->
             @if (task.isBlocked) {
-              <div class="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/60 border border-red-300 dark:border-red-800 text-red-800 dark:text-red-200 flex items-center justify-between gap-3 animate-fade-in">
-                <div class="flex items-center gap-2.5 min-w-0">
-                  <span class="material-symbols-outlined text-red-600 dark:text-red-400 text-[22px] shrink-0">block</span>
+              <div class="p-2.5 rounded bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 flex items-center justify-between gap-3">
+                <div class="flex items-center gap-2 min-w-0">
+                  <span class="material-symbols-outlined text-rose-600 dark:text-rose-400 text-[18px] shrink-0">block</span>
                   <div class="flex flex-col min-w-0">
-                    <span class="text-xs font-bold uppercase tracking-wider text-red-600 dark:text-red-400">Đang bị cản trở (Blocker)</span>
-                    <span class="text-sm font-semibold truncate">{{ task.blockReason || 'Không có lý do chi tiết' }}</span>
+                    <span class="text-xs font-bold text-rose-700 dark:text-rose-300">Cản trở</span>
+                    <span class="text-xs font-medium truncate">{{ task.blockReason || 'Không có lý do chi tiết' }}</span>
                   </div>
                 </div>
                 <button
                   type="button"
                   (click)="unblockTask()"
-                  class="h-8 px-3 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-xs shrink-0 flex items-center gap-1 cursor-pointer transition-colors shadow-xs"
+                  class="h-6 px-2 rounded bg-rose-600 hover:bg-rose-700 text-white font-medium text-xs shrink-0 flex items-center gap-1 cursor-pointer transition-colors"
                 >
-                  <span class="material-symbols-outlined text-[16px]">check_circle</span>
+                  <span class="material-symbols-outlined text-[13px]">check</span>
                   <span>Gỡ cản trở</span>
                 </button>
               </div>
             } @else {
-              <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-dashed border-slate-200 dark:border-slate-800">
+              <div class="flex items-center justify-between py-1">
                 <span class="text-xs text-slate-500 flex items-center gap-1.5">
-                  <span class="material-symbols-outlined text-[16px] text-emerald-500">check_circle</span>
-                  <span>Công việc thông suốt</span>
+                  <span class="material-symbols-outlined text-[15px] text-emerald-600">check_circle</span>
+                  <span>Thông suốt</span>
                 </span>
                 <button
                   type="button"
                   (click)="openBlockTaskModal()"
-                  class="h-7 px-2.5 rounded-md text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 border border-red-200 dark:border-red-900/60 flex items-center gap-1 cursor-pointer transition-colors"
+                  class="h-6 px-2 rounded text-xs font-medium text-slate-600 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 flex items-center gap-1 cursor-pointer transition-colors"
                 >
-                  <span class="material-symbols-outlined text-[14px]">block</span>
+                  <span class="material-symbols-outlined text-[13px]">block</span>
                   <span>Báo cản trở</span>
                 </button>
               </div>
             }
 
-            <!-- Metadata Quick Control Grid (Min 14px font text-sm) -->
-            <div class="task-meta-grid grid grid-cols-2 sm:grid-cols-3 gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/60">
+            <!-- Metadata Properties Grid -->
+            <div class="task-meta-grid grid grid-cols-2 sm:grid-cols-3 gap-3 p-3.5 rounded bg-slate-50/70 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
               <!-- Status Dropdown -->
-              <div class="flex flex-col gap-1.5">
-                <span class="text-sm font-bold uppercase tracking-wider text-slate-400">Trạng thái</span>
+              <div class="flex flex-col gap-1">
+                <span class="text-xs font-medium text-slate-500">Trạng thái</span>
                 <select
                   [(ngModel)]="task.statusName"
                   (ngModelChange)="onFieldChange()"
-                  class="h-9 px-3 rounded-lg text-sm font-semibold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary"
+                  class="h-7 px-2 rounded text-xs font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-slate-900"
                 >
                   @for (st of availableStatusNames(); track st) {
                     <option [value]="st">{{ st }}</option>
@@ -148,12 +150,12 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
               </div>
 
               <!-- Priority -->
-              <div class="flex flex-col gap-1.5">
-                <span class="text-sm font-bold uppercase tracking-wider text-slate-400">Độ ưu tiên</span>
+              <div class="flex flex-col gap-1">
+                <span class="text-xs font-medium text-slate-500">Độ ưu tiên</span>
                 <select
                   [(ngModel)]="task.priority"
                   (ngModelChange)="onFieldChange()"
-                  class="h-9 px-3 rounded-lg text-sm font-semibold border border-amber-200 dark:border-amber-900 bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-300 focus:outline-none"
+                  class="h-7 px-2 rounded text-xs font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-slate-900"
                 >
                   <option value="Low">Low</option>
                   <option value="Medium">Medium</option>
@@ -163,298 +165,205 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
               </div>
 
               <!-- Assignee -->
-              <div class="flex flex-col gap-1.5">
-                <span class="text-sm font-bold uppercase tracking-wider text-slate-400">Người xử lý</span>
-                <select
-                  [(ngModel)]="task.assigneeName"
-                  (ngModelChange)="onFieldChange()"
-                  class="h-9 px-3 rounded-lg text-sm font-semibold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none"
-                >
-                  <option [value]="undefined">Chưa chỉ định</option>
-                  @for (m of projectMembers(); track m.id) {
-                    <option [value]="m.displayName">{{ m.displayName }}</option>
+              <div class="flex flex-col gap-1">
+                <span class="text-xs font-medium text-slate-500">Người thực hiện</span>
+                <div class="flex items-center gap-1.5">
+                  @if (getAssigneeAvatar(task.assigneeName); as av) {
+                    <img [src]="av" [alt]="task.assigneeName || 'Avatar'" class="w-6 h-6 rounded-full object-cover shrink-0 border border-slate-200 dark:border-slate-700" />
+                  } @else if (task.assigneeName) {
+                    <span class="w-6 h-6 rounded-full bg-slate-800 text-white font-bold text-[10px] flex items-center justify-center shrink-0">
+                      {{ getInitials(task.assigneeName) }}
+                    </span>
                   }
-                </select>
+                  <select
+                    [(ngModel)]="task.assigneeName"
+                    (ngModelChange)="onFieldChange()"
+                    class="h-7 px-2 rounded text-xs font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-slate-900 flex-1 min-w-0"
+                  >
+                    <option [value]="undefined">Chưa chỉ định</option>
+                    @for (m of projectMembers(); track m.id) {
+                      <option [value]="m.displayName">{{ m.displayName }}</option>
+                    }
+                  </select>
+                </div>
               </div>
 
               <!-- Story Points -->
-              <div class="flex flex-col gap-1.5">
-                <span class="text-sm font-bold uppercase tracking-wider text-slate-400">Story Points</span>
+              <div class="flex flex-col gap-1">
+                <span class="text-xs font-medium text-slate-500">Story Points</span>
                 <input
                   type="number"
                   min="1"
                   max="21"
                   [(ngModel)]="task.storyPoints"
                   (ngModelChange)="onFieldChange()"
-                  class="h-9 w-full px-3 rounded-lg text-sm font-mono font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none"
+                  class="h-7 w-full px-2 rounded text-xs font-mono font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-slate-900"
                 />
               </div>
 
               <!-- Estimated Hours -->
-              <div class="flex flex-col gap-1.5">
-                <span class="text-sm font-bold uppercase tracking-wider text-slate-400">Giờ ước tính</span>
+              <div class="flex flex-col gap-1">
+                <span class="text-xs font-medium text-slate-500">Giờ ước tính (h)</span>
                 <input
                   type="number"
                   min="0"
                   step="0.5"
                   [(ngModel)]="task.estimatedHours"
                   (ngModelChange)="onFieldChange()"
-                  placeholder="0.0h"
-                  class="h-9 w-full px-3 rounded-lg text-sm font-mono font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none"
+                  placeholder="0.0"
+                  class="h-7 w-full px-2 rounded text-xs font-mono font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-slate-900"
                 />
               </div>
 
               <!-- Remaining Hours -->
-              <div class="flex flex-col gap-1.5">
-                <span class="text-sm font-bold uppercase tracking-wider text-slate-400">Giờ còn lại</span>
+              <div class="flex flex-col gap-1">
+                <span class="text-xs font-medium text-slate-500">Giờ còn lại (h)</span>
                 <input
                   type="number"
                   min="0"
                   step="0.5"
                   [(ngModel)]="task.remainingHours"
                   (ngModelChange)="onFieldChange()"
-                  placeholder="0.0h"
-                  class="h-9 w-full px-3 rounded-lg text-sm font-mono font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none"
+                  placeholder="0.0"
+                  class="h-7 w-full px-2 rounded text-xs font-mono font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-slate-900"
                 />
               </div>
             </div>
 
-            <!-- AI Assistant Tools (AI 1 Breakdown & AI 2 Smart Assignment) -->
-            <div class="p-4 rounded-xl bg-gradient-to-r from-purple-900/10 via-indigo-900/10 to-blue-900/10 border border-purple-500/20 dark:border-purple-500/30 flex flex-col gap-3">
-              <div class="flex items-center justify-between">
-                <span class="text-sm font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300 flex items-center gap-2">
-                  <span class="material-symbols-outlined text-purple-500">auto_awesome</span>
-                  Trợ lý AI Scrum (AI 1 & AI 2)
-                </span>
-                <div class="flex items-center gap-2">
-                  <button 
-                    (click)="toggleAiBreakdownPanel()" 
-                    class="px-2.5 py-1 rounded-lg bg-purple-600 text-white text-xs font-bold shadow-sm hover:bg-purple-700 transition-all flex items-center gap-1"
-                  >
-                    <span class="material-symbols-outlined text-[16px]">account_tree</span>
-                    <span>AI 1 Phân rã Sub-task</span>
-                  </button>
-                  <button 
-                    (click)="toggleAiAssignmentPanel()" 
-                    class="px-2.5 py-1 rounded-lg bg-blue-600 text-white text-xs font-bold shadow-sm hover:bg-blue-700 transition-all flex items-center gap-1"
-                  >
-                    <span class="material-symbols-outlined text-[16px]">psychology</span>
-                    <span>AI 2 Đề xuất phân công</span>
-                  </button>
-                </div>
-              </div>
-
-              <!-- AI 1 Sub-task Breakdown Panel -->
-              @if (showAiBreakdownPanel()) {
-                <div class="p-3.5 rounded-lg bg-white/90 dark:bg-slate-900/90 border border-purple-200 dark:border-purple-800/60 space-y-3 animate-fade-in text-xs">
-                  <div class="flex items-center justify-between border-b border-purple-100 dark:border-purple-900/50 pb-2">
-                    <div>
-                      <strong class="text-slate-900 dark:text-purple-200 text-sm">AI 1: Đề xuất Phân rã Sub-task & AC</strong>
-                      <p class="text-slate-500 text-[11px]">Model: qwen2.5-coder-7b · Schema v1.2 · Human-in-the-loop</p>
-                    </div>
-                    <span class="px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 font-mono text-[10px] font-bold">Draft Preview</span>
-                  </div>
-
-                  <div class="space-y-1.5">
-                    <span class="font-bold text-slate-700 dark:text-slate-300">Gợi ý Sub-tasks:</span>
-                    @for (sub of aiSubtaskSuggestions(); track sub.title; let idx = $index) {
-                      <div class="flex items-center gap-2 p-2 rounded bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                        <input type="checkbox" [(ngModel)]="sub.selected" class="rounded text-purple-600 focus:ring-purple-500" />
-                        <span class="font-mono font-bold text-purple-600">ST-{{ idx + 1 }}</span>
-                        <input type="text" [(ngModel)]="sub.title" class="flex-1 bg-transparent text-slate-800 dark:text-slate-200 font-medium focus:outline-none" />
-                        <span class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-[10px] font-mono">{{ sub.points }} SP</span>
-                      </div>
-                    } @empty {
-                      <p class="text-slate-500 py-3 text-center text-xs">Chưa có đề xuất phân rã Sub-task từ AI Model.</p>
-                    }
-                  </div>
-
-                  @if (aiAcceptanceCriteria().length > 0) {
-                    <div class="space-y-1 pt-1">
-                      <span class="font-bold text-slate-700 dark:text-slate-300">Acceptance Criteria (AC):</span>
-                      <ul class="list-disc list-inside space-y-1 text-slate-600 dark:text-slate-300 pl-1">
-                        @for (ac of aiAcceptanceCriteria(); track ac) {
-                          <li>{{ ac }}</li>
-                        }
-                      </ul>
-                    </div>
-                  }
-
-                  <div class="flex justify-end gap-2 pt-2 border-t border-purple-100 dark:border-purple-900/50">
-                    <button (click)="showAiBreakdownPanel.set(false)" class="px-3 py-1.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium">Hủy</button>
-                    @if (aiSubtaskSuggestions().length > 0) {
-                      <button (click)="applyAiBreakdown()" class="px-3 py-1.5 rounded bg-purple-600 text-white font-bold hover:bg-purple-700 shadow-sm flex items-center gap-1">
-                        <span class="material-symbols-outlined text-[16px]">check</span>
-                        <span>Áp dụng vào Issue (Idempotent)</span>
-                      </button>
-                    }
-                  </div>
-                </div>
-              }
-
-              <!-- AI 2 Assignment Score Breakdown Panel -->
-              @if (showAiAssignmentPanel()) {
-                <div class="p-3.5 rounded-lg bg-white/90 dark:bg-slate-900/90 border border-blue-200 dark:border-blue-800/60 space-y-3 animate-fade-in text-xs">
-                  <div class="flex items-center justify-between border-b border-blue-100 dark:border-blue-900/50 pb-2">
-                    <div>
-                      <strong class="text-slate-900 dark:text-blue-200 text-sm">AI 2: Xếp hạng Ứng viên Phù hợp (Multi-criteria Ranker)</strong>
-                      <p class="text-slate-500 text-[11px]">Công thức: 40% Tải + 30% Kỹ năng + 20% Lịch sử + 10% Capacity</p>
-                    </div>
-                  </div>
-
-                  <div class="space-y-2.5">
-                    @for (c of candidateScores(); track c.name) {
-                      <div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5">
-                        <div class="flex items-center justify-between">
-                          <span class="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                            <span class="w-2 h-2 rounded-full bg-blue-500"></span>
-                            {{ c.name }}
-                          </span>
-                          <span class="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 font-mono font-bold text-xs">{{ c.totalScore }}% Match</span>
-                        </div>
-
-                        <!-- Score breakdown sub-bars -->
-                        <div class="grid grid-cols-4 gap-1 text-[10px] text-slate-500 font-mono pt-1">
-                          <div>Tải (40%): <strong class="text-slate-700 dark:text-slate-300">{{ c.workloadScore }}%</strong></div>
-                          <div>Kỹ năng (30%): <strong class="text-slate-700 dark:text-slate-300">{{ c.skillScore }}%</strong></div>
-                          <div>Lịch sử (20%): <strong class="text-slate-700 dark:text-slate-300">{{ c.historyScore }}%</strong></div>
-                          <div>Capacity (10%): <strong class="text-slate-700 dark:text-slate-300">{{ c.capacityScore }}%</strong></div>
-                        </div>
-
-                        <p class="text-[11px] text-slate-600 dark:text-slate-400 italic">Lý do: {{ c.reason }}</p>
-
-                        <div class="flex justify-end pt-1">
-                          <button (click)="selectCandidate(c.name)" class="px-2.5 py-1 rounded bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors">
-                            Chọn {{ c.name }}
-                          </button>
-                        </div>
-                      </div>
-                    } @empty {
-                      <p class="text-slate-500 py-4 text-center text-xs">Chưa có dữ liệu xếp hạng ứng viên từ AI Model.</p>
-                    }
-                  </div>
-                </div>
-              }
-            </div>
-
             <!-- Task Description -->
-            <div class="flex flex-col gap-2">
-              <span class="text-sm font-bold uppercase tracking-wider text-slate-500">Mô tả công việc</span>
+            <div class="flex flex-col gap-1.5">
+              <span class="text-xs font-medium text-slate-500">Mô tả chi tiết</span>
               <textarea
                 rows="4"
                 [(ngModel)]="task.description"
                 (ngModelChange)="onFieldChange()"
-                placeholder="Nhập chi tiết mô tả công việc..."
-                class="w-full p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary transition-all leading-relaxed"
+                placeholder="Mô tả công việc..."
+                class="w-full p-2.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-slate-900 transition-all leading-relaxed"
               ></textarea>
             </div>
 
-            <!-- Sub-tasks Section inside Drawer -->
-            <div class="flex flex-col gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+            <!-- Sub-tasks Section -->
+            <div class="flex flex-col gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
               <div class="flex items-center justify-between">
-                <span class="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                  <span class="material-symbols-outlined text-[20px] text-amber-500">account_tree</span>
-                  Danh sách Sub-tasks ({{ drawerSubtasks.length }})
+                <span class="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[15px] text-slate-500">subdirectory_arrow_right</span>
+                  <span>Công việc con ({{ drawerSubtasks.length }})</span>
                 </span>
-                <button (click)="isSubtaskComposerOpen.set(!isSubtaskComposerOpen())" class="text-sm font-bold text-primary hover:underline flex items-center gap-1">
-                  <span class="material-symbols-outlined text-[16px]">add</span>
-                  <span>Thêm Sub-task</span>
+                <button (click)="isSubtaskComposerOpen.set(!isSubtaskComposerOpen())" class="text-xs font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[13px]">add</span>
+                  <span>Thêm việc con</span>
                 </button>
               </div>
 
               @if (isSubtaskComposerOpen()) {
-                <div class="flex flex-col sm:flex-row gap-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
+                <div class="flex flex-col sm:flex-row gap-2 p-2 rounded bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
                   <input
                     type="text"
                     [ngModel]="newSubtaskTitle()"
                     (ngModelChange)="newSubtaskTitle.set($event)"
                     (keyup.enter)="addSubtaskFromDrawer()"
-                    placeholder="Nhập tên Sub-task mới"
-                    class="flex-1 h-9 px-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-sm focus:outline-none focus:border-primary"
+                    placeholder="Tên việc con..."
+                    class="flex-1 h-7 px-2.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs focus:outline-none focus:border-slate-900"
                   />
-                  <button (click)="addSubtaskFromDrawer()" class="h-9 px-3 rounded-lg bg-primary text-white text-sm font-semibold">Thêm</button>
-                  <button (click)="cancelSubtaskComposer()" class="h-9 px-3 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-semibold">Hủy</button>
+                  <div class="flex gap-1">
+                    <button (click)="addSubtaskFromDrawer()" class="h-7 px-2.5 rounded bg-slate-900 text-white text-xs font-medium hover:bg-slate-800">Thêm</button>
+                    <button (click)="cancelSubtaskComposer()" class="h-7 px-2 rounded bg-white border border-slate-200 text-slate-600 text-xs font-medium hover:bg-slate-50">Hủy</button>
+                  </div>
                 </div>
               }
 
-              <div class="space-y-2">
+              <div class="space-y-1">
                 @for (sub of drawerSubtasks; track sub.id) {
-                  <div class="drawer-subtask-row flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 text-sm">
-                    <div class="flex items-center gap-2">
-                      <span class="font-mono font-bold text-amber-600">{{ sub.issueKey }}</span>
-                      <span class="font-medium text-slate-800 dark:text-slate-200">{{ sub.title }}</span>
+                  <div class="drawer-subtask-row flex items-center justify-between p-2 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs">
+                    <div class="flex items-center gap-2 min-w-0">
+                      <span class="font-mono text-slate-500 text-[11px]">{{ sub.issueKey }}</span>
+                      <span class="font-medium text-slate-800 dark:text-slate-200 truncate">{{ sub.title }}</span>
                     </div>
-                    <div class="flex items-center gap-2">
-                      <span class="px-2 py-0.5 rounded text-xs font-bold bg-slate-200 dark:bg-slate-700">{{ sub.statusName }}</span>
-                      <span class="text-xs text-slate-500">{{ sub.assigneeName }}</span>
+                    <div class="flex items-center gap-2 shrink-0">
+                      <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700">{{ sub.statusName }}</span>
+                      <span class="text-xs text-slate-500">{{ sub.assigneeName || '—' }}</span>
                     </div>
                   </div>
                 }
 
                 @if (drawerSubtasks.length === 0) {
-                  <p class="text-xs text-slate-400 italic">Chưa có công việc con nào. Nhấn "+ Thêm Sub-task" để tạo mới.</p>
+                  <p class="text-xs text-slate-400 italic py-1">Chưa có công việc con.</p>
                 }
               </div>
             </div>
 
-            <!-- Discussion & Activities Section -->
-            <div class="flex flex-col gap-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+            <!-- Comments Section -->
+            <div class="flex flex-col gap-2.5 pt-3 border-t border-slate-200 dark:border-slate-800">
               <div class="flex items-center justify-between">
-                <span class="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                  <span class="material-symbols-outlined text-[20px]">forum</span>
-                  Trao đổi & Bình luận ({{ (task.comments?.length || 0) }})
+                <span class="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[15px] text-slate-500">chat_bubble_outline</span>
+                  <span>Bình luận ({{ (task.comments?.length || 0) }})</span>
                 </span>
+                <a [routerLink]="['/issues', task.id]" (click)="dismissed.emit()" class="text-xs text-slate-500 hover:text-slate-900 underline flex items-center gap-1">
+                  <span>Trang chi tiết</span>
+                  <span class="material-symbols-outlined text-[12px]">open_in_new</span>
+                </a>
               </div>
 
-              <a [routerLink]="['/issues', task.id]" (click)="dismissed.emit()" class="text-primary underline">Mở trang chi tiết · Tệp đính kèm · Tiêu chí nghiệm thu</a>
-              <!-- Comment Input Box -->
-              <div class="flex gap-3">
-                <div class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold shrink-0">
-                  {{ currentUserInitial() }}
-                </div>
-                <div class="flex-1 flex flex-col gap-2">
+              <!-- Comments List -->
+              <div class="flex flex-col gap-2 mt-1">
+                @for (comment of task.comments; track comment.id) {
+                  <div class="flex gap-2.5 p-2.5 rounded-md bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800">
+                    @if (getAuthorAvatar(comment.authorName); as av) {
+                      <img [src]="av" [alt]="comment.authorName" class="w-6 h-6 rounded-full object-cover shrink-0 border border-slate-200 dark:border-slate-700" />
+                    } @else {
+                      <div class="w-6 h-6 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center text-[10px] font-bold shrink-0">
+                        {{ comment.authorName[0] }}
+                      </div>
+                    }
+                    <div class="flex flex-col gap-0.5 text-xs min-w-0 flex-1">
+                      <div class="flex items-center gap-2">
+                        <span class="font-semibold text-slate-900 dark:text-slate-100">{{ comment.authorName }}</span>
+                        <span class="text-[10px] text-slate-400 font-mono">{{ comment.createdAt | date:'dd/MM/yyyy HH:mm' }}</span>
+                      </div>
+                      <p class="text-slate-700 dark:text-slate-300 leading-relaxed break-words">{{ comment.content }}</p>
+                    </div>
+                  </div>
+                } @empty {
+                  <p class="text-xs text-slate-400 py-1 italic">Chưa có bình luận nào.</p>
+                }
+              </div>
+
+              <!-- Comment Input Box (Placed at the bottom) -->
+              <div class="flex gap-2.5 pt-2.5 border-t border-slate-100 dark:border-slate-800">
+                @if (currentUserAvatar(); as av) {
+                  <img [src]="av" [alt]="'Tôi'" class="w-6 h-6 rounded-full object-cover shrink-0 border border-slate-200 dark:border-slate-700" />
+                } @else {
+                  <div class="w-6 h-6 rounded bg-slate-900 text-white flex items-center justify-center text-[10px] font-semibold shrink-0">
+                    {{ currentUserInitial() }}
+                  </div>
+                }
+                <div class="flex-1 flex flex-col gap-1.5">
                   <input
                     type="text"
                     [(ngModel)]="newCommentText"
                     (keyup.enter)="submitComment()"
-                    placeholder="Viết bình luận hoặc trao đổi... (Enter để gửi)"
-                    class="w-full h-10 px-4 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary"
+                    placeholder="Viết bình luận... (Enter để gửi)"
+                    class="w-full h-8 px-2.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
                   />
                   <div class="flex justify-end">
                     <button
                       (click)="submitComment()"
-                      class="px-4 py-1.5 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary-container transition-all cursor-pointer"
+                      [disabled]="!newCommentText.trim()"
+                      class="px-3 py-1 rounded-md bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white text-xs font-medium transition-all cursor-pointer"
                     >
-                      Gửi bình luận
+                      Gửi
                     </button>
                   </div>
                 </div>
-              </div>
-
-              <!-- Comments List -->
-              <div class="flex flex-col gap-3 mt-2">
-                @for (comment of task.comments; track comment.id) {
-                  <div class="flex gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/50 dark:border-slate-700/50">
-                    <div class="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-bold shrink-0">
-                      {{ comment.authorName[0] }}
-                    </div>
-                    <div class="flex flex-col gap-1 text-sm">
-                      <div class="flex items-center gap-2">
-                        <span class="font-bold text-slate-900 dark:text-white">{{ comment.authorName }}</span>
-                        <span class="text-xs text-slate-400">{{ comment.createdAt }}</span>
-                      </div>
-                      <p class="text-slate-700 dark:text-slate-300 leading-relaxed text-sm">{{ comment.content }}</p>
-                    </div>
-                  </div>
-                }
               </div>
             </div>
 
           </div>
 
           <!-- Drawer Footer Controls -->
-          <div class="task-drawer-footer px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex justify-end gap-3">
-            <button (click)="dismissed.emit()" class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer">
+          <div class="task-drawer-footer px-6 py-2.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex justify-end gap-2">
+            <button (click)="dismissed.emit()" class="px-3 py-1 rounded text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer border border-slate-200 dark:border-slate-700">
               Đóng
             </button>
           </div>
@@ -463,25 +372,24 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
 
         <!-- Modal Báo Cản Trở (Blocker Dialog) -->
         @if (isBlockModalOpen()) {
-          <div class="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
-            <div class="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-5 flex flex-col gap-4">
-              <div class="flex items-center gap-2 text-red-600 dark:text-red-400">
-                <span class="material-symbols-outlined text-[24px]">block</span>
-                <h3 class="text-base font-bold text-slate-900 dark:text-white">Báo cáo cản trở (Blocker)</h3>
+          <div class="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fade-in">
+            <div class="w-full max-w-md bg-white dark:bg-slate-900 rounded shadow-xl border border-slate-200 dark:border-slate-800 p-4 flex flex-col gap-3">
+              <div class="flex items-center gap-2 text-rose-600 dark:text-rose-400">
+                <span class="material-symbols-outlined text-[20px]">block</span>
+                <h3 class="text-sm font-semibold text-slate-900 dark:text-white">Báo cáo cản trở</h3>
               </div>
-              <p class="text-xs text-slate-500">Mô tả trở ngại ngăn cản công việc được tiếp tục thực hiện để Scrum Master & Đội ngũ hỗ trợ giải phóng:</p>
               <textarea
                 rows="3"
                 [ngModel]="blockReasonInput()"
                 (ngModelChange)="blockReasonInput.set($event)"
-                placeholder="Nhập lý do bị nghẽn, người hoặc tài nguyên cần phụ thuộc..."
-                class="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:border-red-500"
+                placeholder="Nhập lý do bị cản trở..."
+                class="w-full p-2.5 rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-rose-500"
               ></textarea>
-              <div class="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <div class="flex justify-end gap-2 pt-1 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
                   (click)="closeBlockTaskModal()"
-                  class="h-9 px-3.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 cursor-pointer"
+                  class="h-7 px-3 rounded text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer border border-slate-200"
                 >
                   Hủy
                 </button>
@@ -489,10 +397,10 @@ import { ConfirmDialogService } from '../../../core/services/confirm-dialog.serv
                   type="button"
                   (click)="submitBlockTask()"
                   [disabled]="!blockReasonInput().trim()"
-                  class="h-9 px-4 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-xs"
+                  class="h-7 px-3 rounded bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-medium flex items-center gap-1 cursor-pointer transition-colors"
                 >
-                  <span class="material-symbols-outlined text-[16px]">check</span>
-                  <span>Xác nhận chặn</span>
+                  <span class="material-symbols-outlined text-[14px]">check</span>
+                  <span>Xác nhận</span>
                 </button>
               </div>
             </div>
@@ -546,6 +454,7 @@ export class TaskDetailDrawerComponent {
     const name = this.identityService.authState().currentUser?.displayName;
     return name ? name.charAt(0).toUpperCase() : 'U';
   });
+  readonly currentUserAvatar = computed(() => resolveAvatarUrl(this.identityService.authState().currentUser?.avatarUrl));
 
   readonly epics = this.projectService.epics;
   newCommentText = '';
@@ -574,6 +483,27 @@ export class TaskDetailDrawerComponent {
     const dynamic = this.projectService.projectStatuses().map(s => s.name);
     return dynamic.length > 0 ? dynamic : ['To Do', 'In Progress', 'Code Review', 'Done'];
   });
+
+
+  getAssigneeAvatar(name?: string): string | null {
+    if (!name) return null;
+    const member = this.projectMembers().find(m => m.displayName && m.displayName.trim().toLowerCase() === name.trim().toLowerCase());
+    return resolveAvatarUrl(member?.avatarUrl);
+  }
+
+  getAuthorAvatar(name?: string): string | null {
+    if (!name) return null;
+    const member = this.projectMembers().find(m => m.displayName && m.displayName.trim().toLowerCase() === name.trim().toLowerCase());
+    return resolveAvatarUrl(member?.avatarUrl);
+  }
+
+  getInitials(name?: string): string {
+    if (!name) return '?';
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return '?';
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
 
   openBlockTaskModal(): void {
     this.blockReasonInput.set('');

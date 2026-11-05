@@ -9,7 +9,11 @@
         @for (member of members(); track member.userId) {
           <li class="flex flex-col gap-3 py-3 sm:flex-row sm:items-center">
             <span class="flex min-w-0 flex-1 items-center gap-3">
-              <span class="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary-fixed text-xs font-bold text-primary" aria-hidden="true">{{ avatar(member) }}</span>
+              @if (resolvedAvatar(member); as avatarSrc) {
+                <img [src]="avatarSrc" [alt]="member.displayName" class="size-9 shrink-0 rounded-full object-cover" />
+              } @else {
+                <span class="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary-fixed text-xs font-bold text-primary" aria-hidden="true">{{ avatar(member) }}</span>
+              }
               <span class="min-w-0">
                 <span class="block truncate text-sm font-semibold text-slate-900 dark:text-white">{{ member.displayName }}</span>
                 <span class="block truncate text-xs text-slate-500">{{ member.email }} · tham gia {{ joinedAgo(member) }}</span>

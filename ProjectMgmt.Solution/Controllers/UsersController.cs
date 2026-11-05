@@ -9,7 +9,6 @@ namespace ProjectMgmt.Solution.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/users")]
-[Route("api/v1/users")]
 public class UsersController : ControllerBase
 {
     private static readonly Action<ILogger, string, Exception?> LogEndpointFailure =
@@ -45,8 +44,7 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// Danh sách người dùng đang hoạt động (dùng cho chọn Lead/thành viên dự án).
-    /// Hỗ trợ cả /api/users (cũ) và /api/v1/users (mới).
+    /// Danh sách người dùng đang hoạt động (dùng cho chọn Lead/thành viên dự án qua /api/users).
     /// </summary>
     [HttpGet]
     [HttpGet("directory")]
@@ -195,6 +193,34 @@ public class UsersController : ControllerBase
                     StatusCode(StatusCodes.Status413PayloadTooLarge, result),
                 "IDENTITY_AVATAR_TYPE_INVALID" =>
                     StatusCode(StatusCodes.Status415UnsupportedMediaType, result),
+                _ => BadRequest(result)
+            };
+        }
+        catch (Exception exception)
+        {
+            return InternalError("me/avatar", exception);
+        }
+    }
+
+    [HttpDelete("me/avatar")]
+    public async Task<IActionResult> DeleteAvatar()
+    {
+        try
+        {
+            if (!TryGetUserId(out var userId))
+            {
+                return Unauthenticated();
+            }
+
+            var result = await _profileServices.DeleteAvatarAsync(userId);
+            if (result.Success)
+            {
+                return Ok(result);
+            }
+
+            return result.ErrorCode switch
+            {
+                "IDENTITY_PROFILE_NOT_FOUND" => NotFound(result),
                 _ => BadRequest(result)
             };
         }

@@ -82,7 +82,31 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
   // Inline Quick Task Creation per Sprint
   inlineTaskTitleMap: Record<string, string> = {};
+  inlineTaskTypeMap: Record<string, string> = { 'sp-backlog': 'Story' };
   activeInlineSprintId = signal<string | null>(null);
+
+  toggleInlineCreate(sprintId: string): void {
+    if (this.activeInlineSprintId() === sprintId) {
+      this.activeInlineSprintId.set(null);
+    } else {
+      if (!this.inlineTaskTypeMap[sprintId]) {
+        this.inlineTaskTypeMap[sprintId] = 'Story';
+      }
+      this.activeInlineSprintId.set(sprintId);
+    }
+  }
+
+  getIssueTypeColorClass(type: string): string {
+    switch ((type || '').toLowerCase()) {
+      case 'story': return 'text-emerald-600';
+      case 'task': return 'text-blue-600';
+      case 'bug': return 'text-rose-600';
+      case 'epic': return 'text-violet-600';
+      case 'sub-task':
+      case 'subtask': return 'text-slate-500';
+      default: return 'text-blue-600';
+    }
+  }
 
   // Quick Action Row Dropdown Menu State
   activeMenuTaskId = signal<string | null>(null);
@@ -119,6 +143,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     const task = this.workItems().find(w => w.id === activeId);
     return task?.sprintId === sprintId;
   }
+
 
   // Inline Task Title Edit State
   editingTaskId = signal<string | null>(null);
@@ -247,17 +272,9 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     return items;
   });
 
-  // CDK Drag and Drop across Sprints
+  // CDK Drag and Drop across Sprints: chỉ giữ để di chuyển tạm thời, thả ra là tự động trở về vị trí ban đầu theo yêu cầu
   onSprintDrop(event: CdkDragDrop<WorkItem[]>, targetSprintId: string, targetSprintName: string): void {
-    if (event.previousContainer === event.container) {
-      const ordered = [...event.container.data]; moveItemInArray(ordered, event.previousIndex, event.currentIndex);
-      this.projectService.reorderWorkItems(ordered.map(i => i.id)); return;
-    }
-    const item = event.item.data as WorkItem;
-    if (item && item.sprintId !== targetSprintId) {
-      this.projectService.updateWorkItemSprint(item.id, targetSprintId, targetSprintName);
-      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
-    }
+    event.item.reset();
   }
 
   // Context Menu Handlers
@@ -962,12 +979,14 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
     const currentUserName = this.identityService.authState().currentUser?.displayName || '';
     const normalizedSprintId = sprintId === 'sp-backlog' ? undefined : sprintId;
+    const selectedType = this.inlineTaskTypeMap[sprintId] || 'Story';
+
     this.projectService.addWorkItem({
       title: title.trim(),
       sprintId: normalizedSprintId,
       sprintName: normalizedSprintId ? sprintName : 'Backlog Pool',
       statusName: 'To Do',
-      issueType: 'Task',
+      issueType: selectedType,
       priority: 'Medium',
       storyPoints: 3,
       assigneeName: currentUserName
@@ -975,6 +994,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
     this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     this.inlineTaskTitleMap[sprintId] = '';
+    this.inlineTaskTypeMap[sprintId] = 'Story';
     this.activeInlineSprintId.set(null);
   }
 
@@ -1113,14 +1133,13 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     this.clearSelection();
   }
 
-  // --- Quick Exports & AI ---
+  // --- Quick Exports ---
   exportExcel(): void {
-    this.excelService.exportToExcel(this.workItems(), 'Project_Backlog_Export.csv');
-    this.toastService.success('Xuất Dữ Liệu Excel', 'Đã tải xuống file CSV/Excel thành công.');
-  }
-
-  triggerAiBreakdown(): void {
-    this.toastService.info('Phân Rã Tự Động', 'Hệ thống đang tự động phân rã các User Stories thành Subtasks.');
+    const projectKey = this.projectService.currentProject().projectKey || 'PROJECT';
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const filename = `${projectKey}_Backlog_Export_${dateStr}.csv`;
+    this.excelService.exportToExcel(this.workItems(), filename, this.sprints());
+    this.toastService.success('Xuất Excel thành công', `Đã tải xuống danh sách công việc: ${filename}`);
   }
 }
 

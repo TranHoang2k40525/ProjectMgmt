@@ -6,7 +6,6 @@ using ProjectMgmt.Solution.Services;
 
 namespace ProjectMgmt.Solution.Controllers;
 
-[Route("api/v1/projects")]
 [Route("api/projects")]
 [TypeFilter(typeof(ProjectMgmt.Solution.Security.ProjectAuthorizationFilter))]
 public class ProjectsController : ApiControllerBase
@@ -87,17 +86,13 @@ public class ProjectsController : ApiControllerBase
                 }
             }
 
-            var allowed = isOrgOwner || (request.OrgId != Guid.Empty
-                && (await _permissions.HasPermissionAsync(
-                    _currentUser.UserId.Value,
-                    "project.create",
-                    "Organization",
-                    request.OrgId)
-                    || await _permissions.HasPermissionAsync(
-                    _currentUser.UserId.Value,
-                    "project.create",
-                    "System",
-                    null)));
+            var isSystemAdmin = await _permissions.HasPermissionAsync(
+                _currentUser.UserId.Value,
+                "project.create",
+                "System",
+                null);
+
+            var allowed = isOrgOwner || isSystemAdmin;
             if (!allowed)
             {
                 return StatusCode(
@@ -106,7 +101,7 @@ public class ProjectsController : ApiControllerBase
                     {
                         success = false,
                         errorCode = "PROJECT_CREATE_FORBIDDEN",
-                        message = "Bạn không có quyền tạo dự án trong tổ chức này."
+                        message = "Chỉ Chủ tổ chức (Org Owner) mới có quyền tạo dự án và gán Giám đốc dự án."
                     });
             }
 
@@ -142,16 +137,6 @@ public class ProjectsController : ApiControllerBase
         Guid projectId) =>
         FromResult(await _management.DeleteProjectAsync(projectId));
 
-    [HttpGet("{projectId:guid}/issue-types")]
-    public Task<IReadOnlyList<ProjectIssueTypeDto>> GetIssueTypes(
-        Guid projectId) =>
-        _projects.GetIssueTypesAsync(projectId);
-
-    [HttpGet("{projectId:guid}/statuses")]
-    public Task<IReadOnlyList<ProjectStatusDto>> GetStatuses(
-        Guid projectId) =>
-        _projects.GetStatusesAsync(projectId);
-
     // ==========================================
     // WORKFLOW TRANSITIONS
     // ==========================================
@@ -160,12 +145,6 @@ public class ProjectsController : ApiControllerBase
     public async Task<ActionResult<IReadOnlyList<WorkflowTransitionItemDto>>> GetWorkflowTransitions(
         Guid projectId) =>
         FromResult(await _management.GetWorkflowTransitionsAsync(projectId));
-
-    [HttpPost("{projectId:guid}/workflow/transitions")]
-    public async Task<ActionResult<WorkflowTransitionItemDto>> CreateWorkflowTransition(
-        Guid projectId,
-        [FromBody] CreateWorkflowTransitionRequestDto request) =>
-        FromResult(await _management.CreateWorkflowTransitionAsync(projectId, request));
 
     // ==========================================
     // BOARDS

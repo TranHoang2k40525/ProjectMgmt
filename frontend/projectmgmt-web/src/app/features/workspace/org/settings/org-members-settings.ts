@@ -20,6 +20,7 @@ import {
 import { initials, timeAgo } from '../../work-display';
 import { WorkspaceContextService } from '../../workspace-context.service';
 import { INVITE_OUTCOME_LABELS, MAX_INVITE_EMAILS, parseInviteEmails } from './invite-emails';
+import { resolveAvatarUrl } from '../../../../core/utils/avatar.utils';
 
 /** Cài đặt · Thành viên: đổi vai trò, gỡ thành viên, mời qua email, link mời. */
 @Component({
@@ -247,6 +248,10 @@ export class OrgMembersSettingsComponent implements OnInit {
 
   avatar(member: OrgMember): string {
     return initials(member.displayName);
+  }
+
+  resolvedAvatar(member: OrgMember): string | null {
+    return resolveAvatarUrl(member.avatarUrl);
   }
 
   private regenerate(): void {

@@ -11,7 +11,6 @@ namespace ProjectMgmt.Solution.Controllers;
 /// Route cũ POST /issues/{id}/criteria và PUT /criteria/{id} trong WorkItemsController gọi cùng service.
 /// </summary>
 [Route("api")]
-[Route("api/v1")]
 public class IssueRequirementController(
     IIssueRequirementService requirements,
     IIssueTrackingService issues,

@@ -12,7 +12,6 @@ namespace ProjectMgmt.Solution.Controllers;
 /// POST /issues/{id}/comments, POST /issues/{id}/attachments, GET/DELETE /attachments/{id} vẫn ở WorkItemsController (URL cũ) nhưng gọi cùng service.
 /// </summary>
 [Route("api")]
-[Route("api/v1")]
 public class IssueCollaborationController(
     IIssueCollaborationService collaboration,
     IIssueTrackingService issues,

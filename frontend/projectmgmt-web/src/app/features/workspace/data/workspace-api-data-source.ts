@@ -65,7 +65,7 @@ export class WorkspaceApiDataSource extends WorkspaceDataSource {
   private readonly projects = inject(ProjectManagementService);
   private readonly identityApi = inject(IdentityApi);
   private readonly identity = inject(IdentityService);
-  private readonly base = `${environment.apiBaseUrl}/v1`;
+  private readonly base = environment.apiBaseUrl;
   private users$: Observable<UserInfo[]> | null = null;
 
   private org(orgId: string): string {

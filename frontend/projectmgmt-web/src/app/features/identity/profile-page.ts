@@ -37,9 +37,19 @@ export class ProfilePageComponent implements OnInit {
     this.isAvatarModalOpen.set(true);
   }
 
+  readonly contextRole = computed(() => {
+    if (this.projectService.hasActiveProject()) {
+      const proj = this.projectService.currentProject();
+      const myId = this.user()?.id;
+      if (proj.leadUserId === myId) return 'Giám đốc dự án';
+      return 'Thành viên dự án';
+    }
+    return 'Tài khoản cá nhân';
+  });
+
   onAvatarModalUpdated(newAvatarUrl: string): void {
-    this.user.update(user => user ? { ...user, avatarUrl: newAvatarUrl } : user);
-    this.successMsg.set('Cập nhật ảnh đại diện thành công.');
+    this.user.update(user => user ? { ...user, avatarUrl: newAvatarUrl || null } : user);
+    this.successMsg.set(newAvatarUrl ? 'Cập nhật ảnh đại diện thành công.' : 'Đã xóa ảnh đại diện.');
   }
 
   skillsCatalog = signal<SkillModel[]>([]);

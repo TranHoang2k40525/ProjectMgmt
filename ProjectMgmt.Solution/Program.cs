@@ -19,6 +19,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Planning.Infrastructure;
+using Planning.Infrastructure.Services;
 using ProjectMgmt.IdentityAccess.Contracts;
 using ProjectMgmt.Modules.IdentityExperience.Application.Services;
 using ProjectMgmt.Modules.Planning.ProjectManagement.Application.IServices;
@@ -260,6 +261,7 @@ builder.Services.AddScoped<IAiIssueSourceReader, AiIssueSourceReader>();
 builder.Services.AddScoped<IAiBreakdownApplyCoordinator, AiBreakdownApplyCoordinator>();
 builder.Services.AddScoped<IUserWorkReader, UserWorkReader>();
 builder.Services.AddScoped<IAvatarStorage, LocalAvatarStorage>();
+builder.Services.AddScoped<ISpecHubStorageService, SpecHubStorageService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserContext, CurrentUserContext>();
 builder.Services.AddScoped<IPermissionEvaluator, PermissionEvaluator>();
@@ -423,7 +425,8 @@ app.UseSerilogRequestLogging(options =>
 var frontendIndexPath = Path.Combine(app.Environment.WebRootPath ?? string.Empty, "index.html");
 var hasFrontendArtifact = File.Exists(frontendIndexPath);
 var avatarDirectory = Path.Combine(app.Environment.ContentRootPath, "Assets", "avatars");
-Directory.CreateDirectory(avatarDirectory);
+try { Directory.CreateDirectory(avatarDirectory); } catch { /* Ignore if directory exists or restricted */ }
+try { Directory.CreateDirectory(Path.Combine(app.Environment.ContentRootPath, "Spec_Hub")); } catch { /* Ignore */ }
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(avatarDirectory),

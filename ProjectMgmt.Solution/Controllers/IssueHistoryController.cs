@@ -8,7 +8,6 @@ namespace ProjectMgmt.Solution.Controllers;
 
 /// <summary>Lịch sử Issue (module C). Chỉ đọc; thành viên Project mới xem được.</summary>
 [Route("api/issues/{id:guid}")]
-[Route("api/v1/issues/{id:guid}")]
 public class IssueHistoryController(
     IIssueHistoryService history,
     IIssueTrackingService issues,

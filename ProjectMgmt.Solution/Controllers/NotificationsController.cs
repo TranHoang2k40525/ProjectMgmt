@@ -8,7 +8,6 @@ namespace ProjectMgmt.Solution.Controllers;
 
 [ApiController]
 [Authorize]
-[Route("api/v1/notifications")]
 [Route("api/notifications")]
 public class NotificationsController : ControllerBase
 {

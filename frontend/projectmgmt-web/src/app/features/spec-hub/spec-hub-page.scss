@@ -1,3 +1,43 @@
-.spec-hub-container {
-  min-height: calc(100vh - 3.5rem);
+.spec-hub-root {
+  /* VS Code subtle custom scrollbars */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.35);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(148, 163, 184, 0.6);
+  }
+
+  .tree-node-wrapper {
+    position: relative;
+  }
+
+  .prose {
+    font-size: 0.925rem;
+    line-height: 1.7;
+    h1, h2, h3, h4 {
+      font-weight: 700;
+      margin-top: 1.25rem;
+      margin-bottom: 0.5rem;
+    }
+    p {
+      margin-bottom: 0.75rem;
+    }
+    ul, ol {
+      margin-left: 1.25rem;
+      margin-bottom: 0.75rem;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1rem 0;
+    }
+  }
 }

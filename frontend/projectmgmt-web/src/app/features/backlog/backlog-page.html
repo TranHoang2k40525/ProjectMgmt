@@ -23,7 +23,6 @@
       </div>
 
       <div class="toolbar-actions" aria-label="Thao tác Backlog">
-        <button type="button" class="button button-ai" (click)="triggerAiBreakdown()"><span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span><span>Phân rã AI</span></button>
         <button type="button" class="button button-secondary" (click)="exportExcel()"><span class="material-symbols-outlined" aria-hidden="true">download</span><span>Xuất Excel</span></button>
         <button type="button" class="button button-primary" (click)="createSprint()"><span class="material-symbols-outlined" aria-hidden="true">add</span><span>Tạo Sprint</span></button>
       </div>
@@ -106,17 +105,27 @@
               <button type="button" class="button button-secondary" (click)="openSprintReview(sprint, $event)" title="Sprint Review & PO Nghiệm Thu"><span class="material-symbols-outlined" aria-hidden="true">fact_check</span><span>Review</span></button>
               <button type="button" class="button button-secondary" (click)="openSprintRetro(sprint, $event)" title="Sprint Retrospective Cải Tiến"><span class="material-symbols-outlined" aria-hidden="true">rate_review</span><span>Retro</span></button>
               <button type="button" class="button button-secondary" (click)="toggleSprintStatus(sprint, $event)"><span class="material-symbols-outlined" aria-hidden="true">{{ sprint.status === 'future' ? 'play_arrow' : (sprint.status === 'active' ? 'check_circle' : 'restart_alt') }}</span><span>{{ sprint.status === 'future' ? 'Bắt đầu' : (sprint.status === 'active' ? 'Hoàn thành' : 'Mở lại') }}</span></button>
-              <button type="button" class="button button-primary" (click)="activeInlineSprintId.set(activeInlineSprintId() === sprint.id ? null : sprint.id)"><span class="material-symbols-outlined" aria-hidden="true">add</span><span>Tạo việc</span></button>
+              <button type="button" class="button button-primary" (click)="toggleInlineCreate(sprint.id)"><span class="material-symbols-outlined" aria-hidden="true">add</span><span>Tạo việc</span></button>
             </div>
           </div>
-          @if (activeInlineSprintId() === sprint.id) { <div class="inline-create"><input type="text" [(ngModel)]="inlineTaskTitleMap[sprint.id]" (keyup.enter)="createInlineSprintTask(sprint.id, sprint.name)" placeholder="Nhập tên công việc rồi nhấn Enter" /><button type="button" class="button button-primary" (click)="createInlineSprintTask(sprint.id, sprint.name)">Thêm</button><button type="button" class="button button-secondary" (click)="activeInlineSprintId.set(null)">Hủy</button></div> }
+          @if (activeInlineSprintId() === sprint.id) {
+            <div class="inline-create">
+              <select (change)="inlineTaskTypeMap[sprint.id] = $any($event.target).value" class="type-select" aria-label="Loại công việc">
+                <option value="Story" [selected]="(inlineTaskTypeMap[sprint.id] || 'Story') === 'Story'">Story</option>
+                <option value="Task" [selected]="inlineTaskTypeMap[sprint.id] === 'Task'">Task</option>
+                <option value="Bug" [selected]="inlineTaskTypeMap[sprint.id] === 'Bug'">Bug</option>
+              </select>
+              <input type="text" [(ngModel)]="inlineTaskTitleMap[sprint.id]" (keyup.enter)="createInlineSprintTask(sprint.id, sprint.name)" placeholder="Tên User Story hoặc công việc... (Enter để tạo)" />
+              <button type="button" class="button button-primary" (click)="createInlineSprintTask(sprint.id, sprint.name)">Tạo</button>
+              <button type="button" class="button button-secondary" (click)="activeInlineSprintId.set(null)">Hủy</button>
+            </div>
+          }
           @if (sprintTasks.length > 0) { <ng-container *ngTemplateOutlet="workItemList; context: { $implicit: sprintTasks }"></ng-container> } @else { <div class="empty-state"><span class="material-symbols-outlined" aria-hidden="true">inventory_2</span><p>Sprint chưa có công việc.</p></div> }
         </article>
       } @empty {
-        <div class="empty-state p-6 border border-dashed border-slate-300 dark:border-slate-700/60 rounded-xl text-center">
-          <span class="material-symbols-outlined text-[32px] text-slate-400 mb-2">sprint</span>
-          <p class="text-sm font-semibold text-slate-600 dark:text-slate-300">Chưa có Sprint nào trong dự án</p>
-          <p class="text-xs text-slate-400 mt-1">Bấm nút "Tạo Sprint" ở trên để khởi tạo chu kỳ phát triển mới.</p>
+        <div class="empty-state p-6 border border-dashed border-slate-200 dark:border-slate-800 rounded-lg text-center">
+          <span class="material-symbols-outlined text-[32px] text-slate-400 mb-1" aria-hidden="true">sprint</span>
+          <p class="text-sm font-semibold text-slate-600 dark:text-slate-300">Chưa có Sprint trong dự án</p>
         </div>
       }
 
@@ -127,8 +136,19 @@
         (cdkDropListDropped)="onSprintDrop($event, 'sp-backlog', 'Backlog Pool')"
         class="sprint-section backlog-pool"
       >
-        <div class="sprint-header"><div class="sprint-info"><span class="material-symbols-outlined text-slate-500" aria-hidden="true">inbox</span><div><h2>Backlog</h2><p>Kho công việc chưa gán Sprint · {{ backlogPoolItems.length }} việc</p></div></div><button type="button" class="button button-primary" (click)="activeInlineSprintId.set(activeInlineSprintId() === 'sp-backlog' ? null : 'sp-backlog')"><span class="material-symbols-outlined" aria-hidden="true">add</span><span>Tạo việc</span></button></div>
-        @if (activeInlineSprintId() === 'sp-backlog') { <div class="inline-create"><input type="text" [(ngModel)]="inlineTaskTitleMap['sp-backlog']" (keyup.enter)="createInlineSprintTask('sp-backlog', 'Backlog Pool')" placeholder="Nhập tên công việc vào Backlog" /><button type="button" class="button button-primary" (click)="createInlineSprintTask('sp-backlog', 'Backlog Pool')">Thêm</button><button type="button" class="button button-secondary" (click)="activeInlineSprintId.set(null)">Hủy</button></div> }
+        <div class="sprint-header"><div class="sprint-info"><span class="material-symbols-outlined text-slate-500" aria-hidden="true">inbox</span><div><h2>Backlog</h2><p>{{ backlogPoolItems.length }} công việc</p></div></div><button type="button" class="button button-primary" (click)="toggleInlineCreate('sp-backlog')"><span class="material-symbols-outlined" aria-hidden="true">add</span><span>Tạo việc</span></button></div>
+        @if (activeInlineSprintId() === 'sp-backlog') {
+          <div class="inline-create">
+            <select (change)="inlineTaskTypeMap['sp-backlog'] = $any($event.target).value" class="type-select" aria-label="Loại công việc">
+              <option value="Story" [selected]="(inlineTaskTypeMap['sp-backlog'] || 'Story') === 'Story'">Story</option>
+              <option value="Task" [selected]="inlineTaskTypeMap['sp-backlog'] === 'Task'">Task</option>
+              <option value="Bug" [selected]="inlineTaskTypeMap['sp-backlog'] === 'Bug'">Bug</option>
+            </select>
+            <input type="text" [(ngModel)]="inlineTaskTitleMap['sp-backlog']" (keyup.enter)="createInlineSprintTask('sp-backlog', 'Backlog Pool')" placeholder="Tên User Story hoặc công việc vào Backlog... (Enter để tạo)" />
+            <button type="button" class="button button-primary" (click)="createInlineSprintTask('sp-backlog', 'Backlog Pool')">Tạo</button>
+            <button type="button" class="button button-secondary" (click)="activeInlineSprintId.set(null)">Hủy</button>
+          </div>
+        }
         @if (backlogPoolItems.length > 0) { <ng-container *ngTemplateOutlet="workItemList; context: { $implicit: backlogPoolItems }"></ng-container> } @else { <div class="empty-state"><span class="material-symbols-outlined" aria-hidden="true">inbox</span><p>Backlog đang trống.</p></div> }
       </article>
     </main>
@@ -205,76 +225,38 @@
                 Trao đổi & Bình luận ({{ sprintMessages().length }})
               </strong>
             </div>
-            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              Realtime
-            </span>
           </div>
 
-          <!-- Comment Input Box -->
-          <div style="display: flex; gap: 10px; align-items: flex-start;">
-            <div style="width: 32px; height: 32px; border-radius: 50%; background: #4f46e5; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0;">
-              {{ currentUserInitial() }}
-            </div>
-            <div style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
-              <textarea
-                rows="2"
-                [ngModel]="chatInputText()"
-                (ngModelChange)="chatInputText.set($event)"
-                (keydown)="onChatKeydown($event)"
-                placeholder="Viết bình luận hoặc trao đổi về chu kỳ Sprint này... (Enter để gửi)"
-                style="width: 100%; resize: vertical; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 12px; font-size: 13px; outline: none; font-family: inherit; line-height: 1.4; background: #fff;"
-              ></textarea>
-              <div style="display: flex; justify-content: flex-end;">
-                <button
-                  type="button"
-                  class="button button-primary"
-                  style="padding: 5px 14px; font-size: 13px; display: inline-flex; align-items: center; gap: 6px;"
-                  [disabled]="!chatInputText().trim() || isSendingMessage()"
-                  (click)="sendSprintChatMessage()"
-                >
-                  @if (isSendingMessage()) {
-                    <span class="material-symbols-outlined text-[16px] animate-spin" aria-hidden="true">progress_activity</span>
-                  } @else {
-                    <span class="material-symbols-outlined text-[16px]" aria-hidden="true">send</span>
-                    <span>Gửi bình luận</span>
-                  }
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Comments List -->
-          <div class="sprint-comments-list sprint-chat-messages" style="display: flex; flex-direction: column; gap: 10px; max-height: 280px; overflow-y: auto; padding-right: 4px;">
+          <!-- Comments List (Historical Discussion First) -->
+          <div class="sprint-comments-list sprint-chat-messages" style="display: flex; flex-direction: column; gap: 8px; max-height: 280px; overflow-y: auto; padding-right: 4px;">
             @if (isChatLoading()) {
-              <div style="display: flex; align-items: center; justify-content: center; padding: 24px; color: #94a3b8; gap: 8px; font-size: 13px;">
+              <div style="display: flex; align-items: center; justify-content: center; padding: 20px; color: #94a3b8; gap: 8px; font-size: 13px;">
                 <span class="material-symbols-outlined animate-spin" aria-hidden="true">progress_activity</span>
                 <span>Đang tải trao đổi...</span>
               </div>
             } @else if (sprintMessages().length === 0) {
-              <div style="padding: 16px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; text-align: center; color: #64748b; font-size: 13px;">
-                <span class="material-symbols-outlined text-[28px] text-slate-400 mb-1" aria-hidden="true">chat_bubble_outline</span>
+              <div style="padding: 16px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 6px; text-align: center; color: #64748b; font-size: 13px;">
+                <span class="material-symbols-outlined text-[24px] text-slate-400 mb-1" aria-hidden="true">chat_bubble_outline</span>
                 <p style="margin: 0; font-weight: 500;">Chưa có trao đổi nào trong Sprint này.</p>
-                <p style="margin: 4px 0 0 0; font-size: 12px; color: #94a3b8;">Bình luận sẽ gửi thông báo tức thời tới các thành viên liên quan.</p>
               </div>
             } @else {
               @for (msg of sprintMessages(); track msg.id) {
-                <div style="display: flex; gap: 10px; padding: 10px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;">
-                  <div style="width: 30px; height: 30px; border-radius: 50%; background: #e0e7ff; color: #4338ca; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; overflow: hidden;">
+                <div style="display: flex; gap: 8px; padding: 8px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;">
+                  <div style="width: 26px; height: 26px; border-radius: 4px; background: #0f172a; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; overflow: hidden;">
                     @if (msg.senderAvatar) {
                       <img [src]="msg.senderAvatar" [alt]="msg.senderName" style="width: 100%; height: 100%; object-fit: cover;" />
                     } @else {
                       <span>{{ getAssigneeInitials(msg.senderName) }}</span>
                     }
                   </div>
-                  <div style="flex: 1; display: flex; flex-direction: column; gap: 3px;">
+                  <div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
                     <div style="display: flex; align-items: center; justify-content: space-between; font-size: 12px;">
                       <div style="display: flex; align-items: center; gap: 6px;">
-                        <span style="font-weight: 700; color: #1e293b;">{{ msg.senderName }}</span>
+                        <span style="font-weight: 600; color: #0f172a;">{{ msg.senderName }}</span>
                         @if (msg.isCurrentUser) {
-                          <span style="font-size: 10px; padding: 1px 6px; border-radius: 4px; background: #e0e7ff; color: #4338ca; font-weight: 600;">Bạn</span>
+                          <span style="font-size: 10px; padding: 1px 5px; border-radius: 4px; background: #e2e8f0; color: #334155; font-weight: 600;">Bạn</span>
                         }
-                        <span style="color: #94a3b8;">• {{ msg.createdAt | date:'HH:mm - dd/MM' }}</span>
+                        <span style="color: #94a3b8; font-size: 11px;">• {{ msg.createdAt | date:'HH:mm - dd/MM/yyyy' }}</span>
                       </div>
                       @if (msg.isCurrentUser) {
                         <button type="button" (click)="deleteChatMessage(msg.id)" title="Xóa bình luận" style="background: none; border: none; cursor: pointer; padding: 0; color: #94a3b8; display: flex; align-items: center;">
@@ -282,11 +264,44 @@
                         </button>
                       }
                     </div>
-                    <p style="margin: 0; font-size: 13px; color: #334155; line-height: 1.5; white-space: pre-wrap; word-break: break-word;">{{ msg.content }}</p>
+                    <p style="margin: 0; font-size: 12.5px; color: #334155; line-height: 1.5; white-space: pre-wrap; word-break: break-word;">{{ msg.content }}</p>
                   </div>
                 </div>
               }
             }
+          </div>
+
+          <!-- Comment Input Box (Docked at the Bottom) -->
+          <div style="display: flex; gap: 8px; align-items: flex-start; padding-top: 10px; border-top: 1px solid #f1f5f9;">
+            <div style="width: 28px; height: 28px; border-radius: 4px; background: #0f172a; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0;">
+              {{ currentUserInitial() }}
+            </div>
+            <div style="flex: 1; display: flex; flex-direction: column; gap: 6px;">
+              <textarea
+                rows="2"
+                [ngModel]="chatInputText()"
+                (ngModelChange)="chatInputText.set($event)"
+                (keydown)="onChatKeydown($event)"
+                placeholder="Viết bình luận hoặc trao đổi về chu kỳ Sprint này... (Enter để gửi)"
+                style="width: 100%; resize: vertical; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 10px; font-size: 12.5px; outline: none; font-family: inherit; line-height: 1.4; background: #fff;"
+              ></textarea>
+              <div style="display: flex; justify-content: flex-end;">
+                <button
+                  type="button"
+                  class="button button-primary"
+                  style="padding: 4px 12px; font-size: 12px; display: inline-flex; align-items: center; gap: 5px; border-radius: 6px; background: #0f172a; color: #ffffff;"
+                  [disabled]="!chatInputText().trim() || isSendingMessage()"
+                  (click)="sendSprintChatMessage()"
+                >
+                  @if (isSendingMessage()) {
+                    <span class="material-symbols-outlined text-[15px] animate-spin" aria-hidden="true">progress_activity</span>
+                  } @else {
+                    <span class="material-symbols-outlined text-[15px]" aria-hidden="true">send</span>
+                    <span>Gửi bình luận</span>
+                  }
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -311,7 +326,7 @@
           [class.is-selected]="isTaskSelected(item.id)"
         >
           <div class="cell-select no-drawer flex items-center gap-1.5">
-            <span cdkDragHandle class="material-symbols-outlined drag-handle text-[18px] text-slate-400 hover:text-slate-700 cursor-grab active:cursor-grabbing select-none shrink-0" title="Kéo để sắp xếp hoặc đổi Sprint">drag_indicator</span>
+            <span cdkDragHandle class="material-symbols-outlined drag-handle text-[18px] text-slate-400 hover:text-slate-700 cursor-grab active:cursor-grabbing select-none shrink-0" title="Giữ để di chuyển">drag_indicator</span>
             <input type="checkbox" [checked]="isTaskSelected(item.id)" [attr.aria-label]="'Chọn ' + item.issueKey" (change)="toggleTaskSelection(item.id, $event)" />
             @if (subtasks.length > 0) {
               <button type="button" class="icon-button icon-button-small" [title]="expandedSubtasks()[item.id] ? 'Thu gọn Sub-task' : 'Mở Sub-task'" (click)="toggleSubtasks(item.id, $event)">
@@ -319,11 +334,11 @@
               </button>
             }
           </div>
-          <div class="cell-key cursor-pointer" (click)="openTask(item, $event)"><span class="material-symbols-outlined issue-type-icon" [title]="item.issueType" aria-hidden="true">{{ getIssueTypeIcon(item.issueType) }}</span><strong>{{ item.issueKey }}</strong></div>
+          <div class="cell-key cursor-pointer" (click)="openTask(item, $event)"><span class="material-symbols-outlined issue-type-icon" [ngClass]="getIssueTypeColorClass(item.issueType)" [title]="item.issueType" aria-hidden="true">{{ getIssueTypeIcon(item.issueType) }}</span><strong>{{ item.issueKey }}</strong></div>
           <div class="cell-title flex items-center gap-1.5 flex-wrap">
             @if (editingTaskId() === item.id) { <input class="title-input" type="text" [ngModel]="editingTaskTitle()" (ngModelChange)="editingTaskTitle.set($event)" (click)="$event.stopPropagation()" (keyup.enter)="saveEditingTaskTitle(item.id)" (blur)="saveEditingTaskTitle(item.id)" /> } @else { <button type="button" class="task-title-button" (click)="openTask(item, $event)">{{ item.title }}</button><button type="button" class="edit-title-button" title="Sửa tên công việc" (click)="startEditingTaskTitle(item, $event)"><span class="material-symbols-outlined" aria-hidden="true">edit</span></button> }
             @if (isItemReady(item)) {
-              <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200" title="Definition of Ready (DoR): Đã ước lượng điểm & đủ mô tả"><span class="material-symbols-outlined text-[12px] text-emerald-600">check_circle</span>Ready</span>
+              <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200" title="Sẵn sàng thực hiện"><span class="material-symbols-outlined text-[12px] text-emerald-600">check_circle</span>Ready</span>
             }
             @if (item.isBlocked) {
               <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200" [title]="item.blockReason"><span class="material-symbols-outlined text-[12px] text-rose-600">block</span>Blocked</span>

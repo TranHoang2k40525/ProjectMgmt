@@ -24,7 +24,6 @@ public sealed class WorkflowTemplateInput
 }
 
 [Route("api/projects/{projectId:guid}")]
-[Route("api/v1/projects/{projectId:guid}")]
 public sealed class ProjectCustomizationController(PlanningDbContext db, DeliveryIntelligenceDbContext delivery, ProjectAccess access) : ApiControllerBase
 {
     private static bool IsSystemType(string name) =>

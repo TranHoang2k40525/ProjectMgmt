@@ -17,7 +17,7 @@ export interface WorkspaceHandlerDeps {
  * (tổ chức, dự án, issue, người dùng…) không bị chặn — request đi thẳng tới backend thật.
  * Khi backend làm xong một endpoint, xóa handler tương ứng ở đây.
  */
-const API = `${environment.apiBaseUrl}/v1`;
+const API = `${environment.apiBaseUrl}`;
 const STORAGE_KEY = 'pm-msw-workspace-db-v1';
 
 export function browserStorage(key = STORAGE_KEY) {

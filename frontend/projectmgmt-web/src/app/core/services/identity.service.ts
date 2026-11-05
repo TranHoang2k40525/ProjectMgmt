@@ -1,6 +1,6 @@
 import { Injectable, inject, signal, computed } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, forkJoin, map, of, switchMap, throwError } from 'rxjs';
+import { Observable, catchError, forkJoin, map, of, switchMap, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AccountApi } from '../api/account.api';
 import { LoginResult } from '../api/account-api.models';
@@ -237,6 +237,17 @@ export class IdentityService {
         : state);
       return avatarUrl ?? '';
     }));
+  }
+
+  deleteAvatar(): Observable<void> {
+    return this.identityApi.deleteAvatar().pipe(
+      catchError(() => this.identityApi.updateMyProfile({ avatarUrl: null })),
+      map(() => {
+        this.authState.update(state => state.currentUser
+          ? { ...state, currentUser: { ...state.currentUser, avatarUrl: null } }
+          : state);
+      })
+    );
   }
 
   // ==========================================

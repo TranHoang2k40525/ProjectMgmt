@@ -88,7 +88,7 @@ function isBackendUrl(url: string): boolean {
 }
 
 function isAuthEndpoint(url: string): boolean {
-  return url.includes('/api/v1/auth/') || url.includes('/api/auth/');
+  return url.includes('/api/auth/');
 }
 
 function readStatus(error: unknown): number | undefined {

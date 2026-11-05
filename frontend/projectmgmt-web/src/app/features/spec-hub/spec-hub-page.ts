@@ -2,19 +2,39 @@ import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angula
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink, ActivatedRoute } from '@angular/router';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   ProjectManagementService,
-  SpecDocument
+  SpecTreeNode,
+  SpecFileContent
 } from '../../core/services/project-management.service';
 import { IdentityService } from '../../core/services/identity.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ConfirmDialogService } from '../../core/services/confirm-dialog.service';
 
+export interface OpenSpecTab {
+  id: string;
+  name: string;
+  extension?: string;
+  fileType: 'text' | 'pdf' | 'docx' | 'xlsx';
+  content?: string;
+  previewData?: any;
+  status: 'Draft' | 'Review' | 'Approved';
+  version: number;
+  isLoading?: boolean;
+  isSaving?: boolean;
+  isDirty?: boolean;
+  rawUrl: string;
+  downloadUrl: string;
+  safePdfUrl?: SafeResourceUrl;
+  activeSheetIndex?: number;
+}
+
 @Component({
   selector: 'app-spec-hub-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule],
   templateUrl: './spec-hub-page.html',
   styleUrl: './spec-hub-page.scss'
 })
@@ -23,174 +43,321 @@ export class SpecHubPageComponent implements OnInit {
   private readonly identityService = inject(IdentityService);
   private readonly toastService = inject(ToastService);
   private readonly confirmService = inject(ConfirmDialogService);
+  private readonly sanitizer = inject(DomSanitizer);
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
 
   readonly activeProject = this.projectService.currentProject;
-  readonly documentsList = signal<SpecDocument[]>([]);
-  readonly selectedDoc = signal<SpecDocument | null>(null);
-  readonly isLoading = signal(false);
-  readonly isSaving = signal(false);
+  readonly treeNodes = signal<SpecTreeNode[]>([]);
+  readonly isLoadingTree = signal(false);
 
-  // Chế độ xem & sửa
-  readonly isEditing = signal(false);
-  readonly editTitle = signal('');
-  readonly editContent = signal('');
+  // Thư mục đang mở rộng
+  readonly expandedFolderIds = signal<Set<string>>(new Set());
+  readonly selectedNodeId = signal<string | null>(null);
 
-  // Modal tạo tài liệu mới
-  readonly isCreateModalOpen = signal(false);
-  readonly newDocTitle = signal('');
-  readonly newDocContent = signal('');
+  // Tabs mở nhiều file (VS Code style)
+  readonly openTabs = signal<OpenSpecTab[]>([]);
+  readonly activeTabId = signal<string | null>(null);
 
-  // Modal bóc tách User Story
+  readonly currentTab = computed(() => {
+    const id = this.activeTabId();
+    if (!id) return null;
+    return this.openTabs().find(t => t.id === id) ?? null;
+  });
+
+  // Quyền hạn Scrum (Chỉ Lead/Owner/PM/SM được tạo/sửa/xóa)
+  readonly isManager = computed(() => {
+    if (this.identityService.isSystemAdmin()) return true;
+    const currentUserId = this.identityService.authState().currentUser?.id;
+    const proj = this.activeProject();
+    if (!proj || !currentUserId) return false;
+    if (proj.leadUserId === currentUserId) return true;
+    const userMember = proj.members?.find(m => m.userId === currentUserId);
+    if (!userMember) return false;
+    const roleLower = userMember.role.toLowerCase();
+    return (
+      roleLower.includes('lead') ||
+      roleLower.includes('manager') ||
+      roleLower.includes('master') ||
+      roleLower.includes('owner')
+    );
+  });
+
+  // Modal Tạo thư mục
+  readonly isCreateFolderModalOpen = signal(false);
+  readonly newFolderName = signal('');
+  readonly folderParentId = signal<string | null>(null);
+
+  // Modal Tạo file văn bản (.txt)
+  readonly isCreateTextFileModalOpen = signal(false);
+  readonly newTextFileName = signal('');
+  readonly newTextFileContent = signal('');
+  readonly textFileParentId = signal<string | null>(null);
+
+  // Modal Đổi tên
+  readonly isRenameModalOpen = signal(false);
+  readonly renameItemId = signal<string | null>(null);
+  readonly renameItemName = signal('');
+
+  // Modal Bóc tách Story
   readonly isExtractModalOpen = signal(false);
   readonly extractStoryTitle = signal('');
   readonly extractExcerpt = signal('');
   readonly extractStoryPoints = signal<number>(3);
   readonly extractCriteria = signal<string[]>(['']);
 
-  // Bình luận & phản biện
-  readonly activeTab = signal<'preview' | 'stories' | 'comments'>('preview');
+  // Phản biện & Tab chi tiết bên phải
+  readonly isSidePanelOpen = signal(false);
+  readonly activeSideTab = signal<'comments' | 'stories'>('comments');
   readonly newCommentText = signal('');
   readonly selectedHighlightText = signal('');
 
-  // Quyền hạn Scrum
-  readonly isProjectLeadOrOwner = computed(() => {
-    const currentUserId = this.identityService.authState().currentUser?.id;
-    const proj = this.activeProject();
-    if (!proj || !currentUserId) return false;
-    return proj.leadUserId === currentUserId;
-  });
+  // Target tải lên file
+  uploadTargetParentId: string | null = null;
 
   ngOnInit(): void {
     this.route.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(params => {
       const docId = params.get('docId');
-      this.loadDocuments(docId);
+      this.loadTree(docId);
     });
   }
 
-  loadDocuments(autoSelectDocId?: string | null): void {
+  loadTree(autoOpenDocId?: string | null): void {
     const projectId = this.activeProject()?.id;
     if (!projectId) return;
 
-    this.isLoading.set(true);
-    this.projectService.getProjectDocuments(projectId).subscribe({
-      next: docs => {
-        this.documentsList.set(docs);
-        this.isLoading.set(false);
+    this.isLoadingTree.set(true);
+    this.projectService.getSpecTree(projectId).subscribe({
+      next: nodes => {
+        this.treeNodes.set(nodes);
+        this.isLoadingTree.set(false);
 
-        if (autoSelectDocId) {
-          this.selectDocumentById(autoSelectDocId);
-        } else if (docs.length > 0 && !this.selectedDoc()) {
-          this.selectDocumentById(docs[0].id);
+        // Mặc định mở rộng cấp đầu tiên nếu có thư mục
+        const folderIds = new Set<string>();
+        nodes.forEach(n => {
+          if (n.isDirectory) folderIds.add(n.id);
+        });
+        this.expandedFolderIds.set(folderIds);
+
+        if (autoOpenDocId) {
+          const targetNode = this.findNodeInTree(nodes, autoOpenDocId);
+          if (targetNode && !targetNode.isDirectory) {
+            this.openTabForNode(targetNode);
+          }
+        } else if (this.openTabs().length === 0) {
+          // Mở tệp đầu tiên tìm thấy
+          const firstFile = this.findFirstFile(nodes);
+          if (firstFile) {
+            this.openTabForNode(firstFile);
+          }
         }
       },
       error: () => {
-        this.isLoading.set(false);
-        this.toastService.error('Đặc tả', 'Không thể nạp danh sách tài liệu đặc tả.');
+        this.isLoadingTree.set(false);
+        this.toastService.error('Spec Hub', 'Không thể nạp cây thư mục tài liệu.');
       }
     });
   }
 
-  selectDocumentById(docId: string): void {
-    this.isLoading.set(true);
-    this.projectService.getDocument(docId).subscribe({
-      next: doc => {
-        this.selectedDoc.set(doc);
-        this.editTitle.set(doc.title);
-        this.editContent.set(doc.content ?? '');
-        this.isEditing.set(false);
-        this.isLoading.set(false);
+  private findNodeInTree(nodes: SpecTreeNode[], id: string): SpecTreeNode | null {
+    for (const node of nodes) {
+      if (node.id === id) return node;
+      if (node.children?.length) {
+        const found = this.findNodeInTree(node.children, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  private findFirstFile(nodes: SpecTreeNode[]): SpecTreeNode | null {
+    for (const node of nodes) {
+      if (!node.isDirectory) return node;
+      if (node.children?.length) {
+        const f = this.findFirstFile(node.children);
+        if (f) return f;
+      }
+    }
+    return null;
+  }
+
+  // --- CÂY THƯ MỤC: MỞ RỘNG / THU GỌN ---
+  toggleFolder(node: SpecTreeNode, event?: MouseEvent): void {
+    if (event) event.stopPropagation();
+    this.expandedFolderIds.update(set => {
+      const copy = new Set(set);
+      if (copy.has(node.id)) {
+        copy.delete(node.id);
+      } else {
+        copy.add(node.id);
+      }
+      return copy;
+    });
+    this.selectedNodeId.set(node.id);
+  }
+
+  isFolderExpanded(id: string): boolean {
+    return this.expandedFolderIds().has(id);
+  }
+
+  collapseAllFolders(): void {
+    this.expandedFolderIds.set(new Set());
+  }
+
+  // --- MỞ TỆP TIN TRONG MULTI-TAB WORKSPACE ---
+  onNodeClick(node: SpecTreeNode): void {
+    this.selectedNodeId.set(node.id);
+    if (node.isDirectory) {
+      this.toggleFolder(node);
+    } else {
+      this.openTabForNode(node);
+    }
+  }
+
+  openTabForNode(node: SpecTreeNode): void {
+    const existing = this.openTabs().find(t => t.id === node.id);
+    if (existing) {
+      this.activeTabId.set(node.id);
+      return;
+    }
+
+    const ext = (node.extension ?? '').toLowerCase();
+    let fileType: 'text' | 'pdf' | 'docx' | 'xlsx' = 'text';
+    if (ext === '.pdf') fileType = 'pdf';
+    else if (ext === '.docx') fileType = 'docx';
+    else if (ext === '.xlsx') fileType = 'xlsx';
+
+    const rawUrl = this.projectService.getRawFileUrl(node.id);
+    const downloadUrl = this.projectService.getDownloadUrl(node.id);
+    const safePdfUrl = fileType === 'pdf' ? this.sanitizer.bypassSecurityTrustResourceUrl(rawUrl) : undefined;
+
+    const newTab: OpenSpecTab = {
+      id: node.id,
+      name: node.name,
+      extension: ext,
+      fileType,
+      status: node.status,
+      version: node.version,
+      isLoading: true,
+      rawUrl,
+      downloadUrl,
+      safePdfUrl,
+      activeSheetIndex: 0
+    };
+
+    this.openTabs.update(tabs => [...tabs, newTab]);
+    this.activeTabId.set(node.id);
+
+    // Tải nội dung chi tiết
+    this.projectService.getFileContent(node.id).subscribe({
+      next: content => {
+        this.openTabs.update(tabs =>
+          tabs.map(t => {
+            if (t.id === node.id) {
+              return {
+                ...t,
+                content: content.content ?? '',
+                previewData: content.previewData,
+                status: content.status,
+                version: content.version,
+                isLoading: false,
+                isDirty: false
+              };
+            }
+            return t;
+          })
+        );
       },
       error: () => {
-        this.isLoading.set(false);
-        this.toastService.error('Đặc tả', 'Không thể mở tài liệu đặc tả.');
+        this.openTabs.update(tabs =>
+          tabs.map(t => (t.id === node.id ? { ...t, isLoading: false } : t))
+        );
+        this.toastService.error('Tệp tin', `Không thể nạp nội dung của tệp "${node.name}".`);
       }
     });
   }
 
-  openCreateModal(): void {
-    this.newDocTitle.set('');
-    this.newDocContent.set(
-      '# 1. Mục tiêu (Objective)\nMô tả mục tiêu kinh doanh và giá trị mang lại cho người dùng theo triết lý Agile Scrum.\n\n# 2. Phạm vi tính năng (Scope)\n- Tính năng A\n- Tính năng B\n\n# 3. Yêu cầu chi tiết (Detailed Specifications)\nMô tả chi tiết các luồng nghiệp vụ...\n\n# 4. Tiêu chí thành công (Acceptance Criteria)\n- Điều kiện 1\n- Điều kiện 2'
+  selectTab(tabId: string): void {
+    this.activeTabId.set(tabId);
+    this.selectedNodeId.set(tabId);
+  }
+
+  closeTab(tabId: string, event?: MouseEvent): void {
+    if (event) event.stopPropagation();
+
+    const tabs = this.openTabs();
+    const index = tabs.findIndex(t => t.id === tabId);
+    if (index === -1) return;
+
+    const updated = tabs.filter(t => t.id !== tabId);
+    this.openTabs.set(updated);
+
+    if (this.activeTabId() === tabId) {
+      if (updated.length > 0) {
+        const nextIndex = Math.min(index, updated.length - 1);
+        this.activeTabId.set(updated[nextIndex].id);
+      } else {
+        this.activeTabId.set(null);
+      }
+    }
+  }
+
+  // --- LƯU THAY ĐỔI CHO FILE TEXT / MARKDOWN ---
+  onTextChange(newContent: string): void {
+    const tab = this.currentTab();
+    if (!tab || tab.fileType !== 'text') return;
+
+    this.openTabs.update(tabs =>
+      tabs.map(t => (t.id === tab.id ? { ...t, content: newContent, isDirty: true } : t))
     );
-    this.isCreateModalOpen.set(true);
   }
 
-  closeCreateModal(): void {
-    this.isCreateModalOpen.set(false);
-  }
+  saveActiveTextFile(): void {
+    const tab = this.currentTab();
+    if (!tab || tab.fileType !== 'text' || !this.isManager()) return;
 
-  submitCreateDocument(): void {
-    const projectId = this.activeProject()?.id;
-    const title = this.newDocTitle().trim();
-    if (!projectId || !title) return;
+    this.openTabs.update(tabs =>
+      tabs.map(t => (t.id === tab.id ? { ...t, isSaving: true } : t))
+    );
 
-    this.isSaving.set(true);
-    this.projectService.createProjectDocument(projectId, title, this.newDocContent()).subscribe({
+    this.projectService.updateTextFileContent(tab.id, tab.content ?? '').subscribe({
       next: res => {
-        this.isSaving.set(false);
-        this.isCreateModalOpen.set(false);
-        this.toastService.success('Đặc tả', `Đã tạo tài liệu "${title}" thành công.`);
-        this.loadDocuments(res.id);
+        this.openTabs.update(tabs =>
+          tabs.map(t =>
+            t.id === tab.id
+              ? { ...t, isSaving: false, isDirty: false, version: res.version ?? t.version + 1 }
+              : t
+          )
+        );
+        this.toastService.success('Đặc tả', `Đã lưu tệp "${tab.name}" thành công.`);
+        this.loadTree(tab.id);
       },
       error: () => {
-        this.isSaving.set(false);
-        this.toastService.error('Đặc tả', 'Lỗi khi tạo tài liệu mới.');
+        this.openTabs.update(tabs =>
+          tabs.map(t => (t.id === tab.id ? { ...t, isSaving: false } : t))
+        );
+        this.toastService.error('Đặc tả', 'Lỗi khi lưu tệp văn bản.');
       }
     });
   }
 
-  startEditing(): void {
-    const doc = this.selectedDoc();
-    if (!doc) return;
-    this.editTitle.set(doc.title);
-    this.editContent.set(doc.content ?? '');
-    this.isEditing.set(true);
-  }
+  // --- CẬP NHẬT TRẠNG THÁI DUYỆT (APPROVED / REVIEW / DRAFT) ---
+  changeTabStatus(status: 'Draft' | 'Review' | 'Approved'): void {
+    const tab = this.currentTab();
+    if (!tab) return;
 
-  cancelEditing(): void {
-    this.isEditing.set(false);
-  }
-
-  saveDocumentEdits(): void {
-    const doc = this.selectedDoc();
-    if (!doc) return;
-
-    const title = this.editTitle().trim();
-    if (!title) {
-      this.toastService.warning('Đặc tả', 'Tiêu đề tài liệu không được để trống.');
+    if (status === 'Approved' && !this.isManager()) {
+      this.toastService.warning('Phân quyền', 'Chỉ Giám đốc dự án / PO mới có quyền phê duyệt tài liệu.');
       return;
     }
 
-    this.isSaving.set(true);
-    this.projectService.updateProjectDocument(doc.id, title, this.editContent()).subscribe({
+    this.projectService.updateProjectDocumentStatus(tab.id, status).subscribe({
       next: () => {
-        this.isSaving.set(false);
-        this.isEditing.set(false);
-        this.toastService.success('Đặc tả', 'Đã lưu tài liệu đặc tả thành công.');
-        this.selectDocumentById(doc.id);
-      },
-      error: () => {
-        this.isSaving.set(false);
-        this.toastService.error('Đặc tả', 'Lỗi khi lưu tài liệu.');
-      }
-    });
-  }
-
-  changeDocumentStatus(status: 'Draft' | 'Review' | 'Approved'): void {
-    const doc = this.selectedDoc();
-    if (!doc) return;
-
-    if (status === 'Approved' && !this.isProjectLeadOrOwner()) {
-      this.toastService.warning('Phân quyền', 'Chỉ Giám đốc dự án / PO mới có quyền phê duyệt tài liệu đặc tả.');
-      return;
-    }
-
-    this.projectService.updateProjectDocumentStatus(doc.id, status).subscribe({
-      next: () => {
-        this.toastService.success('Đặc tả', `Đã cập nhật trạng thái tài liệu sang ${status}.`);
-        this.selectDocumentById(doc.id);
+        this.openTabs.update(tabs =>
+          tabs.map(t => (t.id === tab.id ? { ...t, status } : t))
+        );
+        this.toastService.success('Đặc tả', `Đã cập nhật trạng thái sang "${status}".`);
+        this.loadTree(tab.id);
       },
       error: () => {
         this.toastService.error('Đặc tả', 'Không thể cập nhật trạng thái tài liệu.');
@@ -198,47 +365,197 @@ export class SpecHubPageComponent implements OnInit {
     });
   }
 
-  deleteCurrentDocument(): void {
-    const doc = this.selectedDoc();
-    if (!doc) return;
+  // --- TẢI XUỐNG FILE GỐC ---
+  downloadFile(id?: string): void {
+    const targetId = id ?? this.activeTabId();
+    if (!targetId) return;
+    const url = this.projectService.getDownloadUrl(targetId);
+    window.open(url, '_blank');
+  }
+
+  // --- CHỌN SHEET CHO EXCEL ---
+  selectExcelSheet(index: number): void {
+    const tab = this.currentTab();
+    if (!tab) return;
+    this.openTabs.update(tabs =>
+      tabs.map(t => (t.id === tab.id ? { ...t, activeSheetIndex: index } : t))
+    );
+  }
+
+  // --- MODAL: TẠO THƯ MỤC ---
+  openCreateFolderModal(parentId?: string | null, event?: MouseEvent): void {
+    if (event) event.stopPropagation();
+    this.folderParentId.set(parentId ?? null);
+    this.newFolderName.set('');
+    this.isCreateFolderModalOpen.set(true);
+  }
+
+  submitCreateFolder(): void {
+    const projectId = this.activeProject()?.id;
+    const name = this.newFolderName().trim();
+    if (!projectId || !name) return;
+
+    this.projectService.createFolder(projectId, name, this.folderParentId()).subscribe({
+      next: res => {
+        this.isCreateFolderModalOpen.set(false);
+        this.toastService.success('Thư mục', `Đã tạo thư mục "${name}" thành công.`);
+        this.loadTree();
+        if (this.folderParentId()) {
+          this.expandedFolderIds.update(s => new Set(s).add(this.folderParentId()!));
+        }
+      },
+      error: () => {
+        this.toastService.error('Thư mục', 'Lỗi khi tạo thư mục mới.');
+      }
+    });
+  }
+
+  // --- MODAL: TẠO FILE VĂN BẢN (.TXT) ---
+  openCreateTextFileModal(parentId?: string | null, event?: MouseEvent): void {
+    if (event) event.stopPropagation();
+    this.textFileParentId.set(parentId ?? null);
+    this.newTextFileName.set('');
+    this.newTextFileContent.set(
+      '# 1. Mục tiêu (Objective)\nMô tả mục tiêu kỹ thuật...\n\n# 2. Tiêu chí nghiệm thu (Acceptance Criteria)\n- Tiêu chí 1\n- Tiêu chí 2'
+    );
+    this.isCreateTextFileModalOpen.set(true);
+  }
+
+  submitCreateTextFile(): void {
+    const projectId = this.activeProject()?.id;
+    let name = this.newTextFileName().trim();
+    if (!projectId || !name) return;
+
+    if (!name.includes('.')) name += '.txt';
+
+    this.projectService.createTextFile(projectId, name, this.newTextFileContent(), this.textFileParentId()).subscribe({
+      next: res => {
+        this.isCreateTextFileModalOpen.set(false);
+        this.toastService.success('Tệp tin', `Đã tạo tệp "${name}" thành công.`);
+        this.loadTree(res.id);
+        if (this.textFileParentId()) {
+          this.expandedFolderIds.update(s => new Set(s).add(this.textFileParentId()!));
+        }
+      },
+      error: () => {
+        this.toastService.error('Tệp tin', 'Lỗi khi tạo tệp văn bản mới.');
+      }
+    });
+  }
+
+  // --- TẢI TỆP LÊN (UPLOAD) ---
+  triggerFileUpload(parentId?: string | null, event?: MouseEvent): void {
+    if (event) event.stopPropagation();
+    this.uploadTargetParentId = parentId ?? null;
+    const input = document.getElementById('spec-file-input') as HTMLInputElement;
+    if (input) {
+      input.value = '';
+      input.click();
+    }
+  }
+
+  onFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+
+    const file = input.files[0];
+    const projectId = this.activeProject()?.id;
+    if (!projectId) return;
+
+    this.toastService.info('Tải lên', `Đang tải lên tệp "${file.name}"...`);
+
+    this.projectService.uploadSpecFile(projectId, file, this.uploadTargetParentId).subscribe({
+      next: res => {
+        this.toastService.success('Tải lên', `Tệp "${file.name}" đã được đồng bộ vào Spec Hub.`);
+        this.loadTree(res.id);
+        if (this.uploadTargetParentId) {
+          this.expandedFolderIds.update(s => new Set(s).add(this.uploadTargetParentId!));
+        }
+      },
+      error: () => {
+        this.toastService.error('Tải lên', 'Lỗi khi tải tệp lên Spec Hub.');
+      }
+    });
+  }
+
+  // --- MODAL: ĐỔI TÊN ---
+  openRenameModal(node: SpecTreeNode, event?: MouseEvent): void {
+    if (event) event.stopPropagation();
+    this.renameItemId.set(node.id);
+    this.renameItemName.set(node.name);
+    this.isRenameModalOpen.set(true);
+  }
+
+  submitRename(): void {
+    const id = this.renameItemId();
+    const newName = this.renameItemName().trim();
+    if (!id || !newName) return;
+
+    this.projectService.renameSpecItem(id, newName).subscribe({
+      next: () => {
+        this.isRenameModalOpen.set(false);
+        this.toastService.success('Đổi tên', 'Đã đổi tên thành công.');
+        this.openTabs.update(tabs =>
+          tabs.map(t => (t.id === id ? { ...t, name: newName } : t))
+        );
+        this.loadTree(id);
+      },
+      error: () => {
+        this.toastService.error('Đổi tên', 'Không thể đổi tên đối tượng.');
+      }
+    });
+  }
+
+  // --- XÓA TỆP / THƯ MỤC ---
+  deleteItem(node: SpecTreeNode, event?: MouseEvent): void {
+    if (event) event.stopPropagation();
+
+    const isDir = node.isDirectory;
+    const msg = isDir
+      ? `Bạn có chắc chắn muốn xóa thư mục "${node.name}" và toàn bộ tệp bên trong? Thao tác này sẽ xóa đồng thời trên đĩa cứng.`
+      : `Bạn có chắc chắn muốn xóa tệp "${node.name}" trên hệ thống và đĩa cứng?`;
 
     this.confirmService.confirm({
-      title: 'Xóa tài liệu đặc tả',
-      message: `Bạn có chắc chắn muốn xóa tài liệu "${doc.title}"? Thao tác này không thể hoàn tác.`,
-      confirmText: 'Xóa tài liệu',
+      title: isDir ? 'Xóa thư mục Spec Hub' : 'Xóa tệp tin Spec Hub',
+      message: msg,
+      confirmText: 'Xóa vĩnh viễn',
       cancelText: 'Hủy',
       type: 'danger',
       onConfirm: () => {
-        this.projectService.deleteProjectDocument(doc.id).subscribe({
+        this.projectService.deleteSpecItem(node.id).subscribe({
           next: () => {
-            this.toastService.success('Đặc tả', 'Đã xóa tài liệu đặc tả.');
-            this.selectedDoc.set(null);
-            this.loadDocuments();
+            this.toastService.success('Spec Hub', `Đã xóa "${node.name}".`);
+            this.closeTab(node.id);
+            this.loadTree();
           },
           error: () => {
-            this.toastService.error('Đặc tả', 'Lỗi khi xóa tài liệu.');
+            this.toastService.error('Spec Hub', 'Lỗi khi xóa đối tượng.');
           }
         });
       }
     });
   }
 
-  // --- BÓC TÁCH USER STORY TRỰC TIẾP TỪ NỘI DUNG ĐẶC TẢ ---
+  // --- BÓC TÁCH USER STORY SANG BACKLOG ---
   onTextSelection(): void {
     const selection = window.getSelection();
     if (selection && selection.toString().trim().length > 0) {
-      const selectedText = selection.toString().trim();
-      this.selectedHighlightText.set(selectedText);
+      this.selectedHighlightText.set(selection.toString().trim());
     }
   }
 
   openExtractStoryModal(): void {
     const selectionText = this.selectedHighlightText() || window.getSelection()?.toString().trim() || '';
     this.extractExcerpt.set(selectionText);
-    
-    // Gợi ý tiêu đề từ câu đầu tiên của excerpt
+
     const firstSentence = selectionText.split('\n')[0].replace(/^[#-*\s]+/, '').trim();
-    this.extractStoryTitle.set(firstSentence ? (firstSentence.length > 80 ? firstSentence.slice(0, 77) + '...' : firstSentence) : 'Người dùng muốn...');
+    this.extractStoryTitle.set(
+      firstSentence
+        ? firstSentence.length > 80
+          ? firstSentence.slice(0, 77) + '...'
+          : firstSentence
+        : 'Người dùng muốn...'
+    );
     this.extractStoryPoints.set(3);
     this.extractCriteria.set(['']);
     this.isExtractModalOpen.set(true);
@@ -265,49 +582,83 @@ export class SpecHubPageComponent implements OnInit {
   }
 
   submitExtractStory(): void {
-    const doc = this.selectedDoc();
+    const tab = this.currentTab();
     const title = this.extractStoryTitle().trim();
-    if (!doc || !title) {
+    if (!tab || !title) {
       this.toastService.warning('Bóc tách Story', 'Vui lòng nhập tiêu đề cho User Story.');
       return;
     }
 
     const ac = this.extractCriteria().map(c => c.trim()).filter(c => c.length > 0);
-    this.isSaving.set(true);
-    this.projectService.extractStoryFromDoc(doc.id, title, this.extractExcerpt(), this.extractStoryPoints(), ac).subscribe({
-      next: res => {
-        this.isSaving.set(false);
-        this.isExtractModalOpen.set(false);
-        this.toastService.success('Bóc tách Story', `Đã tạo thành công User Story ${res.issueKey}: ${res.title}`);
-        // Tải lại tài liệu để cập nhật linked stories
-        this.selectDocumentById(doc.id);
-        // Đồng thời cập nhật lại Backlog workspace
-        this.projectService.loadWorkspace();
-      },
-      error: () => {
-        this.isSaving.set(false);
-        this.toastService.error('Bóc tách Story', 'Không thể bóc tách Story từ tài liệu.');
-      }
-    });
+    this.projectService
+      .extractStoryFromDoc(tab.id, title, this.extractExcerpt(), this.extractStoryPoints(), ac)
+      .subscribe({
+        next: res => {
+          this.isExtractModalOpen.set(false);
+          this.toastService.success('Bóc tách Story', `Đã tạo thành công Story ${res.issueKey}: ${res.title}`);
+          this.projectService.loadWorkspace();
+        },
+        error: () => {
+          this.toastService.error('Bóc tách Story', 'Không thể bóc tách Story từ tài liệu.');
+        }
+      });
   }
 
   // --- BÌNH LUẬN & PHẢN BIỆN ---
   submitComment(): void {
-    const doc = this.selectedDoc();
+    const tab = this.currentTab();
     const text = this.newCommentText().trim();
-    if (!doc || !text) return;
+    if (!tab || !text) return;
 
-    const highlight = this.selectedHighlightText();
-    this.projectService.addDocumentComment(doc.id, text, highlight || undefined).subscribe({
+    this.projectService.addDocumentComment(tab.id, text, this.selectedHighlightText() || undefined).subscribe({
       next: () => {
         this.toastService.success('Phản biện', 'Đã gửi ý kiến phản biện.');
         this.newCommentText.set('');
         this.selectedHighlightText.set('');
-        this.selectDocumentById(doc.id);
       },
       error: () => {
         this.toastService.error('Phản biện', 'Không thể gửi phản biện.');
       }
     });
+  }
+
+  getFileIcon(extension?: string | null): string {
+    const ext = (extension ?? '').toLowerCase();
+    switch (ext) {
+      case '.pdf':
+        return 'picture_as_pdf';
+      case '.docx':
+        return 'article';
+      case '.xlsx':
+        return 'table_chart';
+      case '.md':
+      case '.txt':
+      default:
+        return 'description';
+    }
+  }
+
+  getFileIconColor(extension?: string | null): string {
+    const ext = (extension ?? '').toLowerCase();
+    switch (ext) {
+      case '.pdf':
+        return 'text-rose-500';
+      case '.docx':
+        return 'text-blue-500';
+      case '.xlsx':
+        return 'text-emerald-500';
+      case '.md':
+      case '.txt':
+      default:
+        return 'text-amber-500';
+    }
+  }
+
+  formatFileSize(bytes?: number): string {
+    if (!bytes || bytes <= 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   }
 }

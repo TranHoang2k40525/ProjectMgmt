@@ -200,48 +200,48 @@ public class DataOpsApiMySqlTests(DeliveryApiFixture fixture) : IClassFixture<De
     [MySqlFact]
     public async Task ProjectManagerWithoutDatasetPermissionIsForbidden()
     {
-        Assert.Equal(HttpStatusCode.Forbidden, (await As(SharedTestData.OwnerUserId).GetAsync("/api/v1/ai-data/datasets")).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await As(SharedTestData.OwnerUserId).GetAsync("/api/v1/ai-data/cleaning-rules")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await As(SharedTestData.OwnerUserId).GetAsync("/api/ai-data/datasets")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await As(SharedTestData.OwnerUserId).GetAsync("/api/ai-data/cleaning-rules")).StatusCode);
     }
 
     [MySqlFact]
     public async Task AdminRunsFullLifecycleUntilFrozen()
     {
         var admin = As(SharedTestData.SystemAdminUserId);
-        var dataset = await (await admin.PostAsJsonAsync("/api/v1/ai-data/datasets",
+        var dataset = await (await admin.PostAsJsonAsync("/api/ai-data/datasets",
             new CreateDatasetDto { Code = "breakdown-vi-it", Name = "Breakdown IT", TaskType = "Breakdown" })).Content.ReadFromJsonAsync<DatasetDto>();
-        var version = await (await admin.PostAsJsonAsync($"/api/v1/ai-data/datasets/{dataset!.Id}/versions",
+        var version = await (await admin.PostAsJsonAsync($"/api/ai-data/datasets/{dataset!.Id}/versions",
             new CreateDatasetVersionDto { VersionTag = "v1.0.0" })).Content.ReadFromJsonAsync<DatasetVersionDto>();
 
-        var good = await (await admin.PostAsJsonAsync($"/api/v1/ai-data/versions/{version!.Id}/samples", new SaveDatasetSampleDto
+        var good = await (await admin.PostAsJsonAsync($"/api/ai-data/versions/{version!.Id}/samples", new SaveDatasetSampleDto
         {
             Instruction = "Phân rã Story người dùng đổi mật khẩu",
             InputJson = """{"title":"Đổi mật khẩu"}""",
             OutputJson = """{"subTasks":[{"title":"Tạo API đổi mật khẩu có kiểm tra mật khẩu cũ"}]}"""
         })).Content.ReadFromJsonAsync<DatasetSampleDto>();
-        var bad = await (await admin.PostAsJsonAsync($"/api/v1/ai-data/versions/{version.Id}/samples", new SaveDatasetSampleDto
+        var bad = await (await admin.PostAsJsonAsync($"/api/ai-data/versions/{version.Id}/samples", new SaveDatasetSampleDto
         {
             Instruction = "Ngắn", OutputJson = """{"x":1}"""
         })).Content.ReadFromJsonAsync<DatasetSampleDto>();
 
-        var summary = await (await admin.PostAsync($"/api/v1/ai-data/versions/{version.Id}/clean", null)).Content.ReadFromJsonAsync<CleaningRunSummaryDto>();
+        var summary = await (await admin.PostAsync($"/api/ai-data/versions/{version.Id}/clean", null)).Content.ReadFromJsonAsync<CleaningRunSummaryDto>();
         Assert.Equal((2, 1, 1), (summary!.SamplesChecked, summary.Cleaned, summary.Rejected));
-        var flags = await admin.GetFromJsonAsync<List<QualityFlagDto>>($"/api/v1/ai-data/versions/{version.Id}/flags");
+        var flags = await admin.GetFromJsonAsync<List<QualityFlagDto>>($"/api/ai-data/versions/{version.Id}/flags");
         Assert.Contains(flags!, f => f.SampleId == bad!.Id && f.Severity == "Error");
 
-        var approve = await admin.PostAsJsonAsync($"/api/v1/ai-data/samples/{good!.Id}/approve", new ApproveSampleDto { PiiChecked = true, QualityScore = 0.9m });
+        var approve = await admin.PostAsJsonAsync($"/api/ai-data/samples/{good!.Id}/approve", new ApproveSampleDto { PiiChecked = true, QualityScore = 0.9m });
         Assert.Equal(HttpStatusCode.OK, approve.StatusCode);
-        var pending = await admin.GetFromJsonAsync<PagedResultDto<DatasetSampleDto>>($"/api/v1/ai-data/versions/{version.Id}/samples?qualityStatus=Approved");
+        var pending = await admin.GetFromJsonAsync<PagedResultDto<DatasetSampleDto>>($"/api/ai-data/versions/{version.Id}/samples?qualityStatus=Approved");
         Assert.Equal(1, pending!.TotalCount);
 
         // Không gửi body: seed ngẫu nhiên.
-        var frozen = await (await admin.PostAsync($"/api/v1/ai-data/versions/{version.Id}/freeze", null))
+        var frozen = await (await admin.PostAsync($"/api/ai-data/versions/{version.Id}/freeze", null))
             .Content.ReadFromJsonAsync<DatasetVersionDto>();
         Assert.True(frozen!.IsFrozen);
         Assert.NotNull(frozen.SplitSeed);
         Assert.Equal(64, frozen.Checksum!.Length);
 
-        var afterFreeze = await admin.PostAsJsonAsync($"/api/v1/ai-data/versions/{version.Id}/samples", new SaveDatasetSampleDto { Instruction = "Mẫu sau khi freeze không được thêm" });
+        var afterFreeze = await admin.PostAsJsonAsync($"/api/ai-data/versions/{version.Id}/samples", new SaveDatasetSampleDto { Instruction = "Mẫu sau khi freeze không được thêm" });
         Assert.Equal(HttpStatusCode.Conflict, afterFreeze.StatusCode);
         Assert.Contains("DATASET_VERSION_FROZEN", await afterFreeze.Content.ReadAsStringAsync(), StringComparison.Ordinal);
     }

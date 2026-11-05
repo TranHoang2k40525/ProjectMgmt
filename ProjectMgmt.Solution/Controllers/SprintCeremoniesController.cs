@@ -47,7 +47,6 @@ public sealed class CompleteSprintRolloverRequest
 }
 
 [Route("api")]
-[Route("api/v1")]
 [TypeFilter(typeof(ProjectAuthorizationFilter))]
 public class SprintCeremoniesController(
     PlanningDbContext planning,

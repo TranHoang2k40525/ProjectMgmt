@@ -24,7 +24,8 @@ import { ToastService } from '../../core/services/toast.service';
       <div class="breadcrumb">
         <a routerLink="/projects">Dự án</a> &gt;
         @if (project()) {
-          <a [routerLink]="['/projects', projectId, 'settings']">{{ project()?.name }}</a> &gt;
+          <a routerLink="/project/summary" class="hover:text-primary hover:underline">{{ project()?.name }}</a> &gt;
+          <a [routerLink]="['/projects', projectId, 'settings']" class="hover:text-primary hover:underline">Cài đặt</a> &gt;
         }
         <span>Cấu hình Board</span>
       </div>

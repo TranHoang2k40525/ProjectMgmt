@@ -128,6 +128,63 @@ export interface SpecDocument {
   linkedStories?: SpecStoryLink[];
 }
 
+export interface SpecTreeNode {
+  id: string;
+  parentId?: string | null;
+  name: string;
+  title?: string;
+  relativePath: string;
+  isDirectory: boolean;
+  extension?: string | null;
+  fileSize: number;
+  status: 'Draft' | 'Review' | 'Approved';
+  version: number;
+  createdByUserId: string;
+  createdByName?: string;
+  createdAt: string;
+  updatedAt?: string | null;
+  children: SpecTreeNode[];
+}
+
+export interface XlsxSheet {
+  name: string;
+  rows: string[][];
+}
+
+export interface XlsxPreview {
+  fileName: string;
+  sheets: XlsxSheet[];
+}
+
+export interface DocxPreview {
+  fileName: string;
+  extractedHtml: string;
+  rawText: string;
+}
+
+export interface SpecFileContent {
+  id: string;
+  projectId: string;
+  name: string;
+  title: string;
+  relativePath: string;
+  extension?: string;
+  fileSize: number;
+  fileType: 'text' | 'pdf' | 'docx' | 'xlsx';
+  content?: string;
+  previewData?: DocxPreview | XlsxPreview | any;
+  status: 'Draft' | 'Review' | 'Approved';
+  version: number;
+  createdByUserId: string;
+  createdByName?: string;
+  approvedByUserId?: string;
+  approvedByName?: string;
+  createdAt: string;
+  updatedAt?: string;
+  comments?: SpecDocumentComment[];
+  linkedStories?: SpecStoryLink[];
+}
+
 export interface PlanningPokerVote {
   id: string;
   sessionId: string;
@@ -943,6 +1000,52 @@ export class ProjectManagementService {
 
   deleteProjectDocument(id: string): Observable<boolean> {
     return this.http.delete<void>(`${this.baseUrl}/documents/${id}`).pipe(map(() => true));
+  }
+
+  // --- Spec Hub File System & Multi-Tab Tree ---
+  getSpecTree(projectId: string): Observable<SpecTreeNode[]> {
+    return this.http.get<SpecTreeNode[]>(`${this.baseUrl}/projects/${projectId}/documents/tree`);
+  }
+
+  createFolder(projectId: string, name: string, parentId?: string | null): Observable<any> {
+    return this.http.post(`${this.baseUrl}/projects/${projectId}/documents/folders`, { name, parentId });
+  }
+
+  createTextFile(projectId: string, name: string, content = '', parentId?: string | null): Observable<any> {
+    return this.http.post(`${this.baseUrl}/projects/${projectId}/documents/files/text`, { name, content, parentId });
+  }
+
+  uploadSpecFile(projectId: string, file: File, parentId?: string | null): Observable<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (parentId) {
+      formData.append('parentId', parentId);
+    }
+    return this.http.post(`${this.baseUrl}/projects/${projectId}/documents/files/upload`, formData);
+  }
+
+  getFileContent(documentId: string): Observable<SpecFileContent> {
+    return this.http.get<SpecFileContent>(`${this.baseUrl}/documents/${documentId}/content`);
+  }
+
+  updateTextFileContent(documentId: string, content: string): Observable<any> {
+    return this.http.put(`${this.baseUrl}/documents/${documentId}/content`, { content });
+  }
+
+  renameSpecItem(documentId: string, newName: string): Observable<any> {
+    return this.http.put(`${this.baseUrl}/documents/${documentId}/rename`, { newName });
+  }
+
+  deleteSpecItem(documentId: string): Observable<any> {
+    return this.http.delete(`${this.baseUrl}/documents/${documentId}`);
+  }
+
+  getDownloadUrl(documentId: string): string {
+    return `${this.baseUrl}/documents/${documentId}/download`;
+  }
+
+  getRawFileUrl(documentId: string): string {
+    return `${this.baseUrl}/documents/${documentId}/raw`;
   }
 
   addDocumentComment(documentId: string, content: string, selectedText?: string): Observable<SpecDocumentComment> {

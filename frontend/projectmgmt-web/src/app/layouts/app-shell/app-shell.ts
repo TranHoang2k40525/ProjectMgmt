@@ -79,8 +79,48 @@ export class AppShellComponent {
   // Check if current route is inside a Project Context (Show Sub-Header)
   readonly isProjectRoute = computed(() => {
     const url = this.currentUrl();
-    return url.includes('/project/') || url.includes('/board') || url.includes('/backlog') || url.includes('/task-list') || url.includes('/roadmap') || url.includes('/reports') || url.includes('/documents') || (url.includes('/projects/') && url.includes('/settings'));
+    if (!url || url === '/' || url.startsWith('/for-you') || url.startsWith('/orgs') || url.startsWith('/profile') || url.startsWith('/notifications') || url.startsWith('/admin') || url.startsWith('/auth') || url.startsWith('/login') || url.startsWith('/invite')) {
+      return false;
+    }
+    return (
+      url.startsWith('/project') ||
+      url.startsWith('/projects') ||
+      url.startsWith('/board') ||
+      url.startsWith('/backlog') ||
+      url.startsWith('/roadmap') ||
+      url.startsWith('/task-list') ||
+      url.startsWith('/list') ||
+      url.startsWith('/documents') ||
+      url.startsWith('/reports') ||
+      url.startsWith('/issues')
+    );
   });
+
+  isTabActive(tab: string): boolean {
+    const url = this.currentUrl();
+    switch (tab) {
+      case 'summary':
+        return url.startsWith('/project/summary') || url.includes('/summary');
+      case 'roadmap':
+        return url.startsWith('/roadmap');
+      case 'board':
+        return url.startsWith('/board');
+      case 'backlog':
+        return url.startsWith('/backlog');
+      case 'task-list':
+        return url.startsWith('/task-list') || url.startsWith('/list');
+      case 'documents':
+        return url.startsWith('/documents') || url.includes('/documents');
+      case 'reports':
+        return url.startsWith('/reports');
+      case 'members':
+        return url.includes('/members');
+      case 'settings':
+        return url.includes('/settings') || url.includes('/workflow') || url.includes('/boards') || url.includes('/board-settings');
+      default:
+        return false;
+    }
+  }
 
   // Header Live Search Signal
   readonly headerSearchQuery = signal<string>('');
@@ -122,6 +162,21 @@ export class AppShellComponent {
     return this.isProjectRoute() || url.startsWith('/issues/') ? this.activeProject().orgId || null : null;
   });
   readonly sidebarOrg = computed(() => this.organizations().find(org => org.id === this.currentOrgId()) ?? null);
+
+  /** Vai trò theo ngữ cảnh hiện tại (Dự án -> Tổ chức -> Tài khoản cá nhân, tuyệt đối không gán Admin toàn cục) */
+  readonly currentContextRole = computed(() => {
+    if (this.isProjectRoute() && this.activeProject().id) {
+      const proj = this.activeProject();
+      const myId = this.identity.authState().currentUser?.id;
+      if (proj.leadUserId === myId) return 'Giám đốc dự án';
+      return 'Thành viên dự án';
+    }
+    const org = this.sidebarOrg();
+    if (org) {
+      return this.orgRoleLabels[org.myRole] || 'Thành viên tổ chức';
+    }
+    return 'Tài khoản cá nhân';
+  });
 
   @HostListener('document:keydown', ['$event'])
   onGlobalKeydown(event: KeyboardEvent): void {

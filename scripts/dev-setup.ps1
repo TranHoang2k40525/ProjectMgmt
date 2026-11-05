@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
   Dựng nhanh môi trường dev local: tạo DB, chạy migration 3 module, vá các cột còn thiếu migration,
   kích hoạt tài khoản (khi không có SMTP) và (tùy chọn) chạy backend.
@@ -101,7 +101,13 @@ if (-not $SkipMigrations) {
     @{ Table = 'Issue'; Column = 'RemainingHours'; Definition = 'DECIMAL(5,2) NULL' },
     @{ Table = 'WorkflowStatus'; Column = 'IsDone'; Definition = 'TINYINT(1) NOT NULL DEFAULT 0' },
     @{ Table = 'WorkflowStatus'; Column = 'IsActiveWork'; Definition = 'TINYINT(1) NOT NULL DEFAULT 0' },
-    @{ Table = 'WorkflowStatus'; Column = 'IsCanceled'; Definition = 'TINYINT(1) NOT NULL DEFAULT 0' }
+    @{ Table = 'WorkflowStatus'; Column = 'IsCanceled'; Definition = 'TINYINT(1) NOT NULL DEFAULT 0' },
+    @{ Table = 'ProjectDocument'; Column = 'ParentId'; Definition = 'CHAR(36) NULL' },
+    @{ Table = 'ProjectDocument'; Column = 'Name'; Definition = 'VARCHAR(255) NOT NULL DEFAULT \'\'' },
+    @{ Table = 'ProjectDocument'; Column = 'RelativePath'; Definition = 'VARCHAR(1000) NOT NULL DEFAULT \'\'' },
+    @{ Table = 'ProjectDocument'; Column = 'IsDirectory'; Definition = 'TINYINT(1) NOT NULL DEFAULT 0' },
+    @{ Table = 'ProjectDocument'; Column = 'Extension'; Definition = 'VARCHAR(20) NULL' },
+    @{ Table = 'ProjectDocument'; Column = 'FileSize'; Definition = 'BIGINT NOT NULL DEFAULT 0' }
   )
   foreach ($patch in $patches) {
     $exists = Invoke-Sql "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='$Database' AND TABLE_NAME='$($patch.Table)' AND COLUMN_NAME='$($patch.Column)';"

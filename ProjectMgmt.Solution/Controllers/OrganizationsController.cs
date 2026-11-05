@@ -5,7 +5,6 @@ using ProjectMgmt.Solution.Services;
 
 namespace ProjectMgmt.Solution.Controllers;
 
-[Route("api/v1/organizations")]
 [Route("api/organizations")]
 public class OrganizationsController : ApiControllerBase
 {

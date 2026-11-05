@@ -13,7 +13,6 @@ namespace ProjectMgmt.Solution.Controllers;
 /// thật của Planning; khi B đăng ký contract đó thì các endpoint tự hoạt động.
 /// </summary>
 [Route("api/issues/{id:guid}")]
-[Route("api/v1/issues/{id:guid}")]
 public class IssueReleaseController(
     IIssueTrackingService issues,
     ProjectAccess access,

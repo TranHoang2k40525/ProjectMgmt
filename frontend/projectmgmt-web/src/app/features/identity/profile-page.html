@@ -9,18 +9,11 @@
         
         <div class="profile-hero-layout relative flex flex-col md:flex-row md:items-center justify-between gap-6 z-10">
           <div class="flex flex-col gap-1">
-            <div class="flex items-center gap-2">
-              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container-lowest/15 backdrop-blur-md text-on-primary font-label-sm text-label-sm uppercase tracking-wider font-semibold">
-                <span class="material-symbols-outlined text-[14px]">verified_user</span>
-                Tài Khoản Kỹ Sư Agile
-              </span>
-            </div>
-            
             <h1 class="font-headline-lg text-headline-lg text-white tracking-tight font-bold">
-              Hồ sơ cá nhân & Cài đặt bảo mật tài khoản
+              Hồ sơ cá nhân & Bảo mật tài khoản
             </h1>
             <p class="font-body-md text-body-md text-on-primary-container/90 max-w-2xl">
-              Quản lý định danh kỹ sư, thông tin xác thực đa lớp, quyền điều phối Scrum Sprint và thông tin định danh số.
+              Quản lý thông tin tài khoản và bảo mật cá nhân.
             </p>
           </div>
 
@@ -42,7 +35,7 @@
         <div class="profile-overview-layout flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           
           <div class="flex flex-col sm:flex-row items-start sm:items-center gap-5">
-            <div class="relative group cursor-pointer" (click)="openAvatarModal()" title="Nhấp để xem hoặc đổi ảnh đại diện">
+            <div id="profile-avatar-button" class="relative group cursor-pointer" (click)="openAvatarModal()" title="Nhấp để xem, thay đổi hoặc xóa ảnh đại diện">
               @if (resolvedAvatarUrl()) {
                 <img [src]="resolvedAvatarUrl()" [alt]="u.displayName" class="w-24 h-24 rounded-full object-cover shadow-md ring-4 ring-surface-container-high transition-transform duration-200 group-hover:scale-105" />
               } @else {
@@ -52,7 +45,7 @@
               }
               <div class="absolute inset-0 rounded-full bg-black/40 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                 <span class="material-symbols-outlined text-[24px]">photo_camera</span>
-                <span class="text-[10px] font-bold mt-0.5">Đổi ảnh</span>
+                <span class="text-[10px] font-bold mt-0.5">Tùy chọn</span>
               </div>
               <span class="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-emerald-500 ring-2 ring-surface-container-lowest z-10" title="Đang online"></span>
             </div>
@@ -61,8 +54,8 @@
               <div class="flex flex-wrap items-center gap-2">
                 <h2 class="font-headline-md text-headline-md text-on-surface font-bold">{{ u.displayName }}</h2>
                 <span class="px-3 py-1 rounded-full bg-surface-container-high text-primary font-label-sm text-label-sm flex items-center gap-1 font-semibold">
-                  <span class="material-symbols-outlined text-[14px]">hub</span>
-                  {{ u.roleName }}
+                  <span class="material-symbols-outlined text-[14px]">account_circle</span>
+                  {{ contextRole() }}
                 </span>
                 <span class="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-label-sm text-label-sm font-semibold flex items-center gap-1">
                   <span class="material-symbols-outlined text-[13px]">check_circle</span>
@@ -89,8 +82,8 @@
 
           <div class="profile-quick-actions flex items-center gap-2 shrink-0">
             <button type="button" (click)="setTab('SKILLS')" class="px-3.5 py-2 rounded-xl bg-primary-container text-on-primary hover:bg-primary font-label-lg text-label-lg transition-colors flex items-center gap-1.5 shadow-sm font-semibold cursor-pointer">
-              <span class="material-symbols-outlined text-[18px]">auto_awesome</span>
-              <span>Hồ sơ năng lực AI</span>
+              <span class="material-symbols-outlined text-[18px]">verified</span>
+              <span>Kỹ năng chuyên môn</span>
             </button>
           </div>
         </div>
@@ -267,18 +260,7 @@
                   <textarea id="profBio" rows="3" maxlength="5000" formControlName="bio" placeholder="Vai trò, kinh nghiệm và định hướng chuyên môn..." class="w-full px-4 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-primary-container"></textarea>
                 </div>
 
-                <div class="flex flex-col gap-1.5 md:col-span-2">
-                  <label for="profAvatar" class="font-label-md text-label-md text-on-surface font-semibold">Ảnh đại diện</label>
-                  <input id="profAvatar" type="file" accept="image/jpeg,image/png,image/webp" (change)="onAvatarSelected($event)" class="w-full px-4 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md file:mr-4 file:rounded-lg file:border-0 file:bg-primary-container file:px-3 file:py-1.5 file:text-white" />
-                  <small class="text-outline">JPEG, PNG hoặc WebP; dung lượng tối đa 5 MB. Backend kiểm tra chữ ký tệp thật.</small>
-                </div>
-
-                <div class="md:col-span-2 pt-4 flex items-center justify-between border-t border-surface-container mt-2">
-                  <span class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1">
-                    <span class="material-symbols-outlined text-[16px] text-primary">history</span>
-                    Đã đồng bộ thông tin hồ sơ với máy chủ
-                  </span>
-
+                <div class="md:col-span-2 pt-4 flex items-center justify-end border-t border-surface-container mt-2">
                   <button type="submit" [disabled]="loading() || profileForm.invalid" class="px-5 py-2.5 rounded-xl bg-primary-container hover:bg-primary text-on-primary font-label-lg text-label-lg transition-colors shadow-md flex items-center gap-2 font-bold cursor-pointer disabled:opacity-50">
                     @if (loading()) {
                       <span class="spinner"></span> Đang lưu...

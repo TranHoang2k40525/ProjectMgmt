@@ -11,7 +11,6 @@ namespace ProjectMgmt.Solution.Controllers;
 /// Sửa/xóa nhãn của Project: "project.settings.manage".
 /// </summary>
 [Route("api")]
-[Route("api/v1")]
 public class IssueLabelLinkController(
     IIssueLabelLinkService labels,
     IIssueTrackingService issues,

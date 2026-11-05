@@ -47,7 +47,6 @@ public sealed class SprintRequest
 }
 
 [Route("api")]
-[Route("api/v1")]
 public sealed class WorkItemsController(
     DeliveryIntelligenceDbContext delivery,
     PlanningDbContext planning,
