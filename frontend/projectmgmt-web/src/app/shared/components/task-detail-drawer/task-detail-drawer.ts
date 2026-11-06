@@ -316,7 +316,7 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
               <div class="flex flex-col gap-2 mt-1">
                 @for (comment of sortedComments(); track comment.id) {
                   <div class="flex gap-2.5 p-2.5 rounded-md bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800">
-                    @if (getAuthorAvatar(comment.authorName); as av) {
+                    @if (getAuthorAvatar(comment.authorName, comment.authorAvatar); as av) {
                       <img [src]="av" [alt]="comment.authorName" class="w-6 h-6 rounded-full object-cover shrink-0 border border-slate-200 dark:border-slate-700" />
                     } @else {
                       <div class="w-6 h-6 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center text-[10px] font-bold shrink-0">
@@ -588,9 +588,7 @@ export class TaskDetailDrawerComponent {
 
 
   getAssigneeAvatar(name?: string): string | null {
-    if (!name) return null;
-    const member = this.projectMembers().find(m => m.displayName && m.displayName.trim().toLowerCase() === name.trim().toLowerCase());
-    return resolveAvatarUrl(member?.avatarUrl);
+    return this.projectService.getMemberAvatar(name, this.task?.assigneeAvatar);
   }
 
   getIssueTypeIcon(item: WorkItem): string {
@@ -633,10 +631,8 @@ export class TaskDetailDrawerComponent {
     return map[typeName.toLowerCase()] || '#4BADE8';
   }
 
-  getAuthorAvatar(name?: string): string | null {
-    if (!name) return null;
-    const member = this.projectMembers().find(m => m.displayName && m.displayName.trim().toLowerCase() === name.trim().toLowerCase());
-    return resolveAvatarUrl(member?.avatarUrl);
+  getAuthorAvatar(name?: string, authorAvatar?: string): string | null {
+    return this.projectService.getMemberAvatar(name, authorAvatar);
   }
 
   getInitials(name?: string): string {

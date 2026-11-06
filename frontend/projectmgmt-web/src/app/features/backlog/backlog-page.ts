@@ -52,6 +52,17 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
   readonly projectMembers = computed(() => this.projectService.currentProject()?.members ?? []);
 
+  readonly canManageSprints = computed(() => {
+    if (this.identityService.isSystemAdmin()) return true;
+    const myId = this.identityService.authState().currentUser?.id;
+    if (!myId) return false;
+    const proj = this.projectService.currentProject();
+    if (proj.leadUserId && proj.leadUserId.toLowerCase() === myId.toLowerCase()) return true;
+    const myMember = (proj.members || []).find(m => m.userId && m.userId.toLowerCase() === myId.toLowerCase());
+    if (myMember && (myMember.role === 'Project Lead' || myMember.role === 'Scrum Master')) return true;
+    return false;
+  });
+
   // Search & Filter State
   searchQuery = signal<string>('');
   selectedTypeFilter = signal<string | null>(null);
@@ -952,6 +963,10 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     const parts = name.trim().split(' ');
     if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
     return (parts[parts.length - 2][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+
+  getAssigneeAvatar(name?: string, itemAvatar?: string): string | null {
+    return this.projectService.getMemberAvatar(name, itemAvatar);
   }
 
   getSprintAssignees(sprintId: string): string[] {

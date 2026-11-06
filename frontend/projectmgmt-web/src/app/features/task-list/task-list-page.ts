@@ -152,9 +152,13 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
                     </td>
                     <td data-label="Người xử lý" class="py-2.5 px-3 text-xs">
                       <div class="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
-                        <div class="w-5 h-5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center text-[10px] font-bold">
-                          {{ (item.assigneeName || 'U')[0] }}
-                        </div>
+                        @if (getAssigneeAvatar(item); as avatarUrl) {
+                          <img [src]="avatarUrl" [alt]="item.assigneeName || 'Chưa gán'" class="w-5 h-5 rounded-full object-cover shrink-0 ring-1 ring-slate-200 dark:ring-slate-700" />
+                        } @else {
+                          <div class="w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center text-[10px] font-bold shrink-0">
+                            {{ (item.assigneeName || 'U')[0] }}
+                          </div>
+                        }
                         <span class="truncate max-w-[120px]">{{ item.assigneeName }}</span>
                       </div>
                     </td>
@@ -273,6 +277,10 @@ export class TaskListPageComponent {
 
   openDrawer(task: WorkItem): void {
     this.projectService.activeDrawerTask.set(task);
+  }
+
+  getAssigneeAvatar(item: WorkItem): string | null {
+    return this.projectService.getMemberAvatar(item.assigneeName, item.assigneeAvatar);
   }
 
   getIssueTypeIcon(item: WorkItem): string {

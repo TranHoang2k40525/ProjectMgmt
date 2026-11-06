@@ -40,49 +40,51 @@ interface CandidateOrgMember {
     <div class="project-members-page settings-container">
       
       <!-- Breadcrumb Navigation -->
-      <div class="breadcrumb">
-        <a routerLink="/projects">Dự án</a> &gt;
+      @if (canManageMembers()) {
+        <div class="breadcrumb">
+          <a routerLink="/projects">Dự án</a> &gt;
+          @if (currentProject(); as proj) {
+            <a routerLink="/project/summary" class="hover:text-primary hover:underline">{{ proj.name }} ({{ proj.projectKey }})</a> &gt;
+          }
+          <span>Cài đặt</span>
+        </div>
+
+        <div class="settings-header">
+          <div>
+            <h1>Cài đặt Dự án</h1>
+            <p class="subtitle">Quản lý cấu hình thông tin chung, loại công việc động, nhãn dán, quy trình (Workflow) và bảng (Board)</p>
+          </div>
+        </div>
+
+        <!-- Settings Tabs Navigation -->
         @if (currentProject(); as proj) {
-          <a routerLink="/project/summary" class="hover:text-primary hover:underline">{{ proj.name }} ({{ proj.projectKey }})</a> &gt;
+          <div class="settings-tabs">
+            <a [routerLink]="['/projects', proj.id, 'settings']" class="tab-item">
+              <span class="material-symbols-outlined text-[18px]">tune</span>
+              <span>Thông tin chung</span>
+            </a>
+            <a [routerLink]="['/projects', proj.id, 'settings']" [queryParams]="{ tab: 'issue-types' }" class="tab-item">
+              <span class="material-symbols-outlined text-[18px]">category</span>
+              <span>Loại công việc (Issue Types)</span>
+            </a>
+            <a [routerLink]="['/projects', proj.id, 'settings']" [queryParams]="{ tab: 'labels' }" class="tab-item">
+              <span class="material-symbols-outlined text-[18px]">label</span>
+              <span>Quản lý Nhãn (Labels)</span>
+            </a>
+            <a [routerLink]="['/projects', proj.id, 'settings', 'workflow']" class="tab-item">
+              <span class="material-symbols-outlined text-[18px]">sync_alt</span>
+              <span>Cấu hình Workflow</span>
+            </a>
+            <a [routerLink]="['/projects', proj.id, 'settings', 'board']" class="tab-item">
+              <span class="material-symbols-outlined text-[18px]">view_kanban</span>
+              <span>Cấu hình Board</span>
+            </a>
+            <span class="tab-item active">
+              <span class="material-symbols-outlined text-[18px]">badge</span>
+              <span>Thành viên &amp; Phân quyền</span>
+            </span>
+          </div>
         }
-        <span>Cài đặt</span>
-      </div>
-
-      <div class="settings-header">
-        <div>
-          <h1>Cài đặt Dự án</h1>
-          <p class="subtitle">Quản lý cấu hình thông tin chung, loại công việc động, nhãn dán, quy trình (Workflow) và bảng (Board)</p>
-        </div>
-      </div>
-
-      <!-- Settings Tabs Navigation -->
-      @if (currentProject(); as proj) {
-        <div class="settings-tabs">
-          <a [routerLink]="['/projects', proj.id, 'settings']" class="tab-item">
-            <span class="material-symbols-outlined text-[18px]">tune</span>
-            <span>Thông tin chung</span>
-          </a>
-          <a [routerLink]="['/projects', proj.id, 'settings']" [queryParams]="{ tab: 'issue-types' }" class="tab-item">
-            <span class="material-symbols-outlined text-[18px]">category</span>
-            <span>Loại công việc (Issue Types)</span>
-          </a>
-          <a [routerLink]="['/projects', proj.id, 'settings']" [queryParams]="{ tab: 'labels' }" class="tab-item">
-            <span class="material-symbols-outlined text-[18px]">label</span>
-            <span>Quản lý Nhãn (Labels)</span>
-          </a>
-          <a [routerLink]="['/projects', proj.id, 'settings', 'workflow']" class="tab-item">
-            <span class="material-symbols-outlined text-[18px]">sync_alt</span>
-            <span>Cấu hình Workflow</span>
-          </a>
-          <a [routerLink]="['/projects', proj.id, 'settings', 'board']" class="tab-item">
-            <span class="material-symbols-outlined text-[18px]">view_kanban</span>
-            <span>Cấu hình Board</span>
-          </a>
-          <span class="tab-item active">
-            <span class="material-symbols-outlined text-[18px]">badge</span>
-            <span>Thành viên &amp; Phân quyền</span>
-          </span>
-        </div>
       }
 
       @if (error) { <p role="alert" class="p-3 rounded bg-red-50 text-red-700 text-xs font-medium">{{ error }}</p> }

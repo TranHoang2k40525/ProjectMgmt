@@ -380,6 +380,7 @@ public sealed class WorkItemsController(
         var epicIds = issues.Where(i => i.EpicId.HasValue).Select(i => i.EpicId!.Value).Distinct().ToList();
         var epics = await delivery.Issues.AsNoTracking().Where(i => epicIds.Contains(i.Id)).ToDictionaryAsync(i => i.Id);
         string Name(Guid? userId) => userId.HasValue && profiles.TryGetValue(userId.Value, out var p) ? p.DisplayName : "";
+        string? Avatar(Guid? userId) => userId.HasValue && profiles.TryGetValue(userId.Value, out var p) ? p.AvatarUrl : null;
         return issues.Select(i => new WorkItemView {
             Id = i.Id, ProjectId = i.ProjectId, IssueKey = $"{projects[i.ProjectId].ProjectKey}-{i.IssueNumber}", Title = i.Title, Description = i.Description,
             StatusId = i.StatusId, StatusName = statuses.TryGetValue(i.StatusId, out var st) ? st.Name : "",
@@ -395,12 +396,12 @@ public sealed class WorkItemsController(
             StoryPoints = i.StoryPoints ?? 0,
             EstimatedHours = i.EstimatedHours, RemainingHours = i.RemainingHours,
             IsBlocked = i.IsBlocked, BlockReason = i.BlockReason, BlockedAt = i.BlockedAt,
-            ParentId = i.ParentId, AssigneeId = i.AssigneeId, AssigneeName = Name(i.AssigneeId), ReporterName = Name(i.ReporterId),
+            ParentId = i.ParentId, AssigneeId = i.AssigneeId, AssigneeName = Name(i.AssigneeId), AssigneeAvatar = Avatar(i.AssigneeId), ReporterName = Name(i.ReporterId),
             SprintId = i.SprintId, SprintName = i.SprintId.HasValue && sprints.TryGetValue(i.SprintId.Value, out var sp) ? sp.Name : "",
             EpicId = i.EpicId, EpicName = i.EpicId.HasValue && epics.TryGetValue(i.EpicId.Value, out var e) ? e.Title : "", EpicColor = "indigo", CreatedAt = i.CreatedAt, UpdatedAt = i.UpdatedAt,
             Labels = labels.Where(l => l.IssueId == i.Id).Select(l => l.Name).ToList(),
-            Comments = comments.Where(c => c.IssueId == i.Id).Select(c => new { c.Id, authorName = Name(c.UserId), c.Content, c.CreatedAt }).ToList(),
-            Activities = activities.Where(a => a.IssueId == i.Id).Select(a => new { a.Id, actorName = Name(a.UserId), action = a.Action + (a.NewValue is null ? "" : ": " + a.NewValue), timestamp = a.CreatedAt }).ToList(),
+            Comments = comments.Where(c => c.IssueId == i.Id).Select(c => new { c.Id, authorName = Name(c.UserId), authorAvatar = Avatar(c.UserId), c.Content, c.CreatedAt }).ToList(),
+            Activities = activities.Where(a => a.IssueId == i.Id).Select(a => new { a.Id, actorName = Name(a.UserId), actorAvatar = Avatar(a.UserId), action = a.Action + (a.NewValue is null ? "" : ": " + a.NewValue), timestamp = a.CreatedAt }).ToList(),
             Attachments = attachments.Where(a => a.IssueId == i.Id).Select(a => new { a.Id, a.FileName, a.FileSizeBytes, a.CreatedAt }).ToList(),
             Criteria = criteria.Where(c => c.IssueId == i.Id).Select(c => new { c.Id, c.Content, c.IsMet }).ToList()
         }).ToList();
@@ -430,7 +431,7 @@ public sealed class WorkItemView
     public string Priority { get; set; } = ""; public decimal StoryPoints { get; set; }
     public decimal? EstimatedHours { get; set; } public decimal? RemainingHours { get; set; }
     public bool IsBlocked { get; set; } public string? BlockReason { get; set; } public DateTime? BlockedAt { get; set; }
-    public Guid? ParentId { get; set; } public Guid? AssigneeId { get; set; } public string AssigneeName { get; set; } = ""; public string ReporterName { get; set; } = "";
+    public Guid? ParentId { get; set; } public Guid? AssigneeId { get; set; } public string AssigneeName { get; set; } = ""; public string? AssigneeAvatar { get; set; } public string ReporterName { get; set; } = "";
     public Guid? SprintId { get; set; } public string SprintName { get; set; } = ""; public Guid? EpicId { get; set; } public string EpicName { get; set; } = ""; public string EpicColor { get; set; } = "";
     public DateTime CreatedAt { get; set; } public DateTime? UpdatedAt { get; set; }
     public List<string> Labels { get; set; } = []; public object Comments { get; set; } = Array.Empty<object>(); public object Activities { get; set; } = Array.Empty<object>();

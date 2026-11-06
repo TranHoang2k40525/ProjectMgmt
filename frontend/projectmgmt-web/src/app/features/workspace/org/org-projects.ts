@@ -42,7 +42,9 @@ export class OrgProjectsComponent implements OnInit {
     this.load();
     // /projects/new chuyển về đây kèm ?create=1: mở wizard rồi bỏ tham số để reload không mở lại.
     if (this.route.snapshot.queryParamMap.get('create')) {
-      this.wizardOpen.set(true);
+      if (this.context.isOwner()) {
+        this.wizardOpen.set(true);
+      }
       void this.router.navigate([], { relativeTo: this.route, queryParams: { create: null }, queryParamsHandling: 'merge', replaceUrl: true });
     }
   }

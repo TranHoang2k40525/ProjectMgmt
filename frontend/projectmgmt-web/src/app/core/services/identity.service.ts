@@ -65,6 +65,7 @@ export class IdentityService {
   constructor() {
     if (this.authState().isAuthenticated) {
       this.initRealtimeNotifications();
+      this.getMyProfile().subscribe({ error: () => undefined });
     }
   }
 
@@ -80,6 +81,7 @@ export class IdentityService {
         this.tokenStore.setSession(session);
         this.authState.set({ currentUser: user, isAuthenticated: true, token: session.accessToken });
         this.initRealtimeNotifications();
+        this.getMyProfile().subscribe({ error: () => undefined });
         return { user, token: session.accessToken };
       })
     );
@@ -177,6 +179,7 @@ export class IdentityService {
       userId: result.userId,
       email: result.email,
       fullName: result.fullName ?? result.email,
+      avatarUrl: result.avatarUrl ?? null,
       roles: result.roles ?? []
     };
   }
@@ -187,7 +190,7 @@ export class IdentityService {
       id: session.userId,
       email: session.email,
       displayName: session.fullName,
-      avatarUrl: null,
+      avatarUrl: this.resolveAssetUrl(session.avatarUrl),
       jobTitle: '',
       roleId: '',
       roleName: session.roles[0] ?? 'Thành viên',
@@ -232,6 +235,10 @@ export class IdentityService {
   uploadAvatar(file: File): Observable<string> {
     return this.identityApi.uploadAvatar(file).pipe(map(result => {
       const avatarUrl = this.resolveAssetUrl(result.avatarUrl);
+      const session = this.tokenStore.getSession();
+      if (session) {
+        this.tokenStore.setSession({ ...session, avatarUrl });
+      }
       this.authState.update(state => state.currentUser
         ? { ...state, currentUser: { ...state.currentUser, avatarUrl } }
         : state);
@@ -243,6 +250,10 @@ export class IdentityService {
     return this.identityApi.deleteAvatar().pipe(
       catchError(() => this.identityApi.updateMyProfile({ avatarUrl: null })),
       map(() => {
+        const session = this.tokenStore.getSession();
+        if (session) {
+          this.tokenStore.setSession({ ...session, avatarUrl: null });
+        }
         this.authState.update(state => state.currentUser
           ? { ...state, currentUser: { ...state.currentUser, avatarUrl: null } }
           : state);
@@ -351,7 +362,8 @@ export class IdentityService {
       this.tokenStore.setSession({
         ...session,
         email: user.email,
-        fullName: user.displayName
+        fullName: user.displayName,
+        avatarUrl: user.avatarUrl
       });
     }
     this.authState.update(state => ({ ...state, currentUser: user }));
@@ -393,8 +405,10 @@ export class IdentityService {
 
   getUsers(): Observable<UserProfileModel[]> {
     return this.http.get<UserProfileModel[]>(`${environment.apiBaseUrl}/admin/users`).pipe(
-      map(users => users.map(u => ({ ...u, roleId: u.roles?.[0]?.roleId ?? '',
-        roleName: u.roles?.map(r => r.roleName).join(', ') ?? '', twoFactorEnabled: false })))
+      map(users => users.map(u => ({
+        ...u, roleId: u.roles?.[0]?.roleId ?? '',
+        roleName: u.roles?.map(r => r.roleName).join(', ') ?? '', twoFactorEnabled: false
+      })))
     );
   }
 
@@ -452,8 +466,10 @@ export class IdentityService {
   createRole(name: string, description: string, permissionCodes: string[], scope: string = 'Project'): Observable<RoleModel> {
     return this.permissionIds(permissionCodes).pipe(
       switchMap(permissionIds => this.rbacApi.createRole({ name, scope, description, permissionIds })),
-      map(res => ({ id: res.roleId ?? '', name: res.name ?? name, code: res.name ?? name,
-        scope: res.scope ?? scope, description, isSystem: false, permissionCodes }))
+      map(res => ({
+        id: res.roleId ?? '', name: res.name ?? name, code: res.name ?? name,
+        scope: res.scope ?? scope, description, isSystem: false, permissionCodes
+      }))
     );
   }
   assignUserRole(userId: string, roleId: string, scopeType: string = 'System', scopeId?: string): Observable<RoleDto> {

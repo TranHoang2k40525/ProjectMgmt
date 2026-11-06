@@ -339,6 +339,7 @@ export interface TaskComment {
 export interface TaskActivity {
   id: string;
   actorName: string;
+  actorAvatar?: string;
   action: string;
   timestamp: string;
 }
@@ -503,23 +504,78 @@ export class ProjectManagementService {
   loadWorkspace(projectId = this.currentProject().id): void {
     if (!projectId) return;
     this.workspaceLoading.set(true);
+    this.saveError.set(null);
     forkJoin({
       data: this.http.get<{ workItems: WorkItem[]; sprints: Sprint[]; epics: EpicItem[]; statuses: ProjectStatus[] }>(`${this.baseUrl}/projects/${projectId}/workspace`),
       types: this.getIssueTypes(projectId),
-      members: this.rbac.getProjectMembers(projectId)
+      members: this.rbac.getProjectMembers(projectId).pipe(catchError(() => of({ members: [] })))
     }).subscribe({
-      next: ({data, members, types}) => {
+      next: ({ data, members, types }) => {
         if (this.currentProject().id !== projectId) return;
+        const resolvedMembers: ProjectMember[] = (members.members ?? []).map(m => ({
+          id: m.userId ?? '',
+          userId: m.userId ?? '',
+          displayName: m.fullName ?? m.email ?? '',
+          email: m.email ?? '',
+          role: this.mapBackendRoleToProjectMemberRole(m.roleName),
+          joinedAt: m.grantedAt ?? '',
+          avatarUrl: resolveAvatarUrl(m.avatarUrl) ?? undefined
+        }));
+        const memberAvatarByName = new Map(
+          resolvedMembers
+            .filter(m => m.displayName && m.avatarUrl)
+            .map(m => [m.displayName.trim().toLowerCase(), m.avatarUrl!])
+        );
+        const memberAvatarById = new Map(
+          resolvedMembers
+            .filter(m => m.userId && m.avatarUrl)
+            .map(m => [m.userId, m.avatarUrl!])
+        );
+        const normalizedItems = (data.workItems ?? []).map(item => ({
+          ...item,
+          assigneeAvatar: resolveAvatarUrl(item.assigneeAvatar)
+            || (item.assigneeId ? memberAvatarById.get(item.assigneeId) : undefined)
+            || (item.assigneeName ? memberAvatarByName.get(item.assigneeName.trim().toLowerCase()) : undefined),
+          comments: (item.comments ?? []).map(c => ({
+            ...c,
+            authorAvatar: resolveAvatarUrl(c.authorAvatar)
+              || (c.authorName ? memberAvatarByName.get(c.authorName.trim().toLowerCase()) : undefined)
+          })),
+          activities: (item.activities ?? []).map(a => ({
+            ...a,
+            actorAvatar: resolveAvatarUrl(a.actorAvatar)
+              || (a.actorName ? memberAvatarByName.get(a.actorName.trim().toLowerCase()) : undefined)
+          }))
+        }));
         if (this.pendingSaves() === 0) {
-          this.customIssueTypes.set(types); this.workItems.set(data.workItems); this.sprints.set(data.sprints); this.epics.set(data.epics); this.projectStatuses.set(data.statuses);
+          this.customIssueTypes.set(types);
+          this.workItems.set(normalizedItems);
+          this.sprints.set(data.sprints);
+          this.epics.set(data.epics);
+          this.projectStatuses.set(data.statuses);
           const openId = this.activeDrawerTask()?.id;
-          if (openId) this.activeDrawerTask.set(data.workItems.find(i => i.id === openId) ?? null);
+          if (openId) this.activeDrawerTask.set(normalizedItems.find(i => i.id === openId) ?? null);
         }
-        this.currentProject.update(p => ({ ...p, members: (members.members ?? []).map(m => ({ id: m.userId ?? '', userId: m.userId ?? '', displayName: m.fullName ?? m.email ?? '', email: m.email ?? '', role: (m.roleName ?? 'Developer') as ProjectMember['role'], joinedAt: m.grantedAt ?? '', avatarUrl: resolveAvatarUrl(m.avatarUrl) ?? undefined })) }));
+        this.currentProject.update(p => ({ ...p, members: resolvedMembers }));
       },
       error: (e: { title?: string }) => { if (this.currentProject().id === projectId) this.saveError.set(e.title ?? 'Không thể tải công việc.'); this.workspaceLoading.set(false); },
       complete: () => this.workspaceLoading.set(false)
     });
+  }
+
+  getMemberAvatar(nameOrId?: string | null, itemAvatar?: string | null): string | null {
+    const direct = resolveAvatarUrl(itemAvatar);
+    if (direct) return direct;
+    if (!nameOrId) return null;
+    const key = nameOrId.trim().toLowerCase();
+    const member = this.currentProject().members?.find(
+      m => m.userId?.toLowerCase() === key || m.displayName?.trim().toLowerCase() === key
+    );
+    if (member?.avatarUrl) return resolveAvatarUrl(member.avatarUrl);
+    const fromItem = this.workItems().find(
+      w => (w.assigneeName?.trim().toLowerCase() === key || w.assigneeId?.toLowerCase() === key) && w.assigneeAvatar
+    );
+    return resolveAvatarUrl(fromItem?.assigneeAvatar);
   }
 
   private persist(item: WorkItem, create = false): void {
@@ -561,7 +617,7 @@ export class ProjectManagementService {
   updateWorkItemStatus(id: string, statusName: string): void { this.patch(id, { statusName }); }
   updateWorkItemAssignee(id: string, assigneeName: string): void {
     const member = this.currentProject().members?.find(m => m.displayName === assigneeName);
-    this.patch(id, { assigneeName, assigneeId: member?.userId });
+    this.patch(id, { assigneeName, assigneeId: member?.userId, assigneeAvatar: member?.avatarUrl });
   }
   updateWorkItemPriority(id: string, priority: WorkItem['priority']): void { this.patch(id, { priority }); }
   updateWorkItemEpic(id: string, epicName: string, epicColor = 'indigo'): void { this.patch(id, { epicName, epicColor, epicId: this.epics().find(e => e.name === epicName)?.id }); }
@@ -603,7 +659,7 @@ export class ProjectManagementService {
   updateSprintStatus(id: string, status: Sprint['status']): void { this.patchSprint(id, { status }); }
   updateSprintGoal(id: string, goal: string): void { this.patchSprint(id, { goal }); }
   updateSprintInfo(id: string, name: string, startDate?: string, endDate?: string, goal?: string): void {
-    this.patchSprint(id, { name, ...(startDate ? {startDate} : {}), ...(endDate ? {endDate} : {}), ...(goal !== undefined ? {goal} : {}) });
+    this.patchSprint(id, { name, ...(startDate ? { startDate } : {}), ...(endDate ? { endDate } : {}), ...(goal !== undefined ? { goal } : {}) });
   }
   moveSprintItemsToBacklog(id: string): void { this.workItems().filter(i => i.sprintId === id).forEach(i => this.updateWorkItemSprint(i.id, '', 'Backlog')); }
   getSprintMessages(sprintId: string): Observable<SprintMessage[]> {
@@ -1072,7 +1128,7 @@ export class ProjectManagementService {
           const parsed = JSON.parse(item);
           if (parsed?.accessToken) return parsed.accessToken;
         }
-      } catch {}
+      } catch { }
     }
     return '';
   }

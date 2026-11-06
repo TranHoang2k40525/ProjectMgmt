@@ -168,7 +168,17 @@ export class AppShellComponent {
     if (this.isProjectRoute() && this.activeProject().id) {
       const proj = this.activeProject();
       const myId = this.identity.authState().currentUser?.id;
-      if (proj.leadUserId === myId) return 'Giám đốc dự án';
+      if (proj.leadUserId && myId && proj.leadUserId.toLowerCase() === myId.toLowerCase()) return 'Giám đốc dự án';
+      const myMember = (proj.members || []).find(m => m.userId && myId && m.userId.toLowerCase() === myId.toLowerCase());
+      if (myMember) {
+        switch (myMember.role) {
+          case 'Project Lead': return 'Quản lý dự án';
+          case 'Scrum Master': return 'Scrum Master';
+          case 'Developer': return 'Kỹ sư phát triển';
+          case 'QA Engineer': return 'QA Engineer';
+          case 'Viewer': return 'Người quan sát';
+        }
+      }
       return 'Thành viên dự án';
     }
     const org = this.sidebarOrg();
@@ -176,6 +186,28 @@ export class AppShellComponent {
       return this.orgRoleLabels[org.myRole] || 'Thành viên tổ chức';
     }
     return 'Tài khoản cá nhân';
+  });
+
+  readonly canManageActiveProject = computed(() => {
+    if (this.identity.isSystemAdmin()) return true;
+    const myId = this.identity.authState().currentUser?.id;
+    if (!myId) return false;
+    const org = this.sidebarOrg();
+    if (org && org.ownerId && org.ownerId.toLowerCase() === myId.toLowerCase()) return true;
+    const proj = this.activeProject();
+    if (proj.leadUserId && proj.leadUserId.toLowerCase() === myId.toLowerCase()) return true;
+    const myMember = (proj.members || []).find(m => m.userId && m.userId.toLowerCase() === myId.toLowerCase());
+    if (myMember && (myMember.role === 'Project Lead' || myMember.role === 'Scrum Master')) return true;
+    return false;
+  });
+
+  readonly canEditProjectTasks = computed(() => {
+    if (this.canManageActiveProject()) return true;
+    const myId = this.identity.authState().currentUser?.id;
+    if (!myId) return false;
+    const proj = this.activeProject();
+    const myMember = (proj.members || []).find(m => m.userId && m.userId.toLowerCase() === myId.toLowerCase());
+    return myMember ? myMember.role !== 'Viewer' : true;
   });
 
   @HostListener('document:keydown', ['$event'])
@@ -218,18 +250,23 @@ export class AppShellComponent {
   }
 
   readonly isAvatarModalOpen = signal(false);
+  readonly avatarLoadErrorUrl = signal<string | null>(null);
 
   readonly currentResolvedAvatarUrl = computed(() => {
-    return resolveAvatarUrl(this.identity.authState().currentUser?.avatarUrl);
+    const url = resolveAvatarUrl(this.identity.authState().currentUser?.avatarUrl);
+    if (url && this.avatarLoadErrorUrl() === url) return null;
+    return url;
   });
 
   openCurrentUserAvatarModal(): void {
     this.isAvatarModalOpen.set(true);
   }
 
-  useAvatarFallback(event: Event): void {
-    const image = event.target as HTMLImageElement;
-    image.style.display = 'none';
+  useAvatarFallback(_event: Event): void {
+    const url = resolveAvatarUrl(this.identity.authState().currentUser?.avatarUrl);
+    if (url) {
+      this.avatarLoadErrorUrl.set(url);
+    }
   }
 
   toggleSidebar(): void {

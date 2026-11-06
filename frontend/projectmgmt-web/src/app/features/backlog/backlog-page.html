@@ -24,7 +24,9 @@
 
       <div class="toolbar-actions" aria-label="Thao tác Backlog">
         <button type="button" class="button button-secondary" (click)="exportExcel()"><span class="material-symbols-outlined" aria-hidden="true">download</span><span>Xuất Excel</span></button>
-        <button type="button" class="button button-primary" (click)="createSprint()"><span class="material-symbols-outlined" aria-hidden="true">add</span><span>Tạo Sprint</span></button>
+        @if (canManageSprints()) {
+          <button type="button" class="button button-primary" (click)="createSprint()"><span class="material-symbols-outlined" aria-hidden="true">add</span><span>Tạo Sprint</span></button>
+        }
       </div>
     </div>
 
@@ -100,11 +102,21 @@
               <span class="muted-count">{{ sprintTasks.length }} việc</span>
             </div>
             <div class="sprint-actions" (click)="$event.stopPropagation()">
-              <div class="avatar-stack" [title]="sprintAssignees.join(', ')" aria-label="Thành viên Sprint">@for (assignee of sprintAssignees; track assignee) { <span>{{ getAssigneeInitials(assignee) }}</span> }</div>
+              <div class="avatar-stack" [title]="sprintAssignees.join(', ')" aria-label="Thành viên Sprint">
+                @for (assignee of sprintAssignees; track assignee) {
+                  @if (getAssigneeAvatar(assignee); as avatarUrl) {
+                    <img [src]="avatarUrl" [alt]="assignee" class="avatar-stack-img" />
+                  } @else {
+                    <span>{{ getAssigneeInitials(assignee) }}</span>
+                  }
+                }
+              </div>
               <span class="points-summary">{{ sprint.totalStoryPoints }} SP</span>
               <button type="button" class="button button-secondary" (click)="openSprintReview(sprint, $event)" title="Sprint Review & PO Nghiệm Thu"><span class="material-symbols-outlined" aria-hidden="true">fact_check</span><span>Review</span></button>
               <button type="button" class="button button-secondary" (click)="openSprintRetro(sprint, $event)" title="Sprint Retrospective Cải Tiến"><span class="material-symbols-outlined" aria-hidden="true">rate_review</span><span>Retro</span></button>
-              <button type="button" class="button button-secondary" (click)="toggleSprintStatus(sprint, $event)"><span class="material-symbols-outlined" aria-hidden="true">{{ sprint.status === 'future' ? 'play_arrow' : (sprint.status === 'active' ? 'check_circle' : 'restart_alt') }}</span><span>{{ sprint.status === 'future' ? 'Bắt đầu' : (sprint.status === 'active' ? 'Hoàn thành' : 'Mở lại') }}</span></button>
+              @if (canManageSprints()) {
+                <button type="button" class="button button-secondary" (click)="toggleSprintStatus(sprint, $event)"><span class="material-symbols-outlined" aria-hidden="true">{{ sprint.status === 'future' ? 'play_arrow' : (sprint.status === 'active' ? 'check_circle' : 'restart_alt') }}</span><span>{{ sprint.status === 'future' ? 'Bắt đầu' : (sprint.status === 'active' ? 'Hoàn thành' : 'Mở lại') }}</span></button>
+              }
               <button type="button" class="button button-primary" (click)="toggleInlineCreate(sprint.id)"><span class="material-symbols-outlined" aria-hidden="true">add</span><span>Tạo việc</span></button>
             </div>
           </div>
@@ -186,7 +198,14 @@
                       </ng-template>
                     </div>
 
-                    <div class="cell-assignee" [title]="item.assigneeName || 'Chưa gán'"><span class="assignee-avatar">{{ getAssigneeInitials(item.assigneeName) }}</span><span>{{ item.assigneeName || 'Chưa gán' }}</span></div>
+                    <div class="cell-assignee" [title]="item.assigneeName || 'Chưa gán'">
+                      @if (getAssigneeAvatar(item.assigneeName, item.assigneeAvatar); as avatarUrl) {
+                        <img [src]="avatarUrl" [alt]="item.assigneeName || 'Chưa gán'" class="assignee-avatar-img" />
+                      } @else {
+                        <span class="assignee-avatar">{{ getAssigneeInitials(item.assigneeName) }}</span>
+                      }
+                      <span class="truncate">{{ item.assigneeName || 'Chưa gán' }}</span>
+                    </div>
 
                     <div class="cell-menu no-drawer">
                       <button #menuOrigin="cdkOverlayOrigin" cdkOverlayOrigin type="button" class="icon-button icon-button-small" title="Thêm thao tác" [attr.aria-expanded]="activeMenuTaskId() === item.id" (click)="toggleRowMenu(item.id, $event)"><span class="material-symbols-outlined" aria-hidden="true">more_vert</span></button>
@@ -296,7 +315,14 @@
                     </ng-template>
                   </div>
 
-                  <div class="cell-assignee" [title]="item.assigneeName || 'Chưa gán'"><span class="assignee-avatar">{{ getAssigneeInitials(item.assigneeName) }}</span><span>{{ item.assigneeName || 'Chưa gán' }}</span></div>
+                  <div class="cell-assignee" [title]="item.assigneeName || 'Chưa gán'">
+                    @if (getAssigneeAvatar(item.assigneeName, item.assigneeAvatar); as avatarUrl) {
+                      <img [src]="avatarUrl" [alt]="item.assigneeName || 'Chưa gán'" class="assignee-avatar-img" />
+                    } @else {
+                      <span class="assignee-avatar">{{ getAssigneeInitials(item.assigneeName) }}</span>
+                    }
+                    <span class="truncate">{{ item.assigneeName || 'Chưa gán' }}</span>
+                  </div>
 
                   <div class="cell-menu no-drawer">
                     <button #menuOrigin="cdkOverlayOrigin" cdkOverlayOrigin type="button" class="icon-button icon-button-small" title="Thêm thao tác" [attr.aria-expanded]="activeMenuTaskId() === item.id" (click)="toggleRowMenu(item.id, $event)"><span class="material-symbols-outlined" aria-hidden="true">more_vert</span></button>

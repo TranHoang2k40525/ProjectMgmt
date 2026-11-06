@@ -282,6 +282,7 @@ public class ProjectMembersController : ControllerBase
 
             var allowed = project.LeadUserId == _currentUser.UserId.Value
                 || project.CreatedByUserId == _currentUser.UserId.Value
+                || (permissionCode == "member.read" && await _permissions.IsProjectMemberAsync(_currentUser.UserId.Value, projectId))
                 || await _permissions.HasPermissionAsync(
                     _currentUser.UserId.Value,
                     permissionCode,

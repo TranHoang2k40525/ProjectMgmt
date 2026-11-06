@@ -248,7 +248,14 @@
 
                 <div class="flex items-center gap-2 no-drawer">
                   <span class="font-bold text-primary text-xs font-mono bg-primary/10 px-2 py-0.5 rounded">{{ item.storyPoints }} SP</span>
-                  <span class="text-slate-500 text-xs truncate max-w-[80px]" [title]="item.assigneeName || 'Chưa gán'">{{ item.assigneeName || 'Chưa gán' }}</span>
+                  <div class="flex items-center gap-1.5" [title]="item.assigneeName || 'Chưa gán'">
+                    @if (getAssigneeAvatar(item.assigneeName, item.assigneeAvatar); as avatarUrl) {
+                      <img [src]="avatarUrl" [alt]="item.assigneeName || 'Chưa gán'" class="w-5 h-5 rounded-full object-cover shrink-0 ring-1 ring-slate-200 dark:ring-slate-700" />
+                    } @else {
+                      <span class="w-5 h-5 rounded-full bg-primary text-white text-[10px] font-bold flex items-center justify-center shrink-0">{{ getAssigneeInitials(item.assigneeName) }}</span>
+                    }
+                    <span class="text-slate-500 text-xs truncate max-w-[80px]">{{ item.assigneeName || 'Chưa gán' }}</span>
+                  </div>
                 </div>
               </div>
             </div>

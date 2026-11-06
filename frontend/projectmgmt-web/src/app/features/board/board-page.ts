@@ -366,6 +366,17 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
     return { total: subs.length, done };
   }
 
+  getAssigneeAvatar(name?: string, itemAvatar?: string): string | null {
+    return this.projectService.getMemberAvatar(name, itemAvatar);
+  }
+
+  getAssigneeInitials(name?: string): string {
+    if (!name) return 'U';
+    const parts = name.trim().split(' ');
+    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+    return (parts[parts.length - 2][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+
   closeAllPopups(): void {
     this.activeMenuTaskId.set(null);
     this.contextMenuVisible.set(false);

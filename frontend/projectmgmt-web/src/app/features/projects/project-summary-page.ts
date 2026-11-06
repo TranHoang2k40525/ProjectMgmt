@@ -183,9 +183,13 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
           <div class="flex flex-col gap-3">
             @for (act of recentActivities(); track act.id) {
               <div class="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40">
-                <div class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold shrink-0">
-                  {{ act.actorName.charAt(0) }}
-                </div>
+                @if (getActorAvatar(act.actorName, act.actorAvatar); as avatarUrl) {
+                  <img [src]="avatarUrl" [alt]="act.actorName" class="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-slate-200 dark:ring-slate-700" />
+                } @else {
+                  <div class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold shrink-0">
+                    {{ act.actorName.charAt(0) }}
+                  </div>
+                }
                 <div class="flex flex-col text-xs">
                   <span class="font-bold text-slate-900 dark:text-white">{{ act.actorName }}</span>
                   <span class="text-slate-600 dark:text-slate-300">{{ act.action }} <span class="font-semibold text-primary">[{{ act.issueKey }}]</span></span>
@@ -259,7 +263,7 @@ export class ProjectSummaryPageComponent implements AfterViewInit, OnDestroy {
   readonly lowCount = computed(() => this.items().filter(i => i.priority === 'Low').length);
 
   readonly recentActivities = computed(() => {
-    const list: { id: string; actorName: string; action: string; timestamp: string; issueKey: string }[] = [];
+    const list: { id: string; actorName: string; actorAvatar?: string; action: string; timestamp: string; issueKey: string }[] = [];
     for (const item of this.items()) {
       for (const act of item.activities ?? []) {
         list.push({ ...act, issueKey: item.issueKey });
@@ -267,6 +271,10 @@ export class ProjectSummaryPageComponent implements AfterViewInit, OnDestroy {
     }
     return list.slice(0, 5);
   });
+
+  getActorAvatar(actorName: string, actorAvatar?: string): string | null {
+    return this.projectService.getMemberAvatar(actorName, actorAvatar);
+  }
 
   ngAfterViewInit(): void {
     if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {

@@ -477,7 +477,9 @@ select:focus-visible {
 }
 
 .avatar-stack span,
-.assignee-avatar {
+.avatar-stack-img,
+.assignee-avatar,
+.assignee-avatar-img {
   width: 28px;
   height: 28px;
   display: inline-grid;
@@ -486,11 +488,13 @@ select:focus-visible {
   border-radius: 50%;
   color: #fff;
   background: #0052cc;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 700;
+  object-fit: cover;
+  flex-shrink: 0;
 }
 
-.avatar-stack span + span {
+.avatar-stack > * + * {
   margin-left: -7px;
 }
 
