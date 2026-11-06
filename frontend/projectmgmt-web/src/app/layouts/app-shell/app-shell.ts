@@ -114,9 +114,9 @@ export class AppShellComponent {
       case 'reports':
         return url.startsWith('/reports');
       case 'members':
-        return url.includes('/members');
+        return url.includes('/members') || url.includes('tab=members');
       case 'settings':
-        return url.includes('/settings') || url.includes('/workflow') || url.includes('/boards') || url.includes('/board-settings');
+        return (url.includes('/settings') && !url.includes('tab=members')) || url.includes('/workflow') || url.includes('/boards') || url.includes('/board-settings');
       default:
         return false;
     }
@@ -242,9 +242,13 @@ export class AppShellComponent {
   }
 
   onRouteActivated(): void {
+    const url = this.currentUrl();
+    if (url.includes('/settings') || url.includes('/workflow') || url.includes('/boards') || url.includes('/members')) {
+      return;
+    }
     window.requestAnimationFrame(() => {
       if (this.pageBody) {
-        this.motion.animatePage(this.pageBody.nativeElement, this.currentUrl());
+        this.motion.animatePage(this.pageBody.nativeElement, url);
       }
     });
   }

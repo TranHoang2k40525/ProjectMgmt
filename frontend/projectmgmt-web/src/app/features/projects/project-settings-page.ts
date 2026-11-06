@@ -1,6 +1,6 @@
 import { apiErrorMessage } from '../../core/http/api-error-message';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import {
@@ -13,11 +13,23 @@ import {
 } from '../../core/services/project-management.service';
 import { ConfirmDialogService } from '../../core/services/confirm-dialog.service';
 import { ToastService } from '../../core/services/toast.service';
+import { WorkflowSettingsPage } from './workflow-settings-page';
+import { BoardSettingsPage } from './board-settings-page';
+import { ProjectMembersPageComponent } from './project-members-page';
+
+export type ProjectSettingsTab = 'general' | 'issue-types' | 'labels' | 'workflow' | 'board' | 'members';
 
 @Component({
   selector: 'app-project-settings-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [
+    CommonModule,
+    FormsModule,
+    RouterLink,
+    WorkflowSettingsPage,
+    BoardSettingsPage,
+    ProjectMembersPageComponent
+  ],
   template: `
     <div class="settings-container">
       <div class="breadcrumb">
@@ -64,27 +76,33 @@ import { ToastService } from '../../core/services/toast.service';
           <span class="material-symbols-outlined text-[18px]">label</span>
           <span>Quản lý Nhãn (Labels)</span>
         </button>
-        <a
-          [routerLink]="['/projects', projectId, 'settings', 'workflow']"
+        <button
+          type="button"
+          (click)="selectTab('workflow')"
+          [class.active]="activeTab() === 'workflow'"
           class="tab-item"
         >
           <span class="material-symbols-outlined text-[18px]">sync_alt</span>
           <span>Cấu hình Workflow</span>
-        </a>
-        <a
-          [routerLink]="['/projects', projectId, 'settings', 'board']"
+        </button>
+        <button
+          type="button"
+          (click)="selectTab('board')"
+          [class.active]="activeTab() === 'board'"
           class="tab-item"
         >
           <span class="material-symbols-outlined text-[18px]">view_kanban</span>
           <span>Cấu hình Board</span>
-        </a>
-        <a
-          [routerLink]="['/projects', projectId, 'members']"
+        </button>
+        <button
+          type="button"
+          (click)="selectTab('members')"
+          [class.active]="activeTab() === 'members'"
           class="tab-item"
         >
           <span class="material-symbols-outlined text-[18px]">badge</span>
           <span>Thành viên &amp; Phân quyền</span>
-        </a>
+        </button>
       </div>
 
       @if (loading()) {
@@ -261,6 +279,27 @@ import { ToastService } from '../../core/services/toast.service';
                 </div>
               }
             </div>
+          </div>
+        }
+
+        <!-- TAB 4: CẤU HÌNH WORKFLOW -->
+        @if (activeTab() === 'workflow') {
+          <div class="settings-content">
+            <app-workflow-settings-page [embedded]="true" [projectIdInput]="projectId"></app-workflow-settings-page>
+          </div>
+        }
+
+        <!-- TAB 5: CẤU HÌNH BOARD -->
+        @if (activeTab() === 'board') {
+          <div class="settings-content">
+            <app-board-settings-page [embedded]="true" [projectIdInput]="projectId"></app-board-settings-page>
+          </div>
+        }
+
+        <!-- TAB 6: THÀNH VIÊN & PHÂN QUYỀN -->
+        @if (activeTab() === 'members') {
+          <div class="settings-content">
+            <app-project-members-page [embedded]="true"></app-project-members-page>
           </div>
         }
       }
@@ -587,12 +626,12 @@ export class ProjectSettingsPage implements OnInit {
   private readonly toastService = inject(ToastService);
 
   projectId = '';
-  readonly activeTab = signal<'general' | 'issue-types' | 'labels'>('general');
+  readonly activeTab = signal<ProjectSettingsTab>('general');
   readonly project = signal<Project | null>(null);
   readonly users = signal<UserDisplayInfo[]>([]);
   readonly issueTypes = signal<CustomIssueType[]>([]);
   readonly labels = signal<ProjectLabel[]>([]);
-  readonly loading = signal<boolean>(true);
+  readonly loading = signal<boolean>(false);
   readonly saving = signal<boolean>(false);
   readonly error = signal<string | null>(null);
 
@@ -622,16 +661,49 @@ export class ProjectSettingsPage implements OnInit {
     leadUserId: ''
   };
 
+  constructor() {
+    effect(() => {
+      const current = this.projectService.currentProject();
+      if (current?.id && !this.projectId) {
+        this.projectId = current.id;
+        this.applyCachedProject(current);
+        this.loadProject();
+        this.loadUsers();
+        this.loadIssueTypes();
+        this.loadLabels();
+      }
+    });
+  }
+
   ngOnInit(): void {
-    this.projectId = this.route.snapshot.paramMap.get('id') || '';
+    this.projectId = this.route.snapshot.paramMap.get('id') || this.projectService.currentProject().id || '';
+    const cached = this.projectService.currentProject();
+    if (cached && (!this.projectId || cached.id === this.projectId)) {
+      this.projectId = this.projectId || cached.id;
+      this.applyCachedProject(cached);
+    }
+
+    const routeDataTab = this.route.snapshot.data['tab'] as ProjectSettingsTab | undefined;
+    const urlPath = this.router.url;
+    if (routeDataTab) {
+      this.activeTab.set(routeDataTab);
+    } else if (urlPath.includes('/workflow')) {
+      this.activeTab.set('workflow');
+    } else if (urlPath.includes('/board')) {
+      this.activeTab.set('board');
+    } else if (urlPath.includes('/members')) {
+      this.activeTab.set('members');
+    }
+
     this.route.queryParamMap.subscribe(q => {
-      const tab = q.get('tab');
-      if (tab === 'issue-types' || tab === 'labels' || tab === 'general') {
+      const tab = q.get('tab') as ProjectSettingsTab | null;
+      if (tab === 'issue-types' || tab === 'labels' || tab === 'general' || tab === 'workflow' || tab === 'board' || tab === 'members') {
         this.activeTab.set(tab);
-      } else {
+      } else if (!this.route.snapshot.data['tab'] && !this.router.url.includes('/workflow') && !this.router.url.includes('/board') && !this.router.url.includes('/members')) {
         this.activeTab.set('general');
       }
     });
+
     if (this.projectId) {
       this.loadProject();
       this.loadUsers();
@@ -640,25 +712,40 @@ export class ProjectSettingsPage implements OnInit {
     }
   }
 
-  selectTab(tab: 'general' | 'issue-types' | 'labels'): void {
+  private applyCachedProject(p: Project): void {
+    this.project.set(p);
+    this.editForm = {
+      name: p.name,
+      description: p.description || '',
+      leadUserId: p.leadUserId
+    };
+    const cachedTypes = this.projectService.customIssueTypes();
+    if (cachedTypes.length > 0 && this.issueTypes().length === 0) {
+      this.issueTypes.set(cachedTypes);
+    }
+  }
+
+  selectTab(tab: ProjectSettingsTab): void {
     this.activeTab.set(tab);
-    void this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: { tab: tab === 'general' ? null : tab },
-      queryParamsHandling: 'merge',
-      replaceUrl: true
-    });
+    if (this.projectId) {
+      void this.router.navigate(['/projects', this.projectId, 'settings'], {
+        queryParams: { tab: tab === 'general' ? null : tab },
+        replaceUrl: true
+      });
+    }
   }
 
   loadUsers(): void {
     this.projectService.getUsers().subscribe({
       next: users => this.users.set(users),
-      error: err => this.error.set(apiErrorMessage(err, 'Không thể tải người phụ trách dự án.'))
+      error: () => undefined
     });
   }
 
   loadProject(): void {
-    this.loading.set(true);
+    if (!this.project()) {
+      this.loading.set(true);
+    }
     this.error.set(null);
     this.projectService.getProjectById(this.projectId).subscribe({
       next: (p) => {
@@ -671,7 +758,9 @@ export class ProjectSettingsPage implements OnInit {
         this.loading.set(false);
       },
       error: (err) => {
-        this.error.set(apiErrorMessage(err, 'Không tìm thấy dự án.'));
+        if (!this.project()) {
+          this.error.set(apiErrorMessage(err, 'Không tìm thấy dự án.'));
+        }
         this.loading.set(false);
       }
     });

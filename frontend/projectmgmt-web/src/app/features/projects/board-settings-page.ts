@@ -1,6 +1,6 @@
 import { apiErrorMessage } from '../../core/http/api-error-message';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
@@ -20,7 +20,8 @@ import { ToastService } from '../../core/services/toast.service';
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink],
   template: `
-    <div class="board-settings-container">
+    <div [class.board-settings-container]="!embedded" class="text-slate-900 dark:text-slate-100">
+      @if (!embedded) {
       <div class="breadcrumb">
         <a routerLink="/projects">Dự án</a> &gt;
         @if (project()) {
@@ -63,6 +64,7 @@ import { ToastService } from '../../core/services/toast.service';
           <span>Thành viên &amp; Phân quyền</span>
         </a>
       </div>
+      }
 
       @if (alertMessage()) {
         <div class="alert" [class.alert-success]="alertType() === 'success'" [class.alert-error]="alertType() === 'error'">
@@ -75,6 +77,7 @@ import { ToastService } from '../../core/services/toast.service';
         <div class="board-header">
           <div>
             <h3>Chọn Bảng (Board) để cấu hình</h3>
+            <p class="hint mb-2">Chọn bảng Scrum hoặc Kanban hiện có của dự án để thiết lập các cột trạng thái và giới hạn WIP.</p>
             <div class="board-tabs">
               @for (b of boards(); track b.id) {
                 <button
@@ -92,8 +95,9 @@ import { ToastService } from '../../core/services/toast.service';
               }
             </div>
           </div>
-          <button (click)="showNewBoardModal.set(!showNewBoardModal())" class="btn btn-secondary btn-sm">
-            + Tạo Board mới
+          <button (click)="showNewBoardModal.set(!showNewBoardModal())" class="btn btn-primary flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-[18px]">add</span>
+            <span>Tạo Board mới</span>
           </button>
         </div>
 
@@ -333,17 +337,18 @@ import { ToastService } from '../../core/services/toast.service';
       background: #ffffff;
       border: 1px solid #e2e8f0;
       border-radius: 12px;
-      padding: 1.5rem;
+      padding: 1.75rem;
       box-shadow: 0 1px 3px rgba(0,0,0,0.04);
       margin-bottom: 1.5rem;
     }
     .board-select-box {
-      border-left: 4px solid #2563eb;
+      border: 1px solid #e2e8f0;
     }
     .board-header {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
+      gap: 1rem;
     }
     .board-tabs {
       display: flex;
@@ -369,10 +374,10 @@ import { ToastService } from '../../core/services/toast.service';
       border-color: #94a3b8;
     }
     .board-btn.active {
-      background: #eff6ff;
-      border-color: #2563eb;
-      color: #1d4ed8;
-      box-shadow: 0 0 0 2px rgba(37,99,235,0.2);
+      background: #ecfdf5;
+      border-color: #2d6a4f;
+      color: #1b4332;
+      box-shadow: 0 0 0 2px rgba(45, 106, 79, 0.15);
     }
     .board-type-tag {
       font-size: 0.75rem;
@@ -530,8 +535,8 @@ import { ToastService } from '../../core/services/toast.service';
     }
     .form-control:focus {
       outline: none;
-      border-color: #2563eb;
-      box-shadow: 0 0 0 3px rgba(37,99,235,0.15);
+      border-color: #2d6a4f;
+      box-shadow: 0 0 0 3px rgba(45, 106, 79, 0.15);
     }
     .form-hint {
       display: block;
@@ -548,17 +553,24 @@ import { ToastService } from '../../core/services/toast.service';
       border: 1px solid transparent;
       transition: all 0.2s;
     }
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
     .btn-primary {
-      background: #2563eb;
+      background: #1b4332;
       color: #ffffff;
     }
     .btn-primary:hover:not(:disabled) {
-      background: #1d4ed8;
+      background: #2d6a4f;
     }
     .btn-secondary {
       background: #f1f5f9;
       color: #334155;
       border-color: #cbd5e1;
+    }
+    .btn-secondary:hover:not(:disabled) {
+      background: #e2e8f0;
     }
     .btn-sm {
       padding: 0.35rem 0.75rem;
@@ -588,7 +600,7 @@ import { ToastService } from '../../core/services/toast.service';
       width: 32px;
       height: 32px;
       border: 3px solid #e2e8f0;
-      border-top-color: #2563eb;
+      border-top-color: #2d6a4f;
       border-radius: 50%;
       animation: spin 0.8s linear infinite;
       margin: 0 auto 0.75rem auto;
@@ -602,106 +614,29 @@ import { ToastService } from '../../core/services/toast.service';
       color: #64748b;
     }
 
-    @media (max-width: 1279px) {
-      .board-settings-container {
-        width: 100%;
-        max-width: 100%;
-        min-width: 0;
-        padding: 1rem;
-      }
-      .board-settings-container *,
-      .card,
-      .col-info {
-        min-width: 0;
-      }
-      .settings-tabs {
-        overflow-x: auto;
-        overscroll-behavior-inline: contain;
-        scroll-snap-type: x proximity;
-        scrollbar-width: thin;
-      }
-      .tab-item {
-        flex: 0 0 auto;
-        scroll-snap-align: start;
+    @media (max-width: 900px) {
+      .columns-management-grid {
+        grid-template-columns: 1fr;
       }
       .board-header {
-        gap: 1rem;
-        flex-wrap: wrap;
-      }
-      .board-header > div {
-        flex: 1 1 420px;
-        min-width: 0;
-      }
-      .board-tabs {
-        min-width: 0;
-      }
-      .board-btn {
-        max-width: 100%;
-        white-space: normal;
+        flex-direction: column;
+        align-items: stretch;
       }
       .form-row {
-        align-items: stretch;
         flex-wrap: wrap;
       }
-      .form-row > .form-control:first-of-type {
-        flex: 1 1 360px;
-      }
-      .columns-management-grid {
-        grid-template-columns: minmax(280px, 1fr) minmax(280px, 340px);
-      }
-      .column-item {
-        align-items: flex-start;
-      }
-      .board-settings-container button,
-      .board-settings-container input,
-      .board-settings-container select {
-        min-height: 40px;
-      }
-      .btn-arrow,
-      .btn-delete {
-        min-width: 40px;
-      }
-      .col-title {
-        align-items: flex-start;
-        flex-wrap: wrap;
-      }
-    }
-
-    @media (max-width: 767px), (max-width: 932px) and (orientation: landscape) and (max-height: 520px) {
-      .board-settings-container { padding: 0; }
-      h1 { font-size: 1.35rem; line-height: 1.08; }
-      .subtitle { line-height: 1.45; }
-      .settings-tabs { gap: 0; margin: 1rem 0; }
-      .tab-item { padding: .75rem .9rem; font-size: .875rem; }
-      .card { padding: 1rem; margin-bottom: 1rem; }
-      .board-header {
-        align-items: stretch;
-        flex-direction: column;
-      }
-      .board-header > div {
-        flex: 0 1 auto;
-        width: 100%;
-      }
-      .board-header > .btn { width: 100%; justify-content: center; }
-      .board-tabs { flex-direction: column; }
-      .board-btn { width: 100%; justify-content: flex-start; }
-      .form-row { flex-direction: column; }
-      .form-row > * { width: 100% !important; max-width: none !important; flex-basis: auto !important; }
-      .columns-management-grid { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
-      .column-item { gap: .75rem; padding: .75rem; }
-      .btn,
-      .btn-arrow,
-      .btn-delete { min-height: 42px; }
-      .btn-arrow { min-width: 42px; }
     }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class BoardSettingsPage implements OnInit {
-  private readonly route = inject(ActivatedRoute);
+  private readonly route = inject(ActivatedRoute, { optional: true });
   private readonly projectService = inject(ProjectManagementService);
   private readonly confirmService = inject(ConfirmDialogService);
   private readonly toastService = inject(ToastService);
+
+  @Input() embedded = false;
+  @Input() projectIdInput = '';
 
   projectId = '';
   readonly project = signal<Project | null>(null);
@@ -735,7 +670,15 @@ export class BoardSettingsPage implements OnInit {
   };
 
   ngOnInit(): void {
-    this.projectId = this.route.snapshot.paramMap.get('id') || '';
+    this.projectId = this.projectIdInput || this.route?.snapshot?.paramMap?.get('id') || this.projectService.currentProject?.()?.id || '';
+    const cachedProj = this.projectService.currentProject?.();
+    if (cachedProj && cachedProj.id === this.projectId) {
+      this.project.set(cachedProj);
+      const cachedStatuses = this.projectService.projectStatuses?.() ?? [];
+      if (cachedStatuses.length > 0) {
+        this.statuses.set(cachedStatuses);
+      }
+    }
     if (this.projectId) {
       this.loadProject();
       this.loadStatuses();

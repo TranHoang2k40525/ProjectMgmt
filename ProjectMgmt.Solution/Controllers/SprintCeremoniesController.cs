@@ -18,12 +18,19 @@ public sealed class CreatePokerSessionRequest
 
 public sealed class SubmitPokerVoteRequest
 {
+    [Range(0, 100)] public decimal? Points { get; set; }
     [Range(0, 100)] public decimal VoteValue { get; set; }
 }
 
 public sealed class FinalizePokerRequest
 {
+    [Range(0, 100)] public decimal? Points { get; set; }
     [Range(0, 100)] public decimal StoryPoints { get; set; }
+}
+
+public sealed class AcceptStoryRequest
+{
+    public string? Feedback { get; set; }
 }
 
 public sealed class RejectStoryRequest
@@ -33,17 +40,18 @@ public sealed class RejectStoryRequest
 
 public sealed class CreateRetroCardRequest
 {
-    [Required, RegularExpression("^(Well|Wrong|Action)$")]
-    public string ColumnType { get; set; } = "Well";
+    public string? Category { get; set; }
+    public string? ColumnType { get; set; }
     [Required, StringLength(2000, MinimumLength = 1)] public string Content { get; set; } = "";
     public bool IsAnonymous { get; set; }
 }
 
 public sealed class CompleteSprintRolloverRequest
 {
-    [Required, RegularExpression("^(Backlog|NextSprint)$")]
-    public string TargetDestination { get; set; } = "Backlog";
+    public string? TargetDestination { get; set; }
     public Guid? NextSprintId { get; set; }
+    public Guid? MoveToSprintId { get; set; }
+    public bool? MoveToBacklog { get; set; }
 }
 
 [Route("api")]
@@ -57,6 +65,13 @@ public class SprintCeremoniesController(
     // ==========================================
     // 1. PLANNING POKER ONLINE (FIBONACCI)
     // ==========================================
+
+    [HttpPost("sprints/{sprintId:guid}/poker/sessions")]
+    public Task<IActionResult> CreateOrGetSprintPokerSession(Guid sprintId, [FromBody] CreatePokerSessionRequest request)
+    {
+        request.SprintId = sprintId;
+        return CreateOrGetPokerSession(request);
+    }
 
     [HttpPost("poker/sessions")]
     public async Task<IActionResult> CreateOrGetPokerSession([FromBody] CreatePokerSessionRequest request)
@@ -105,13 +120,19 @@ public class SprintCeremoniesController(
 
         var voteList = votes.Select(v => new
         {
+            v.Id,
+            v.SessionId,
             v.UserId,
             UserName = userDict.GetValueOrDefault(v.UserId, "Thành viên"),
             VoteValue = isRevealed ? (decimal?)v.VoteValue : null,
+            StoryPoints = isRevealed ? (decimal?)v.VoteValue : null,
+            v.VotedAt,
             HasVoted = true
         }).ToList();
 
         var issue = await delivery.Issues.AsNoTracking().SingleOrDefaultAsync(i => i.Id == session.IssueId);
+        var project = await planning.Projects.AsNoTracking().SingleOrDefaultAsync(p => p.Id == session.ProjectId);
+        var issueKey = project is not null && issue is not null ? $"{project.ProjectKey}-{issue.IssueNumber}" : "";
 
         return Ok(new
         {
@@ -119,9 +140,12 @@ public class SprintCeremoniesController(
             session.ProjectId,
             session.SprintId,
             session.IssueId,
+            IssueKey = issueKey,
             IssueTitle = issue?.Title ?? "",
             session.Status,
+            IsRevealed = isRevealed,
             session.FinalStoryPoints,
+            session.CreatedAt,
             Votes = voteList,
             TotalVoted = votes.Count
         });
@@ -134,6 +158,7 @@ public class SprintCeremoniesController(
         if (session is null) return NotFound();
         if (!await access.AllowsAsync(session.ProjectId)) return Forbid();
 
+        var voteValue = request.Points ?? request.VoteValue;
         var vote = await planning.PlanningPokerVotes.SingleOrDefaultAsync(v => v.SessionId == id && v.UserId == access.UserId);
         if (vote is null)
         {
@@ -142,14 +167,14 @@ public class SprintCeremoniesController(
                 Id = Guid.NewGuid(),
                 SessionId = id,
                 UserId = access.UserId,
-                VoteValue = request.VoteValue,
+                VoteValue = voteValue,
                 VotedAt = DateTime.UtcNow
             };
             planning.PlanningPokerVotes.Add(vote);
         }
         else
         {
-            vote.VoteValue = request.VoteValue;
+            vote.VoteValue = voteValue;
             vote.VotedAt = DateTime.UtcNow;
         }
 
@@ -162,7 +187,7 @@ public class SprintCeremoniesController(
     {
         var session = await planning.PlanningPokerSessions.SingleOrDefaultAsync(s => s.Id == id);
         if (session is null) return NotFound();
-        if (!await access.AllowsAsync(session.ProjectId, "issue.update")) return Forbid();
+        if (!await access.AllowsAsync(session.ProjectId)) return Forbid();
 
         session.Status = "Revealed";
         session.UpdatedAt = DateTime.UtcNow;
@@ -176,16 +201,17 @@ public class SprintCeremoniesController(
     {
         var session = await planning.PlanningPokerSessions.SingleOrDefaultAsync(s => s.Id == id);
         if (session is null) return NotFound();
-        if (!await access.AllowsAsync(session.ProjectId, "issue.update")) return Forbid();
+        if (!await access.AllowsAsync(session.ProjectId)) return Forbid();
 
+        var storyPoints = request.Points ?? request.StoryPoints;
         session.Status = "Finished";
-        session.FinalStoryPoints = request.StoryPoints;
+        session.FinalStoryPoints = storyPoints;
         session.UpdatedAt = DateTime.UtcNow;
 
         var issue = await delivery.Issues.SingleOrDefaultAsync(i => i.Id == session.IssueId);
         if (issue is not null)
         {
-            issue.StoryPoints = request.StoryPoints;
+            issue.StoryPoints = storyPoints;
             issue.UpdatedAt = DateTime.UtcNow;
         }
 
@@ -265,20 +291,15 @@ public class SprintCeremoniesController(
         return Ok(result);
     }
 
-    [HttpPost("sprints/{sprintId:guid}/accept-story/{storyId:guid}")]
-    public async Task<IActionResult> AcceptStory(Guid sprintId, Guid storyId)
+    [HttpPost("issues/{storyId:guid}/accept-story")]
+    public async Task<IActionResult> AcceptStoryByIssue(Guid storyId, [FromBody] AcceptStoryRequest? _ = null)
     {
-        var sprint = await planning.Sprints.AsNoTracking().SingleOrDefaultAsync(s => s.Id == sprintId);
-        if (sprint is null) return NotFound();
-        if (!await access.AllowsAsync(sprint.ProjectId, "project.settings.manage") && !await access.AllowsAsync(sprint.ProjectId, "sprint.close"))
-            return Forbid();
-
-        var story = await delivery.Issues.SingleOrDefaultAsync(i => i.Id == storyId && i.SprintId == sprintId);
+        var story = await delivery.Issues.SingleOrDefaultAsync(i => i.Id == storyId && !i.IsDeleted);
         if (story is null) return NotFound();
+        if (!await access.AllowsAsync(story.ProjectId)) return Forbid();
 
-        // Tìm trạng thái Done của dự án
-        var doneStatus = await planning.WorkflowStatuses.FirstOrDefaultAsync(s => s.ProjectId == sprint.ProjectId && s.IsDone)
-            ?? await planning.WorkflowStatuses.FirstOrDefaultAsync(s => s.ProjectId == sprint.ProjectId && s.Category == "Done");
+        var doneStatus = await planning.WorkflowStatuses.FirstOrDefaultAsync(s => s.ProjectId == story.ProjectId && s.IsDone)
+            ?? await planning.WorkflowStatuses.FirstOrDefaultAsync(s => s.ProjectId == story.ProjectId && s.Category == "Done");
         if (doneStatus is null) return BadRequest(new { title = "Dự án chưa cấu hình trạng thái Done." });
 
         story.StatusId = doneStatus.Id;
@@ -291,25 +312,33 @@ public class SprintCeremoniesController(
             IssueId = story.Id,
             UserId = access.UserId,
             Action = "PO Sign-off: Accepted",
-            NewValue = "Done",
+            NewValue = doneStatus.Name,
             Source = "User",
             CreatedAt = DateTime.UtcNow
         });
 
         await delivery.SaveChangesAsync();
-        return Ok(new { story.Id, Status = "Accepted", doneStatus.Name });
+        return Ok(new { story.Id, Status = "Accepted", StatusName = doneStatus.Name, IsDone = true });
     }
 
-    [HttpPost("sprints/{sprintId:guid}/reject-story/{storyId:guid}")]
-    public async Task<IActionResult> RejectStory(Guid sprintId, Guid storyId, [FromBody] RejectStoryRequest request)
-    {
-        var sprint = await planning.Sprints.AsNoTracking().SingleOrDefaultAsync(s => s.Id == sprintId);
-        if (sprint is null) return NotFound();
-        if (!await access.AllowsAsync(sprint.ProjectId, "project.settings.manage") && !await access.AllowsAsync(sprint.ProjectId, "sprint.close"))
-            return Forbid();
+    [HttpPost("sprints/{sprintId:guid}/accept-story/{storyId:guid}")]
+    public Task<IActionResult> AcceptStory(Guid sprintId, Guid storyId) => AcceptStoryByIssue(storyId);
 
-        var story = await delivery.Issues.SingleOrDefaultAsync(i => i.Id == storyId && i.SprintId == sprintId);
+    [HttpPost("issues/{storyId:guid}/reject-story")]
+    public async Task<IActionResult> RejectStoryByIssue(Guid storyId, [FromBody] RejectStoryRequest request)
+    {
+        var story = await delivery.Issues.SingleOrDefaultAsync(i => i.Id == storyId && !i.IsDeleted);
         if (story is null) return NotFound();
+        if (!await access.AllowsAsync(story.ProjectId)) return Forbid();
+
+        var reopenStatus = await planning.WorkflowStatuses.FirstOrDefaultAsync(s => s.ProjectId == story.ProjectId && s.Category == "InProgress")
+            ?? await planning.WorkflowStatuses.FirstOrDefaultAsync(s => s.ProjectId == story.ProjectId && !s.IsDone && s.Category != "Done");
+        if (reopenStatus is not null)
+        {
+            story.StatusId = reopenStatus.Id;
+            story.ResolvedAt = null;
+            story.UpdatedAt = DateTime.UtcNow;
+        }
 
         delivery.ActivityLogs.Add(new ActivityLog
         {
@@ -323,12 +352,33 @@ public class SprintCeremoniesController(
         });
 
         await delivery.SaveChangesAsync();
-        return Ok(new { story.Id, Status = "Rejected", Reason = request.Reason.Trim() });
+        return Ok(new { story.Id, Status = "Rejected", StatusName = reopenStatus?.Name ?? "", IsDone = false, Reason = request.Reason.Trim() });
     }
+
+    [HttpPost("sprints/{sprintId:guid}/reject-story/{storyId:guid}")]
+    public Task<IActionResult> RejectStory(Guid sprintId, Guid storyId, [FromBody] RejectStoryRequest request) => RejectStoryByIssue(storyId, request);
 
     // ==========================================
     // 3. SPRINT RETROSPECTIVE BOARD
     // ==========================================
+
+    private static string MapColumnToCategory(string? columnType) => columnType switch
+    {
+        "Wrong" or "CouldImprove" => "CouldImprove",
+        "Action" or "ActionItem" => "ActionItem",
+        _ => "WentWell"
+    };
+
+    private static string MapCategoryToColumn(string? category, string? columnType)
+    {
+        var val = (category ?? columnType ?? "Well").Trim();
+        return val switch
+        {
+            "CouldImprove" or "Wrong" => "Wrong",
+            "ActionItem" or "Action" => "Action",
+            _ => "Well"
+        };
+    }
 
     [HttpGet("sprints/{sprintId:guid}/retro-cards")]
     public async Task<IActionResult> GetRetroCards(Guid sprintId)
@@ -346,16 +396,29 @@ public class SprintCeremoniesController(
         var users = await userLookup.GetAllActiveDisplayInfoAsync();
         var userDict = users.ToDictionary(u => u.UserId, u => u.DisplayName);
 
+        var project = await planning.Projects.AsNoTracking().SingleOrDefaultAsync(p => p.Id == sprint.ProjectId);
+        var convertedIds = cards.Where(c => c.ConvertedToIssueId.HasValue).Select(c => c.ConvertedToIssueId!.Value).Distinct().ToList();
+        var convertedIssues = convertedIds.Count > 0
+            ? await delivery.Issues.AsNoTracking().Where(i => convertedIds.Contains(i.Id)).ToDictionaryAsync(i => i.Id, i => i.IssueNumber)
+            : new Dictionary<Guid, int>();
+
         return Ok(cards.Select(c => new
         {
             c.Id,
             c.SprintId,
             c.ColumnType,
+            Category = MapColumnToCategory(c.ColumnType),
             c.Content,
             c.IsAnonymous,
+            UserId = c.AuthorUserId,
             AuthorName = c.IsAnonymous ? "Thành viên ẩn danh" : userDict.GetValueOrDefault(c.AuthorUserId, "Thành viên"),
             c.VoteCount,
+            VotesCount = c.VoteCount,
             c.ConvertedToIssueId,
+            ConvertedIssueId = c.ConvertedToIssueId,
+            ConvertedIssueKey = c.ConvertedToIssueId.HasValue && project is not null && convertedIssues.TryGetValue(c.ConvertedToIssueId.Value, out var num)
+                ? $"{project.ProjectKey}-{num}"
+                : null,
             c.CreatedAt
         }));
     }
@@ -367,11 +430,12 @@ public class SprintCeremoniesController(
         if (sprint is null) return NotFound();
         if (!await access.AllowsAsync(sprint.ProjectId)) return Forbid();
 
+        var columnType = MapCategoryToColumn(request.Category, request.ColumnType);
         var card = new SprintRetrospectiveCard
         {
             Id = Guid.NewGuid(),
             SprintId = sprintId,
-            ColumnType = request.ColumnType,
+            ColumnType = columnType,
             Content = request.Content.Trim(),
             IsAnonymous = request.IsAnonymous,
             AuthorUserId = access.UserId,
@@ -381,7 +445,26 @@ public class SprintCeremoniesController(
 
         planning.SprintRetrospectiveCards.Add(card);
         await planning.SaveChangesAsync();
-        return StatusCode(201, card);
+
+        var users = await userLookup.GetAllActiveDisplayInfoAsync();
+        var userDict = users.ToDictionary(u => u.UserId, u => u.DisplayName);
+
+        return StatusCode(201, new
+        {
+            card.Id,
+            card.SprintId,
+            card.ColumnType,
+            Category = MapColumnToCategory(card.ColumnType),
+            card.Content,
+            card.IsAnonymous,
+            UserId = card.AuthorUserId,
+            AuthorName = card.IsAnonymous ? "Thành viên ẩn danh" : userDict.GetValueOrDefault(card.AuthorUserId, "Thành viên"),
+            card.VoteCount,
+            VotesCount = card.VoteCount,
+            card.ConvertedToIssueId,
+            ConvertedIssueId = card.ConvertedToIssueId,
+            card.CreatedAt
+        });
     }
 
     [HttpPost("retro-cards/{id:guid}/vote")]
@@ -392,7 +475,7 @@ public class SprintCeremoniesController(
 
         card.VoteCount += 1;
         await planning.SaveChangesAsync();
-        return Ok(new { card.Id, card.VoteCount });
+        return Ok(new { card.Id, card.VoteCount, VotesCount = card.VoteCount });
     }
 
     [HttpPost("retro-cards/{id:guid}/convert-to-task")]
@@ -438,12 +521,28 @@ public class SprintCeremoniesController(
         await planning.SaveChangesAsync();
 
         var project = await planning.Projects.AsNoTracking().SingleAsync(p => p.Id == sprint.ProjectId);
+        var issueKey = $"{project.ProjectKey}-{issue.IssueNumber}";
 
         return Ok(new
         {
             IssueId = issue.Id,
-            IssueKey = $"{project.ProjectKey}-{issue.IssueNumber}",
-            issue.Title
+            IssueKey = issueKey,
+            issue.Title,
+            Task = new
+            {
+                Id = issue.Id,
+                ProjectId = sprint.ProjectId,
+                IssueKey = issueKey,
+                Title = issue.Title,
+                Description = issue.Description,
+                StatusName = initStatus.Name,
+                IssueType = taskType.Name,
+                Priority = priority.Name,
+                StoryPoints = 0,
+                SprintId = "sp-backlog",
+                SprintName = "Backlog Pool",
+                CreatedAt = issue.CreatedAt
+            }
         });
     }
 
@@ -458,6 +557,7 @@ public class SprintCeremoniesController(
         if (sprint is null) return NotFound();
         if (!await access.AllowsAsync(sprint.ProjectId)) return Forbid();
 
+        var project = await planning.Projects.AsNoTracking().SingleAsync(p => p.Id == sprint.ProjectId);
         var statuses = await planning.WorkflowStatuses.AsNoTracking()
             .Where(s => s.ProjectId == sprint.ProjectId)
             .ToDictionaryAsync(s => s.Id);
@@ -470,6 +570,7 @@ public class SprintCeremoniesController(
         var completedIssues = issues.Where(i => statuses.TryGetValue(i.StatusId, out var st) && (st.IsDone || st.Category == "Done")).ToList();
         var completedPoints = completedIssues.Sum(i => i.StoryPoints ?? 0);
         var unfinishedIssues = issues.Where(i => !statuses.TryGetValue(i.StatusId, out var st) || (!st.IsDone && st.Category != "Done")).ToList();
+        var incompletePoints = unfinishedIssues.Sum(i => i.StoryPoints ?? 0);
 
         var futureSprints = await planning.Sprints.AsNoTracking()
             .Where(s => s.ProjectId == sprint.ProjectId && s.Id != sprintId && s.Status != "Completed")
@@ -480,14 +581,28 @@ public class SprintCeremoniesController(
         return Ok(new
         {
             sprint.Id,
+            SprintId = sprint.Id,
             sprint.Name,
+            SprintName = sprint.Name,
             sprint.Goal,
             CommittedStoryPoints = committedPoints,
             CompletedStoryPoints = completedPoints,
+            CompletedPoints = completedPoints,
+            IncompletePoints = incompletePoints,
             TotalStories = issues.Count,
             CompletedStories = completedIssues.Count,
+            CompletedStoriesCount = completedIssues.Count,
             UnfinishedStories = unfinishedIssues.Count,
-            AvailableNextSprints = futureSprints
+            IncompleteStoriesCount = unfinishedIssues.Count,
+            IncompleteStories = unfinishedIssues.Select(i => new
+            {
+                i.Id,
+                IssueKey = $"{project.ProjectKey}-{i.IssueNumber}",
+                i.Title,
+                StoryPoints = i.StoryPoints ?? 0
+            }),
+            AvailableNextSprints = futureSprints,
+            NextSprints = futureSprints
         });
     }
 
@@ -513,7 +628,8 @@ public class SprintCeremoniesController(
 
         var unfinished = issues.Where(i => !statuses.TryGetValue(i.StatusId, out var st) || (!st.IsDone && st.Category != "Done")).ToList();
 
-        Guid? nextSprintId = request.TargetDestination == "NextSprint" ? request.NextSprintId : null;
+        Guid? nextSprintId = request.MoveToSprintId ?? (request.TargetDestination == "NextSprint" ? request.NextSprintId : null);
+        if (request.MoveToBacklog == true) nextSprintId = null;
 
         foreach (var item in unfinished)
         {
@@ -526,10 +642,12 @@ public class SprintCeremoniesController(
 
         return Ok(new
         {
+            Success = true,
+            ClosedSprintId = sprint.Id,
             sprint.Id,
             Status = "Completed",
             RolledOverCount = unfinished.Count,
-            RolledOverTo = request.TargetDestination
+            RolledOverTo = nextSprintId.HasValue ? "NextSprint" : "Backlog"
         });
     }
 }

@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnDestroy, OnInit, inject, signal, computed, effect } from '@angular/core';
+import { Component, ElementRef, Input, OnDestroy, OnInit, inject, signal, computed, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
@@ -37,10 +37,10 @@ interface CandidateOrgMember {
     @if (!projectService.hasActiveProject()) {
       <app-no-project-state featureName="Thành viên & Phân quyền Nhóm"></app-no-project-state>
     } @else {
-    <div class="project-members-page settings-container">
+    <div [class.settings-container]="!embedded" class="project-members-page">
       
       <!-- Breadcrumb Navigation -->
-      @if (canManageMembers()) {
+      @if (!embedded) {
         <div class="breadcrumb">
           <a routerLink="/projects">Dự án</a> &gt;
           @if (currentProject(); as proj) {
@@ -87,103 +87,80 @@ interface CandidateOrgMember {
         }
       }
 
-      @if (error) { <p role="alert" class="p-3 rounded bg-red-50 text-red-700 text-xs font-medium">{{ error }}</p> }
+      @if (error) { <p role="alert" class="p-3 mb-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs font-medium">{{ error }}</p> }
 
-      <!-- Top Action Bar -->
-      <div class="members-header flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
-        <div class="flex flex-col gap-1">
-          <div class="flex items-center gap-2.5">
-            <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-              <span class="material-symbols-outlined text-[20px]">group</span>
-            </span>
-            <h1 class="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
-              Thành viên & Phân quyền Dự án
-            </h1>
-            @if (currentProject(); as proj) {
-              <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                {{ proj.projectKey }}
-              </span>
-            }
+      <div class="card">
+        <!-- Card Header -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+          <div>
+            <h2>Thành viên &amp; Phân quyền trong dự án ({{ members().length }})</h2>
+            <p class="text-sm text-slate-500">
+              Quản lý đội ngũ phát triển Scrum, phân vai trò trách nhiệm và quyền hạn thực thi trong dự án.
+            </p>
           </div>
-          <p class="text-xs text-slate-500 dark:text-slate-400">
-            Quản lý đội ngũ phát triển Scrum, phân vai trò trách nhiệm và quyền hạn thực thi trong dự án
-          </p>
-        </div>
 
-        @if (canManageMembers()) {
-          <div class="flex items-center gap-3">
+          @if (canManageMembers()) {
             <button
+              type="button"
               (click)="openInviteModal()"
               [disabled]="loading() || !currentProject().id"
-              class="px-4 py-2 rounded-lg bg-primary hover:bg-primary-container text-white font-semibold text-xs shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              class="btn btn-primary flex items-center gap-1.5 shrink-0"
             >
               <span class="material-symbols-outlined text-[18px]">person_add</span>
-              Thêm thành viên
+              <span>Thêm thành viên</span>
             </button>
-          </div>
-        }
-      </div>
-
-      @if (!canManageMembers()) {
-        <div class="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-900 text-xs font-medium flex items-center gap-2">
-          <span class="material-symbols-outlined text-[18px]">lock</span>
-          <span>Chế độ chỉ đọc: Chỉ Lãnh đạo hoặc Scrum Master mới có quyền phân vai trò dự án.</span>
-        </div>
-      }
-
-      <!-- Filters & Stats Bar -->
-      <div class="members-toolbar flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
-        <div class="flex items-center gap-3 flex-1">
-          <div class="relative flex items-center max-w-xs w-full">
-            <span class="material-symbols-outlined absolute left-3 text-[18px] text-slate-400 pointer-events-none">search</span>
-            <input
-              type="text"
-              [ngModel]="searchQuery()"
-              (ngModelChange)="searchQuery.set($event)"
-              placeholder="Tìm theo tên, email..."
-              class="w-full h-9 pl-9 pr-3 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-            />
-          </div>
-
-          <select
-            [ngModel]="selectedRoleFilter()"
-            (ngModelChange)="selectedRoleFilter.set($event)"
-            class="h-9 px-3 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer"
-          >
-            <option [ngValue]="null">Tất cả vai trò</option>
-            <option value="Project Lead">Project Lead</option>
-            <option value="Scrum Master">Scrum Master</option>
-            <option value="Developer">Developer</option>
-            <option value="QA Engineer">QA Engineer</option>
-            <option value="Viewer">Viewer</option>
-          </select>
-        </div>
-
-        <div class="text-xs text-slate-500 font-medium">
-          Hiển thị <strong>{{ filteredMembers().length }}</strong> / {{ members().length }} thành viên
-        </div>
-      </div>
-
-      <!-- Members Grid -->
-      @if (loading()) {
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          @for (i of [1,2,3,4,5,6]; track i) {
-            <div class="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 animate-pulse flex flex-col gap-3">
-              <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-800"></div>
-                <div class="flex flex-col gap-1.5 flex-1">
-                  <div class="h-3.5 bg-slate-200 dark:bg-slate-800 rounded-md w-2/3"></div>
-                  <div class="h-2.5 bg-slate-100 dark:bg-slate-800/60 rounded-md w-1/2"></div>
-                </div>
-              </div>
-              <div class="h-4 bg-slate-100 dark:bg-slate-800/40 rounded-md w-1/3 mt-2"></div>
-            </div>
           }
         </div>
-      } @else {
-        <div class="members-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          @for (member of filteredMembers(); track member.id) {
-            <div class="member-card p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs hover:shadow-md transition-all flex flex-col justify-between gap-4">
+
+        @if (!canManageMembers()) {
+          <div class="p-3 mb-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-900 text-xs font-medium flex items-center gap-2">
+            <span class="material-symbols-outlined text-[18px]">lock</span>
+            <span>Chế độ chỉ đọc: Chỉ Lãnh đạo hoặc Scrum Master mới có quyền phân vai trò dự án.</span>
+          </div>
+        }
+
+        <!-- Filters & Stats Bar -->
+        <div class="members-toolbar flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-50/70 dark:bg-slate-800/50 p-3 mb-4 rounded-xl border border-slate-200/80 dark:border-slate-800">
+          <div class="flex items-center gap-3 flex-1">
+            <div class="relative flex items-center max-w-xs w-full">
+              <span class="material-symbols-outlined absolute left-3 text-[18px] text-slate-400 pointer-events-none">search</span>
+              <input
+                type="text"
+                [ngModel]="searchQuery()"
+                (ngModelChange)="searchQuery.set($event)"
+                placeholder="Tìm theo tên, email..."
+                class="w-full h-9 pl-9 pr-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+              />
+            </div>
+
+            <select
+              [ngModel]="selectedRoleFilter()"
+              (ngModelChange)="selectedRoleFilter.set($event)"
+              class="h-9 px-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer"
+            >
+              <option [ngValue]="null">Tất cả vai trò</option>
+              <option value="Project Lead">Project Lead</option>
+              <option value="Scrum Master">Scrum Master</option>
+              <option value="Developer">Developer</option>
+              <option value="QA Engineer">QA Engineer</option>
+              <option value="Viewer">Viewer</option>
+            </select>
+          </div>
+
+          <div class="text-xs text-slate-500 font-medium">
+            Hiển thị <strong>{{ filteredMembers().length }}</strong> / {{ members().length }} thành viên
+          </div>
+        </div>
+
+        <!-- Members Grid -->
+        @if (loading() && members().length === 0) {
+          <div class="py-10 text-center text-slate-400 text-sm">
+            Đang tải danh sách thành viên dự án...
+          </div>
+        } @else {
+          <div class="members-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            @for (member of filteredMembers(); track member.id) {
+              <div class="member-card p-4 rounded-xl bg-slate-50/50 dark:bg-slate-900/50 border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between gap-4">
               <div class="flex items-start justify-between gap-3">
                 <div class="flex items-center gap-3 min-w-0">
                   <div
@@ -280,8 +257,9 @@ interface CandidateOrgMember {
               }
             </div>
           }
-        </div>
-      }
+          </div>
+        }
+      </div>
 
       <!-- Invite Member Modal (Restricted to Project's Organization Members) -->
       @if (isInviteModalOpen) {
@@ -422,21 +400,18 @@ interface CandidateOrgMember {
       width: 100%;
       box-sizing: border-box;
       margin: 0 auto;
-      display: flex;
-      flex-direction: column;
-      gap: 1.25rem;
     }
     .breadcrumb {
       font-size: 0.85rem;
       color: #64748b;
-      margin-bottom: -0.5rem;
+      margin-bottom: 0.75rem;
     }
     .breadcrumb a {
       color: #1b4332;
       text-decoration: none;
     }
     .settings-header {
-      margin-bottom: 0;
+      margin-bottom: 1.25rem;
     }
     .settings-header h1 {
       font-size: 1.6rem;
@@ -454,7 +429,7 @@ interface CandidateOrgMember {
       align-items: center;
       gap: 0.25rem;
       border-bottom: 2px solid #e2e8f0;
-      margin: 0.25rem 0 0.5rem 0;
+      margin: 1.5rem 0 1.75rem 0;
       overflow-x: auto;
       scrollbar-width: none;
     }
@@ -486,9 +461,44 @@ interface CandidateOrgMember {
       color: #1b4332;
       border-bottom-color: #2d6a4f;
     }
+    .card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 1.75rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    h2 {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: #0f172a;
+      margin: 0 0 0.25rem 0;
+    }
+    .btn {
+      padding: 0.65rem 1.25rem;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.2s;
+    }
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .btn-primary {
+      background: #1b4332;
+      color: #ffffff;
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: #2d6a4f;
+    }
   `]
 })
 export class ProjectMembersPageComponent implements OnInit, OnDestroy {
+  @Input() embedded = false;
   readonly projectService = inject(ProjectManagementService);
   readonly identity = inject(IdentityService);
   private readonly route = inject(ActivatedRoute, { optional: true });

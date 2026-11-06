@@ -1,7 +1,7 @@
 import { forkJoin } from 'rxjs';
 import { apiErrorMessage } from '../../core/http/api-error-message';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
@@ -21,7 +21,8 @@ import { WorkflowTemplate as OrgWorkflowTemplate } from '../workspace/data/works
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink],
   template: `
-    <div class="workflow-container font-sans text-slate-900 dark:text-slate-100">
+    <div [class.workflow-container]="!embedded" class="text-slate-900 dark:text-slate-100">
+      @if (!embedded) {
       <div class="breadcrumb">
         <a routerLink="/projects">Dự án</a> &gt;
         @if (project()) {
@@ -64,6 +65,7 @@ import { WorkflowTemplate as OrgWorkflowTemplate } from '../workspace/data/works
           <span>Thành viên &amp; Phân quyền</span>
         </a>
       </div>
+      }
 
       @if (alertMessage()) {
         <div role="status" class="alert" [class.alert-success]="alertType() === 'success'" [class.alert-error]="alertType() === 'error'">
@@ -446,7 +448,7 @@ import { WorkflowTemplate as OrgWorkflowTemplate } from '../workspace/data/works
       background: #ffffff;
       border: 1px solid #e2e8f0;
       border-radius: 12px;
-      padding: 1.5rem;
+      padding: 1.75rem;
       box-shadow: 0 1px 3px rgba(0,0,0,0.04);
       margin-bottom: 1.5rem;
     }
@@ -635,18 +637,21 @@ import { WorkflowTemplate as OrgWorkflowTemplate } from '../workspace/data/works
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class WorkflowSettingsPage implements OnInit {
-  private readonly route = inject(ActivatedRoute);
+  private readonly route = inject(ActivatedRoute, { optional: true });
   private readonly projectService = inject(ProjectManagementService);
   private readonly confirmService = inject(ConfirmDialogService);
   private readonly toastService = inject(ToastService);
   private readonly workspaceData = inject(WorkspaceDataSource, { optional: true });
+
+  @Input() embedded = false;
+  @Input() projectIdInput = '';
 
   projectId = '';
   readonly project = signal<Project | null>(null);
   readonly statuses = signal<ProjectStatus[]>([]);
   readonly transitions = signal<WorkflowTransition[]>([]);
   readonly availableWorkflowTemplates = signal<OrgWorkflowTemplate[]>([]);
-  readonly loading = signal<boolean>(true);
+  readonly loading = signal<boolean>(false);
   readonly submitting = signal<boolean>(false);
   readonly alertMessage = signal<string | null>(null);
   readonly alertType = signal<'success' | 'error'>('success');
@@ -675,7 +680,15 @@ export class WorkflowSettingsPage implements OnInit {
   };
 
   ngOnInit(): void {
-    this.projectId = this.route.snapshot.paramMap.get('id') || '';
+    this.projectId = this.projectIdInput || this.route?.snapshot?.paramMap?.get('id') || this.projectService.currentProject()?.id || '';
+    const cachedProj = this.projectService.currentProject?.();
+    if (cachedProj && cachedProj.id === this.projectId) {
+      this.project.set(cachedProj);
+      const cachedStatuses = this.projectService.projectStatuses?.() ?? [];
+      if (cachedStatuses.length > 0) {
+        this.statuses.set(cachedStatuses);
+      }
+    }
     if (this.projectId) {
       this.loadProject();
       this.loadWorkflowData();
@@ -703,7 +716,9 @@ export class WorkflowSettingsPage implements OnInit {
   }
 
   loadWorkflowData(): void {
-    this.loading.set(true);
+    if (this.statuses().length === 0) {
+      this.loading.set(true);
+    }
     forkJoin({
       statuses: this.projectService.getProjectStatuses(this.projectId),
       transitions: this.projectService.getWorkflowTransitions(this.projectId)
