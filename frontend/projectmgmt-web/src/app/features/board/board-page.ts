@@ -110,22 +110,40 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
   });
 
   getIssueTypeIcon(type: string): string {
-    const custom = this.projectService.customIssueTypes().find(t => t.name.toLowerCase() === type.toLowerCase());
-    if (custom?.icon) return custom.icon;
+    const typeName = type || '';
+    const custom = this.projectService.customIssueTypes().find(t =>
+      t.name.toLowerCase() === typeName.toLowerCase() ||
+      ((typeName.toLowerCase() === 'sub-task' || typeName.toLowerCase() === 'subtask') && (t.isSubtask || t.name.toLowerCase() === 'subtask' || t.name.toLowerCase() === 'sub-task'))
+    );
+    if (custom?.icon && custom.icon !== 'task') return custom.icon;
     const map: Record<string, string> = {
-      'Story': 'bookmark',
-      'Task': 'task',
-      'Bug': 'bug_report',
-      'Use-Case': 'schema',
-      'Epic': 'bolt',
-      'Sub-task': 'subdirectory_arrow_right'
+      'story': 'bookmark',
+      'task': 'task_alt',
+      'bug': 'bug_report',
+      'use-case': 'schema',
+      'epic': 'bolt',
+      'sub-task': 'subdirectory_arrow_right',
+      'subtask': 'subdirectory_arrow_right'
     };
-    return map[type] || 'task_alt';
+    return map[typeName.toLowerCase()] || custom?.icon || 'task_alt';
   }
 
   getIssueTypeColor(type: string): string {
-    const custom = this.projectService.customIssueTypes().find(t => t.name.toLowerCase() === type.toLowerCase());
-    return custom?.color || '#3B82F6';
+    const typeName = type || '';
+    const custom = this.projectService.customIssueTypes().find(t =>
+      t.name.toLowerCase() === typeName.toLowerCase() ||
+      ((typeName.toLowerCase() === 'sub-task' || typeName.toLowerCase() === 'subtask') && (t.isSubtask || t.name.toLowerCase() === 'subtask' || t.name.toLowerCase() === 'sub-task'))
+    );
+    if (custom?.color) return custom.color;
+    const map: Record<string, string> = {
+      'story': '#65BA43',
+      'task': '#4BADE8',
+      'bug': '#E5493A',
+      'epic': '#904EE2',
+      'sub-task': '#4BADE8',
+      'subtask': '#4BADE8'
+    };
+    return map[typeName.toLowerCase()] || '#4BADE8';
   }
 
   // --- Blocker Management ---

@@ -28,6 +28,7 @@ export abstract class WorkspaceDataSource {
   abstract listOrganizations(): Observable<OrganizationSummary[]>;
   abstract getOrganization(orgId: string): Observable<OrganizationSummary>;
   abstract createOrganization(request: CreateOrganizationRequest): Observable<OrganizationSummary>;
+  abstract deleteOrganization(orgId: string): Observable<void>;
 
   abstract listMembers(orgId: string): Observable<OrgMember[]>;
   abstract updateMemberRole(orgId: string, userId: string, role: OrgRoleCode): Observable<OrgMember>;

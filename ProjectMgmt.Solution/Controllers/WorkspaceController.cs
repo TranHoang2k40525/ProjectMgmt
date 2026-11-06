@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using IdentityExperience.Application.Dto;
+using IdentityExperience.Application.IServices;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MySqlConnector;
@@ -145,15 +147,21 @@ public sealed class WorkspaceController : ControllerBase
 {
     private readonly MySqlConnection _db;
     private readonly ICurrentUserContext _currentUser;
+    private readonly INotificationServices _notificationServices;
+    private readonly IEmailService _emailService;
     private readonly ILogger<WorkspaceController> _logger;
 
     public WorkspaceController(
         MySqlConnection db,
         ICurrentUserContext currentUser,
+        INotificationServices notificationServices,
+        IEmailService emailService,
         ILogger<WorkspaceController> logger)
     {
         _db = db;
         _currentUser = currentUser;
+        _notificationServices = notificationServices;
+        _emailService = emailService;
         _logger = logger;
     }
 
@@ -506,24 +514,93 @@ public sealed class WorkspaceController : ControllerBase
         await EnsureConnectionOpenAsync();
         var results = new List<InviteEmailResultDto>();
 
+        string orgName = "Tổ chức";
+        await using (var orgCmd = _db.CreateCommand())
+        {
+            orgCmd.CommandText = "SELECT Name FROM Organization WHERE Id = @orgId LIMIT 1;";
+            orgCmd.Parameters.AddWithValue("@orgId", orgId.ToString());
+            var orgNameObj = await orgCmd.ExecuteScalarAsync();
+            if (orgNameObj != null) orgName = orgNameObj.ToString()!;
+        }
+
+        string inviterName = "Quản trị viên tổ chức";
+        if (CurrentUserId != Guid.Empty)
+        {
+            await using var inviterCmd = _db.CreateCommand();
+            inviterCmd.CommandText = @"
+                SELECT COALESCE(up.DisplayName, u.Email, 'Quản trị viên tổ chức')
+                FROM User u
+                LEFT JOIN UserProfile up ON u.Id = up.UserId
+                WHERE u.Id = @userId LIMIT 1;";
+            inviterCmd.Parameters.AddWithValue("@userId", CurrentUserId.ToString());
+            var inviterObj = await inviterCmd.ExecuteScalarAsync();
+            if (inviterObj != null) inviterName = inviterObj.ToString()!;
+        }
+
+        // Ensure an active invite link token exists for this organization so the email has a direct 1-click join URL
+        string inviteToken;
+        await using (var linkCmd = _db.CreateCommand())
+        {
+            linkCmd.CommandText = "SELECT Token FROM OrganizationInviteLink WHERE OrgId = @orgId AND IsActive = 1 ORDER BY CreatedAt DESC LIMIT 1;";
+            linkCmd.Parameters.AddWithValue("@orgId", orgId.ToString());
+            var tokenObj = await linkCmd.ExecuteScalarAsync();
+            if (tokenObj != null && !string.IsNullOrWhiteSpace(tokenObj.ToString()))
+            {
+                inviteToken = tokenObj.ToString()!;
+            }
+            else
+            {
+                inviteToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
+                await using var createLinkCmd = _db.CreateCommand();
+                createLinkCmd.CommandText = @"
+                    INSERT INTO OrganizationInviteLink (Token, OrgId, Role, CreatedByUserId, CreatedAt, IsActive)
+                    VALUES (@token, @orgId, @role, @userId, UTC_TIMESTAMP(6), 1);";
+                createLinkCmd.Parameters.AddWithValue("@token", inviteToken);
+                createLinkCmd.Parameters.AddWithValue("@orgId", orgId.ToString());
+                createLinkCmd.Parameters.AddWithValue("@role", string.IsNullOrWhiteSpace(request.Role) ? "Member" : request.Role);
+                createLinkCmd.Parameters.AddWithValue("@userId", CurrentUserId.ToString());
+                await createLinkCmd.ExecuteNonQueryAsync();
+            }
+        }
+
+        var originHeader = Request.Headers.Origin.FirstOrDefault();
+        var baseUrl = !string.IsNullOrWhiteSpace(originHeader)
+            ? originHeader.TrimEnd('/')
+            : $"{Request.Scheme}://{Request.Host}";
+        var inviteAcceptUrl = $"{baseUrl}/invite/{inviteToken}";
+        var roleLabel = string.Equals(request.Role, "Admin", StringComparison.OrdinalIgnoreCase)
+            ? "Quản trị viên"
+            : "Thành viên";
+
         foreach (var email in request.Emails)
         {
             var trimmedEmail = email.Trim().ToLowerInvariant();
             if (string.IsNullOrWhiteSpace(trimmedEmail)) continue;
 
-            // Check if user exists
-            await using var checkUserCmd = _db.CreateCommand();
-            checkUserCmd.CommandText = "SELECT Id FROM User WHERE LOWER(Email) = @email LIMIT 1;";
-            checkUserCmd.Parameters.AddWithValue("@email", trimmedEmail);
-            var userIdObj = await checkUserCmd.ExecuteScalarAsync();
+            // Check if user exists and get display name
+            string? targetUserId = null;
+            string targetDisplayName = trimmedEmail;
+            await using (var checkUserCmd = _db.CreateCommand())
+            {
+                checkUserCmd.CommandText = @"
+                    SELECT u.Id, COALESCE(up.DisplayName, u.Email)
+                    FROM User u
+                    LEFT JOIN UserProfile up ON u.Id = up.UserId
+                    WHERE LOWER(u.Email) = @email LIMIT 1;";
+                checkUserCmd.Parameters.AddWithValue("@email", trimmedEmail);
+                await using var userReader = await checkUserCmd.ExecuteReaderAsync();
+                if (await userReader.ReadAsync())
+                {
+                    targetUserId = AsString(userReader.GetValue(0));
+                    targetDisplayName = AsString(userReader.GetValue(1));
+                }
+            }
 
-            if (userIdObj == null)
+            if (string.IsNullOrWhiteSpace(targetUserId))
             {
                 results.Add(new InviteEmailResultDto { Email = trimmedEmail, Outcome = "NoAccount" });
                 continue;
             }
-
-            var targetUserId = userIdObj.ToString()!;
 
             // Check if already member
             await using var checkMemberCmd = _db.CreateCommand();
@@ -542,32 +619,83 @@ public sealed class WorkspaceController : ControllerBase
                 continue;
             }
 
-            // Check if already invited pending
+            // Check if already invited pending -> if so, update timestamp/role and resend email + notification!
+            Guid invitationId;
             await using var checkInvCmd = _db.CreateCommand();
             checkInvCmd.CommandText = @"
-                SELECT 1 FROM OrganizationInvitation
+                SELECT Id FROM OrganizationInvitation
                 WHERE OrgId = @orgId AND LOWER(Email) = @email AND Status = 'Pending' LIMIT 1;";
             checkInvCmd.Parameters.AddWithValue("@orgId", orgId.ToString());
             checkInvCmd.Parameters.AddWithValue("@email", trimmedEmail);
-            var isInvited = await checkInvCmd.ExecuteScalarAsync() != null;
+            var existingInvIdObj = await checkInvCmd.ExecuteScalarAsync();
 
-            if (isInvited)
+            if (existingInvIdObj != null && Guid.TryParse(existingInvIdObj.ToString(), out var parsedExistingId))
             {
-                results.Add(new InviteEmailResultDto { Email = trimmedEmail, Outcome = "AlreadyInvited" });
-                continue;
+                invitationId = parsedExistingId;
+                await using var updateCmd = _db.CreateCommand();
+                updateCmd.CommandText = @"
+                    UPDATE OrganizationInvitation
+                    SET Role = @role, InvitedByUserId = @invitedBy, CreatedAt = UTC_TIMESTAMP(6)
+                    WHERE Id = @id;";
+                updateCmd.Parameters.AddWithValue("@id", invitationId.ToString());
+                updateCmd.Parameters.AddWithValue("@role", request.Role);
+                updateCmd.Parameters.AddWithValue("@invitedBy", CurrentUserId.ToString());
+                await updateCmd.ExecuteNonQueryAsync();
+            }
+            else
+            {
+                invitationId = Guid.NewGuid();
+                await using var insertCmd = _db.CreateCommand();
+                insertCmd.CommandText = @"
+                    INSERT INTO OrganizationInvitation (Id, OrgId, Email, Role, InvitedByUserId, Status, CreatedAt)
+                    VALUES (@id, @orgId, @email, @role, @invitedBy, 'Pending', UTC_TIMESTAMP(6));";
+                insertCmd.Parameters.AddWithValue("@id", invitationId.ToString());
+                insertCmd.Parameters.AddWithValue("@orgId", orgId.ToString());
+                insertCmd.Parameters.AddWithValue("@email", trimmedEmail);
+                insertCmd.Parameters.AddWithValue("@role", request.Role);
+                insertCmd.Parameters.AddWithValue("@invitedBy", CurrentUserId.ToString());
+                await insertCmd.ExecuteNonQueryAsync();
             }
 
-            // Create invitation
-            await using var insertCmd = _db.CreateCommand();
-            insertCmd.CommandText = @"
-                INSERT INTO OrganizationInvitation (Id, OrgId, Email, Role, InvitedByUserId, Status, CreatedAt)
-                VALUES (@id, @orgId, @email, @role, @invitedBy, 'Pending', UTC_TIMESTAMP(6));";
-            insertCmd.Parameters.AddWithValue("@id", Guid.NewGuid().ToString());
-            insertCmd.Parameters.AddWithValue("@orgId", orgId.ToString());
-            insertCmd.Parameters.AddWithValue("@email", trimmedEmail);
-            insertCmd.Parameters.AddWithValue("@role", request.Role);
-            insertCmd.Parameters.AddWithValue("@invitedBy", CurrentUserId.ToString());
-            await insertCmd.ExecuteNonQueryAsync();
+            // 1. Publish in-app + real-time SignalR notification
+            if (Guid.TryParse(targetUserId, out var targetUserGuid))
+            {
+                try
+                {
+                    await _notificationServices.PublishAsync(new NotificationDto
+                    {
+                        UserId = targetUserGuid,
+                        Type = "OrganizationInvitation",
+                        Title = $"Lời mời tham gia tổ chức {orgName}",
+                        Content = $"{inviterName} đã mời bạn tham gia tổ chức \"{orgName}\" với vai trò {roleLabel}.",
+                        EntityType = "OrganizationInvitation",
+                        EntityId = invitationId,
+                        ActorId = CurrentUserId != Guid.Empty ? CurrentUserId : null,
+                        RoleName = request.Role,
+                        SendEmail = false
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Không thể tạo thông báo lời mời tổ chức cho {Email}", trimmedEmail);
+                }
+            }
+
+            // 2. Send invitation email via SMTP
+            try
+            {
+                await _emailService.SendOrganizationInvitationAsync(
+                    trimmedEmail,
+                    targetDisplayName,
+                    orgName,
+                    inviterName,
+                    roleLabel,
+                    inviteAcceptUrl);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Không thể gửi email lời mời tổ chức tới {Email}", trimmedEmail);
+            }
 
             results.Add(new InviteEmailResultDto { Email = trimmedEmail, Outcome = "Sent" });
         }
@@ -645,30 +773,70 @@ public sealed class WorkspaceController : ControllerBase
         }
 
         var list = new List<MyInvitationDto>();
-        await using var cmd = _db.CreateCommand();
-        cmd.CommandText = @"
-            SELECT oi.Id, oi.OrgId, o.Name AS OrgName, oi.Role,
-                   COALESCE(up.DisplayName, u.Email, 'Hệ thống') AS InvitedByName, oi.CreatedAt
-            FROM OrganizationInvitation oi
-            JOIN Organization o ON oi.OrgId = o.Id
-            LEFT JOIN User u ON oi.InvitedByUserId = u.Id
-            LEFT JOIN UserProfile up ON u.Id = up.UserId
-            WHERE LOWER(oi.Email) = LOWER(@email) AND oi.Status = 'Pending' AND o.IsActive = 1
-            ORDER BY oi.CreatedAt DESC;";
-        cmd.Parameters.AddWithValue("@email", email);
-
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        await using (var cmd = _db.CreateCommand())
         {
-            list.Add(new MyInvitationDto
+            cmd.CommandText = @"
+                SELECT oi.Id, oi.OrgId, o.Name AS OrgName, oi.Role,
+                       COALESCE(up.DisplayName, u.Email, 'Hệ thống') AS InvitedByName, oi.CreatedAt
+                FROM OrganizationInvitation oi
+                JOIN Organization o ON oi.OrgId = o.Id
+                LEFT JOIN User u ON oi.InvitedByUserId = u.Id
+                LEFT JOIN UserProfile up ON u.Id = up.UserId
+                WHERE LOWER(oi.Email) = LOWER(@email) AND oi.Status = 'Pending' AND o.IsActive = 1
+                ORDER BY oi.CreatedAt DESC;";
+            cmd.Parameters.AddWithValue("@email", email);
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
             {
-                Id = AsString(reader.GetValue(0)),
-                OrgId = AsString(reader.GetValue(1)),
-                OrgName = AsString(reader.GetValue(2)),
-                Role = AsString(reader.GetValue(3)),
-                InvitedByName = AsString(reader.GetValue(4)),
-                CreatedAt = reader.GetDateTime(5).ToString("O")
-            });
+                list.Add(new MyInvitationDto
+                {
+                    Id = AsString(reader.GetValue(0)),
+                    OrgId = AsString(reader.GetValue(1)),
+                    OrgName = AsString(reader.GetValue(2)),
+                    Role = AsString(reader.GetValue(3)),
+                    InvitedByName = AsString(reader.GetValue(4)),
+                    CreatedAt = reader.GetDateTime(5).ToString("O")
+                });
+            }
+        }
+
+        // Ensure every pending OrganizationInvitation has a Notification row so the user sees it in /notifications
+        foreach (var inv in list)
+        {
+            if (!Guid.TryParse(inv.Id, out var invGuid)) continue;
+            await using var checkNotifCmd = _db.CreateCommand();
+            checkNotifCmd.CommandText = @"
+                SELECT 1 FROM Notification
+                WHERE UserId = @userId AND EntityType = 'OrganizationInvitation' AND EntityId = @entityId
+                LIMIT 1;";
+            checkNotifCmd.Parameters.AddWithValue("@userId", CurrentUserId.ToString());
+            checkNotifCmd.Parameters.AddWithValue("@entityId", invGuid.ToString());
+            var exists = await checkNotifCmd.ExecuteScalarAsync() != null;
+            if (!exists)
+            {
+                var roleLabel = string.Equals(inv.Role, "Admin", StringComparison.OrdinalIgnoreCase)
+                    ? "Quản trị viên"
+                    : "Thành viên";
+                try
+                {
+                    await _notificationServices.PublishAsync(new NotificationDto
+                    {
+                        UserId = CurrentUserId,
+                        Type = "OrganizationInvitation",
+                        Title = $"Lời mời tham gia tổ chức {inv.OrgName}",
+                        Content = $"{inv.InvitedByName} đã mời bạn tham gia tổ chức \"{inv.OrgName}\" với vai trò {roleLabel}.",
+                        EntityType = "OrganizationInvitation",
+                        EntityId = invGuid,
+                        RoleName = inv.Role,
+                        SendEmail = false
+                    });
+                }
+                catch
+                {
+                    // Ignore backfill error
+                }
+            }
         }
 
         return Ok(list);
@@ -682,14 +850,55 @@ public sealed class WorkspaceController : ControllerBase
 
         string orgId;
         string role;
+        string invitedByUserId;
         await using (var fetchCmd = _db.CreateCommand())
         {
-            fetchCmd.CommandText = "SELECT OrgId, Role FROM OrganizationInvitation WHERE Id = @id AND Status = 'Pending' LIMIT 1;";
+            fetchCmd.CommandText = "SELECT OrgId, Role, InvitedByUserId FROM OrganizationInvitation WHERE Id = @id AND Status = 'Pending' LIMIT 1;";
             fetchCmd.Parameters.AddWithValue("@id", invitationId.ToString());
             await using var reader = await fetchCmd.ExecuteReaderAsync();
             if (!await reader.ReadAsync()) return NotFound(new { title = "Lời mời không tồn tại hoặc đã xử lý." });
             orgId = AsString(reader.GetValue(0));
             role = AsString(reader.GetValue(1));
+            invitedByUserId = AsString(reader.GetValue(2));
+        }
+
+        // Mark corresponding Notification as read
+        await using (var markNotifCmd = _db.CreateCommand())
+        {
+            markNotifCmd.CommandText = @"
+                UPDATE Notification
+                SET IsRead = 1, ReadAt = UTC_TIMESTAMP(6)
+                WHERE UserId = @userId AND EntityType = 'OrganizationInvitation' AND EntityId = @entityId;";
+            markNotifCmd.Parameters.AddWithValue("@userId", CurrentUserId.ToString());
+            markNotifCmd.Parameters.AddWithValue("@entityId", invitationId.ToString());
+            await markNotifCmd.ExecuteNonQueryAsync();
+        }
+
+        string orgName = "Tổ chức";
+        string ownerId = "";
+        await using (var orgCmd = _db.CreateCommand())
+        {
+            orgCmd.CommandText = "SELECT Name, OwnerId FROM Organization WHERE Id = @orgId LIMIT 1;";
+            orgCmd.Parameters.AddWithValue("@orgId", orgId);
+            await using var reader = await orgCmd.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
+            {
+                orgName = AsString(reader.GetValue(0));
+                ownerId = AsString(reader.GetValue(1));
+            }
+        }
+
+        string responderName = "Thành viên";
+        await using (var userCmd = _db.CreateCommand())
+        {
+            userCmd.CommandText = @"
+                SELECT COALESCE(up.DisplayName, u.Email, 'Thành viên')
+                FROM User u
+                LEFT JOIN UserProfile up ON u.Id = up.UserId
+                WHERE u.Id = @userId LIMIT 1;";
+            userCmd.Parameters.AddWithValue("@userId", CurrentUserId.ToString());
+            var rName = await userCmd.ExecuteScalarAsync();
+            if (rName != null) responderName = rName.ToString()!;
         }
 
         if (request.Accept)
@@ -707,23 +916,34 @@ public sealed class WorkspaceController : ControllerBase
             acceptCmd.Parameters.AddWithValue("@role", role);
             await acceptCmd.ExecuteNonQueryAsync();
 
-            // Return OrgMembership
-            await using var orgCmd = _db.CreateCommand();
-            orgCmd.CommandText = "SELECT Name, OwnerId FROM Organization WHERE Id = @orgId LIMIT 1;";
-            orgCmd.Parameters.AddWithValue("@orgId", orgId);
-            await using var reader = await orgCmd.ExecuteReaderAsync();
-            if (await reader.ReadAsync())
+            if (Guid.TryParse(invitedByUserId, out var inviterGuid) && inviterGuid != CurrentUserId)
             {
-                return Ok(new OrgMembershipDto
+                try
                 {
-                    OrgId = orgId,
-                    OrgName = AsString(reader.GetValue(0)),
-                    OwnerId = AsString(reader.GetValue(1)),
-                    Role = role,
-                    JoinedAt = DateTime.UtcNow.ToString("O"),
-                    MemberCount = 1
-                });
+                    await _notificationServices.PublishAsync(new NotificationDto
+                    {
+                        UserId = inviterGuid,
+                        Type = "ProjectInvitationAccepted",
+                        Title = $"Lời mời tham gia tổ chức {orgName} đã được chấp nhận",
+                        Content = $"{responderName} đã chấp nhận lời mời tham gia tổ chức \"{orgName}\".",
+                        EntityType = "Organization",
+                        EntityId = Guid.TryParse(orgId, out var parsedOrgId) ? parsedOrgId : null,
+                        ActorId = CurrentUserId,
+                        SendEmail = false
+                    });
+                }
+                catch { }
             }
+
+            return Ok(new OrgMembershipDto
+            {
+                OrgId = orgId,
+                OrgName = orgName,
+                OwnerId = ownerId,
+                Role = role,
+                JoinedAt = DateTime.UtcNow.ToString("O"),
+                MemberCount = 1
+            });
         }
         else
         {
@@ -731,6 +951,25 @@ public sealed class WorkspaceController : ControllerBase
             declineCmd.CommandText = "UPDATE OrganizationInvitation SET Status = 'Declined', RespondedAt = UTC_TIMESTAMP(6) WHERE Id = @id;";
             declineCmd.Parameters.AddWithValue("@id", invitationId.ToString());
             await declineCmd.ExecuteNonQueryAsync();
+
+            if (Guid.TryParse(invitedByUserId, out var inviterGuid) && inviterGuid != CurrentUserId)
+            {
+                try
+                {
+                    await _notificationServices.PublishAsync(new NotificationDto
+                    {
+                        UserId = inviterGuid,
+                        Type = "ProjectInvitationDeclined",
+                        Title = $"Lời mời tham gia tổ chức {orgName} đã bị từ chối",
+                        Content = $"{responderName} đã từ chối lời mời tham gia tổ chức \"{orgName}\".",
+                        EntityType = "Organization",
+                        EntityId = Guid.TryParse(orgId, out var parsedOrgId) ? parsedOrgId : null,
+                        ActorId = CurrentUserId,
+                        SendEmail = false
+                    });
+                }
+                catch { }
+            }
         }
 
         return NoContent();
@@ -814,24 +1053,37 @@ public sealed class WorkspaceController : ControllerBase
     {
         await EnsureConnectionOpenAsync();
 
-        await using var cmd = _db.CreateCommand();
-        cmd.CommandText = @"
-            SELECT oil.Token, oil.OrgId, o.Name AS OrgName, oil.Role,
-                   COALESCE(up.DisplayName, u.Email, 'Hệ thống') AS InvitedByName
-            FROM OrganizationInviteLink oil
-            JOIN Organization o ON oil.OrgId = o.Id
-            LEFT JOIN User u ON oil.CreatedByUserId = u.Id
-            LEFT JOIN UserProfile up ON u.Id = up.UserId
-            WHERE oil.Token = @token AND oil.IsActive = 1 LIMIT 1;";
-        cmd.Parameters.AddWithValue("@token", token);
+        string resolvedToken;
+        string orgId;
+        string orgName;
+        string role;
+        string invitedByName;
 
-        await using var reader = await cmd.ExecuteReaderAsync();
-        if (!await reader.ReadAsync())
+        await using (var cmd = _db.CreateCommand())
         {
-            return NotFound(new { title = "Link mời không hợp lệ hoặc đã hết hạn." });
+            cmd.CommandText = @"
+                SELECT oil.Token, oil.OrgId, o.Name AS OrgName, oil.Role,
+                       COALESCE(up.DisplayName, u.Email, 'Hệ thống') AS InvitedByName
+                FROM OrganizationInviteLink oil
+                JOIN Organization o ON oil.OrgId = o.Id
+                LEFT JOIN User u ON oil.CreatedByUserId = u.Id
+                LEFT JOIN UserProfile up ON u.Id = up.UserId
+                WHERE oil.Token = @token AND oil.IsActive = 1 AND o.IsActive = 1 LIMIT 1;";
+            cmd.Parameters.AddWithValue("@token", token);
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            if (!await reader.ReadAsync())
+            {
+                return NotFound(new { title = "Link mời không hợp lệ hoặc đã hết hạn." });
+            }
+
+            resolvedToken = AsString(reader.GetValue(0));
+            orgId = AsString(reader.GetValue(1));
+            orgName = AsString(reader.GetValue(2));
+            role = AsString(reader.GetValue(3));
+            invitedByName = AsString(reader.GetValue(4));
         }
 
-        var orgId = AsString(reader.GetValue(1));
         var alreadyMember = false;
         if (CurrentUserId != Guid.Empty)
         {
@@ -848,11 +1100,11 @@ public sealed class WorkspaceController : ControllerBase
 
         return Ok(new InviteLinkPreviewDto
         {
-            Token = AsString(reader.GetValue(0)),
+            Token = resolvedToken,
             OrgId = orgId,
-            OrgName = AsString(reader.GetValue(2)),
-            Role = AsString(reader.GetValue(3)),
-            InvitedByName = AsString(reader.GetValue(4)),
+            OrgName = orgName,
+            Role = role,
+            InvitedByName = invitedByName,
             AlreadyMember = alreadyMember
         });
     }
@@ -874,7 +1126,7 @@ public sealed class WorkspaceController : ControllerBase
                 SELECT oil.OrgId, oil.Role, o.Name, o.OwnerId
                 FROM OrganizationInviteLink oil
                 JOIN Organization o ON oil.OrgId = o.Id
-                WHERE oil.Token = @token AND oil.IsActive = 1 LIMIT 1;";
+                WHERE oil.Token = @token AND oil.IsActive = 1 AND o.IsActive = 1 LIMIT 1;";
             cmd.Parameters.AddWithValue("@token", token);
             await using var reader = await cmd.ExecuteReaderAsync();
             if (!await reader.ReadAsync())
@@ -892,12 +1144,45 @@ public sealed class WorkspaceController : ControllerBase
             insertCmd.CommandText = @"
                 INSERT INTO OrganizationMember (Id, OrgId, UserId, Role, JoinedAt)
                 VALUES (@id, @orgId, @userId, @role, UTC_TIMESTAMP(6))
-                ON DUPLICATE KEY UPDATE Role = VALUES(Role);";
+                ON DUPLICATE KEY UPDATE Role = VALUES(Role);
+
+                UPDATE OrganizationInvitation oi
+                JOIN User u ON LOWER(oi.Email) = LOWER(u.Email)
+                SET oi.Status = 'Accepted', oi.RespondedAt = UTC_TIMESTAMP(6)
+                WHERE oi.OrgId = @orgId AND u.Id = @userId AND oi.Status = 'Pending';";
             insertCmd.Parameters.AddWithValue("@id", Guid.NewGuid().ToString());
             insertCmd.Parameters.AddWithValue("@orgId", orgId);
             insertCmd.Parameters.AddWithValue("@userId", CurrentUserId.ToString());
             insertCmd.Parameters.AddWithValue("@role", role);
             await insertCmd.ExecuteNonQueryAsync();
+        }
+
+        if (Guid.TryParse(ownerId, out var ownerGuid) && ownerGuid != CurrentUserId)
+        {
+            try
+            {
+                string responderName = "Thành viên mới";
+                await using (var uCmd = _db.CreateCommand())
+                {
+                    uCmd.CommandText = "SELECT COALESCE(up.DisplayName, u.Email, 'Thành viên mới') FROM User u LEFT JOIN UserProfile up ON u.Id = up.UserId WHERE u.Id = @userId LIMIT 1;";
+                    uCmd.Parameters.AddWithValue("@userId", CurrentUserId.ToString());
+                    var rObj = await uCmd.ExecuteScalarAsync();
+                    if (rObj != null) responderName = rObj.ToString()!;
+                }
+
+                await _notificationServices.PublishAsync(new NotificationDto
+                {
+                    UserId = ownerGuid,
+                    Type = "ProjectInvitationAccepted",
+                    Title = $"Thành viên mới tham gia tổ chức {orgName}",
+                    Content = $"{responderName} đã tham gia tổ chức \"{orgName}\" qua liên kết mời.",
+                    EntityType = "Organization",
+                    EntityId = Guid.TryParse(orgId, out var parsedOrgId) ? parsedOrgId : null,
+                    ActorId = CurrentUserId,
+                    SendEmail = false
+                });
+            }
+            catch { }
         }
 
         return Ok(new OrgMembershipDto
@@ -993,15 +1278,14 @@ public sealed class WorkspaceController : ControllerBase
     {
         await EnsureConnectionOpenAsync();
 
-        var templates = GetSystemPresets();
-        var customTemplates = new List<WorkflowTemplateDto>();
+        var templates = new List<WorkflowTemplateDto>();
 
         await using var cmd = _db.CreateCommand();
         cmd.CommandText = @"
-            SELECT Id, OrgId, Name, ManagementType, StatusesJson, IsDefault
-            FROM OrganizationWorkflowTemplate
-            WHERE OrgId = @orgId
-            ORDER BY CreatedAt ASC;";
+            SELECT CAST(Id AS CHAR(64)) AS Id, CAST(OrgId AS CHAR(64)) AS OrgId, Name, ManagementType, StatusesJson, IsDefault, IsPreset
+            FROM organizationworkflowtemplate
+            WHERE IsActive = 1 AND (OrgId IS NULL OR OrgId = @orgId)
+            ORDER BY IsPreset DESC, CreatedAt ASC;";
         cmd.Parameters.AddWithValue("@orgId", orgId.ToString());
 
         await using var reader = await cmd.ExecuteReaderAsync();
@@ -1011,28 +1295,29 @@ public sealed class WorkspaceController : ControllerBase
             List<WorkflowStatusDefDto>? statuses = null;
             try
             {
-                statuses = JsonSerializer.Deserialize<List<WorkflowStatusDefDto>>(statusesJson);
+                statuses = JsonSerializer.Deserialize<List<WorkflowStatusDefDto>>(statusesJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             }
             catch { }
 
-            customTemplates.Add(new WorkflowTemplateDto
+            var isPreset = !reader.IsDBNull(6) && Convert.ToBoolean(reader.GetValue(6));
+
+            templates.Add(new WorkflowTemplateDto
             {
                 Id = AsString(reader.GetValue(0)),
                 OrgId = reader.IsDBNull(1) ? null : AsString(reader.GetValue(1)),
                 Name = AsString(reader.GetValue(2)),
                 ManagementType = AsString(reader.GetValue(3)),
                 Statuses = statuses ?? [],
-                IsPreset = false,
+                IsPreset = isPreset,
                 IsDefault = reader.GetBoolean(5)
             });
         }
 
-        if (customTemplates.Any(t => t.IsDefault))
+        if (!templates.Any(t => t.IsDefault) && templates.Count > 0)
         {
-            foreach (var preset in templates) preset.IsDefault = false;
+            templates[0].IsDefault = true;
         }
 
-        templates.AddRange(customTemplates);
         return Ok(templates);
     }
 

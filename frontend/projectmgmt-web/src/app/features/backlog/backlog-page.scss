@@ -636,13 +636,31 @@ select:focus-visible {
   overflow: hidden;
   color: #0052cc;
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.issue-type-badge {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+}
+
+.issue-type-badge .material-symbols-outlined {
+  font-size: 15px;
+  line-height: 1;
+  color: #ffffff;
+}
+
 .issue-type-icon {
   flex: 0 0 auto;
-  color: #0052cc;
   font-size: 18px;
 }
 
@@ -1343,6 +1361,36 @@ select:focus-visible {
     background: #cbd5e1;
     border-radius: 3px;
   }
+}
+
+.cdk-drag-preview {
+  box-sizing: border-box;
+  border-radius: 8px;
+  border: 1px solid #4c9aff;
+  background: #ffffff;
+  box-shadow: 0 10px 25px -5px rgba(9, 30, 66, 0.2), 0 4px 10px -2px rgba(9, 30, 66, 0.12);
+  opacity: 0.96;
+}
+
+.cdk-drag-placeholder {
+  opacity: 0.35;
+  background: #eff6ff;
+  border: 1px dashed #3b82f6;
+  border-radius: 6px;
+}
+
+.cdk-drag-animating {
+  transition: transform 220ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.work-item-table.cdk-drop-list-dragging .work-item-group:not(.cdk-drag-placeholder),
+.sprint-section.cdk-drop-list-dragging .work-item-group:not(.cdk-drag-placeholder) {
+  transition: transform 220ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.sprint-section.cdk-drop-list-receiving {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.18);
 }
 
 @media (prefers-reduced-motion: reduce) {

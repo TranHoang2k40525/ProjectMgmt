@@ -117,6 +117,14 @@ public sealed class WorkItemsController(
         var type = await planning.IssueTypes.SingleOrDefaultAsync(t => t.ProjectId == projectId && t.Name == request.IssueType);
         if (type is null && request.IssueType == "Sub-task") type = await planning.IssueTypes.FirstOrDefaultAsync(t => t.ProjectId == projectId && t.IsSubtask);
         var status = await planning.WorkflowStatuses.FirstOrDefaultAsync(s => s.ProjectId == projectId && (s.Name == request.StatusName || (request.StatusName == "Code Review" && s.Name == "In Review") || (request.StatusName == "In Review" && s.Name == "Code Review")));
+        if (status is null && !id.HasValue)
+        {
+            status = await planning.WorkflowStatuses
+                .Where(s => s.ProjectId == projectId)
+                .OrderByDescending(s => s.IsInitial)
+                .ThenBy(s => s.OrderIndex)
+                .FirstOrDefaultAsync();
+        }
         if (type is null || status is null) return Invalid("Loại công việc hoặc trạng thái không thuộc dự án.");
         if (type.IsSubtask != request.ParentId.HasValue) return Invalid("Subtask phải có công việc cha; các loại khác không dùng ParentId.");
         if (request.ParentId.HasValue)
@@ -268,7 +276,7 @@ public sealed class WorkItemsController(
     private static object SprintView(Sprint s, List<Issue> issues) => new { s.Id, s.ProjectId, s.Name, s.Goal, s.StartDate, s.EndDate, status = s.Status == "Active" ? "active" : s.Status == "Completed" ? "completed" : "future", workItemsCount = issues.Count(i => i.SprintId == s.Id), totalStoryPoints = issues.Where(i => i.SprintId == s.Id).Sum(i => i.StoryPoints ?? 0) };
 
     [HttpPost("issues/{id:guid}/attachments")]
-    [RequestSizeLimit(11 * 1024 * 1024)]
+    [RequestSizeLimit(50 * 1024 * 1024)]
     public async Task<IActionResult> Upload(Guid id, IFormFile file, [FromServices] IIssueCollaborationService collaboration)
     {
         var issue = await delivery.Issues.AsNoTracking().SingleOrDefaultAsync(i => i.Id == id && !i.IsDeleted);
@@ -379,7 +387,9 @@ public sealed class WorkItemsController(
             IsDone = statuses.TryGetValue(i.StatusId, out var sd) && (sd.IsDone || string.Equals(sd.Category, "Done", StringComparison.OrdinalIgnoreCase)),
             IssueTypeId = i.IssueTypeId,
             IssueType = types.TryGetValue(i.IssueTypeId, out var it) ? (it.IsSubtask ? "Sub-task" : it.Name) : "Task",
-            IssueTypeIcon = types.TryGetValue(i.IssueTypeId, out var iti) ? (iti.IconKey ?? "task") : "task",
+            IssueTypeIcon = types.TryGetValue(i.IssueTypeId, out var iti)
+                ? (!string.IsNullOrWhiteSpace(iti.IconKey) && iti.IconKey != "task" ? iti.IconKey : DefaultIconForIssueType(iti.Name, iti.IsSubtask))
+                : "task_alt",
             IssueTypeColor = types.TryGetValue(i.IssueTypeId, out var itc) ? itc.ColorHex : "#6366F1",
             Priority = i.PriorityId.HasValue && priorities.TryGetValue(i.PriorityId.Value, out var p) ? (p.Name == "Highest" ? "Urgent" : p.Name) : "Medium",
             StoryPoints = i.StoryPoints ?? 0,
@@ -394,6 +404,19 @@ public sealed class WorkItemsController(
             Attachments = attachments.Where(a => a.IssueId == i.Id).Select(a => new { a.Id, a.FileName, a.FileSizeBytes, a.CreatedAt }).ToList(),
             Criteria = criteria.Where(c => c.IssueId == i.Id).Select(c => new { c.Id, c.Content, c.IsMet }).ToList()
         }).ToList();
+    }
+
+    private static string DefaultIconForIssueType(string? name, bool isSubtask = false)
+    {
+        if (isSubtask) return "subdirectory_arrow_right";
+        return (name ?? "").Trim().ToLowerInvariant() switch
+        {
+            "epic" => "bolt",
+            "story" => "bookmark",
+            "bug" => "bug_report",
+            "subtask" or "sub-task" => "subdirectory_arrow_right",
+            _ => "task_alt"
+        };
     }
 }
 

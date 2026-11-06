@@ -3,6 +3,7 @@ using IdentityExperience.Application.Dto;
 using IdentityExperience.Application.IServices;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using ProjectMgmt.IdentityAccess.Contracts;
 using ProjectMgmt.ProjectManagement.Contracts;
 
@@ -47,6 +48,69 @@ public class ProjectMembersController : ControllerBase
             "member.read",
             "list",
             async (actor, _) => Ok(await _roleServices.GetProjectMembersAsync(projectId)));
+    }
+
+    [HttpGet("candidate-org-members")]
+    public async Task<IActionResult> GetCandidateOrgMembers(Guid projectId, [FromServices] Planning.Infrastructure.PlanningDbContext planning)
+    {
+        return await ExecuteWithPermission(
+            projectId,
+            "member.read",
+            "candidate-org-members",
+            async (actor, _) =>
+            {
+                var scopeInfo = await _projects.GetProjectScopeAsync(projectId);
+                if (scopeInfo is null) return NotFound(new { message = "Không tìm thấy thông tin dự án." });
+
+                var existingMembers = await _roleServices.GetProjectMembersAsync(projectId);
+                var existingUserIds = (existingMembers.Members ?? existingMembers.Items ?? [])
+                    .Where(m => m.UserId.HasValue)
+                    .Select(m => m.UserId!.Value)
+                    .ToHashSet();
+                if (scopeInfo.LeadUserId != Guid.Empty) existingUserIds.Add(scopeInfo.LeadUserId);
+                if (scopeInfo.CreatedByUserId != Guid.Empty) existingUserIds.Add(scopeInfo.CreatedByUserId);
+                existingUserIds.Add(actor);
+
+                var conn = planning.Database.GetDbConnection();
+                if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync();
+                await using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    SELECT DISTINCT u.Id, u.Email, COALESCE(up.DisplayName, u.Email) AS DisplayName, up.AvatarUrl
+                    FROM (
+                        SELECT UserId FROM organizationmember WHERE OrgId = @orgId
+                        UNION
+                        SELECT OwnerId AS UserId FROM organization WHERE Id = @orgId
+                        UNION
+                        SELECT u2.Id AS UserId FROM organizationinvitation oi JOIN user u2 ON LOWER(oi.Email) = LOWER(u2.Email) WHERE oi.OrgId = @orgId AND oi.Status IN ('Pending', 'Accepted')
+                    ) orgUsers
+                    JOIN user u ON orgUsers.UserId = u.Id
+                    LEFT JOIN userprofile up ON u.Id = up.UserId
+                    WHERE u.IsActive = 1
+                    ORDER BY DisplayName ASC;";
+                var p = cmd.CreateParameter();
+                p.ParameterName = "@orgId";
+                p.Value = scopeInfo.OrganizationId.ToString();
+                cmd.Parameters.Add(p);
+
+                var candidates = new List<object>();
+                await using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    var userIdStr = reader.GetValue(0)?.ToString();
+                    if (Guid.TryParse(userIdStr, out var uId) && !existingUserIds.Contains(uId))
+                    {
+                        candidates.Add(new
+                        {
+                            UserId = uId,
+                            Email = reader.GetString(1),
+                            DisplayName = reader.GetString(2),
+                            AvatarUrl = reader.IsDBNull(3) ? null : reader.GetString(3)
+                        });
+                    }
+                }
+
+                return Ok(candidates);
+            });
     }
 
     [HttpPost]
@@ -216,12 +280,14 @@ public class ProjectMembersController : ControllerBase
                 });
             }
 
-            var allowed = await _permissions.HasPermissionAsync(
-                _currentUser.UserId.Value,
-                permissionCode,
-                "Project",
-                projectId,
-                project.OrganizationId);
+            var allowed = project.LeadUserId == _currentUser.UserId.Value
+                || project.CreatedByUserId == _currentUser.UserId.Value
+                || await _permissions.HasPermissionAsync(
+                    _currentUser.UserId.Value,
+                    permissionCode,
+                    "Project",
+                    projectId,
+                    project.OrganizationId);
             if (!allowed)
             {
                 return StatusCode(

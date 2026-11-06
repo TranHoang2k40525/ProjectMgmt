@@ -2,7 +2,7 @@ import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angula
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink, ActivatedRoute } from '@angular/router';
-import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
+import { DomSanitizer, SafeResourceUrl, SafeHtml } from '@angular/platform-browser';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   ProjectManagementService,
@@ -17,7 +17,7 @@ export interface OpenSpecTab {
   id: string;
   name: string;
   extension?: string;
-  fileType: 'text' | 'pdf' | 'docx' | 'xlsx';
+  fileType: 'text' | 'pdf' | 'docx' | 'xlsx' | 'image' | 'markdown';
   content?: string;
   previewData?: any;
   status: 'Draft' | 'Review' | 'Approved';
@@ -29,6 +29,7 @@ export interface OpenSpecTab {
   downloadUrl: string;
   safePdfUrl?: SafeResourceUrl;
   activeSheetIndex?: number;
+  markdownMode?: 'view' | 'edit';
 }
 
 @Component({
@@ -114,6 +115,10 @@ export class SpecHubPageComponent implements OnInit {
 
   // Target tải lên file
   uploadTargetParentId: string | null = null;
+
+  // Drag and Drop State
+  readonly draggedNode = signal<SpecTreeNode | null>(null);
+  readonly dragOverFolderId = signal<string | null>(null);
 
   ngOnInit(): void {
     this.route.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(params => {
@@ -222,10 +227,12 @@ export class SpecHubPageComponent implements OnInit {
     }
 
     const ext = (node.extension ?? '').toLowerCase();
-    let fileType: 'text' | 'pdf' | 'docx' | 'xlsx' = 'text';
+    let fileType: 'text' | 'pdf' | 'docx' | 'xlsx' | 'image' | 'markdown' = 'text';
     if (ext === '.pdf') fileType = 'pdf';
     else if (ext === '.docx') fileType = 'docx';
     else if (ext === '.xlsx') fileType = 'xlsx';
+    else if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp'].includes(ext)) fileType = 'image';
+    else if (ext === '.md') fileType = 'markdown';
 
     const rawUrl = this.projectService.getRawFileUrl(node.id);
     const downloadUrl = this.projectService.getDownloadUrl(node.id);
@@ -238,11 +245,12 @@ export class SpecHubPageComponent implements OnInit {
       fileType,
       status: node.status,
       version: node.version,
-      isLoading: true,
+      isLoading: fileType !== 'image',
       rawUrl,
       downloadUrl,
       safePdfUrl,
-      activeSheetIndex: 0
+      activeSheetIndex: 0,
+      markdownMode: 'view'
     };
 
     this.openTabs.update(tabs => [...tabs, newTab]);
@@ -305,7 +313,7 @@ export class SpecHubPageComponent implements OnInit {
   // --- LƯU THAY ĐỔI CHO FILE TEXT / MARKDOWN ---
   onTextChange(newContent: string): void {
     const tab = this.currentTab();
-    if (!tab || tab.fileType !== 'text') return;
+    if (!tab || (tab.fileType !== 'text' && tab.fileType !== 'markdown')) return;
 
     this.openTabs.update(tabs =>
       tabs.map(t => (t.id === tab.id ? { ...t, content: newContent, isDirty: true } : t))
@@ -314,7 +322,7 @@ export class SpecHubPageComponent implements OnInit {
 
   saveActiveTextFile(): void {
     const tab = this.currentTab();
-    if (!tab || tab.fileType !== 'text' || !this.isManager()) return;
+    if (!tab || (tab.fileType !== 'text' && tab.fileType !== 'markdown') || !this.isManager()) return;
 
     this.openTabs.update(tabs =>
       tabs.map(t => (t.id === tab.id ? { ...t, isSaving: true } : t))
@@ -631,7 +639,16 @@ export class SpecHubPageComponent implements OnInit {
         return 'article';
       case '.xlsx':
         return 'table_chart';
+      case '.png':
+      case '.jpg':
+      case '.jpeg':
+      case '.gif':
+      case '.webp':
+      case '.svg':
+      case '.bmp':
+        return 'image';
       case '.md':
+        return 'markdown';
       case '.txt':
       default:
         return 'description';
@@ -647,7 +664,16 @@ export class SpecHubPageComponent implements OnInit {
         return 'text-blue-500';
       case '.xlsx':
         return 'text-emerald-500';
+      case '.png':
+      case '.jpg':
+      case '.jpeg':
+      case '.gif':
+      case '.webp':
+      case '.svg':
+      case '.bmp':
+        return 'text-purple-500';
       case '.md':
+        return 'text-cyan-500';
       case '.txt':
       default:
         return 'text-amber-500';
@@ -660,5 +686,219 @@ export class SpecHubPageComponent implements OnInit {
     const sizes = ['B', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+
+  // --- KÉO THẢ DI CHUYỂN TÀI LIỆU TRONG CÂY THƯ MỤC ---
+  onNodeDragStart(node: SpecTreeNode, event: DragEvent): void {
+    if (!this.isManager()) return;
+    this.draggedNode.set(node);
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', node.id);
+    }
+  }
+
+  onNodeDragEnd(): void {
+    this.draggedNode.set(null);
+    this.dragOverFolderId.set(null);
+  }
+
+  onFolderDragOver(targetFolder: SpecTreeNode | null, event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+    this.dragOverFolderId.set(targetFolder ? targetFolder.id : 'root');
+  }
+
+  onFolderDragLeave(targetFolder: SpecTreeNode | null, event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    const folderId = targetFolder ? targetFolder.id : 'root';
+    if (this.dragOverFolderId() === folderId) {
+      this.dragOverFolderId.set(null);
+    }
+  }
+
+  onFolderDrop(targetFolder: SpecTreeNode | null, event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.dragOverFolderId.set(null);
+
+    // 1. Kiểm tra nếu là file/thư mục kéo thả từ máy tính Desktop vào
+    if (event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files.length > 0) {
+      void this.handleDesktopFilesDrop(event.dataTransfer, targetFolder ? targetFolder.id : null);
+      return;
+    }
+
+    // 2. Kéo thả nội bộ di chuyển giữa các thư mục trong cây tài liệu
+    const dragged = this.draggedNode();
+    if (!dragged) return;
+
+    const targetId = targetFolder ? targetFolder.id : null;
+    if (dragged.id === targetId || dragged.parentId === targetId) return;
+
+    this.projectService.moveDocument(dragged.id, targetId).subscribe({
+      next: () => {
+        this.toastService.success('Di chuyển tài liệu', `Đã di chuyển "${dragged.name}" thành công.`);
+        this.loadTree(dragged.id);
+        if (targetId) {
+          this.expandedFolderIds.update(set => new Set(set).add(targetId));
+        }
+      },
+      error: () => {
+        this.toastService.error('Di chuyển tài liệu', `Không thể di chuyển "${dragged.name}".`);
+      }
+    });
+    this.draggedNode.set(null);
+  }
+
+  // --- KÉO THẢ CẢ THƯ MỤC VÀ NHIỀU FILE TỪ MÁY TÍNH VÀO SPEC HUB ---
+  private async handleDesktopFilesDrop(dataTransfer: DataTransfer, parentId: string | null): Promise<void> {
+    const projectId = this.activeProject()?.id;
+    if (!projectId) return;
+
+    const items = dataTransfer.items;
+    const fileEntries: { file: File; relativePath?: string }[] = [];
+
+    const traverseEntry = async (entry: any, path: string): Promise<void> => {
+      if (entry.isFile) {
+        const file: File = await new Promise((resolve, reject) => entry.file(resolve, reject));
+        fileEntries.push({ file, relativePath: path ? `${path}/${file.name}` : file.name });
+      } else if (entry.isDirectory) {
+        const dirReader = entry.createReader();
+        const readEntries = async (): Promise<any[]> => {
+          return new Promise((resolve, reject) => {
+            dirReader.readEntries(resolve, reject);
+          });
+        };
+        let entries: any[] = [];
+        let batch: any[];
+        do {
+          batch = await readEntries();
+          entries = entries.concat(batch);
+        } while (batch && batch.length > 0);
+
+        for (const child of entries) {
+          await traverseEntry(child, path ? `${path}/${entry.name}` : entry.name);
+        }
+      }
+    };
+
+    if (items && items.length > 0 && typeof items[0].webkitGetAsEntry === 'function') {
+      for (let i = 0; i < items.length; i++) {
+        const entry = items[i].webkitGetAsEntry();
+        if (entry) {
+          await traverseEntry(entry, '');
+        }
+      }
+    } else {
+      for (let i = 0; i < dataTransfer.files.length; i++) {
+        const f = dataTransfer.files[i];
+        fileEntries.push({ file: f, relativePath: f.name });
+      }
+    }
+
+    if (fileEntries.length === 0) return;
+
+    this.toastService.info('Spec Hub', `Đang tải lên ${fileEntries.length} tệp tin và cấu trúc thư mục...`);
+
+    this.projectService.uploadMultipleSpecFiles(projectId, fileEntries, parentId).subscribe({
+      next: () => {
+        this.toastService.success('Spec Hub', `Đã đồng bộ thành công ${fileEntries.length} tệp vào Spec Hub.`);
+        this.loadTree();
+        if (parentId) {
+          this.expandedFolderIds.update(s => new Set(s).add(parentId));
+        }
+      },
+      error: () => {
+        this.toastService.error('Spec Hub', 'Lỗi khi tải hàng loạt tệp tin lên Spec Hub.');
+      }
+    });
+  }
+
+  // --- MARKDOWN VIEWER & GITHUB-STYLE PREVIEW ---
+  toggleMarkdownMode(tab: OpenSpecTab, mode: 'view' | 'edit'): void {
+    this.openTabs.update(tabs =>
+      tabs.map(t => (t.id === tab.id ? { ...t, markdownMode: mode } : t))
+    );
+  }
+
+  renderMarkdown(md?: string): SafeHtml {
+    if (!md) return this.sanitizer.bypassSecurityTrustHtml('<p class="italic text-slate-400">Tài liệu markdown trống.</p>');
+
+    let html = md
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    // Fenced Code Blocks
+    html = html.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (_, lang, code) => {
+      return `<pre class="my-3 p-3.5 rounded-xl bg-slate-900 text-slate-100 font-mono text-xs overflow-x-auto border border-slate-800"><div class="text-[10px] text-slate-400 mb-1.5 font-bold uppercase tracking-wider">${lang || 'code'}</div><code>${code.trim()}</code></pre>`;
+    });
+
+    // Inline Code
+    html = html.replace(/`([^`]+)`/g, '<code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-primary font-mono text-xs font-semibold">$1</code>');
+
+    // Headings
+    html = html.replace(/^#### (.*$)/gim, '<h4 class="text-sm font-bold text-slate-900 dark:text-white mt-4 mb-2">$1</h4>');
+    html = html.replace(/^### (.*$)/gim, '<h3 class="text-base font-bold text-slate-900 dark:text-white mt-5 mb-2 pb-1 border-b border-slate-100 dark:border-slate-800">$1</h3>');
+    html = html.replace(/^## (.*$)/gim, '<h2 class="text-lg font-bold text-slate-900 dark:text-white mt-6 mb-2 pb-1 border-b border-slate-200 dark:border-slate-700">$1</h2>');
+    html = html.replace(/^# (.*$)/gim, '<h1 class="text-xl font-bold text-slate-900 dark:text-white mt-6 mb-3 pb-2 border-b border-slate-200 dark:border-slate-700">$1</h1>');
+
+    // Blockquotes
+    html = html.replace(/^\> (.*$)/gim, '<blockquote class="border-l-4 border-primary pl-4 py-1.5 my-2.5 italic text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-850/60 rounded-r-lg">$1</blockquote>');
+
+    // Bold, Italic, Strikethrough
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong class="font-bold text-slate-900 dark:text-white">$1</strong>');
+    html = html.replace(/\*([^*]+)\*/g, '<em class="italic">$1</em>');
+    html = html.replace(/~~([^~]+)~~/g, '<del class="line-through text-slate-400">$1</del>');
+
+    // Task list items
+    html = html.replace(/^- \[x\] (.*$)/gim, '<li class="flex items-center gap-2 list-none my-1"><span class="material-symbols-outlined text-emerald-500 text-[18px]">check_box</span><span class="line-through text-slate-400">$1</span></li>');
+    html = html.replace(/^- \[ \] (.*$)/gim, '<li class="flex items-center gap-2 list-none my-1"><span class="material-symbols-outlined text-slate-400 text-[18px]">check_box_outline_blank</span><span>$1</span></li>');
+
+    // Unordered lists
+    html = html.replace(/^[*-] (.*$)/gim, '<li class="ml-4 list-disc my-0.5">$1</li>');
+
+    // Tables
+    const lines = html.split('\n');
+    let inTable = false;
+    let tableHtml = '';
+    const processedLines: string[] = [];
+
+    for (const line of lines) {
+      if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
+        const cells = line.trim().slice(1, -1).split('|').map(c => c.trim());
+        if (cells.every(c => /^[-:]+$/.test(c))) {
+          continue;
+        }
+        if (!inTable) {
+          inTable = true;
+          tableHtml = '<div class="overflow-x-auto my-3"><table class="min-w-full divide-y divide-slate-200 dark:divide-slate-700 border border-slate-200 dark:border-slate-700 text-xs text-left">';
+          tableHtml += '<thead><tr class="bg-slate-50 dark:bg-slate-800">' + cells.map(c => `<th class="px-3 py-2 font-bold">${c}</th>`).join('') + '</tr></thead><tbody class="divide-y divide-slate-100 dark:divide-slate-800">';
+        } else {
+          tableHtml += '<tr>' + cells.map(c => `<td class="px-3 py-2">${c}</td>`).join('') + '</tr>';
+        }
+      } else {
+        if (inTable) {
+          inTable = false;
+          tableHtml += '</tbody></table></div>';
+          processedLines.push(tableHtml);
+          tableHtml = '';
+        }
+        processedLines.push(line);
+      }
+    }
+    if (inTable) {
+      tableHtml += '</tbody></table></div>';
+      processedLines.push(tableHtml);
+    }
+
+    html = processedLines.join('\n');
+    html = html.replace(/\n\n/g, '<div class="h-2"></div>');
+
+    return this.sanitizer.bypassSecurityTrustHtml(html);
   }
 }

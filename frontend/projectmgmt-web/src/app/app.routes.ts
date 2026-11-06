@@ -37,7 +37,9 @@ export const routes: Routes = [
       { path: '', pathMatch: 'full', redirectTo: 'for-you' },
       { path: 'for-you', loadComponent: () => import('./features/workspace/home/home-page').then(m => m.WorkspaceHomePageComponent) },
       { path: 'project/summary', loadComponent: () => import('./features/projects/project-summary-page').then(m => m.ProjectSummaryPageComponent) },
+      { path: 'projects/:id', redirectTo: 'projects/:id/summary', pathMatch: 'full' },
       { path: 'projects/:id/summary', loadComponent: () => import('./features/projects/project-summary-page').then(m => m.ProjectSummaryPageComponent) },
+      { path: 'projects/:id/overview', redirectTo: 'projects/:id/summary', pathMatch: 'full' },
       { path: 'project/members', loadComponent: () => import('./features/projects/project-members-page').then(m => m.ProjectMembersPageComponent) },
       { path: 'projects/:id/members', loadComponent: () => import('./features/projects/project-members-page').then(m => m.ProjectMembersPageComponent) },
       { path: 'profile', loadComponent: () => import('./features/identity/profile-page').then(m => m.ProfilePageComponent) },
@@ -56,7 +58,8 @@ export const routes: Routes = [
             canActivate: [orgOwnerGuard],
             loadComponent: () => import('./features/workspace/org/settings/org-settings').then(m => m.OrgSettingsComponent),
             children: [
-              { path: '', pathMatch: 'full', redirectTo: 'members' },
+              { path: '', pathMatch: 'full', redirectTo: 'general' },
+              { path: 'general', loadComponent: () => import('./features/workspace/org/settings/org-general-settings').then(m => m.OrgGeneralSettingsComponent) },
               { path: 'members', loadComponent: () => import('./features/workspace/org/settings/org-members-settings').then(m => m.OrgMembersSettingsComponent) },
               { path: 'workflows', loadComponent: () => import('./features/workspace/org/settings/org-workflow-templates').then(m => m.OrgWorkflowTemplatesComponent) }
             ]

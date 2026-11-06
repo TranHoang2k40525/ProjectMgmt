@@ -113,7 +113,13 @@
       </div>
 
       <!-- Tree Nodes Scroll Area -->
-      <div class="flex-1 overflow-y-auto overflow-x-hidden p-1.5 space-y-0.5 text-xs">
+      <div
+        (dragover)="onFolderDragOver(null, $event)"
+        (dragleave)="onFolderDragLeave(null, $event)"
+        (drop)="onFolderDrop(null, $event)"
+        [class.bg-primary/10]="dragOverFolderId() === 'root'"
+        class="flex-1 overflow-y-auto overflow-x-hidden p-1.5 space-y-0.5 text-xs transition-colors"
+      >
         @if (isLoadingTree() && treeNodes().length === 0) {
           <div class="p-6 text-center text-slate-400 flex flex-col items-center gap-2">
             <span class="material-symbols-outlined animate-spin text-[20px]">sync</span>
@@ -125,7 +131,7 @@
             <span class="font-bold">Kho tài liệu trống</span>
             <p class="text-[11px] leading-relaxed">
               @if (isManager()) {
-                Nhấn biểu tượng "+" bên trên để tạo thư mục hoặc tải lên tệp đặc tả.
+                Kéo thả file/thư mục từ máy tính vào đây hoặc nhấn "+" để thêm mới.
               } @else {
                 Chưa có tài liệu nào trong dự án này.
               }
@@ -150,7 +156,14 @@
       <div class="tree-node-wrapper group/node">
         <!-- Node Row -->
         <div
+          [draggable]="isManager()"
+          (dragstart)="onNodeDragStart(node, $event)"
+          (dragend)="onNodeDragEnd()"
+          (dragover)="node.isDirectory ? onFolderDragOver(node, $event) : null"
+          (dragleave)="node.isDirectory ? onFolderDragLeave(node, $event) : null"
+          (drop)="node.isDirectory ? onFolderDrop(node, $event) : null"
           (click)="onNodeClick(node)"
+          [class.bg-primary/20]="dragOverFolderId() === node.id"
           [class.bg-primary/10]="selectedNodeId() === node.id || activeTabId() === node.id"
           [class.text-primary]="selectedNodeId() === node.id || activeTabId() === node.id"
           class="flex items-center justify-between h-7 px-1.5 rounded hover:bg-slate-200/70 dark:hover:bg-slate-800/60 cursor-pointer transition-colors relative"
@@ -448,7 +461,7 @@
                   <span class="text-sm">Đang tải nội dung tệp...</span>
                 </div>
               } @else {
-                <!-- 1. TEXT / MARKDOWN EDITOR -->
+                <!-- 1. TEXT EDITOR -->
                 @if (tab.fileType === 'text') {
                   <div class="flex-1 flex flex-col h-full p-4 font-mono text-sm">
                     <textarea
@@ -461,7 +474,67 @@
                   </div>
                 }
 
-                <!-- 2. PDF VIEWER (IFRAME NATIVE) -->
+                <!-- 2. MARKDOWN VIEWER & EDITOR (GITHUB STYLE VIEW / EDIT TABS) -->
+                @if (tab.fileType === 'markdown') {
+                  <div class="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-950 overflow-hidden">
+                    <div class="h-9 px-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0 select-none">
+                      <div class="flex items-center gap-1">
+                        <button
+                          type="button"
+                          (click)="toggleMarkdownMode(tab, 'view')"
+                          [class.bg-slate-100]="tab.markdownMode !== 'edit'"
+                          [class.dark:bg-slate-800]="tab.markdownMode !== 'edit'"
+                          [class.text-primary]="tab.markdownMode !== 'edit'"
+                          [class.font-bold]="tab.markdownMode !== 'edit'"
+                          class="px-2.5 py-1 rounded text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <span class="material-symbols-outlined text-[15px]">visibility</span>
+                          <span>Xem trước (Preview)</span>
+                        </button>
+                        <button
+                          type="button"
+                          (click)="toggleMarkdownMode(tab, 'edit')"
+                          [class.bg-slate-100]="tab.markdownMode === 'edit'"
+                          [class.dark:bg-slate-800]="tab.markdownMode === 'edit'"
+                          [class.text-primary]="tab.markdownMode === 'edit'"
+                          [class.font-bold]="tab.markdownMode === 'edit'"
+                          class="px-2.5 py-1 rounded text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <span class="material-symbols-outlined text-[15px]">edit</span>
+                          <span>Chỉnh sửa (Edit)</span>
+                        </button>
+                      </div>
+                      <span class="text-[11px] text-slate-400 font-mono">Markdown Viewer v1.0</span>
+                    </div>
+
+                    @if (tab.markdownMode === 'edit') {
+                      <div class="flex-1 flex flex-col h-full p-4 font-mono text-xs">
+                        <textarea
+                          [ngModel]="tab.content"
+                          (ngModelChange)="onTextChange($event)"
+                          [readonly]="!isManager()"
+                          placeholder="Nhập nội dung markdown..."
+                          class="flex-1 w-full p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 font-mono text-xs leading-relaxed outline-none resize-none focus:border-primary transition-colors"
+                        ></textarea>
+                      </div>
+                    } @else {
+                      <div class="flex-1 overflow-y-auto p-6 sm:p-10 bg-white dark:bg-slate-900">
+                        <div [innerHTML]="renderMarkdown(tab.content)" class="prose dark:prose-invert max-w-4xl mx-auto leading-relaxed text-sm"></div>
+                      </div>
+                    }
+                  </div>
+                }
+
+                <!-- 3. IMAGE VIEWER -->
+                @if (tab.fileType === 'image') {
+                  <div class="flex-1 flex flex-col items-center justify-center p-6 bg-slate-100 dark:bg-slate-950 overflow-auto">
+                    <div class="relative max-w-full max-h-full flex items-center justify-center p-4 bg-white dark:bg-slate-900 rounded-2xl shadow-md border border-slate-200 dark:border-slate-800">
+                      <img [src]="tab.rawUrl" [alt]="tab.name" class="max-w-full max-h-[75vh] object-contain rounded-lg" />
+                    </div>
+                  </div>
+                }
+
+                <!-- 4. PDF VIEWER (IFRAME NATIVE WITH AUTH QUERY TOKEN) -->
                 @if (tab.fileType === 'pdf') {
                   <div class="flex-1 flex flex-col h-full bg-slate-200 dark:bg-slate-900 p-2">
                     <iframe
@@ -472,22 +545,33 @@
                   </div>
                 }
 
-                <!-- 3. WORD VIEWER (.DOCX EXTRACTED PREVIEW) -->
+                <!-- 5. WORD VIEWER (.DOCX AUTHENTIC A4 CANVAS WITH FULL EMBEDDED IMAGES) -->
                 @if (tab.fileType === 'docx') {
-                  <div class="flex-1 overflow-y-auto p-4 sm:p-8 bg-slate-100 dark:bg-slate-950">
-                    <div class="max-w-4xl mx-auto bg-white dark:bg-slate-900 p-6 sm:p-10 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800">
-                      <div class="flex items-center justify-between pb-4 mb-6 border-b border-slate-100 dark:border-slate-800">
-                        <div class="flex items-center gap-2">
-                          <span class="material-symbols-outlined text-[24px] text-blue-500">article</span>
-                          <span class="text-base font-bold text-slate-900 dark:text-white">{{ tab.name }}</span>
+                  <div class="flex-1 overflow-y-auto p-4 sm:p-8 bg-slate-200 dark:bg-slate-950">
+                    <div class="max-w-[850px] min-h-[1100px] mx-auto bg-white text-slate-900 p-8 sm:p-14 shadow-2xl rounded border border-slate-300 font-serif leading-relaxed">
+                      <div class="flex items-center justify-between pb-4 mb-8 border-b border-slate-200 font-sans">
+                        <div class="flex items-center gap-2.5">
+                          <span class="material-symbols-outlined text-[26px] text-blue-600">article</span>
+                          <div>
+                            <h2 class="text-base font-bold text-slate-900">{{ tab.name }}</h2>
+                            <p class="text-[11px] text-slate-500">Định dạng Microsoft Word (.docx) • Chế độ xem trang in A4</p>
+                          </div>
                         </div>
-                        <span class="text-xs text-slate-400">Trích xuất từ Word (.docx)</span>
+                        <button
+                          type="button"
+                          (click)="downloadFile(tab.id)"
+                          class="px-3 py-1 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <span class="material-symbols-outlined text-[15px]">download</span>
+                          <span>Tải tệp gốc</span>
+                        </button>
                       </div>
 
                       @if (tab.previewData?.extractedHtml) {
-                        <div [innerHTML]="tab.previewData?.extractedHtml" class="prose dark:prose-invert max-w-none"></div>
+                        <div [innerHTML]="tab.previewData?.extractedHtml" class="docx-canvas text-sm"></div>
                       } @else {
-                        <div class="text-center py-12 text-slate-400">
+                        <div class="text-center py-16 text-slate-400 font-sans">
+                          <span class="material-symbols-outlined text-[36px] mb-2">article</span>
                           <p class="text-sm">Không có nội dung văn bản hiển thị.</p>
                         </div>
                       }
@@ -495,7 +579,7 @@
                   </div>
                 }
 
-                <!-- 4. EXCEL VIEWER (.XLSX GRID SPREADSHEET) -->
+                <!-- 6. EXCEL VIEWER (.XLSX GRID SPREADSHEET) -->
                 @if (tab.fileType === 'xlsx') {
                   <div class="flex-1 flex flex-col h-full bg-slate-100 dark:bg-slate-950 overflow-hidden">
                     <!-- Sheet Switcher Tabs -->

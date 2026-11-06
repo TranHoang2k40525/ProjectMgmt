@@ -342,8 +342,17 @@ export class AppShellComponent {
   }
 
   exportExcel(): void {
-    this.excelService.exportToExcel(this.projectService.workItems(), 'Project_WorkItems_Export.csv');
-    this.toastService.success('Xuất Dữ Liệu Excel', 'Đã tải xuống file CSV/Excel danh sách công việc thành công.');
+    const proj = this.projectService.currentProject();
+    const projectKey = proj.projectKey || 'PROJECT';
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const filename = `${projectKey}_WorkItems_Export_${dateStr}.xlsx`;
+    this.excelService.exportToExcel(
+      this.projectService.workItems(),
+      filename,
+      this.projectService.sprints(),
+      proj.name || projectKey
+    );
+    this.toastService.success('Xuất Dữ Liệu Excel', `Đã tải xuống bảng Excel: ${filename}`);
   }
 
   closeActiveDrawer(): void {

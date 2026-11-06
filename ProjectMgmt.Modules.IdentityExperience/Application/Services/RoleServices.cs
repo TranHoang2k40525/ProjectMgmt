@@ -239,6 +239,8 @@ public class RoleServices : IRoleServices
             return Failure("RBAC_SELF_ESCALATION_FORBIDDEN", "Không được tự thêm hoặc nâng vai trò của chính mình.");
         }
 
+        await _rbacRepository.CanUserJoinProjectAsync(userId.Value, projectId);
+
         var result = await _rbacRepository.AddProjectMemberAsync(
             userId.Value,
             roleId.Value,
@@ -400,6 +402,9 @@ public class RoleServices : IRoleServices
             Name = role.Name,
             Scope = role.Scope,
             IsSystem = role.IsSystem,
+            IsPreset = role.IsPreset || role.IsSystem,
+            IsActive = role.IsActive,
+            OrgId = role.OrgId,
             Description = role.Description
         };
     }
@@ -508,9 +513,15 @@ public class RoleServices : IRoleServices
             ? await _identityRepository.GetUserByNormalizedEmailAsync(normalized)
             : null;
 
-        if (user is null || !user.IsActive || !user.IsEmailVerified)
+        if (user is null || !user.IsActive)
         {
-            return Failure("RBAC_USER_NOT_FOUND", "Chưa tìm thấy tài khoản đã xác minh với email này.");
+            return Failure("RBAC_USER_NOT_FOUND", "Chưa tìm thấy tài khoản hoạt động với email này.");
+        }
+
+        var isOrgMember = await _rbacRepository.CanUserJoinProjectAsync(user.Id, projectId);
+        if (!isOrgMember)
+        {
+            return Failure("RBAC_USER_NOT_IN_ORG", $"Người dùng '{email}' không thuộc tổ chức của dự án. Không thể mời người ngoài tổ chức vào dự án.");
         }
 
         var roles = await _rbacRepository.GetRolesAsync("Project");
@@ -591,6 +602,13 @@ public class RoleServices : IRoleServices
 
                 // Tìm hoặc tạo mới người dùng
                 var user = await _identityRepository.GetOrCreateUserByEmailAsync(email, displayName);
+
+                var isOrgMember = await _rbacRepository.CanUserJoinProjectAsync(user.Id, projectId);
+                if (!isOrgMember)
+                {
+                    errors.Add($"Email '{email}' không thuộc tổ chức của dự án. Không thể mời người ngoài tổ chức.");
+                    continue;
+                }
 
                 // Gán vai trò vào dự án
                 var assignResult = await _rbacRepository.AddProjectMemberAsync(

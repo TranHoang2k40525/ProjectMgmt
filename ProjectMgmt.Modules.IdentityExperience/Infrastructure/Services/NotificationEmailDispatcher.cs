@@ -41,7 +41,7 @@ public class NotificationEmailDispatcher : INotificationEmailDispatcher
         try
         {
             var user = await _identityRepository.GetUserByIdAsync(notification.UserId.Value);
-            if (user is null || !user.IsActive || !user.IsEmailVerified)
+            if (user is null || !user.IsActive)
             {
                 return false;
             }

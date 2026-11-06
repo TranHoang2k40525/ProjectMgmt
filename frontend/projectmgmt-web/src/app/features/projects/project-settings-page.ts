@@ -39,51 +39,51 @@ import { ToastService } from '../../core/services/toast.service';
       <div class="settings-tabs">
         <button
           type="button"
-          (click)="activeTab.set('general')"
+          (click)="selectTab('general')"
           [class.active]="activeTab() === 'general'"
-          class="tab-item flex items-center gap-1.5"
+          class="tab-item"
         >
           <span class="material-symbols-outlined text-[18px]">tune</span>
           <span>Thông tin chung</span>
         </button>
         <button
           type="button"
-          (click)="activeTab.set('issue-types')"
+          (click)="selectTab('issue-types')"
           [class.active]="activeTab() === 'issue-types'"
-          class="tab-item flex items-center gap-1.5"
+          class="tab-item"
         >
           <span class="material-symbols-outlined text-[18px]">category</span>
           <span>Loại công việc (Issue Types)</span>
         </button>
         <button
           type="button"
-          (click)="activeTab.set('labels')"
+          (click)="selectTab('labels')"
           [class.active]="activeTab() === 'labels'"
-          class="tab-item flex items-center gap-1.5"
+          class="tab-item"
         >
           <span class="material-symbols-outlined text-[18px]">label</span>
           <span>Quản lý Nhãn (Labels)</span>
         </button>
         <a
           [routerLink]="['/projects', projectId, 'settings', 'workflow']"
-          class="tab-item flex items-center gap-1.5"
+          class="tab-item"
         >
           <span class="material-symbols-outlined text-[18px]">sync_alt</span>
           <span>Cấu hình Workflow</span>
         </a>
         <a
           [routerLink]="['/projects', projectId, 'settings', 'board']"
-          class="tab-item flex items-center gap-1.5"
+          class="tab-item"
         >
           <span class="material-symbols-outlined text-[18px]">view_kanban</span>
           <span>Cấu hình Board</span>
         </a>
         <a
           [routerLink]="['/projects', projectId, 'members']"
-          class="tab-item flex items-center gap-1.5"
+          class="tab-item"
         >
           <span class="material-symbols-outlined text-[18px]">badge</span>
-          <span>Thành viên & Phân quyền</span>
+          <span>Thành viên &amp; Phân quyền</span>
         </a>
       </div>
 
@@ -380,21 +380,23 @@ import { ToastService } from '../../core/services/toast.service';
   `,
   styles: [`
     .settings-container {
-      padding: 2rem;
-      max-width: 960px;
+      padding: 1.75rem 2rem;
+      max-width: 1180px;
+      width: 100%;
+      box-sizing: border-box;
       margin: 0 auto;
     }
     .breadcrumb {
       font-size: 0.85rem;
       color: #64748b;
-      margin-bottom: 1rem;
+      margin-bottom: 0.75rem;
     }
     .breadcrumb a {
       color: #1b4332;
       text-decoration: none;
     }
     .settings-header {
-      margin-bottom: 1.5rem;
+      margin-bottom: 1.25rem;
     }
     h1 {
       font-size: 1.6rem;
@@ -409,14 +411,20 @@ import { ToastService } from '../../core/services/toast.service';
     }
     .settings-tabs {
       display: flex;
-      gap: 0.5rem;
+      align-items: center;
+      gap: 0.25rem;
       border-bottom: 2px solid #e2e8f0;
-      margin-bottom: 2rem;
+      margin: 1.5rem 0 1.75rem 0;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .settings-tabs::-webkit-scrollbar {
+      display: none;
     }
     .tab-item {
-      padding: 0.75rem 1.25rem;
+      padding: 0.75rem 1rem;
       font-weight: 600;
-      font-size: 0.95rem;
+      font-size: 0.9rem;
       color: #64748b;
       background: transparent;
       border: none;
@@ -424,7 +432,12 @@ import { ToastService } from '../../core/services/toast.service';
       border-bottom: 2px solid transparent;
       margin-bottom: -2px;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: color 0.15s, border-color 0.15s;
+      white-space: nowrap;
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
     }
     .tab-item:hover {
       color: #1b4332;
@@ -611,12 +624,30 @@ export class ProjectSettingsPage implements OnInit {
 
   ngOnInit(): void {
     this.projectId = this.route.snapshot.paramMap.get('id') || '';
+    this.route.queryParamMap.subscribe(q => {
+      const tab = q.get('tab');
+      if (tab === 'issue-types' || tab === 'labels' || tab === 'general') {
+        this.activeTab.set(tab);
+      } else {
+        this.activeTab.set('general');
+      }
+    });
     if (this.projectId) {
       this.loadProject();
       this.loadUsers();
       this.loadIssueTypes();
       this.loadLabels();
     }
+  }
+
+  selectTab(tab: 'general' | 'issue-types' | 'labels'): void {
+    this.activeTab.set(tab);
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { tab: tab === 'general' ? null : tab },
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
   }
 
   loadUsers(): void {

@@ -13,6 +13,8 @@ import {
 } from '../../core/services/project-management.service';
 import { ConfirmDialogService } from '../../core/services/confirm-dialog.service';
 import { ToastService } from '../../core/services/toast.service';
+import { WorkspaceDataSource } from '../workspace/data/workspace-data-source';
+import { WorkflowTemplate as OrgWorkflowTemplate } from '../workspace/data/workspace.models';
 
 @Component({
   selector: 'app-workflow-settings-page',
@@ -23,36 +25,43 @@ import { ToastService } from '../../core/services/toast.service';
       <div class="breadcrumb">
         <a routerLink="/projects">Dự án</a> &gt;
         @if (project()) {
-          <a routerLink="/project/summary" class="hover:text-primary hover:underline">{{ project()?.name }}</a> &gt;
-          <a [routerLink]="['/projects', projectId, 'settings']" class="hover:text-primary hover:underline">Cài đặt</a> &gt;
+          <a routerLink="/project/summary" class="hover:text-primary hover:underline">{{ project()?.name }} ({{ project()?.projectKey }})</a> &gt;
         }
-        <span>Cấu hình Workflow</span>
+        <span>Cài đặt</span>
       </div>
 
       <div class="page-header">
         <div>
-          <h1>Cấu hình Quy trình Workflow</h1>
-          <p class="subtitle">Tự do tùy biến các bước trạng thái (Status), cờ hành vi Scrum (Done/Active/Initial) và luật chuyển đổi (Transitions) cho dự án {{ project()?.name }}</p>
+          <h1>Cài đặt Dự án</h1>
+          <p class="subtitle">Quản lý cấu hình thông tin chung, loại công việc động, nhãn dán, quy trình (Workflow) và bảng (Board)</p>
         </div>
       </div>
 
       <!-- Navigation Tabs -->
       <div class="settings-tabs">
-        <a [routerLink]="['/projects', projectId, 'settings']" class="tab-item flex items-center gap-1.5">
+        <a [routerLink]="['/projects', projectId, 'settings']" class="tab-item">
           <span class="material-symbols-outlined text-[18px]">tune</span>
           <span>Thông tin chung</span>
         </a>
-        <span class="tab-item active flex items-center gap-1.5">
+        <a [routerLink]="['/projects', projectId, 'settings']" [queryParams]="{ tab: 'issue-types' }" class="tab-item">
+          <span class="material-symbols-outlined text-[18px]">category</span>
+          <span>Loại công việc (Issue Types)</span>
+        </a>
+        <a [routerLink]="['/projects', projectId, 'settings']" [queryParams]="{ tab: 'labels' }" class="tab-item">
+          <span class="material-symbols-outlined text-[18px]">label</span>
+          <span>Quản lý Nhãn (Labels)</span>
+        </a>
+        <span class="tab-item active">
           <span class="material-symbols-outlined text-[18px]">sync_alt</span>
           <span>Cấu hình Workflow</span>
         </span>
-        <a [routerLink]="['/projects', projectId, 'settings', 'board']" class="tab-item flex items-center gap-1.5">
+        <a [routerLink]="['/projects', projectId, 'settings', 'board']" class="tab-item">
           <span class="material-symbols-outlined text-[18px]">view_kanban</span>
           <span>Cấu hình Board</span>
         </a>
-        <a [routerLink]="['/projects', projectId, 'members']" class="tab-item flex items-center gap-1.5">
+        <a [routerLink]="['/projects', projectId, 'members']" class="tab-item">
           <span class="material-symbols-outlined text-[18px]">badge</span>
-          <span>Thành viên & Phân quyền</span>
+          <span>Thành viên &amp; Phân quyền</span>
         </a>
       </div>
 
@@ -65,16 +74,22 @@ import { ToastService } from '../../core/services/toast.service';
         </div>
       }
 
-      <!-- 1. MẪU WORKFLOW CHUẨN -->
+      <!-- 1. MẪU WORKFLOW CHUẨN TỪ DATABASE -->
       <div class="card">
-        <h3>Áp dụng mẫu quy trình Scrum chuẩn</h3>
-        <p class="hint">Bổ sung trạng thái và các bước chuyển tiếp tự động mà vẫn giữ nguyên dữ liệu công việc hiện có.</p>
+        <h3>Áp dụng mẫu quy trình Scrum chuẩn (Từ Cơ sở dữ liệu)</h3>
+        <p class="hint">Áp dụng đúng danh sách bước trạng thái, luồng chuyển tiếp và cột Board của mẫu quy trình đã chọn từ cơ sở dữ liệu.</p>
         <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
-          <select id="workflowTemplate" class="form-control sm:max-w-xs" [(ngModel)]="selectedTemplate">
-            <option value="scrum-std">Scrum tiêu chuẩn (To Do, In Progress, Code Review, Done)</option>
-            <option value="agile-qa">Agile QA (To Do, In Progress, Code Review, QA Testing, Done)</option>
-            <option value="kanban-simple">Kanban tinh gọn (To Do, In Progress, Done)</option>
-            <option value="enterprise">Doanh nghiệp (Backlog, Spec Review, In Progress, Code Review, QA, Done)</option>
+          <select id="workflowTemplate" class="form-control sm:max-w-md" [(ngModel)]="selectedTemplate">
+            @for (tpl of availableWorkflowTemplates(); track tpl.id) {
+              <option [value]="tpl.id">
+                {{ tpl.name }} {{ tpl.isPreset ? '• [Mẫu có sẵn]' : '• [Mẫu riêng của tổ chức]' }}
+              </option>
+            } @empty {
+              <option value="scrum-std">Scrum tiêu chuẩn (Mặc định)</option>
+              <option value="agile-qa">Agile QA</option>
+              <option value="kanban-simple">Kanban tinh gọn</option>
+              <option value="enterprise">Doanh nghiệp</option>
+            }
           </select>
           <button class="btn btn-primary flex items-center justify-center gap-1.5" [disabled]="loading() || submitting() || !project()" (click)="applyTemplate()">
             <span class="material-symbols-outlined text-[18px]">auto_fix_high</span>
@@ -361,18 +376,23 @@ import { ToastService } from '../../core/services/toast.service';
   `,
   styles: [`
     .workflow-container {
-      padding: 2rem;
-      max-width: 1100px;
+      padding: 1.75rem 2rem;
+      max-width: 1180px;
+      width: 100%;
+      box-sizing: border-box;
       margin: 0 auto;
     }
     .breadcrumb {
       font-size: 0.85rem;
       color: #64748b;
-      margin-bottom: 1rem;
+      margin-bottom: 0.75rem;
     }
     .breadcrumb a {
       color: #1b4332;
       text-decoration: none;
+    }
+    .page-header {
+      margin-bottom: 1.25rem;
     }
     h1 {
       font-size: 1.6rem;
@@ -387,19 +407,33 @@ import { ToastService } from '../../core/services/toast.service';
     }
     .settings-tabs {
       display: flex;
-      gap: 0.5rem;
+      align-items: center;
+      gap: 0.25rem;
       border-bottom: 2px solid #e2e8f0;
-      margin: 1.5rem 0;
+      margin: 1.5rem 0 1.75rem 0;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .settings-tabs::-webkit-scrollbar {
+      display: none;
     }
     .tab-item {
-      padding: 0.75rem 1.25rem;
+      padding: 0.75rem 1rem;
       font-weight: 600;
-      font-size: 0.95rem;
+      font-size: 0.9rem;
       color: #64748b;
+      background: transparent;
+      border: none;
       text-decoration: none;
       border-bottom: 2px solid transparent;
       margin-bottom: -2px;
       cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+      white-space: nowrap;
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
     }
     .tab-item:hover {
       color: #1b4332;
@@ -605,11 +639,13 @@ export class WorkflowSettingsPage implements OnInit {
   private readonly projectService = inject(ProjectManagementService);
   private readonly confirmService = inject(ConfirmDialogService);
   private readonly toastService = inject(ToastService);
+  private readonly workspaceData = inject(WorkspaceDataSource, { optional: true });
 
   projectId = '';
   readonly project = signal<Project | null>(null);
   readonly statuses = signal<ProjectStatus[]>([]);
   readonly transitions = signal<WorkflowTransition[]>([]);
+  readonly availableWorkflowTemplates = signal<OrgWorkflowTemplate[]>([]);
   readonly loading = signal<boolean>(true);
   readonly submitting = signal<boolean>(false);
   readonly alertMessage = signal<string | null>(null);
@@ -648,7 +684,20 @@ export class WorkflowSettingsPage implements OnInit {
 
   loadProject(): void {
     this.projectService.getProjectById(this.projectId).subscribe({
-      next: p => this.project.set(p),
+      next: p => {
+        this.project.set(p);
+        if (p?.orgId && this.workspaceData) {
+          this.workspaceData.listWorkflowTemplates(p.orgId).subscribe({
+            next: templates => {
+              this.availableWorkflowTemplates.set(templates);
+              if (templates.length > 0 && !templates.some(t => t.id === this.selectedTemplate)) {
+                this.selectedTemplate = templates[0].id;
+              }
+            },
+            error: () => undefined
+          });
+        }
+      },
       error: err => this.reportError(err)
     });
   }

@@ -132,6 +132,10 @@ export class WorkspaceApiDataSource extends WorkspaceDataSource {
     );
   }
 
+  deleteOrganization(orgId: string): Observable<void> {
+    return this.http.delete<void>(this.org(orgId));
+  }
+
   // --- Thành viên, lời mời, link mời (endpoint hợp đồng) --------------------------
 
   /** Lỗi thì dựng từ dữ liệu thật: chủ tổ chức và thành viên các dự án của tổ chức, để vẫn chọn được người khi tạo dự án. */

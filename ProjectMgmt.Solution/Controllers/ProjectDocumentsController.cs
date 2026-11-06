@@ -55,6 +55,11 @@ public sealed class RenameItemRequest
     [Required, StringLength(150, MinimumLength = 1)] public string NewName { get; set; } = "";
 }
 
+public sealed class MoveDocumentRequest
+{
+    public Guid? NewParentId { get; set; }
+}
+
 public sealed class UpdateTextContentRequest
 {
     [Required] public string Content { get; set; } = "";
@@ -303,6 +308,18 @@ public class ProjectDocumentsController(
             {
                 fileType = "pdf";
             }
+            else if (ext is ".png" or ".jpg" or ".jpeg" or ".gif" or ".webp" or ".svg" or ".bmp")
+            {
+                fileType = "image";
+            }
+            else if (ext == ".md")
+            {
+                fileType = "markdown";
+                if (!string.IsNullOrEmpty(doc.RelativePath))
+                {
+                    try { textContent = await specStorage.ReadTextFileAsync(orgName, projName, doc.RelativePath); } catch { }
+                }
+            }
             else
             {
                 fileType = "text";
@@ -543,7 +560,7 @@ public class ProjectDocumentsController(
 
         var fileName = Path.GetFileName(file.FileName);
         var ext = Path.GetExtension(fileName).ToLowerInvariant();
-        var allowedExts = new[] { ".txt", ".md", ".pdf", ".docx", ".xlsx", ".json", ".png", ".jpg", ".jpeg" };
+        var allowedExts = new[] { ".txt", ".md", ".pdf", ".docx", ".xlsx", ".json", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp" };
 
         if (!allowedExts.Contains(ext))
         {
@@ -599,6 +616,179 @@ public class ProjectDocumentsController(
             doc.FileSize,
             doc.CreatedAt
         });
+    }
+
+    [HttpPut("documents/{id:guid}/move")]
+    public async Task<IActionResult> MoveDocument(Guid id, [FromBody] MoveDocumentRequest request)
+    {
+        var doc = await planning.ProjectDocuments.FirstOrDefaultAsync(d => d.Id == id);
+        if (doc is null) return NotFound(new { title = "Không tìm thấy tệp hoặc thư mục." });
+        if (!await access.AllowsAsync(doc.ProjectId, "project.settings.manage") && !await access.AllowsAsync(doc.ProjectId, "issue.update"))
+            return Forbid();
+
+        if (request.NewParentId.HasValue)
+        {
+            if (request.NewParentId.Value == doc.Id)
+                return BadRequest(new { title = "Không thể chuyển mục vào chính nó." });
+
+            var targetParent = await planning.ProjectDocuments.FirstOrDefaultAsync(d => d.Id == request.NewParentId.Value && d.ProjectId == doc.ProjectId);
+            if (targetParent is null || !targetParent.IsDirectory)
+            {
+                return BadRequest(new { title = "Thư mục đích không tồn tại hoặc không phải là thư mục." });
+            }
+
+            var curr = targetParent;
+            while (curr?.ParentId != null)
+            {
+                if (curr.ParentId == doc.Id)
+                {
+                    return BadRequest(new { title = "Không thể chuyển thư mục cha vào thư mục con của chính nó." });
+                }
+                curr = await planning.ProjectDocuments.FirstOrDefaultAsync(d => d.Id == curr.ParentId.Value && d.ProjectId == doc.ProjectId);
+            }
+        }
+
+        doc.ParentId = request.NewParentId;
+        doc.UpdatedAt = DateTime.UtcNow;
+        await planning.SaveChangesAsync();
+
+        return Ok(new { success = true, id = doc.Id, parentId = doc.ParentId });
+    }
+
+    [HttpPost("projects/{projectId:guid}/documents/files/upload-multiple")]
+    [RequestSizeLimit(100_000_000)] // 100MB
+    public async Task<IActionResult> UploadMultipleFiles(
+        Guid projectId,
+        [FromForm] List<IFormFile> files,
+        [FromForm] Guid? parentId,
+        [FromForm] List<string>? relativePaths)
+    {
+        if (!await access.AllowsAsync(projectId, "project.settings.manage") && !await access.AllowsAsync(projectId, "issue.create"))
+            return Forbid();
+
+        if (files == null || files.Count == 0)
+        {
+            return BadRequest(new { title = "Không có tệp tin nào được gửi lên." });
+        }
+
+        var (orgName, projName) = await GetOrgAndProjectNamesAsync(projectId);
+        string parentRelPath = "";
+
+        if (parentId.HasValue)
+        {
+            var parent = await planning.ProjectDocuments.FirstOrDefaultAsync(d => d.Id == parentId.Value && d.ProjectId == projectId);
+            if (parent != null && parent.IsDirectory)
+            {
+                parentRelPath = parent.RelativePath;
+            }
+        }
+
+        var allowedExts = new[] { ".txt", ".md", ".pdf", ".docx", ".xlsx", ".json", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp" };
+        var createdDocs = new List<object>();
+        var folderCache = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+
+        for (var i = 0; i < files.Count; i++)
+        {
+            var file = files[i];
+            if (file.Length == 0) continue;
+
+            var relPathGiven = (relativePaths != null && i < relativePaths.Count) ? relativePaths[i] : file.FileName;
+            var parts = relPathGiven.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+
+            var currentParentId = parentId;
+            var accumulatedPath = parentRelPath;
+
+            if (parts.Length > 1)
+            {
+                for (var p = 0; p < parts.Length - 1; p++)
+                {
+                    var folderName = parts[p];
+                    var subFolderPath = string.IsNullOrEmpty(accumulatedPath) ? folderName : $"{accumulatedPath}/{folderName}";
+
+                    if (!folderCache.TryGetValue(subFolderPath, out var existingFolderId))
+                    {
+                        var dbFolder = await planning.ProjectDocuments.FirstOrDefaultAsync(d => d.ProjectId == projectId && d.ParentId == currentParentId && d.Name == folderName && d.IsDirectory);
+                        if (dbFolder == null)
+                        {
+                            await specStorage.CreateFolderAsync(orgName, projName, subFolderPath);
+                            dbFolder = new ProjectDocument
+                            {
+                                Id = Guid.NewGuid(),
+                                ProjectId = projectId,
+                                ParentId = currentParentId,
+                                Name = folderName,
+                                Title = folderName,
+                                RelativePath = subFolderPath,
+                                IsDirectory = true,
+                                Status = "Draft",
+                                Version = 1,
+                                CreatedByUserId = access.UserId,
+                                CreatedAt = DateTime.UtcNow
+                            };
+                            planning.ProjectDocuments.Add(dbFolder);
+                            await planning.SaveChangesAsync();
+                        }
+                        folderCache[subFolderPath] = dbFolder.Id;
+                        currentParentId = dbFolder.Id;
+                    }
+                    else
+                    {
+                        currentParentId = existingFolderId;
+                    }
+                    accumulatedPath = subFolderPath;
+                }
+            }
+
+            var fileName = parts[^1];
+            var ext = Path.GetExtension(fileName).ToLowerInvariant();
+            if (!allowedExts.Contains(ext)) continue;
+
+            var safeFileName = SpecHubStorageService.SanitizeName(fileName);
+            var fileRelPath = string.IsNullOrEmpty(accumulatedPath) ? safeFileName : $"{accumulatedPath}/{safeFileName}";
+
+            await using var stream = file.OpenReadStream();
+            var (savedPath, fileSize) = await specStorage.SaveUploadedFileAsync(orgName, projName, fileRelPath, stream);
+
+            string initialText = "";
+            if (ext == ".txt" || ext == ".md")
+            {
+                try { initialText = await specStorage.ReadTextFileAsync(orgName, projName, fileRelPath); } catch { }
+            }
+
+            var doc = new ProjectDocument
+            {
+                Id = Guid.NewGuid(),
+                ProjectId = projectId,
+                ParentId = currentParentId,
+                Name = fileName,
+                Title = Path.GetFileNameWithoutExtension(fileName),
+                Content = initialText,
+                RelativePath = savedPath,
+                IsDirectory = false,
+                Extension = ext,
+                FileSize = fileSize,
+                Status = "Draft",
+                Version = 1,
+                CreatedByUserId = access.UserId,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            planning.ProjectDocuments.Add(doc);
+            await planning.SaveChangesAsync();
+
+            createdDocs.Add(new
+            {
+                doc.Id,
+                doc.ParentId,
+                doc.Name,
+                doc.Title,
+                doc.RelativePath,
+                doc.Extension,
+                doc.FileSize
+            });
+        }
+
+        return Ok(new { success = true, uploadedCount = createdDocs.Count, items = createdDocs });
     }
 
     [HttpPost("projects/{projectId:guid}/documents")]

@@ -127,11 +127,21 @@ builder.Services
         {
             OnMessageReceived = context =>
             {
-                var accessToken = context.Request.Query["access_token"];
-                if (!string.IsNullOrWhiteSpace(accessToken)
-                    && context.HttpContext.Request.Path.StartsWithSegments("/hubs/notifications"))
+                var accessToken = context.Request.Query["access_token"].ToString();
+                if (string.IsNullOrWhiteSpace(accessToken))
                 {
-                    context.Token = accessToken;
+                    accessToken = context.Request.Query["token"].ToString();
+                }
+
+                if (!string.IsNullOrWhiteSpace(accessToken))
+                {
+                    var path = context.HttpContext.Request.Path.Value ?? "";
+                    if (path.StartsWith("/hubs/notifications", StringComparison.OrdinalIgnoreCase) ||
+                        path.Contains("/documents/", StringComparison.OrdinalIgnoreCase) ||
+                        path.Contains("/attachments/", StringComparison.OrdinalIgnoreCase))
+                    {
+                        context.Token = accessToken;
+                    }
                 }
 
                 return Task.CompletedTask;
@@ -212,9 +222,9 @@ builder.Services.AddSignalR();
 
 builder.Services.AddScoped(_ => new MySqlConnection(connectionString));
 
-builder.Services.AddDbContext<IdentityExperienceDbContext>((services, options) =>
+builder.Services.AddDbContext<IdentityExperienceDbContext>((_, options) =>
     options.UseMySql(
-        services.GetRequiredService<MySqlConnection>(),
+        connectionString,
         serverVersion,
         mysql =>
         {
@@ -222,9 +232,9 @@ builder.Services.AddDbContext<IdentityExperienceDbContext>((services, options) =
             mysql.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null);
         }));
 
-builder.Services.AddDbContext<PlanningDbContext>((services, options) =>
+builder.Services.AddDbContext<PlanningDbContext>((_, options) =>
     options.UseMySql(
-        services.GetRequiredService<MySqlConnection>(),
+        connectionString,
         serverVersion,
         mysql =>
         {
@@ -232,9 +242,9 @@ builder.Services.AddDbContext<PlanningDbContext>((services, options) =>
             mysql.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null);
         }));
 
-builder.Services.AddDbContext<DeliveryIntelligenceDbContext>((services, options) =>
+builder.Services.AddDbContext<DeliveryIntelligenceDbContext>((_, options) =>
     options.UseMySql(
-        services.GetRequiredService<MySqlConnection>(),
+        connectionString,
         serverVersion,
         mysql =>
         {
@@ -311,9 +321,16 @@ builder.Services.AddScoped<IIssueRequirementService>(services => services.GetReq
 builder.Services.AddScoped<ProjectMgmt.IssueTracking.Contracts.IIssueSkillService>(services => services.GetRequiredService<IssueRequirementService>());
 // IssueTransitionService không đăng ký: cần IWorkflowValidationService thật của Planning (ValidateOnBuild sẽ chặn khởi động).
 // IssuesController tự dựng service khi contract đó có trong DI.
-builder.Services.AddSingleton(builder.Configuration.GetSection(AttachmentOptions.SectionName).Get<AttachmentOptions>() ?? new AttachmentOptions());
-builder.Services.AddSingleton<IAttachmentStorage>(services => new DeliveryIntelligence.Infrastructure.Services.LocalAttachmentStorage(
-    Path.Combine(services.GetRequiredService<IWebHostEnvironment>().ContentRootPath, "App_Data", "attachments")));
+var attachmentOpts = builder.Configuration.GetSection(AttachmentOptions.SectionName).Get<AttachmentOptions>() ?? new AttachmentOptions();
+attachmentOpts.MaxFileSizeBytes = Math.Max(attachmentOpts.MaxFileSizeBytes, 50 * 1024 * 1024);
+var allowedExtSet = attachmentOpts.AllowedExtensions.ToHashSet(StringComparer.OrdinalIgnoreCase);
+allowedExtSet.UnionWith([".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".mov", ".webm", ".avi", ".pdf", ".txt", ".csv", ".docx", ".xlsx", ".zip"]);
+attachmentOpts.AllowedExtensions = [.. allowedExtSet];
+builder.Services.AddSingleton(attachmentOpts);
+
+var attachmentsHubPath = Path.Combine(builder.Environment.ContentRootPath, "Attachments_Hub");
+Directory.CreateDirectory(attachmentsHubPath);
+builder.Services.AddSingleton<IAttachmentStorage>(_ => new DeliveryIntelligence.Infrastructure.Services.LocalAttachmentStorage(attachmentsHubPath));
 builder.Services.AddScoped<ProjectMgmt.IssueTracking.Contracts.IIssueReadService>(services => services.GetRequiredService<IssueContractService>());
 builder.Services.AddScoped<ProjectMgmt.IssueTracking.Contracts.IIssueSprintService>(services => services.GetRequiredService<IssueContractService>());
 // IIssueCreationService chưa đăng ký: cần IIssueNumberGenerator thật từ Planning.

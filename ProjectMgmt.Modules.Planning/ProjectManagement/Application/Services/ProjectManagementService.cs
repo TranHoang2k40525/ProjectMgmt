@@ -197,11 +197,11 @@ public class ProjectManagementService : IProjectManagementService
 
         var issueTypes = new List<IssueType>
         {
-            new IssueType { Id = Guid.NewGuid(), ProjectId = project.Id, Name = "Epic", ColorHex = "#904EE2", HierarchyLevel = 3, IsSubtask = false, OrderIndex = 1 },
-            new IssueType { Id = Guid.NewGuid(), ProjectId = project.Id, Name = "Story", ColorHex = "#65BA43", HierarchyLevel = 2, IsSubtask = false, OrderIndex = 2 },
-            new IssueType { Id = Guid.NewGuid(), ProjectId = project.Id, Name = "Task", ColorHex = "#4BADE8", HierarchyLevel = 2, IsSubtask = false, OrderIndex = 3 },
-            new IssueType { Id = Guid.NewGuid(), ProjectId = project.Id, Name = "Bug", ColorHex = "#E5493A", HierarchyLevel = 2, IsSubtask = false, OrderIndex = 4 },
-            new IssueType { Id = Guid.NewGuid(), ProjectId = project.Id, Name = "Subtask", ColorHex = "#4BADE8", HierarchyLevel = 1, IsSubtask = true, OrderIndex = 5 }
+            new IssueType { Id = Guid.NewGuid(), ProjectId = project.Id, Name = "Epic", IconKey = "bolt", ColorHex = "#904EE2", HierarchyLevel = 3, IsSubtask = false, OrderIndex = 1 },
+            new IssueType { Id = Guid.NewGuid(), ProjectId = project.Id, Name = "Story", IconKey = "bookmark", ColorHex = "#65BA43", HierarchyLevel = 2, IsSubtask = false, OrderIndex = 2 },
+            new IssueType { Id = Guid.NewGuid(), ProjectId = project.Id, Name = "Task", IconKey = "task_alt", ColorHex = "#4BADE8", HierarchyLevel = 2, IsSubtask = false, OrderIndex = 3 },
+            new IssueType { Id = Guid.NewGuid(), ProjectId = project.Id, Name = "Bug", IconKey = "bug_report", ColorHex = "#E5493A", HierarchyLevel = 2, IsSubtask = false, OrderIndex = 4 },
+            new IssueType { Id = Guid.NewGuid(), ProjectId = project.Id, Name = "Subtask", IconKey = "subdirectory_arrow_right", ColorHex = "#4BADE8", HierarchyLevel = 1, IsSubtask = true, OrderIndex = 5 }
         };
         await _repository.AddIssueTypesAsync(issueTypes);
 

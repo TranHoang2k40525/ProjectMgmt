@@ -24,36 +24,43 @@ import { ToastService } from '../../core/services/toast.service';
       <div class="breadcrumb">
         <a routerLink="/projects">Dự án</a> &gt;
         @if (project()) {
-          <a routerLink="/project/summary" class="hover:text-primary hover:underline">{{ project()?.name }}</a> &gt;
-          <a [routerLink]="['/projects', projectId, 'settings']" class="hover:text-primary hover:underline">Cài đặt</a> &gt;
+          <a routerLink="/project/summary" class="hover:text-primary hover:underline">{{ project()?.name }} ({{ project()?.projectKey }})</a> &gt;
         }
-        <span>Cấu hình Board</span>
+        <span>Cài đặt</span>
       </div>
 
       <div class="page-header">
         <div>
-          <h1>Cấu hình Board & Cột công việc (WIP Limit)</h1>
-          <p class="subtitle">Quản lý các cột hiển thị trên Kanban/Scrum Board và giới hạn công việc đang xử lý (WIP)</p>
+          <h1>Cài đặt Dự án</h1>
+          <p class="subtitle">Quản lý cấu hình thông tin chung, loại công việc động, nhãn dán, quy trình (Workflow) và bảng (Board)</p>
         </div>
       </div>
 
       <!-- Navigation Tabs -->
       <div class="settings-tabs">
-        <a [routerLink]="['/projects', projectId, 'settings']" class="tab-item flex items-center gap-1.5">
+        <a [routerLink]="['/projects', projectId, 'settings']" class="tab-item">
           <span class="material-symbols-outlined text-[18px]">tune</span>
           <span>Thông tin chung</span>
         </a>
-        <a [routerLink]="['/projects', projectId, 'settings', 'workflow']" class="tab-item flex items-center gap-1.5">
+        <a [routerLink]="['/projects', projectId, 'settings']" [queryParams]="{ tab: 'issue-types' }" class="tab-item">
+          <span class="material-symbols-outlined text-[18px]">category</span>
+          <span>Loại công việc (Issue Types)</span>
+        </a>
+        <a [routerLink]="['/projects', projectId, 'settings']" [queryParams]="{ tab: 'labels' }" class="tab-item">
+          <span class="material-symbols-outlined text-[18px]">label</span>
+          <span>Quản lý Nhãn (Labels)</span>
+        </a>
+        <a [routerLink]="['/projects', projectId, 'settings', 'workflow']" class="tab-item">
           <span class="material-symbols-outlined text-[18px]">sync_alt</span>
           <span>Cấu hình Workflow</span>
         </a>
-        <span class="tab-item active flex items-center gap-1.5">
+        <span class="tab-item active">
           <span class="material-symbols-outlined text-[18px]">view_kanban</span>
           <span>Cấu hình Board</span>
         </span>
-        <a [routerLink]="['/projects', projectId, 'members']" class="tab-item flex items-center gap-1.5">
+        <a [routerLink]="['/projects', projectId, 'members']" class="tab-item">
           <span class="material-symbols-outlined text-[18px]">badge</span>
-          <span>Thành viên & Phân quyền</span>
+          <span>Thành viên &amp; Phân quyền</span>
         </a>
       </div>
 
@@ -119,7 +126,7 @@ import { ToastService } from '../../core/services/toast.service';
             <div class="columns-header">
               <div>
                 <h3>Danh sách Cột trên Board: {{ selectedBoard()?.name }}</h3>
-                <p class="hint">Dùng các nút mũi tên ▲ ▼ để sắp xếp lại thứ tự cột từ trái sang phải trên bảng.</p>
+                <p class="hint">Dùng các nút mũi tên lên/xuống để sắp xếp lại thứ tự cột từ trái sang phải trên bảng.</p>
               </div>
             </div>
 
@@ -140,16 +147,16 @@ import { ToastService } from '../../core/services/toast.service';
                       <button
                         (click)="moveColumn(i, -1)"
                         [disabled]="savingColumn() || savingOrder() || columnsLoading() || submittingCol() || i === 0"
-                        class="btn-arrow"
+                        class="btn-arrow flex items-center justify-center"
                         title="Di chuyển sang trái"
-                      >▲</button>
+                      ><span class="material-symbols-outlined text-[16px]" aria-hidden="true">arrow_upward</span></button>
                       <span class="order-idx">{{ col.orderIndex }}</span>
                       <button
                         (click)="moveColumn(i, 1)"
                         [disabled]="savingColumn() || savingOrder() || columnsLoading() || submittingCol() || i === columns().length - 1"
-                        class="btn-arrow"
+                        class="btn-arrow flex items-center justify-center"
                         title="Di chuyển sang phải"
-                      >▼</button>
+                      ><span class="material-symbols-outlined text-[16px]" aria-hidden="true">arrow_downward</span></button>
                     </div>
 
                     <div class="col-info">
@@ -256,18 +263,23 @@ import { ToastService } from '../../core/services/toast.service';
   `,
   styles: [`
     .board-settings-container {
-      padding: 2rem;
-      max-width: 1150px;
+      padding: 1.75rem 2rem;
+      max-width: 1180px;
+      width: 100%;
+      box-sizing: border-box;
       margin: 0 auto;
     }
     .breadcrumb {
       font-size: 0.85rem;
       color: #64748b;
-      margin-bottom: 1rem;
+      margin-bottom: 0.75rem;
     }
     .breadcrumb a {
-      color: #2563eb;
+      color: #1b4332;
       text-decoration: none;
+    }
+    .page-header {
+      margin-bottom: 1.25rem;
     }
     h1 {
       font-size: 1.6rem;
@@ -282,26 +294,40 @@ import { ToastService } from '../../core/services/toast.service';
     }
     .settings-tabs {
       display: flex;
-      gap: 0.5rem;
+      align-items: center;
+      gap: 0.25rem;
       border-bottom: 2px solid #e2e8f0;
-      margin: 1.5rem 0;
+      margin: 1.5rem 0 1.75rem 0;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .settings-tabs::-webkit-scrollbar {
+      display: none;
     }
     .tab-item {
-      padding: 0.75rem 1.25rem;
+      padding: 0.75rem 1rem;
       font-weight: 600;
-      font-size: 0.95rem;
+      font-size: 0.9rem;
       color: #64748b;
+      background: transparent;
+      border: none;
       text-decoration: none;
       border-bottom: 2px solid transparent;
       margin-bottom: -2px;
       cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+      white-space: nowrap;
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
     }
     .tab-item:hover {
-      color: #2563eb;
+      color: #1b4332;
     }
     .tab-item.active {
-      color: #2563eb;
-      border-bottom-color: #2563eb;
+      color: #1b4332;
+      border-bottom-color: #2d6a4f;
     }
     .card {
       background: #ffffff;

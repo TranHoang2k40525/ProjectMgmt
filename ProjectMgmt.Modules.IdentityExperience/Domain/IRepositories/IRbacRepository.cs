@@ -46,4 +46,6 @@ public interface IRbacRepository
         Guid? scopeId,
         Guid? organizationId);
     Task<bool> IsProjectMemberAsync(Guid userId, Guid projectId);
+    Task<bool> IsOrganizationMemberAsync(Guid userId, Guid orgId);
+    Task<bool> CanUserJoinProjectAsync(Guid userId, Guid projectId);
 }

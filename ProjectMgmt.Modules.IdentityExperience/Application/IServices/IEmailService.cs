@@ -49,4 +49,12 @@ public interface IEmailService
         string memberName,
         string memberEmail,
         Guid projectId);
+
+    Task<bool> SendOrganizationInvitationAsync(
+        string recipientEmail,
+        string recipientName,
+        string orgName,
+        string inviterName,
+        string roleName,
+        string inviteAcceptUrl);
 }

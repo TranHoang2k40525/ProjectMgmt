@@ -1,8 +1,10 @@
 import { Component, ElementRef, OnDestroy, OnInit, inject, signal, computed, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { gsap } from 'gsap';
+import { environment } from '../../../environments/environment';
 import { RbacApi } from '../../core/api/rbac.api';
 import { ProjectManagementService, ProjectMember, UserDisplayInfo } from '../../core/services/project-management.service';
 import { ToastService } from '../../core/services/toast.service';
@@ -17,50 +19,69 @@ interface ProjectRoleOption {
   name: string;
   code: string;
   description?: string;
+  isPreset?: boolean;
+}
+
+interface CandidateOrgMember {
+  id: string;
+  email: string;
+  displayName: string;
+  avatarUrl?: string | null;
 }
 
 @Component({
   selector: 'app-project-members-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, RouterLinkActive, NoProjectStateComponent, AvatarModalComponent],
+  imports: [CommonModule, FormsModule, RouterLink, NoProjectStateComponent, AvatarModalComponent],
   template: `
     @if (!projectService.hasActiveProject()) {
       <app-no-project-state featureName="Thành viên & Phân quyền Nhóm"></app-no-project-state>
     } @else {
-    <div class="project-members-page flex flex-col gap-5 max-w-7xl mx-auto px-4 sm:px-6 py-6">
+    <div class="project-members-page settings-container">
       
       <!-- Breadcrumb Navigation -->
-      <div class="breadcrumb flex items-center gap-1.5 text-xs text-slate-500">
-        <a routerLink="/projects" class="hover:text-primary hover:underline">Dự án</a>
-        <span class="material-symbols-outlined text-[14px]">chevron_right</span>
+      <div class="breadcrumb">
+        <a routerLink="/projects">Dự án</a> &gt;
         @if (currentProject(); as proj) {
-          <a routerLink="/project/summary" class="hover:text-primary hover:underline">{{ proj.name }} ({{ proj.projectKey }})</a>
-          <span class="material-symbols-outlined text-[14px]">chevron_right</span>
-          <a [routerLink]="['/projects', proj.id, 'settings']" class="hover:text-primary hover:underline">Cài đặt</a>
-          <span class="material-symbols-outlined text-[14px]">chevron_right</span>
+          <a routerLink="/project/summary" class="hover:text-primary hover:underline">{{ proj.name }} ({{ proj.projectKey }})</a> &gt;
         }
-        <span class="font-medium text-slate-800 dark:text-slate-200">Thành viên &amp; Phân quyền</span>
+        <span>Cài đặt</span>
+      </div>
+
+      <div class="settings-header">
+        <div>
+          <h1>Cài đặt Dự án</h1>
+          <p class="subtitle">Quản lý cấu hình thông tin chung, loại công việc động, nhãn dán, quy trình (Workflow) và bảng (Board)</p>
+        </div>
       </div>
 
       <!-- Settings Tabs Navigation -->
       @if (currentProject(); as proj) {
-        <div class="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
-          <a [routerLink]="['/projects', proj.id, 'settings']" routerLinkActive="text-primary font-bold border-b-2 border-primary" [routerLinkActiveOptions]="{ exact: true }" class="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-primary transition-all flex items-center gap-1.5">
+        <div class="settings-tabs">
+          <a [routerLink]="['/projects', proj.id, 'settings']" class="tab-item">
             <span class="material-symbols-outlined text-[18px]">tune</span>
             <span>Thông tin chung</span>
           </a>
-          <a [routerLink]="['/projects', proj.id, 'settings', 'workflow']" routerLinkActive="text-primary font-bold border-b-2 border-primary" class="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-primary transition-all flex items-center gap-1.5">
+          <a [routerLink]="['/projects', proj.id, 'settings']" [queryParams]="{ tab: 'issue-types' }" class="tab-item">
+            <span class="material-symbols-outlined text-[18px]">category</span>
+            <span>Loại công việc (Issue Types)</span>
+          </a>
+          <a [routerLink]="['/projects', proj.id, 'settings']" [queryParams]="{ tab: 'labels' }" class="tab-item">
+            <span class="material-symbols-outlined text-[18px]">label</span>
+            <span>Quản lý Nhãn (Labels)</span>
+          </a>
+          <a [routerLink]="['/projects', proj.id, 'settings', 'workflow']" class="tab-item">
             <span class="material-symbols-outlined text-[18px]">sync_alt</span>
             <span>Cấu hình Workflow</span>
           </a>
-          <a [routerLink]="['/projects', proj.id, 'settings', 'board']" routerLinkActive="text-primary font-bold border-b-2 border-primary" class="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-primary transition-all flex items-center gap-1.5">
+          <a [routerLink]="['/projects', proj.id, 'settings', 'board']" class="tab-item">
             <span class="material-symbols-outlined text-[18px]">view_kanban</span>
             <span>Cấu hình Board</span>
           </a>
-          <a [routerLink]="['/projects', proj.id, 'members']" routerLinkActive="text-primary font-bold border-b-2 border-primary" class="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-primary transition-all flex items-center gap-1.5">
+          <span class="tab-item active">
             <span class="material-symbols-outlined text-[18px]">badge</span>
             <span>Thành viên &amp; Phân quyền</span>
-          </a>
+          </span>
         </div>
       }
 
@@ -101,28 +122,12 @@ interface ProjectRoleOption {
         }
       </div>
 
-      <!-- Scrum Role Hierarchy Info Banner -->
-      <div class="p-3.5 rounded-xl bg-gradient-to-r from-indigo-50/70 via-purple-50/40 to-slate-50 border border-indigo-100 dark:from-slate-900 dark:via-slate-900 dark:to-slate-850 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
-        <div class="flex items-center gap-2.5">
-          <span class="material-symbols-outlined text-indigo-600 dark:text-indigo-400 text-lg">shield_person</span>
-          <div>
-            <span class="font-bold text-slate-800 dark:text-slate-100">Quy tắc Phân quyền Scrum từ trên xuống:</span>
-            <span class="ml-1 inline-flex items-center flex-wrap gap-1.5 text-slate-600 dark:text-slate-400">
-              Chủ tổ chức <span class="material-symbols-outlined text-[15px] text-amber-500" aria-hidden="true">stars</span> →
-              Giám đốc dự án <span class="material-symbols-outlined text-[15px] text-amber-500" aria-hidden="true">verified</span> →
-              Scrum Master <span class="material-symbols-outlined text-[15px] text-purple-500" aria-hidden="true">track_changes</span> →
-              Kỹ sư phát triển &amp; QA <span class="material-symbols-outlined text-[15px] text-blue-500" aria-hidden="true">terminal</span> / <span class="material-symbols-outlined text-[15px] text-cyan-500" aria-hidden="true">biotech</span> →
-              Khách hàng / Viewer <span class="material-symbols-outlined text-[15px] text-slate-400" aria-hidden="true">visibility</span>
-            </span>
-          </div>
+      @if (!canManageMembers()) {
+        <div class="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-900 text-xs font-medium flex items-center gap-2">
+          <span class="material-symbols-outlined text-[18px]">lock</span>
+          <span>Chế độ chỉ đọc: Chỉ Lãnh đạo hoặc Scrum Master mới có quyền phân vai trò dự án.</span>
         </div>
-        @if (!canManageMembers()) {
-          <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 text-[11px] font-medium">
-            <span class="material-symbols-outlined text-[14px]">lock</span>
-            Chế độ chỉ đọc (Chỉ Lãnh đạo hoặc Scrum Master mới có quyền phân vai trò)
-          </span>
-        }
-      </div>
+      }
 
       <!-- Filters & Stats Bar -->
       <div class="members-toolbar flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
@@ -276,19 +281,19 @@ interface ProjectRoleOption {
         </div>
       }
 
-      <!-- Invite Member Modal (Agile Multi-Invite Support) -->
+      <!-- Invite Member Modal (Restricted to Project's Organization Members) -->
       @if (isInviteModalOpen) {
         <div class="members-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div #modalContent class="members-modal w-full max-w-xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col p-6 gap-4 max-h-[90vh] overflow-y-auto">
+          <div #modalContent class="members-modal w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col p-6 gap-4 max-h-[90vh] overflow-y-auto">
             
             <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div class="flex items-center gap-2.5">
                 <span class="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 flex items-center justify-center">
-                  <span class="material-symbols-outlined text-[20px]">group_add</span>
+                  <span class="material-symbols-outlined text-[20px]">person_add</span>
                 </span>
                 <div>
                   <h3 class="text-base font-bold text-slate-900 dark:text-white">Thêm Thành Viên Vào Dự Án</h3>
-                  <p class="text-[11px] text-slate-500">Mời một hoặc nhiều thành viên cùng lúc bằng email (cách nhau bởi dấu ;)</p>
+                  <p class="text-[11px] text-slate-500">Chỉ thành viên thuộc Tổ chức của dự án mới có thể được thêm vào.</p>
                 </div>
               </div>
               <button (click)="isInviteModalOpen = false" class="text-slate-400 hover:text-slate-600 rounded-lg p-1 cursor-pointer">
@@ -296,165 +301,96 @@ interface ProjectRoleOption {
               </button>
             </div>
 
-            <div class="flex flex-col gap-3.5">
-              <!-- Emails Input with ; Support -->
-              <div class="flex flex-col gap-1.5">
-                <div class="flex items-center justify-between">
-                  <label for="member-email" class="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Danh sách Email thành viên <span class="text-rose-500">*</span>
-                  </label>
-                  <span class="text-[11px] text-slate-400">Cách nhau bằng dấu chấm phẩy (;)</span>
-                </div>
-                <textarea
-                  id="member-email"
-                  rows="2"
-                  [ngModel]="newMemberEmail"
-                  (ngModelChange)="onEmailsInput($event)"
-                  placeholder="vd: hoang@gmail.com; linh.dev@company.com; tu.qa@outlook.com;"
-                  class="p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none font-mono"
-                ></textarea>
-                <span class="text-[10px] text-slate-400">Tự động xử lý an toàn dấu chấm phẩy thừa, khoảng trắng và các email trùng lặp.</span>
-              </div>
-
-              <!-- Names Input with ; Support & Auto-fill -->
-              <div class="flex flex-col gap-1.5">
-                <div class="flex items-center justify-between">
-                  <label for="member-name" class="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Họ và tên tương ứng (tự động điền)
-                  </label>
-                  <span class="text-[11px] text-slate-400">Có thể chỉnh sửa (cách nhau ;)</span>
-                </div>
-                <input
-                  id="member-name"
-                  type="text"
-                  [ngModel]="newMemberName"
-                  (ngModelChange)="onNamesInput($event)"
-                  placeholder="vd: Hoàng; Linh; Tú;"
-                  class="h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                />
-                <span class="text-[10px] text-slate-400">Hệ thống tự động trích xuất tên trước ký tự &#64; của email. Bạn có thể sửa tên từng người tương ứng.</span>
-              </div>
-
-              <!-- Role Select -->
-              <div class="flex flex-col gap-1.5">
-                <label for="member-role" class="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Vai trò được giao trong dự án
-                </label>
-                <select
-                  id="member-role"
-                  [(ngModel)]="newMemberRole"
-                  class="h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary cursor-pointer"
-                >
-                  <option value="Developer">Developer (Kỹ sư phát triển)</option>
-                  <option value="Scrum Master">Scrum Master (Điều phối Sprint)</option>
-                  <option value="Product Owner">Product Owner (Chủ sản phẩm)</option>
-                  <option value="QA Engineer">QA Engineer (Kiểm thử chất lượng)</option>
-                  <option value="Viewer">Viewer (Khách hàng / Người quan sát)</option>
-                </select>
-              </div>
-
-              <!-- Live Preview Chips of Parsed Members -->
-              @if (parsedInviteList.length > 0) {
-                <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-col gap-2">
-                  <div class="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
-                    <span class="flex items-center gap-1.5">
-                      <span class="material-symbols-outlined text-[16px] text-primary">preview</span>
-                      Xem trước danh sách mời ({{ validInviteCount }} người hợp lệ)
-                    </span>
-                    @if (parsedInviteList.length !== validInviteCount) {
-                      <span class="text-[11px] text-rose-500 font-semibold">{{ parsedInviteList.length - validInviteCount }} email không hợp lệ</span>
-                    }
-                  </div>
-
-                  <div class="flex flex-wrap gap-2 max-h-36 overflow-y-auto pt-1">
-                    @for (item of parsedInviteList; track item.email; let idx = $index) {
-                      <div
-                        class="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs shadow-2xs"
-                        [class.bg-white]="item.isValid"
-                        [class.dark:bg-slate-900]="item.isValid"
-                        [class.border-slate-200]="item.isValid"
-                        [class.dark:border-slate-700]="item.isValid"
-                        [class.bg-rose-50]="!item.isValid"
-                        [class.dark:bg-rose-950/40]="!item.isValid"
-                        [class.border-rose-200]="!item.isValid"
-                        [class.dark:border-rose-800]="!item.isValid"
-                      >
-                        <span class="w-5 h-5 rounded-full bg-primary/10 text-primary font-bold text-[10px] flex items-center justify-center shrink-0">
-                          {{ getInitials(item.name) }}
-                        </span>
-                        <div class="flex flex-col min-w-0">
-                          <span class="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[130px]">{{ item.name }}</span>
-                          <span class="text-[10px] text-slate-500 dark:text-slate-400 font-mono truncate max-w-[150px]">{{ item.email }}</span>
-                        </div>
-                        @if (item.isValid) {
-                          <span class="material-symbols-outlined text-[14px] text-emerald-600 dark:text-emerald-400" title="Email hợp lệ">check_circle</span>
-                        } @else {
-                          <span class="material-symbols-outlined text-[14px] text-rose-500" title="Email sai định dạng">error</span>
-                        }
-                        <button
-                          type="button"
-                          (click)="removeInviteItem(idx)"
-                          class="text-slate-400 hover:text-rose-500 p-0.5 rounded cursor-pointer"
-                          title="Loại bỏ khỏi danh sách"
-                        >
-                          <span class="material-symbols-outlined text-[14px]">close</span>
-                        </button>
-                      </div>
-                    }
-                  </div>
-                </div>
-              }
-
-              <!-- Existing User Fast Picker -->
-              @if (availableUsersToAdd().length > 0) {
-                <div class="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-1.5">
-                  <label for="member-user-select" class="text-xs font-medium text-slate-500">
-                    Hoặc chọn nhanh tài khoản hệ thống đã có:
+            <div class="flex flex-col gap-4">
+              <!-- Candidate Members Picker from Organization -->
+              @if (orgCandidateMembers().length > 0) {
+                <div class="flex flex-col gap-1.5">
+                  <label for="org-member-picker" class="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Chọn thành viên từ Tổ chức
                   </label>
                   <select
-                    id="member-user-select"
-                    [(ngModel)]="selectedUserId"
-                    (ngModelChange)="onUserSelected($event)"
-                    class="h-9 px-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 cursor-pointer"
+                    id="org-member-picker"
+                    [(ngModel)]="selectedCandidateUserId"
+                    class="h-10 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 cursor-pointer font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                   >
-                    <option value="">-- Chọn tài khoản có sẵn --</option>
-                    @for (u of availableUsersToAdd(); track u.userId) {
-                      <option [value]="u.userId">{{ u.displayName }} ({{ u.email }})</option>
+                    <option value="">-- Hoặc nhập email bên dưới --</option>
+                    @for (cand of orgCandidateMembers(); track cand.id) {
+                      <option [value]="cand.id">{{ cand.displayName }} ({{ cand.email }})</option>
                     }
                   </select>
+                  <span class="text-[11px] text-slate-400">Danh sách thành viên thuộc tổ chức chưa tham gia dự án này.</span>
                 </div>
               }
+
+              <!-- Direct Email Invitation Input -->
+              <div class="flex flex-col gap-1.5">
+                <label for="invite-email-input" class="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Mời qua địa chỉ Email @if (!selectedCandidateUserId) { <span class="text-rose-500">*</span> }
+                </label>
+                <input
+                  id="invite-email-input"
+                  type="text"
+                  [ngModel]="newMemberEmail"
+                  (ngModelChange)="onEmailsInput($event)"
+                  placeholder="Nhập email (ví dụ: hoangteam2004@gmail.com, ngăn cách nhiều email bằng dấu ;)"
+                  class="h-10 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                />
+                <span class="text-[11px] text-slate-400">Hệ thống sẽ gửi cả Email và Thông báo thời gian thực (SignalR) tới người nhận.</span>
+              </div>
+
+              <!-- Role Selector Loaded From Database -->
+              <div class="flex flex-col gap-1.5">
+                <label for="member-role-picker" class="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Vai trò phân bổ trong dự án <span class="text-rose-500">*</span>
+                </label>
+                <select
+                  id="member-role-picker"
+                  [(ngModel)]="selectedRoleId"
+                  class="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary cursor-pointer"
+                >
+                  @for (role of availableRoles(); track role.id) {
+                    <option [value]="role.id">
+                      {{ role.name }} {{ role.isPreset ? '• [Mẫu chuẩn]' : '• [Tùy biến]' }}
+                    </option>
+                  }
+                </select>
+                <span class="text-[11px] text-slate-400">Vai trò được định nghĩa từ cơ sở dữ liệu hệ thống (RBAC).</span>
+              </div>
+
+              <!-- Real-time Notification / Email Notice -->
+              <div class="p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/60 flex items-start gap-2.5 text-xs text-indigo-900 dark:text-indigo-200">
+                <span class="material-symbols-outlined text-indigo-600 dark:text-indigo-400 text-[18px] shrink-0 mt-0.5">mark_email_read</span>
+                <div class="flex flex-col gap-0.5">
+                  <span class="font-bold">Quy trình mời tham gia bảo mật:</span>
+                  <span class="text-[11px] text-indigo-800/80 dark:text-indigo-300/80 leading-relaxed">
+                    Hệ thống sẽ gửi thư mời qua email và thông báo trực tiếp đến tài khoản thành viên. Người được mời cần nhấn liên kết xác nhận để chính thức gia nhập dự án.
+                  </span>
+                </div>
+              </div>
             </div>
 
-            <div class="flex items-center justify-between mt-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-              <span class="text-[11px] text-slate-400 flex items-center gap-1">
-                <span class="material-symbols-outlined text-[14px]">send</span>
-                Sẽ gửi link &amp; thư mời qua email và thông báo
-              </span>
-
-              <div class="flex items-center gap-2.5">
-                <button
-                  type="button"
-                  (click)="isInviteModalOpen = false"
-                  class="px-4 py-2 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="button"
-                  (click)="submitInvite()"
-                  [disabled]="saving || submitting() || (validInviteCount === 0 && !selectedUserId)"
-                  class="px-5 py-2 rounded-lg bg-primary hover:bg-primary-container text-white text-xs font-bold transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer shadow-xs"
-                >
-                  @if (saving || submitting()) {
-                    <span class="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                    Đang gửi thư mời...
-                  } @else {
-                    <span class="material-symbols-outlined text-[16px]">mail</span>
-                    <span>Gửi thư mời ({{ validInviteCount > 0 ? validInviteCount : (selectedUserId ? 1 : 0) }})</span>
-                  }
-                </button>
-              </div>
+            <div class="flex items-center justify-end gap-2.5 mt-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                (click)="isInviteModalOpen = false"
+                class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                (click)="submitInvite()"
+                [disabled]="submitting() || saving || (!selectedCandidateUserId && validInviteCount === 0)"
+                class="px-5 py-2 rounded-xl bg-primary hover:bg-primary-container text-white text-xs font-bold transition-all disabled:opacity-50 flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                @if (submitting() || saving) {
+                  <span class="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                  <span>Đang gửi lời mời...</span>
+                } @else {
+                  <span class="material-symbols-outlined text-[16px]">send</span>
+                  <span>Gửi lời mời tham gia</span>
+                }
+              </button>
             </div>
 
           </div>
@@ -478,11 +414,82 @@ interface ProjectRoleOption {
     :host {
       display: block;
     }
+    .settings-container {
+      padding: 1.75rem 2rem;
+      max-width: 1180px;
+      width: 100%;
+      box-sizing: border-box;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+    .breadcrumb {
+      font-size: 0.85rem;
+      color: #64748b;
+      margin-bottom: -0.5rem;
+    }
+    .breadcrumb a {
+      color: #1b4332;
+      text-decoration: none;
+    }
+    .settings-header {
+      margin-bottom: 0;
+    }
+    .settings-header h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: #1e293b;
+      margin: 0;
+    }
+    .subtitle {
+      color: #64748b;
+      font-size: 0.9rem;
+      margin-top: 0.25rem;
+    }
+    .settings-tabs {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      border-bottom: 2px solid #e2e8f0;
+      margin: 0.25rem 0 0.5rem 0;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .settings-tabs::-webkit-scrollbar {
+      display: none;
+    }
+    .tab-item {
+      padding: 0.75rem 1rem;
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: #64748b;
+      background: transparent;
+      border: none;
+      text-decoration: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+      white-space: nowrap;
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+    }
+    .tab-item:hover {
+      color: #1b4332;
+    }
+    .tab-item.active {
+      color: #1b4332;
+      border-bottom-color: #2d6a4f;
+    }
   `]
 })
 export class ProjectMembersPageComponent implements OnInit, OnDestroy {
   readonly projectService = inject(ProjectManagementService);
   readonly identity = inject(IdentityService);
+  private readonly route = inject(ActivatedRoute, { optional: true });
   private readonly rbac = inject(RbacApi, { optional: true });
   private readonly toastService = inject(ToastService, { optional: true });
   private readonly confirmService = inject(ConfirmDialogService, { optional: true });
@@ -495,7 +502,7 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
   readonly allUsers = signal<UserDisplayInfo[]>([]);
   readonly availableRoles = signal<ProjectRoleOption[]>([]);
 
-  loading = signal<boolean>(true);
+  loading = signal<boolean>(false);
   submitting = signal<boolean>(false);
   searchQuery = signal<string>('');
   selectedRoleFilter = signal<string | null>(null);
@@ -508,6 +515,8 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
 
   selectedUserId = '';
   selectedRoleId = '';
+  readonly orgCandidateMembers = signal<CandidateOrgMember[]>([]);
+  selectedCandidateUserId = '';
 
   readonly isAvatarModalOpen = signal(false);
   readonly avatarModalData = signal<{ avatarUrl?: string | null; displayName: string; isCurrentUser: boolean }>({
@@ -582,15 +591,24 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
       const proj = this.currentProject?.();
       if (proj?.id && proj.id !== this.lastLoadedProjectId) {
         this.lastLoadedProjectId = proj.id;
+        if (proj.members && proj.members.length > 0 && this.members().length === 0) {
+          this.members.set(proj.members);
+        }
         this.loadProjectMembers(proj.id);
       }
     });
   }
 
   ngOnInit(): void {
+    const routeProjId = this.route?.snapshot?.paramMap?.get('id') || '';
     const proj = this.currentProject?.();
-    if (proj && proj.id) {
-      this.loadProjectMembers(proj.id);
+    const targetId = routeProjId || proj?.id || '';
+    if (proj?.members && proj.members.length > 0 && this.members().length === 0) {
+      this.members.set(proj.members);
+    }
+    if (targetId && targetId !== this.lastLoadedProjectId) {
+      this.lastLoadedProjectId = targetId;
+      this.loadProjectMembers(targetId);
     }
     this.loadUsersAndRoles();
   }
@@ -603,17 +621,19 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
 
   loadProjectMembers(projectId: string): void {
     if (!this.projectService?.loadProjectMembers) return;
-    this.loading.set(true);
+    if (this.members().length === 0) {
+      this.loading.set(true);
+    }
     this.projectService.loadProjectMembers(projectId).subscribe({
       next: members => {
         this.members.set(members);
         this.loading.set(false);
-        this.animateCards();
       },
       error: () => {
-        // Fallback to cached project members if any
         const fallback = this.currentProject()?.members ?? [];
-        this.members.set(fallback);
+        if (this.members().length === 0) {
+          this.members.set(fallback);
+        }
         this.loading.set(false);
       }
     });
@@ -635,7 +655,8 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
               id: r.id,
               name: this.normalizeRoleLabel(r.name),
               code: r.code,
-              description: r.description
+              description: r.description,
+              isPreset: r.isPreset ?? false
             }));
             this.availableRoles.set(mapped);
             if (!this.selectedRoleId && mapped.length > 0) {
@@ -648,14 +669,41 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
     }
   }
 
+  loadCandidateOrgMembers(projectId: string): void {
+    this.projectService.getCandidateOrgMembers(projectId).subscribe({
+      next: (candidates) => {
+        const mapped: CandidateOrgMember[] = (candidates || []).map(c => ({
+          id: c.userId,
+          email: c.email,
+          displayName: c.displayName,
+          avatarUrl: c.avatarUrl
+        }));
+        this.orgCandidateMembers.set(mapped);
+        if (mapped.length > 0 && !this.selectedCandidateUserId) {
+          this.selectedCandidateUserId = mapped[0].id;
+        }
+      },
+      error: (err: unknown) => {
+        const errObj = err as { error?: { message?: string } };
+        this.toastService?.error('Lỗi', errObj?.error?.message || 'Không thể tải danh sách thành viên tổ chức.');
+      }
+    });
+  }
+
   openInviteModal(): void {
     this.newMemberEmail = '';
     this.newMemberName = '';
     this.isNameManuallyEdited = false;
     this.selectedUserId = '';
+    this.selectedCandidateUserId = '';
     this.error = '';
     this.selectedRoleId = this.availableRoles()[0]?.id || '';
     this.isInviteModalOpen = true;
+
+    const projId = this.currentProject()?.id;
+    if (projId) {
+      this.loadCandidateOrgMembers(projId);
+    }
 
     requestAnimationFrame(() => {
       const modal = this.el?.nativeElement?.querySelector('.members-modal');
@@ -697,6 +745,9 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
 
   onEmailsInput(value: string): void {
     this.newMemberEmail = value;
+    if (value.trim().length > 0) {
+      this.selectedCandidateUserId = '';
+    }
     if (!this.isNameManuallyEdited) {
       this.autoGenerateNamesFromEmails(value);
     }
@@ -771,26 +822,28 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
     const projId = this.currentProject()?.id;
     if (!projId) return;
 
-    const resolvedRoleId = this.getRoleOptionId(this.newMemberRole) || this.selectedRoleId;
-    if (this.selectedUserId && resolvedRoleId) {
+    const candidateId = this.selectedCandidateUserId || this.selectedUserId;
+    const resolvedRoleId = this.selectedRoleId || this.getRoleOptionId(this.newMemberRole);
+
+    if (candidateId && resolvedRoleId) {
       this.submitting.set(true);
       this.error = '';
-      this.projectService.inviteProjectMember(projId, this.selectedUserId, resolvedRoleId).subscribe({
+      this.projectService.inviteProjectMember(projId, candidateId, resolvedRoleId).subscribe({
         next: () => {
           this.submitting.set(false);
           this.isInviteModalOpen = false;
+          this.selectedCandidateUserId = '';
           this.selectedUserId = '';
-          this.newMemberName = '';
-          this.newMemberEmail = '';
-          this.toastService?.success('Thành công', 'Đã thêm thành viên vào dự án');
+          this.toastService?.success('Thành công', 'Đã thêm thành viên vào dự án và đồng bộ phân quyền.');
           this.loadProjectMembers(projId);
+          this.projectService.loadWorkspace(projId);
         },
         error: (err: unknown) => {
           this.submitting.set(false);
           const errObj = err as { title?: string; detail?: string; error?: { message?: string } };
           const msg = errObj?.detail ?? errObj?.title ?? errObj?.error?.message ?? 'Không thể thêm thành viên. Vui lòng thử lại.';
           this.error = msg;
-          this.toastService?.error('Lỗi', msg);
+          this.toastService?.error('Lỗi thêm thành viên', msg);
         }
       });
       return;
@@ -804,12 +857,14 @@ export class ProjectMembersPageComponent implements OnInit, OnDestroy {
 
     const emailsPayload = validItems.map(i => i.email).join(';');
     const namesPayload = validItems.map(i => i.name).join(';');
+    const selectedRoleObj = this.availableRoles().find(r => r.id === this.selectedRoleId);
+    const resolvedRoleLabel = (selectedRoleObj?.name as ProjectMember['role']) || this.newMemberRole;
 
     this.saving = true;
     this.error = '';
 
     if (this.rbac && typeof this.rbac.batchInviteProjectMembers === 'function') {
-      this.rbac.batchInviteProjectMembers(projId, emailsPayload, namesPayload, this.newMemberRole).subscribe({
+      this.rbac.batchInviteProjectMembers(projId, emailsPayload, namesPayload, resolvedRoleLabel).subscribe({
         next: (res) => {
           this.saving = false;
           this.isInviteModalOpen = false;

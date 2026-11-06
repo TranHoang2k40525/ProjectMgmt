@@ -135,7 +135,18 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
                     class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 cursor-pointer transition-colors group"
                   >
                     <td data-label="STT" class="py-2.5 px-3 font-mono text-slate-400 text-xs">{{ i + 1 }}</td>
-                    <td data-label="Mã Task" class="py-2.5 px-3 font-mono font-semibold text-slate-800 dark:text-slate-200 text-xs">{{ item.issueKey }}</td>
+                    <td data-label="Mã Task" class="py-2.5 px-3 font-mono font-semibold text-xs">
+                      <div class="inline-flex items-center gap-2">
+                        <span
+                          class="w-6 h-6 rounded-md inline-flex items-center justify-center text-white shrink-0 shadow-2xs"
+                          [style.backgroundColor]="getIssueTypeColor(item)"
+                          [title]="item.issueType"
+                        >
+                          <span class="material-symbols-outlined text-[15px]">{{ getIssueTypeIcon(item) }}</span>
+                        </span>
+                        <span [style.color]="getIssueTypeColor(item)" class="font-bold">{{ item.issueKey }}</span>
+                      </div>
+                    </td>
                     <td data-label="Công việc" class="py-2.5 px-3 font-medium text-slate-900 dark:text-white group-hover:text-primary transition-colors text-xs">
                       {{ item.title }}
                     </td>
@@ -264,7 +275,55 @@ export class TaskListPageComponent {
     this.projectService.activeDrawerTask.set(task);
   }
 
+  getIssueTypeIcon(item: WorkItem): string {
+    const typeName = item.issueType || '';
+    const custom = this.projectService.customIssueTypes().find(t =>
+      (item.issueTypeId && t.id === item.issueTypeId) ||
+      t.name.toLowerCase() === typeName.toLowerCase() ||
+      ((typeName.toLowerCase() === 'sub-task' || typeName.toLowerCase() === 'subtask') && (t.isSubtask || t.name.toLowerCase() === 'subtask' || t.name.toLowerCase() === 'sub-task'))
+    );
+    if (custom?.icon && custom.icon !== 'task') return custom.icon;
+    if (item.issueTypeIcon && item.issueTypeIcon !== 'task') return item.issueTypeIcon;
+    const map: Record<string, string> = {
+      'story': 'bookmark',
+      'task': 'task_alt',
+      'bug': 'bug_report',
+      'epic': 'bolt',
+      'sub-task': 'subdirectory_arrow_right',
+      'subtask': 'subdirectory_arrow_right'
+    };
+    return map[typeName.toLowerCase()] || 'task_alt';
+  }
+
+  getIssueTypeColor(item: WorkItem): string {
+    const typeName = item.issueType || '';
+    const custom = this.projectService.customIssueTypes().find(t =>
+      (item.issueTypeId && t.id === item.issueTypeId) ||
+      t.name.toLowerCase() === typeName.toLowerCase() ||
+      ((typeName.toLowerCase() === 'sub-task' || typeName.toLowerCase() === 'subtask') && (t.isSubtask || t.name.toLowerCase() === 'subtask' || t.name.toLowerCase() === 'sub-task'))
+    );
+    if (custom?.color) return custom.color;
+    if (item.issueTypeColor) return item.issueTypeColor;
+    const map: Record<string, string> = {
+      'story': '#65BA43',
+      'task': '#4BADE8',
+      'bug': '#E5493A',
+      'epic': '#904EE2',
+      'sub-task': '#4BADE8',
+      'subtask': '#4BADE8'
+    };
+    return map[typeName.toLowerCase()] || '#4BADE8';
+  }
+
   exportExcel(): void {
-    this.excelService.exportToExcel(this.filteredItems(), 'Project_Task_List_Export.csv');
+    const proj = this.projectService.currentProject();
+    const projectKey = proj.projectKey || 'PROJECT';
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    this.excelService.exportToExcel(
+      this.filteredItems(),
+      `${projectKey}_Task_List_Export_${dateStr}.xlsx`,
+      this.projectService.sprints(),
+      proj.name || projectKey
+    );
   }
 }

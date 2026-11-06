@@ -36,7 +36,14 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
           <!-- Drawer Top Navigation Header -->
           <div class="task-drawer-header flex items-center justify-between px-6 py-3.5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
             <div class="flex items-center gap-2.5">
-              <span class="px-2.5 py-0.5 rounded text-xs font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+              <span
+                class="w-6 h-6 rounded-md inline-flex items-center justify-center text-white shrink-0 shadow-2xs"
+                [style.backgroundColor]="getIssueTypeColor(task)"
+                [title]="task.issueType"
+              >
+                <span class="material-symbols-outlined text-[15px]">{{ getIssueTypeIcon(task) }}</span>
+              </span>
+              <span class="px-2.5 py-0.5 rounded text-xs font-mono font-bold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700" [style.color]="getIssueTypeColor(task)">
                 {{ task.issueKey }}
               </span>
               <span class="text-xs text-slate-500 font-medium">{{ task.sprintName ? ('Sprint: ' + task.sprintName) : (projectService.currentProject().name || 'Dự án') }}</span>
@@ -305,9 +312,9 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
                 </a>
               </div>
 
-              <!-- Comments List -->
+              <!-- Comments List (Newest first) -->
               <div class="flex flex-col gap-2 mt-1">
-                @for (comment of task.comments; track comment.id) {
+                @for (comment of sortedComments(); track comment.id) {
                   <div class="flex gap-2.5 p-2.5 rounded-md bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800">
                     @if (getAuthorAvatar(comment.authorName); as av) {
                       <img [src]="av" [alt]="comment.authorName" class="w-6 h-6 rounded-full object-cover shrink-0 border border-slate-200 dark:border-slate-700" />
@@ -321,51 +328,127 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
                         <span class="font-semibold text-slate-900 dark:text-slate-100">{{ comment.authorName }}</span>
                         <span class="text-[10px] text-slate-400 font-mono">{{ comment.createdAt | date:'dd/MM/yyyy HH:mm' }}</span>
                       </div>
-                      <p class="text-slate-700 dark:text-slate-300 leading-relaxed break-words">{{ comment.content }}</p>
+                      <p class="text-slate-700 dark:text-slate-300 leading-relaxed break-words whitespace-pre-wrap">{{ comment.content }}</p>
                     </div>
                   </div>
                 } @empty {
                   <p class="text-xs text-slate-400 py-1 italic">Chưa có bình luận nào.</p>
                 }
               </div>
+            </div>
 
-              <!-- Comment Input Box (Placed at the bottom) -->
-              <div class="flex gap-2.5 pt-2.5 border-t border-slate-100 dark:border-slate-800">
-                @if (currentUserAvatar(); as av) {
-                  <img [src]="av" [alt]="'Tôi'" class="w-6 h-6 rounded-full object-cover shrink-0 border border-slate-200 dark:border-slate-700" />
-                } @else {
-                  <div class="w-6 h-6 rounded bg-slate-900 text-white flex items-center justify-center text-[10px] font-semibold shrink-0">
-                    {{ currentUserInitial() }}
-                  </div>
-                }
-                <div class="flex-1 flex flex-col gap-1.5">
-                  <input
-                    type="text"
-                    [(ngModel)]="newCommentText"
-                    (keyup.enter)="submitComment()"
-                    placeholder="Viết bình luận... (Enter để gửi)"
-                    class="w-full h-8 px-2.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
-                  />
-                  <div class="flex justify-end">
-                    <button
-                      (click)="submitComment()"
-                      [disabled]="!newCommentText.trim()"
-                      class="px-3 py-1 rounded-md bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white text-xs font-medium transition-all cursor-pointer"
-                    >
-                      Gửi
-                    </button>
-                  </div>
+            <!-- Attachments Section (Images and Videos stored in Attachments_Hub) -->
+            @if (task.attachments && task.attachments.length > 0) {
+              <div class="flex flex-col gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <span class="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[15px] text-slate-500">attachment</span>
+                  <span>Tệp đính kèm ({{ task.attachments.length }})</span>
+                </span>
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  @for (att of task.attachments; track att.id) {
+                    <div class="rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-2 flex flex-col gap-1 overflow-hidden">
+                      <div class="flex items-center gap-1.5 min-w-0">
+                        <span class="material-symbols-outlined text-[16px] text-primary shrink-0">
+                          {{ isVideoAttachment(att.fileName) ? 'movie' : 'image' }}
+                        </span>
+                        <span class="text-xs font-medium text-slate-800 dark:text-slate-200 truncate" [title]="att.fileName">{{ att.fileName }}</span>
+                      </div>
+                      <span class="text-[10px] text-slate-400 font-mono">{{ formatFileSize(att.fileSizeBytes) }}</span>
+                      <a [href]="getAttachmentDownloadUrl(att.id)" target="_blank" class="text-[11px] font-semibold text-primary hover:underline flex items-center gap-0.5 mt-0.5">
+                        <span class="material-symbols-outlined text-[13px]">download</span>
+                        <span>Tải về</span>
+                      </a>
+                    </div>
+                  }
                 </div>
               </div>
-            </div>
+            }
 
           </div>
 
-          <!-- Drawer Footer Controls -->
-          <div class="task-drawer-footer px-6 py-2.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex justify-end gap-2">
-            <button (click)="dismissed.emit()" class="px-3 py-1 rounded text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer border border-slate-200 dark:border-slate-700">
-              Đóng
-            </button>
+          <!-- Pinned Fixed Bottom Comment Bar (Not scrolling with body) -->
+          <div class="pinned-comment-bar shrink-0 p-3 bg-slate-50 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 relative z-30">
+            <!-- Mention Autocomplete Floating Dropdown -->
+            @if (showMentionDropdown() && mentionCandidates().length > 0) {
+              <div class="absolute bottom-full left-3 mb-2 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl overflow-hidden z-40 max-h-48 overflow-y-auto">
+                <div class="p-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50 dark:bg-slate-850 border-b border-slate-100 dark:border-slate-800">Nhắc tên thành viên (&#64;)</div>
+                @for (m of mentionCandidates(); track m.userId) {
+                  <button
+                    type="button"
+                    (click)="insertMention(m)"
+                    class="w-full px-3 py-1.5 flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-left text-xs cursor-pointer transition-colors"
+                  >
+                    @if (getAssigneeAvatar(m.displayName); as av) {
+                      <img [src]="av" [alt]="m.displayName" class="w-5 h-5 rounded-full object-cover shrink-0" />
+                    } @else {
+                      <div class="w-5 h-5 rounded-full bg-primary/10 text-primary font-bold text-[10px] flex items-center justify-center shrink-0">
+                        {{ getInitials(m.displayName) }}
+                      </div>
+                    }
+                    <div class="flex flex-col min-w-0">
+                      <span class="font-bold text-slate-800 dark:text-slate-200 truncate">{{ m.displayName }}</span>
+                      <span class="text-[10px] text-slate-400 truncate">{{ m.email }}</span>
+                    </div>
+                  </button>
+                }
+              </div>
+            }
+
+            <div class="flex items-center gap-2">
+              @if (currentUserAvatar(); as av) {
+                <img [src]="av" [alt]="'Tôi'" class="w-7 h-7 rounded-full object-cover shrink-0 border border-slate-200 dark:border-slate-700" />
+              } @else {
+                <div class="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center text-[11px] font-semibold shrink-0">
+                  {{ currentUserInitial() }}
+                </div>
+              }
+
+              <div class="flex-1 relative flex items-center">
+                <input
+                  type="text"
+                  [ngModel]="newCommentText"
+                  (ngModelChange)="onCommentInputChange($event)"
+                  (keyup.enter)="submitComment()"
+                  placeholder="Viết bình luận... Gõ @ để tag thành viên (Enter để gửi)"
+                  class="w-full h-9 pl-3 pr-20 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary shadow-2xs"
+                />
+
+                <div class="absolute right-1 flex items-center gap-1">
+                  <!-- Attachment Upload Button -->
+                  <input
+                    type="file"
+                    id="task-attachment-input"
+                    accept="image/*,video/mp4,video/quicktime,video/webm"
+                    (change)="onAttachmentSelected($event)"
+                    class="hidden"
+                  />
+                  <button
+                    type="button"
+                    (click)="triggerAttachmentUpload()"
+                    [disabled]="isUploadingAttachment()"
+                    class="w-7 h-7 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-800 flex items-center justify-center cursor-pointer transition-colors"
+                    title="Đính kèm hình ảnh hoặc video ngắn (< 50MB)"
+                  >
+                    @if (isUploadingAttachment()) {
+                      <span class="material-symbols-outlined text-[16px] animate-spin">sync</span>
+                    } @else {
+                      <span class="material-symbols-outlined text-[17px]">attach_file</span>
+                    }
+                  </button>
+
+                  <!-- Send Comment Button -->
+                  <button
+                    type="button"
+                    (click)="submitComment()"
+                    [disabled]="!newCommentText.trim()"
+                    class="w-7 h-7 rounded-lg bg-primary hover:bg-primary-container disabled:opacity-40 text-white flex items-center justify-center cursor-pointer transition-colors"
+                    title="Gửi bình luận"
+                  >
+                    <span class="material-symbols-outlined text-[16px]">send</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
 
         </div>
@@ -458,6 +541,25 @@ export class TaskDetailDrawerComponent {
 
   readonly epics = this.projectService.epics;
   newCommentText = '';
+  readonly isUploadingAttachment = signal(false);
+  readonly showMentionDropdown = signal(false);
+  readonly mentionQuery = signal('');
+
+  readonly mentionCandidates = computed(() => {
+    const q = this.mentionQuery().trim().toLowerCase();
+    const members = this.projectMembers();
+    if (!q) return members.slice(0, 5);
+    return members.filter(m =>
+      (m.displayName && m.displayName.toLowerCase().includes(q)) ||
+      (m.email && m.email.toLowerCase().includes(q))
+    ).slice(0, 5);
+  });
+
+  readonly sortedComments = computed(() => {
+    if (!this.task?.comments) return [];
+    return [...this.task.comments].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  });
+
   readonly isSubtaskComposerOpen = signal(false);
   readonly newSubtaskTitle = signal('');
 
@@ -489,6 +591,46 @@ export class TaskDetailDrawerComponent {
     if (!name) return null;
     const member = this.projectMembers().find(m => m.displayName && m.displayName.trim().toLowerCase() === name.trim().toLowerCase());
     return resolveAvatarUrl(member?.avatarUrl);
+  }
+
+  getIssueTypeIcon(item: WorkItem): string {
+    const typeName = item.issueType || '';
+    const custom = this.projectService.customIssueTypes().find(t =>
+      (item.issueTypeId && t.id === item.issueTypeId) ||
+      t.name.toLowerCase() === typeName.toLowerCase() ||
+      ((typeName.toLowerCase() === 'sub-task' || typeName.toLowerCase() === 'subtask') && (t.isSubtask || t.name.toLowerCase() === 'subtask' || t.name.toLowerCase() === 'sub-task'))
+    );
+    if (custom?.icon && custom.icon !== 'task') return custom.icon;
+    if (item.issueTypeIcon && item.issueTypeIcon !== 'task') return item.issueTypeIcon;
+    const map: Record<string, string> = {
+      'story': 'bookmark',
+      'task': 'task_alt',
+      'bug': 'bug_report',
+      'epic': 'bolt',
+      'sub-task': 'subdirectory_arrow_right',
+      'subtask': 'subdirectory_arrow_right'
+    };
+    return map[typeName.toLowerCase()] || 'task_alt';
+  }
+
+  getIssueTypeColor(item: WorkItem): string {
+    const typeName = item.issueType || '';
+    const custom = this.projectService.customIssueTypes().find(t =>
+      (item.issueTypeId && t.id === item.issueTypeId) ||
+      t.name.toLowerCase() === typeName.toLowerCase() ||
+      ((typeName.toLowerCase() === 'sub-task' || typeName.toLowerCase() === 'subtask') && (t.isSubtask || t.name.toLowerCase() === 'subtask' || t.name.toLowerCase() === 'sub-task'))
+    );
+    if (custom?.color) return custom.color;
+    if (item.issueTypeColor) return item.issueTypeColor;
+    const map: Record<string, string> = {
+      'story': '#65BA43',
+      'task': '#4BADE8',
+      'bug': '#E5493A',
+      'epic': '#904EE2',
+      'sub-task': '#4BADE8',
+      'subtask': '#4BADE8'
+    };
+    return map[typeName.toLowerCase()] || '#4BADE8';
   }
 
   getAuthorAvatar(name?: string): string | null {
@@ -716,11 +858,94 @@ export class TaskDetailDrawerComponent {
     });
   }
 
+  onCommentInputChange(val: string): void {
+    this.newCommentText = val;
+    const match = val.match(/@([a-zA-Z0-9_\u00C0-\u024F\u1EA0-\u1EF9]*)$/);
+    if (match) {
+      this.mentionQuery.set(match[1]);
+      this.showMentionDropdown.set(true);
+    } else {
+      this.showMentionDropdown.set(false);
+    }
+  }
+
+  insertMention(candidate: { displayName: string }): void {
+    const val = this.newCommentText;
+    const replaced = val.replace(/@([a-zA-Z0-9_\u00C0-\u024F\u1EA0-\u1EF9]*)$/, `@${candidate.displayName} `);
+    this.newCommentText = replaced;
+    this.showMentionDropdown.set(false);
+  }
+
+  isVideoAttachment(fileName?: string): boolean {
+    if (!fileName) return false;
+    const ext = fileName.toLowerCase();
+    return ext.endsWith('.mp4') || ext.endsWith('.mov') || ext.endsWith('.webm') || ext.endsWith('.avi');
+  }
+
+  getAttachmentDownloadUrl(attachmentId: string): string {
+    return this.projectService.getDownloadUrl ? `${this.projectService.getDownloadUrl(attachmentId).replace('/documents/', '/attachments/')}` : `/api/attachments/${attachmentId}`;
+  }
+
+  formatFileSize(bytes?: number): string {
+    if (!bytes || bytes <= 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+
+  triggerAttachmentUpload(): void {
+    const input = document.getElementById('task-attachment-input') as HTMLInputElement;
+    if (input) {
+      input.value = '';
+      input.click();
+    }
+  }
+
+  onAttachmentSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0 || !this.task) return;
+    const file = input.files[0];
+    if (file.size > 50 * 1024 * 1024) {
+      this.toastService.error('Tệp đính kèm', 'Kích thước tệp vượt quá giới hạn 50MB.');
+      return;
+    }
+    this.isUploadingAttachment.set(true);
+    this.projectService.uploadAttachment(this.task.id, file).subscribe({
+      next: () => {
+        this.isUploadingAttachment.set(false);
+        this.toastService.success('Đính kèm', `Đã tải lên tệp "${file.name}".`);
+        this.projectService.getIssue(this.task!.id).subscribe({
+          next: updated => {
+            if (this.task && this.task.id === updated.id) {
+              this.task.attachments = updated.attachments;
+            }
+          }
+        });
+      },
+      error: () => {
+        this.isUploadingAttachment.set(false);
+        this.toastService.error('Đính kèm', 'Lỗi khi tải tệp đính kèm lên máy chủ.');
+      }
+    });
+  }
+
   submitComment(): void {
-    if (this.task && this.newCommentText.trim()) {
-      this.projectService.addCommentToTask(this.task.id, this.newCommentText);
-      this.toastService.info('Đang lưu bình luận', 'Vui lòng chờ xác nhận từ máy chủ.');
-      this.newCommentText = '';
+    const text = this.newCommentText.trim();
+    if (this.task && text) {
+      this.projectService.postComment(this.task.id, text).subscribe({
+        next: updated => {
+          if (this.task && this.task.id === updated.id) {
+            this.task.comments = updated.comments;
+          }
+          this.toastService.success('Bình luận', 'Đã đăng bình luận thành công.');
+          this.newCommentText = '';
+          this.showMentionDropdown.set(false);
+        },
+        error: () => {
+          this.toastService.error('Bình luận', 'Không thể gửi bình luận lên máy chủ.');
+        }
+      });
     }
   }
 }

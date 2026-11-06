@@ -524,6 +524,8 @@ export class IdentityService {
     );
   }
 
+  private realtimeListenerBound = false;
+
   initRealtimeNotifications(): void {
     const glob = globalThis as unknown as {
       __vitest__?: unknown;
@@ -540,11 +542,13 @@ export class IdentityService {
     }
     const token = this.tokenStore.getAccessToken();
     if (!token || !this.realtime) return;
-    this.realtime.connect('notifications', token).then(() => {
-      this.realtime?.on<NotificationDto>('notificationReceived', dto => {
+    if (!this.realtimeListenerBound) {
+      this.realtimeListenerBound = true;
+      this.realtime.on<NotificationDto>('notificationReceived', dto => {
         this.pushRealtimeNotification(dto);
       });
-    }).catch(() => undefined);
+    }
+    void this.realtime.connect('notifications', token);
   }
 
   pushRealtimeNotification(dto: NotificationDto): void {
@@ -580,7 +584,10 @@ export class IdentityService {
     let type: NotificationModel['type'] = 'SYSTEM';
     let category: NotificationModel['category'] = 'System';
 
-    if (rawType === 'PROJECTINVITATION' || rawType === 'PROJECT_INVITATION') {
+    if (rawType === 'ORGANIZATIONINVITATION' || rawType === 'ORGANIZATION_INVITATION' || dto.entityType === 'OrganizationInvitation') {
+      type = 'ORGANIZATION_INVITATION';
+      category = 'Assignment';
+    } else if (rawType === 'PROJECTINVITATION' || rawType === 'PROJECT_INVITATION') {
       type = 'PROJECT_INVITATION';
       category = 'Assignment';
     } else if (rawType === 'PROJECTINVITATIONACCEPTED' || rawType === 'PROJECT_INVITATION_ACCEPTED') {
@@ -600,6 +607,17 @@ export class IdentityService {
       category = 'Assignment';
     }
 
+    let actionUrl: string | undefined;
+    if (dto.entityType === 'Issue' && dto.entityId) {
+      actionUrl = `/issues/${dto.entityId}`;
+    } else if (dto.entityType === 'Organization' && dto.entityId) {
+      actionUrl = `/orgs/${dto.entityId}/overview`;
+    } else if (dto.entityType === 'OrganizationInvitation') {
+      actionUrl = `/notifications`;
+    } else if (dto.projectId) {
+      actionUrl = `/projects/${dto.projectId}/summary`;
+    }
+
     return {
       id: dto.notificationId ?? '',
       userId: dto.userId ?? '',
@@ -615,7 +633,7 @@ export class IdentityService {
       actorId: dto.actorId ?? null,
       rawType: dto.type,
       responseStatus: null,
-      actionUrl: dto.entityType === 'Issue' && dto.entityId ? `/issues/${dto.entityId}` : dto.projectId ? `/projects/${dto.projectId}` : undefined
+      actionUrl
     };
   }
 

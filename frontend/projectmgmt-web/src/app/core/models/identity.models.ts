@@ -59,7 +59,7 @@ export interface NotificationModel {
   userId: string;
   title: string;
   message: string;
-  type: 'SECURITY' | 'AI_SUGGESTION' | 'TASK' | 'SYSTEM' | 'PROJECT_INVITATION' | 'PROJECT_INVITATION_ACCEPTED' | 'PROJECT_INVITATION_DECLINED';
+  type: 'SECURITY' | 'AI_SUGGESTION' | 'TASK' | 'SYSTEM' | 'PROJECT_INVITATION' | 'PROJECT_INVITATION_ACCEPTED' | 'PROJECT_INVITATION_DECLINED' | 'ORGANIZATION_INVITATION';
   category: 'System' | 'Assignment' | 'Mention' | 'Security';
   isRead: boolean;
   createdAt: string;

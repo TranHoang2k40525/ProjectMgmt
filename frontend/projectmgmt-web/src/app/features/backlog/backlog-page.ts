@@ -173,6 +173,12 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     const custom = this.projectService.customIssueTypes().map(t => t.name);
     return custom.length > 0 ? custom : ['Story', 'Task', 'Bug', 'Epic', 'Sub-task'];
   });
+  readonly creatableIssueTypes = computed(() => {
+    const custom = this.projectService.customIssueTypes()
+      .filter(t => !t.isSubtask && t.name.toLowerCase() !== 'epic' && t.name.toLowerCase() !== 'subtask' && t.name.toLowerCase() !== 'sub-task')
+      .map(t => t.name);
+    return custom.length > 0 ? custom : ['Story', 'Task', 'Bug'];
+  });
 
   ngOnInit(): void {
     const currentProj = this.projectService.currentProject();
@@ -272,9 +278,31 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     return items;
   });
 
-  // CDK Drag and Drop across Sprints: chỉ giữ để di chuyển tạm thời, thả ra là tự động trở về vị trí ban đầu theo yêu cầu
+  // CDK Drag and Drop across Sprints & Backlog:
+  // Kéo thả thay đổi vị trí trong Sprint hoặc di chuyển qua lại giữa các Sprint & Backlog;
+  // Nếu thả ra ngoài danh sách, CDK tự động hoàn vị trí ban đầu.
   onSprintDrop(event: CdkDragDrop<WorkItem[]>, targetSprintId: string, targetSprintName: string): void {
-    event.item.reset();
+    if (event.previousContainer === event.container) {
+      if (event.previousIndex !== event.currentIndex) {
+        const list = [...event.container.data];
+        moveItemInArray(list, event.previousIndex, event.currentIndex);
+        this.projectService.reorderWorkItems(list.map(i => i.id));
+      } else {
+        event.item.reset();
+      }
+      return;
+    }
+
+    const item = event.item.data as WorkItem;
+    if (!item) {
+      event.item.reset();
+      return;
+    }
+
+    const newSprintId = targetSprintId === 'sp-backlog' ? '' : targetSprintId;
+    const newSprintName = targetSprintId === 'sp-backlog' ? 'Backlog Pool' : targetSprintName;
+
+    this.projectService.updateWorkItemSprint(item.id, newSprintId, newSprintName);
   }
 
   // Context Menu Handlers
@@ -436,18 +464,63 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     this.toastService.info('Cập Nhật Epic', epicName ? `Gán vào Epic: ${epicName}` : 'Đã bỏ gán Epic');
   }
 
-  getIssueTypeIcon(type: string): string {
-    const custom = this.projectService.customIssueTypes().find(t => t.name.toLowerCase() === type.toLowerCase());
-    if (custom?.icon) return custom.icon;
+  getIssueTypeIcon(itemOrType: WorkItem | string): string {
+    const isObj = typeof itemOrType !== 'string';
+    const typeName = isObj ? (itemOrType.issueType || '') : (itemOrType || '');
+    const typeId = isObj ? itemOrType.issueTypeId : undefined;
+
+    const custom = this.projectService.customIssueTypes().find(t =>
+      (typeId && t.id === typeId) ||
+      t.name.toLowerCase() === typeName.toLowerCase() ||
+      ((typeName.toLowerCase() === 'sub-task' || typeName.toLowerCase() === 'subtask') && (t.isSubtask || t.name.toLowerCase() === 'subtask' || t.name.toLowerCase() === 'sub-task'))
+    );
+    if (custom?.icon && custom.icon !== 'task') return custom.icon;
+    if (isObj && itemOrType.issueTypeIcon && itemOrType.issueTypeIcon !== 'task') return itemOrType.issueTypeIcon;
+
     const map: Record<string, string> = {
-      'Story': 'bookmark',
-      'Task': 'task',
-      'Bug': 'bug_report',
-      'Use-Case': 'schema',
-      'Epic': 'bolt',
-      'Sub-task': 'subdirectory_arrow_right'
+      'story': 'bookmark',
+      'task': 'task_alt',
+      'bug': 'bug_report',
+      'use-case': 'schema',
+      'epic': 'bolt',
+      'sub-task': 'subdirectory_arrow_right',
+      'subtask': 'subdirectory_arrow_right'
     };
-    return map[type] || 'task_alt';
+    return map[typeName.toLowerCase()] || custom?.icon || (isObj ? itemOrType.issueTypeIcon : '') || 'task_alt';
+  }
+
+  getIssueTypeColor(itemOrType: WorkItem | string): string {
+    const isObj = typeof itemOrType !== 'string';
+    const typeName = isObj ? (itemOrType.issueType || '') : (itemOrType || '');
+    const typeId = isObj ? itemOrType.issueTypeId : undefined;
+
+    const custom = this.projectService.customIssueTypes().find(t =>
+      (typeId && t.id === typeId) ||
+      t.name.toLowerCase() === typeName.toLowerCase() ||
+      ((typeName.toLowerCase() === 'sub-task' || typeName.toLowerCase() === 'subtask') && (t.isSubtask || t.name.toLowerCase() === 'subtask' || t.name.toLowerCase() === 'sub-task'))
+    );
+    if (custom?.color) return custom.color;
+    if (isObj && itemOrType.issueTypeColor) return itemOrType.issueTypeColor;
+
+    const map: Record<string, string> = {
+      'story': '#65BA43',
+      'task': '#4BADE8',
+      'bug': '#E5493A',
+      'epic': '#904EE2',
+      'sub-task': '#4BADE8',
+      'subtask': '#4BADE8'
+    };
+    return map[typeName.toLowerCase()] || '#4BADE8';
+  }
+
+  getStatusColor(statusName: string, fallbackColor?: string): string {
+    const st = this.projectService.projectStatuses().find(s => s.name.toLowerCase() === (statusName || '').toLowerCase());
+    if (st?.colorHex) return st.colorHex;
+    if (fallbackColor) return fallbackColor;
+    const lower = (statusName || '').toLowerCase();
+    if (lower === 'done') return '#22C55E';
+    if (lower === 'to do' || lower === 'backlog') return '#42526E';
+    return '#0052CC';
   }
 
   isItemReady(item: WorkItem): boolean {
@@ -926,11 +999,11 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
   // --- Sprint & Task Filtering ---
   getSprintItems(sprintId: string): WorkItem[] {
-    return this.filteredWorkItems().filter(item => item.sprintId === sprintId && !item.parentId);
+    return this.filteredWorkItems().filter(item => item.sprintId === sprintId && !item.parentId && item.issueType !== 'Epic');
   }
 
   getBacklogItems(): WorkItem[] {
-    return this.filteredWorkItems().filter(item => (!item.sprintId || item.sprintId === 'sp-backlog') && !item.parentId);
+    return this.filteredWorkItems().filter(item => (!item.sprintId || item.sprintId === 'sp-backlog') && !item.parentId && item.issueType !== 'Epic');
   }
 
   // --- Sub-task Methods ---
@@ -1135,11 +1208,12 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
   // --- Quick Exports ---
   exportExcel(): void {
-    const projectKey = this.projectService.currentProject().projectKey || 'PROJECT';
+    const proj = this.projectService.currentProject();
+    const projectKey = proj.projectKey || 'PROJECT';
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const filename = `${projectKey}_Backlog_Export_${dateStr}.csv`;
-    this.excelService.exportToExcel(this.workItems(), filename, this.sprints());
-    this.toastService.success('Xuất Excel thành công', `Đã tải xuống danh sách công việc: ${filename}`);
+    const filename = `${projectKey}_Backlog_Export_${dateStr}.xlsx`;
+    this.excelService.exportToExcel(this.workItems(), filename, this.sprints(), proj.name || projectKey);
+    this.toastService.success('Xuất Excel thành công', `Đã tải xuống bảng Excel: ${filename}`);
   }
 }
 

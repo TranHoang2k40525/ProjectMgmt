@@ -5,6 +5,7 @@ import { ToastService } from './toast.service';
 import { RbacApi } from '../api/rbac.api';
 import { environment } from '../../../environments/environment';
 import { resolveAvatarUrl } from '../utils/avatar.utils';
+import { TOKEN_STORE } from '../auth/token-store';
 
 export interface Organization {
   id: string;
@@ -414,6 +415,7 @@ export interface WorkItem {
 export class ProjectManagementService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = environment.apiBaseUrl;
+  private readonly tokenStore = inject(TOKEN_STORE, { optional: true });
 
   // Active Projects Signal List
   readonly allProjectsList = signal<Project[]>([]);
@@ -703,6 +705,12 @@ export class ProjectManagementService {
     );
   }
 
+  getCandidateOrgMembers(projectId: string): Observable<Array<{ userId: string; email: string; displayName: string; avatarUrl?: string | null }>> {
+    return this.http.get<Array<{ userId: string; email: string; displayName: string; avatarUrl?: string | null }>>(
+      `${this.baseUrl}/projects/${projectId}/members/candidate-org-members`
+    );
+  }
+
   inviteProjectMember(projectId: string, userId: string, roleId: string): Observable<unknown> {
     return this.http.post(`${this.baseUrl}/projects/${projectId}/members`, { userId, roleId }).pipe(
       tap(() => {
@@ -727,17 +735,21 @@ export class ProjectManagementService {
     );
   }
 
-  getRoles(scope = 'Project'): Observable<Array<{ id: string; name: string; code: string; description?: string }>> {
-    return this.http.get<{ success?: boolean; items?: Array<{ roleId?: string; name?: string; description?: string }> }>(
+  getRoles(scope = 'Project'): Observable<Array<{ id: string; name: string; code: string; description?: string; isPreset?: boolean; isActive?: boolean }>> {
+    return this.http.get<{ success?: boolean; items?: Array<{ roleId?: string; name?: string; description?: string; isPreset?: boolean; isActive?: boolean }> }>(
       `${this.baseUrl}/roles`,
       { params: { scope } }
     ).pipe(
-      map(res => (res.items ?? []).map(r => ({
-        id: r.roleId || '',
-        name: r.name || '',
-        code: (r.name || '').toUpperCase().replace(/\s+/g, '_'),
-        description: r.description
-      })))
+      map(res => (res.items ?? [])
+        .filter(r => r.isActive !== false)
+        .map(r => ({
+          id: r.roleId || '',
+          name: r.name || '',
+          code: (r.name || '').toUpperCase().replace(/\s+/g, '_'),
+          description: r.description,
+          isPreset: r.isPreset ?? false,
+          isActive: r.isActive ?? true
+        })))
     );
   }
 
@@ -799,13 +811,18 @@ export class ProjectManagementService {
       map(types => types.map(t => ({
         id: t.id,
         name: t.name,
-        icon: t.icon ?? t.iconKey ?? 'task',
+        icon: t.icon ?? t.iconKey ?? 'task_alt',
         color: t.color ?? t.colorHex ?? '#6366F1',
         hierarchyLevel: t.hierarchyLevel,
         isSubtask: t.isSubtask,
         orderIndex: t.orderIndex,
         isCustom: t.isCustom
       }))),
+      tap(types => {
+        if (this.currentProject().id === projectId) {
+          this.customIssueTypes.set(types);
+        }
+      }),
       catchError(() => of([]))
     );
   }
@@ -825,6 +842,11 @@ export class ProjectManagementService {
       tap(updated => {
         if (this.currentProject().id === projectId) {
           this.customIssueTypes.update(types => types.map(t => t.id === id ? updated : t));
+          this.workItems.update(items => items.map(item =>
+            (item.issueTypeId === id || (item.issueType || '').toLowerCase() === updated.name.toLowerCase())
+              ? { ...item, issueTypeIcon: updated.icon, issueTypeColor: updated.color }
+              : item
+          ));
         }
       })
     );
@@ -1040,12 +1062,45 @@ export class ProjectManagementService {
     return this.http.delete(`${this.baseUrl}/documents/${documentId}`);
   }
 
+  private getAuthToken(): string {
+    const fromStore = this.tokenStore?.getAccessToken();
+    if (fromStore) return fromStore;
+    if (typeof sessionStorage !== 'undefined') {
+      try {
+        const item = sessionStorage.getItem('projectmgmt.auth-session') || localStorage.getItem('projectmgmt.auth-session');
+        if (item) {
+          const parsed = JSON.parse(item);
+          if (parsed?.accessToken) return parsed.accessToken;
+        }
+      } catch {}
+    }
+    return '';
+  }
+
   getDownloadUrl(documentId: string): string {
-    return `${this.baseUrl}/documents/${documentId}/download`;
+    const token = this.getAuthToken();
+    return `${this.baseUrl}/documents/${documentId}/download${token ? `?access_token=${encodeURIComponent(token)}` : ''}`;
   }
 
   getRawFileUrl(documentId: string): string {
-    return `${this.baseUrl}/documents/${documentId}/raw`;
+    const token = this.getAuthToken();
+    return `${this.baseUrl}/documents/${documentId}/raw${token ? `?access_token=${encodeURIComponent(token)}` : ''}`;
+  }
+
+  moveDocument(documentId: string, newParentId: string | null): Observable<any> {
+    return this.http.put(`${this.baseUrl}/documents/${documentId}/move`, { newParentId });
+  }
+
+  uploadMultipleSpecFiles(projectId: string, files: { file: File; relativePath?: string }[], parentId?: string | null): Observable<any> {
+    const formData = new FormData();
+    for (const item of files) {
+      formData.append('files', item.file);
+      formData.append('relativePaths', item.relativePath || item.file.name);
+    }
+    if (parentId) {
+      formData.append('parentId', parentId);
+    }
+    return this.http.post(`${this.baseUrl}/projects/${projectId}/documents/files/upload-multiple`, formData);
   }
 
   addDocumentComment(documentId: string, content: string, selectedText?: string): Observable<SpecDocumentComment> {
@@ -1149,7 +1204,12 @@ export class ProjectManagementService {
 
   applyWorkflowTemplateToProject(projectId: string, templateId: string): Observable<ProjectStatus[]> {
     return this.http.post<ProjectStatus[]>(`${this.baseUrl}/projects/${projectId}/workflow/template`, { templateId }).pipe(
-      tap(statuses => { if (this.currentProject().id === projectId) this.projectStatuses.set(statuses); })
+      tap(statuses => {
+        if (this.currentProject().id === projectId) {
+          this.projectStatuses.set(statuses);
+          this.loadWorkspace(projectId);
+        }
+      })
     );
   }
 

@@ -111,16 +111,97 @@
           @if (activeInlineSprintId() === sprint.id) {
             <div class="inline-create">
               <select (change)="inlineTaskTypeMap[sprint.id] = $any($event.target).value" class="type-select" aria-label="Loại công việc">
-                <option value="Story" [selected]="(inlineTaskTypeMap[sprint.id] || 'Story') === 'Story'">Story</option>
-                <option value="Task" [selected]="inlineTaskTypeMap[sprint.id] === 'Task'">Task</option>
-                <option value="Bug" [selected]="inlineTaskTypeMap[sprint.id] === 'Bug'">Bug</option>
+                @for (tName of creatableIssueTypes(); track tName) {
+                  <option [value]="tName" [selected]="(inlineTaskTypeMap[sprint.id] || creatableIssueTypes()[0] || 'Story') === tName">{{ tName }}</option>
+                }
               </select>
               <input type="text" [(ngModel)]="inlineTaskTitleMap[sprint.id]" (keyup.enter)="createInlineSprintTask(sprint.id, sprint.name)" placeholder="Tên User Story hoặc công việc... (Enter để tạo)" />
               <button type="button" class="button button-primary" (click)="createInlineSprintTask(sprint.id, sprint.name)">Tạo</button>
               <button type="button" class="button button-secondary" (click)="activeInlineSprintId.set(null)">Hủy</button>
             </div>
           }
-          @if (sprintTasks.length > 0) { <ng-container *ngTemplateOutlet="workItemList; context: { $implicit: sprintTasks }"></ng-container> } @else { <div class="empty-state"><span class="material-symbols-outlined" aria-hidden="true">inventory_2</span><p>Sprint chưa có công việc.</p></div> }
+          @if (sprintTasks.length > 0) {
+            <div class="work-item-table">
+              <div class="work-item-header" aria-hidden="true"><span></span><span>Mã</span><span>Công việc</span><span>Epic</span><span>Ưu tiên</span><span>SP</span><span>Trạng thái</span><span>Người xử lý</span><span></span></div>
+              @for (item of sprintTasks; track item.id) {
+                @let subtasks = getSubtasks(item.id);
+                <div
+                  cdkDrag
+                  [cdkDragData]="item"
+                  [cdkDragDisabled]="editingTaskId() === item.id || editingStoryPointsTaskId() === item.id"
+                  class="work-item-group"
+                >
+                  <div 
+                    (contextmenu)="onContextMenu($event, item)"
+                    (dblclick)="startEditingTaskTitle(item, $event)"
+                    (click)="onWorkItemRowClick(item, $event)"
+                    class="work-item-row interactive-card cursor-pointer" 
+                    [class.is-selected]="isTaskSelected(item.id)"
+                  >
+                    <div class="cell-select no-drawer flex items-center gap-1.5">
+                      <span class="material-symbols-outlined drag-handle text-[18px] text-slate-400 hover:text-slate-700 cursor-grab active:cursor-grabbing select-none shrink-0" title="Giữ để kéo thả di chuyển">drag_indicator</span>
+                      <input type="checkbox" [checked]="isTaskSelected(item.id)" [attr.aria-label]="'Chọn ' + item.issueKey" (change)="toggleTaskSelection(item.id, $event)" />
+                      @if (subtasks.length > 0) {
+                        <button type="button" class="icon-button icon-button-small" [title]="expandedSubtasks()[item.id] ? 'Thu gọn Sub-task' : 'Mở Sub-task'" (click)="toggleSubtasks(item.id, $event)">
+                          <span class="material-symbols-outlined" aria-hidden="true">{{ expandedSubtasks()[item.id] ? 'expand_more' : 'chevron_right' }}</span>
+                        </button>
+                      }
+                    </div>
+                    <div class="cell-key cursor-pointer" (click)="openTask(item, $event)"><span class="issue-type-badge" [style.backgroundColor]="getIssueTypeColor(item)" [title]="item.issueType"><span class="material-symbols-outlined" aria-hidden="true">{{ getIssueTypeIcon(item) }}</span></span><strong [style.color]="getIssueTypeColor(item)">{{ item.issueKey }}</strong></div>
+                    <div class="cell-title flex items-center gap-1.5 flex-wrap">
+                      @if (editingTaskId() === item.id) { <input class="title-input" type="text" [ngModel]="editingTaskTitle()" (ngModelChange)="editingTaskTitle.set($event)" (click)="$event.stopPropagation()" (keyup.enter)="saveEditingTaskTitle(item.id)" (blur)="saveEditingTaskTitle(item.id)" /> } @else { <button type="button" class="task-title-button" (click)="openTask(item, $event)">{{ item.title }}</button><button type="button" class="edit-title-button" title="Sửa tên công việc" (click)="startEditingTaskTitle(item, $event)"><span class="material-symbols-outlined" aria-hidden="true">edit</span></button> }
+                      @if (isItemReady(item)) {
+                        <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200" title="Sẵn sàng thực hiện"><span class="material-symbols-outlined text-[12px] text-emerald-600">check_circle</span>Ready</span>
+                      }
+                      @if (item.isBlocked) {
+                        <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200" [title]="item.blockReason"><span class="material-symbols-outlined text-[12px] text-rose-600">block</span>Blocked</span>
+                      }
+                      @if (subtasks.length > 0) { <span class="subtask-count">{{ getSubtaskProgress(item.id).done }}/{{ subtasks.length }} Sub-task</span> }
+                    </div>
+
+                    <div class="cell-epic no-drawer">
+                      <button #epicOrigin="cdkOverlayOrigin" cdkOverlayOrigin type="button" class="epic-pill" [attr.aria-expanded]="activeEpicDropdownTaskId() === item.id" (click)="toggleEpicDropdown(item.id, $event)"><span>{{ item.epicName || 'Gán Epic' }}</span><span class="material-symbols-outlined" aria-hidden="true">expand_more</span></button>
+                      <ng-template cdkConnectedOverlay [cdkConnectedOverlayOrigin]="epicOrigin" [cdkConnectedOverlayOpen]="activeEpicDropdownTaskId() === item.id" [cdkConnectedOverlayPositions]="startAlignedOverlayPositions" [cdkConnectedOverlayHasBackdrop]="true" cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop" [cdkConnectedOverlayPush]="true" [cdkConnectedOverlayViewportMargin]="12" (backdropClick)="activeEpicDropdownTaskId.set(null)" (detach)="activeEpicDropdownTaskId.set(null)">
+                        <div class="overlay-panel option-menu" role="menu"><div class="overlay-title"><strong>Chọn Epic</strong></div><button type="button" role="menuitem" (click)="selectTaskEpic(item.id, null, $event)"><span>Không gán Epic</span>@if (!item.epicName) { <span class="material-symbols-outlined">check</span> }</button>@for (epic of epics(); track epic.id) { <button type="button" role="menuitem" class="epic-option" (click)="selectTaskEpic(item.id, epic.name, $event)"><span>{{ epic.name }}</span>@if (item.epicName === epic.name) { <span class="material-symbols-outlined">check</span> }</button> }</div>
+                      </ng-template>
+                    </div>
+
+                    <button type="button" class="cell-priority no-drawer" [class.priority-urgent]="item.priority === 'Urgent'" [class.priority-high]="item.priority === 'High'" title="Bấm để chuyển mức ưu tiên" (click)="updateInlinePriorityNext(item.id, item.priority, $event)">{{ item.priority }}</button>
+
+                    <div class="cell-points no-drawer flex items-center gap-1">
+                      @if (editingStoryPointsTaskId() === item.id) {
+                        <input type="number" min="0" max="999" [ngModel]="editingStoryPointsValue()" (ngModelChange)="editingStoryPointsValue.set($event)" (click)="$event.stopPropagation()" (keyup.enter)="saveStoryPoints(item.id, $event)" (blur)="saveStoryPoints(item.id, $event)" aria-label="Story Points" />
+                      } @else {
+                        <button type="button" title="Sửa Story Points" (click)="startEditingStoryPoints(item, $event)">{{ item.storyPoints }}</button>
+                      }
+                      <button type="button" class="icon-button icon-button-small" (click)="openPoker(item, undefined, $event)" title="Planning Poker ước lượng online">
+                        <span class="material-symbols-outlined text-[15px] text-primary" aria-hidden="true">style</span>
+                      </button>
+                    </div>
+
+                    <div class="cell-status no-drawer">
+                      <button #statusOrigin="cdkOverlayOrigin" cdkOverlayOrigin type="button" class="status-pill" [class.status-todo]="item.statusName === 'To Do'" [class.status-progress]="item.statusName === 'In Progress'" [class.status-review]="item.statusName === 'Code Review'" [class.status-done]="item.statusName === 'Done'" [attr.aria-expanded]="activeStatusDropdownTaskId() === item.id" (click)="toggleStatusDropdown(item.id, $event)"><span>{{ item.statusName }}</span><span class="material-symbols-outlined" aria-hidden="true">expand_more</span></button>
+                      <ng-template cdkConnectedOverlay [cdkConnectedOverlayOrigin]="statusOrigin" [cdkConnectedOverlayOpen]="activeStatusDropdownTaskId() === item.id" [cdkConnectedOverlayPositions]="endAlignedOverlayPositions" [cdkConnectedOverlayHasBackdrop]="true" cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop" [cdkConnectedOverlayPush]="true" [cdkConnectedOverlayViewportMargin]="12" (backdropClick)="activeStatusDropdownTaskId.set(null)" (detach)="activeStatusDropdownTaskId.set(null)">
+                        <div class="overlay-panel option-menu status-menu" role="menu">@for (status of statusNames(); track status) { <button type="button" role="menuitem" (click)="updateInlineStatus(item.id, status, $event); activeStatusDropdownTaskId.set(null)"><span class="status-pill" [class.status-todo]="status === 'To Do'" [class.status-progress]="status === 'In Progress'" [class.status-review]="status === 'Code Review'" [class.status-done]="status === 'Done'">{{ status }}</span>@if (item.statusName === status) { <span class="material-symbols-outlined">check</span> }</button> }</div>
+                      </ng-template>
+                    </div>
+
+                    <div class="cell-assignee" [title]="item.assigneeName || 'Chưa gán'"><span class="assignee-avatar">{{ getAssigneeInitials(item.assigneeName) }}</span><span>{{ item.assigneeName || 'Chưa gán' }}</span></div>
+
+                    <div class="cell-menu no-drawer">
+                      <button #menuOrigin="cdkOverlayOrigin" cdkOverlayOrigin type="button" class="icon-button icon-button-small" title="Thêm thao tác" [attr.aria-expanded]="activeMenuTaskId() === item.id" (click)="toggleRowMenu(item.id, $event)"><span class="material-symbols-outlined" aria-hidden="true">more_vert</span></button>
+                      <ng-template cdkConnectedOverlay [cdkConnectedOverlayOrigin]="menuOrigin" [cdkConnectedOverlayOpen]="activeMenuTaskId() === item.id" [cdkConnectedOverlayPositions]="endAlignedOverlayPositions" [cdkConnectedOverlayHasBackdrop]="true" cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop" [cdkConnectedOverlayPush]="true" [cdkConnectedOverlayViewportMargin]="12" (backdropClick)="activeMenuTaskId.set(null)" (detach)="activeMenuTaskId.set(null)">
+                        <div class="overlay-panel option-menu action-menu" role="menu"><button type="button" role="menuitem" (click)="assignToMe(item.id, $event)"><span class="material-symbols-outlined">person_add</span><span>Gán cho tôi</span></button><button type="button" role="menuitem" (click)="openSubtaskInput(item.id, $event); activeMenuTaskId.set(null)"><span class="material-symbols-outlined">account_tree</span><span>Thêm Sub-task</span></button><button type="button" role="menuitem" (click)="cloneItem(item.id, $event)"><span class="material-symbols-outlined">content_copy</span><span>Nhân bản</span></button><div class="menu-separator"></div><div class="menu-label">Chuyển Sprint</div>@for (sprint of sprints(); track sprint.id) { <button type="button" role="menuitem" (click)="updateWorkItemSprint(item.id, sprint.id, sprint.name, $event); activeMenuTaskId.set(null)"><span class="material-symbols-outlined">arrow_forward</span><span>{{ sprint.name }}</span></button> }<button type="button" role="menuitem" (click)="updateWorkItemSprint(item.id, 'sp-backlog', 'Backlog Pool', $event); activeMenuTaskId.set(null)"><span class="material-symbols-outlined">inbox</span><span>Backlog</span></button><div class="menu-separator"></div><button type="button" role="menuitem" class="danger-menu-item" (click)="deleteItem(item.id, $event)"><span class="material-symbols-outlined">delete</span><span>Xóa công việc</span></button></div>
+                      </ng-template>
+                    </div>
+                  </div>
+
+                  @if (activeSubtaskInputId() === item.id) { <div class="subtask-create"><span class="material-symbols-outlined" aria-hidden="true">subdirectory_arrow_right</span><input type="text" [(ngModel)]="subtaskTitleMap[item.id]" (keyup.enter)="createInlineSubtask(item.id)" placeholder="Tên Sub-task mới" /><button type="button" class="button button-primary" (click)="createInlineSubtask(item.id)">Thêm</button><button type="button" class="button button-secondary" (click)="activeSubtaskInputId.set(null)">Hủy</button></div> }
+                  @if (expandedSubtasks()[item.id]) { <div class="subtask-list">@for (subtask of subtasks; track subtask.id) { <button type="button" class="subtask-row" (click)="openTask(subtask, $event)"><span class="material-symbols-outlined" aria-hidden="true">subdirectory_arrow_right</span><strong>{{ subtask.issueKey }}</strong><span>{{ subtask.title }}</span><span class="status-pill" [class.status-todo]="subtask.statusName === 'To Do'" [class.status-progress]="subtask.statusName === 'In Progress'" [class.status-review]="subtask.statusName === 'Code Review'" [class.status-done]="subtask.statusName === 'Done'">{{ subtask.statusName }}</span></button> }</div> }
+                </div>
+              }
+            </div>
+          } @else { <div class="empty-state"><span class="material-symbols-outlined" aria-hidden="true">inventory_2</span><p>Sprint chưa có công việc.</p></div> }
         </article>
       } @empty {
         <div class="empty-state p-6 border border-dashed border-slate-200 dark:border-slate-800 rounded-lg text-center">
@@ -140,22 +221,103 @@
         @if (activeInlineSprintId() === 'sp-backlog') {
           <div class="inline-create">
             <select (change)="inlineTaskTypeMap['sp-backlog'] = $any($event.target).value" class="type-select" aria-label="Loại công việc">
-              <option value="Story" [selected]="(inlineTaskTypeMap['sp-backlog'] || 'Story') === 'Story'">Story</option>
-              <option value="Task" [selected]="inlineTaskTypeMap['sp-backlog'] === 'Task'">Task</option>
-              <option value="Bug" [selected]="inlineTaskTypeMap['sp-backlog'] === 'Bug'">Bug</option>
+              @for (tName of creatableIssueTypes(); track tName) {
+                <option [value]="tName" [selected]="(inlineTaskTypeMap['sp-backlog'] || creatableIssueTypes()[0] || 'Story') === tName">{{ tName }}</option>
+              }
             </select>
             <input type="text" [(ngModel)]="inlineTaskTitleMap['sp-backlog']" (keyup.enter)="createInlineSprintTask('sp-backlog', 'Backlog Pool')" placeholder="Tên User Story hoặc công việc vào Backlog... (Enter để tạo)" />
             <button type="button" class="button button-primary" (click)="createInlineSprintTask('sp-backlog', 'Backlog Pool')">Tạo</button>
             <button type="button" class="button button-secondary" (click)="activeInlineSprintId.set(null)">Hủy</button>
           </div>
         }
-        @if (backlogPoolItems.length > 0) { <ng-container *ngTemplateOutlet="workItemList; context: { $implicit: backlogPoolItems }"></ng-container> } @else { <div class="empty-state"><span class="material-symbols-outlined" aria-hidden="true">inbox</span><p>Backlog đang trống.</p></div> }
+        @if (backlogPoolItems.length > 0) {
+          <div class="work-item-table">
+            <div class="work-item-header" aria-hidden="true"><span></span><span>Mã</span><span>Công việc</span><span>Epic</span><span>Ưu tiên</span><span>SP</span><span>Trạng thái</span><span>Người xử lý</span><span></span></div>
+            @for (item of backlogPoolItems; track item.id) {
+              @let subtasks = getSubtasks(item.id);
+              <div
+                cdkDrag
+                [cdkDragData]="item"
+                [cdkDragDisabled]="editingTaskId() === item.id || editingStoryPointsTaskId() === item.id"
+                class="work-item-group"
+              >
+                <div 
+                  (contextmenu)="onContextMenu($event, item)"
+                  (dblclick)="startEditingTaskTitle(item, $event)"
+                  (click)="onWorkItemRowClick(item, $event)"
+                  class="work-item-row interactive-card cursor-pointer" 
+                  [class.is-selected]="isTaskSelected(item.id)"
+                >
+                  <div class="cell-select no-drawer flex items-center gap-1.5">
+                    <span class="material-symbols-outlined drag-handle text-[18px] text-slate-400 hover:text-slate-700 cursor-grab active:cursor-grabbing select-none shrink-0" title="Giữ để kéo thả di chuyển">drag_indicator</span>
+                    <input type="checkbox" [checked]="isTaskSelected(item.id)" [attr.aria-label]="'Chọn ' + item.issueKey" (change)="toggleTaskSelection(item.id, $event)" />
+                    @if (subtasks.length > 0) {
+                      <button type="button" class="icon-button icon-button-small" [title]="expandedSubtasks()[item.id] ? 'Thu gọn Sub-task' : 'Mở Sub-task'" (click)="toggleSubtasks(item.id, $event)">
+                        <span class="material-symbols-outlined" aria-hidden="true">{{ expandedSubtasks()[item.id] ? 'expand_more' : 'chevron_right' }}</span>
+                      </button>
+                    }
+                  </div>
+                  <div class="cell-key cursor-pointer" (click)="openTask(item, $event)"><span class="issue-type-badge" [style.backgroundColor]="getIssueTypeColor(item)" [title]="item.issueType"><span class="material-symbols-outlined" aria-hidden="true">{{ getIssueTypeIcon(item) }}</span></span><strong [style.color]="getIssueTypeColor(item)">{{ item.issueKey }}</strong></div>
+                  <div class="cell-title flex items-center gap-1.5 flex-wrap">
+                    @if (editingTaskId() === item.id) { <input class="title-input" type="text" [ngModel]="editingTaskTitle()" (ngModelChange)="editingTaskTitle.set($event)" (click)="$event.stopPropagation()" (keyup.enter)="saveEditingTaskTitle(item.id)" (blur)="saveEditingTaskTitle(item.id)" /> } @else { <button type="button" class="task-title-button" (click)="openTask(item, $event)">{{ item.title }}</button><button type="button" class="edit-title-button" title="Sửa tên công việc" (click)="startEditingTaskTitle(item, $event)"><span class="material-symbols-outlined" aria-hidden="true">edit</span></button> }
+                    @if (isItemReady(item)) {
+                      <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200" title="Sẵn sàng thực hiện"><span class="material-symbols-outlined text-[12px] text-emerald-600">check_circle</span>Ready</span>
+                    }
+                    @if (item.isBlocked) {
+                      <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200" [title]="item.blockReason"><span class="material-symbols-outlined text-[12px] text-rose-600">block</span>Blocked</span>
+                    }
+                    @if (subtasks.length > 0) { <span class="subtask-count">{{ getSubtaskProgress(item.id).done }}/{{ subtasks.length }} Sub-task</span> }
+                  </div>
+
+                  <div class="cell-epic no-drawer">
+                    <button #epicOrigin="cdkOverlayOrigin" cdkOverlayOrigin type="button" class="epic-pill" [attr.aria-expanded]="activeEpicDropdownTaskId() === item.id" (click)="toggleEpicDropdown(item.id, $event)"><span>{{ item.epicName || 'Gán Epic' }}</span><span class="material-symbols-outlined" aria-hidden="true">expand_more</span></button>
+                    <ng-template cdkConnectedOverlay [cdkConnectedOverlayOrigin]="epicOrigin" [cdkConnectedOverlayOpen]="activeEpicDropdownTaskId() === item.id" [cdkConnectedOverlayPositions]="startAlignedOverlayPositions" [cdkConnectedOverlayHasBackdrop]="true" cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop" [cdkConnectedOverlayPush]="true" [cdkConnectedOverlayViewportMargin]="12" (backdropClick)="activeEpicDropdownTaskId.set(null)" (detach)="activeEpicDropdownTaskId.set(null)">
+                      <div class="overlay-panel option-menu" role="menu"><div class="overlay-title"><strong>Chọn Epic</strong></div><button type="button" role="menuitem" (click)="selectTaskEpic(item.id, null, $event)"><span>Không gán Epic</span>@if (!item.epicName) { <span class="material-symbols-outlined">check</span> }</button>@for (epic of epics(); track epic.id) { <button type="button" role="menuitem" class="epic-option" (click)="selectTaskEpic(item.id, epic.name, $event)"><span>{{ epic.name }}</span>@if (item.epicName === epic.name) { <span class="material-symbols-outlined">check</span> }</button> }</div>
+                    </ng-template>
+                  </div>
+
+                  <button type="button" class="cell-priority no-drawer" [class.priority-urgent]="item.priority === 'Urgent'" [class.priority-high]="item.priority === 'High'" title="Bấm để chuyển mức ưu tiên" (click)="updateInlinePriorityNext(item.id, item.priority, $event)">{{ item.priority }}</button>
+
+                  <div class="cell-points no-drawer flex items-center gap-1">
+                    @if (editingStoryPointsTaskId() === item.id) {
+                      <input type="number" min="0" max="999" [ngModel]="editingStoryPointsValue()" (ngModelChange)="editingStoryPointsValue.set($event)" (click)="$event.stopPropagation()" (keyup.enter)="saveStoryPoints(item.id, $event)" (blur)="saveStoryPoints(item.id, $event)" aria-label="Story Points" />
+                    } @else {
+                      <button type="button" title="Sửa Story Points" (click)="startEditingStoryPoints(item, $event)">{{ item.storyPoints }}</button>
+                    }
+                    <button type="button" class="icon-button icon-button-small" (click)="openPoker(item, undefined, $event)" title="Planning Poker ước lượng online">
+                      <span class="material-symbols-outlined text-[15px] text-primary" aria-hidden="true">style</span>
+                    </button>
+                  </div>
+
+                  <div class="cell-status no-drawer">
+                    <button #statusOrigin="cdkOverlayOrigin" cdkOverlayOrigin type="button" class="status-pill" [class.status-todo]="item.statusName === 'To Do'" [class.status-progress]="item.statusName === 'In Progress'" [class.status-review]="item.statusName === 'Code Review'" [class.status-done]="item.statusName === 'Done'" [attr.aria-expanded]="activeStatusDropdownTaskId() === item.id" (click)="toggleStatusDropdown(item.id, $event)"><span>{{ item.statusName }}</span><span class="material-symbols-outlined" aria-hidden="true">expand_more</span></button>
+                    <ng-template cdkConnectedOverlay [cdkConnectedOverlayOrigin]="statusOrigin" [cdkConnectedOverlayOpen]="activeStatusDropdownTaskId() === item.id" [cdkConnectedOverlayPositions]="endAlignedOverlayPositions" [cdkConnectedOverlayHasBackdrop]="true" cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop" [cdkConnectedOverlayPush]="true" [cdkConnectedOverlayViewportMargin]="12" (backdropClick)="activeStatusDropdownTaskId.set(null)" (detach)="activeStatusDropdownTaskId.set(null)">
+                      <div class="overlay-panel option-menu status-menu" role="menu">@for (status of statusNames(); track status) { <button type="button" role="menuitem" (click)="updateInlineStatus(item.id, status, $event); activeStatusDropdownTaskId.set(null)"><span class="status-pill" [class.status-todo]="status === 'To Do'" [class.status-progress]="status === 'In Progress'" [class.status-review]="status === 'Code Review'" [class.status-done]="status === 'Done'">{{ status }}</span>@if (item.statusName === status) { <span class="material-symbols-outlined">check</span> }</button> }</div>
+                    </ng-template>
+                  </div>
+
+                  <div class="cell-assignee" [title]="item.assigneeName || 'Chưa gán'"><span class="assignee-avatar">{{ getAssigneeInitials(item.assigneeName) }}</span><span>{{ item.assigneeName || 'Chưa gán' }}</span></div>
+
+                  <div class="cell-menu no-drawer">
+                    <button #menuOrigin="cdkOverlayOrigin" cdkOverlayOrigin type="button" class="icon-button icon-button-small" title="Thêm thao tác" [attr.aria-expanded]="activeMenuTaskId() === item.id" (click)="toggleRowMenu(item.id, $event)"><span class="material-symbols-outlined" aria-hidden="true">more_vert</span></button>
+                    <ng-template cdkConnectedOverlay [cdkConnectedOverlayOrigin]="menuOrigin" [cdkConnectedOverlayOpen]="activeMenuTaskId() === item.id" [cdkConnectedOverlayPositions]="endAlignedOverlayPositions" [cdkConnectedOverlayHasBackdrop]="true" cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop" [cdkConnectedOverlayPush]="true" [cdkConnectedOverlayViewportMargin]="12" (backdropClick)="activeMenuTaskId.set(null)" (detach)="activeMenuTaskId.set(null)">
+                      <div class="overlay-panel option-menu action-menu" role="menu"><button type="button" role="menuitem" (click)="assignToMe(item.id, $event)"><span class="material-symbols-outlined">person_add</span><span>Gán cho tôi</span></button><button type="button" role="menuitem" (click)="openSubtaskInput(item.id, $event); activeMenuTaskId.set(null)"><span class="material-symbols-outlined">account_tree</span><span>Thêm Sub-task</span></button><button type="button" role="menuitem" (click)="cloneItem(item.id, $event)"><span class="material-symbols-outlined">content_copy</span><span>Nhân bản</span></button><div class="menu-separator"></div><div class="menu-label">Chuyển Sprint</div>@for (sprint of sprints(); track sprint.id) { <button type="button" role="menuitem" (click)="updateWorkItemSprint(item.id, sprint.id, sprint.name, $event); activeMenuTaskId.set(null)"><span class="material-symbols-outlined">arrow_forward</span><span>{{ sprint.name }}</span></button> }<button type="button" role="menuitem" (click)="updateWorkItemSprint(item.id, 'sp-backlog', 'Backlog Pool', $event); activeMenuTaskId.set(null)"><span class="material-symbols-outlined">inbox</span><span>Backlog</span></button><div class="menu-separator"></div><button type="button" role="menuitem" class="danger-menu-item" (click)="deleteItem(item.id, $event)"><span class="material-symbols-outlined">delete</span><span>Xóa công việc</span></button></div>
+                    </ng-template>
+                  </div>
+                </div>
+
+                @if (activeSubtaskInputId() === item.id) { <div class="subtask-create"><span class="material-symbols-outlined" aria-hidden="true">subdirectory_arrow_right</span><input type="text" [(ngModel)]="subtaskTitleMap[item.id]" (keyup.enter)="createInlineSubtask(item.id)" placeholder="Tên Sub-task mới" /><button type="button" class="button button-primary" (click)="createInlineSubtask(item.id)">Thêm</button><button type="button" class="button button-secondary" (click)="activeSubtaskInputId.set(null)">Hủy</button></div> }
+                @if (expandedSubtasks()[item.id]) { <div class="subtask-list">@for (subtask of subtasks; track subtask.id) { <button type="button" class="subtask-row" (click)="openTask(subtask, $event)"><span class="material-symbols-outlined" aria-hidden="true">subdirectory_arrow_right</span><strong>{{ subtask.issueKey }}</strong><span>{{ subtask.title }}</span><span class="status-pill" [class.status-todo]="subtask.statusName === 'To Do'" [class.status-progress]="subtask.statusName === 'In Progress'" [class.status-review]="subtask.statusName === 'Code Review'" [class.status-done]="subtask.statusName === 'Done'">{{ subtask.statusName }}</span></button> }</div> }
+              </div>
+            }
+          </div>
+        } @else { <div class="empty-state"><span class="material-symbols-outlined" aria-hidden="true">inbox</span><p>Backlog đang trống.</p></div> }
       </article>
     </main>
   </div>
 
   @if (selectedTaskIds().length > 0) {
-    <aside class="bulk-toolbar" aria-label="Thao tác hàng loạt"><strong>{{ selectedTaskIds().length }} đã chọn</strong><select aria-label="Đổi trạng thái" (change)="bulkChangeStatus($any($event.target).value)"><option value="" disabled selected>Đổi trạng thái</option><option value="To Do">To Do</option><option value="In Progress">In Progress</option><option value="Code Review">Code Review</option><option value="Done">Done</option></select><select aria-label="Chuyển Sprint" (change)="bulkChangeSprint($any($event.target).value, 'Sprint đã chọn')"><option value="" disabled selected>Chuyển Sprint</option>@for (sprint of sprints(); track sprint.id) { <option [value]="sprint.id">{{ sprint.name }}</option> }</select><button type="button" class="danger-button" (click)="bulkDeleteTasks()">Xóa</button><button type="button" class="icon-button icon-button-dark" title="Bỏ chọn" (click)="clearSelection()"><span class="material-symbols-outlined" aria-hidden="true">close</span></button></aside>
+    <aside class="bulk-toolbar" aria-label="Thao tác hàng loạt"><strong>{{ selectedTaskIds().length }} đã chọn</strong><select aria-label="Đổi trạng thái" (change)="bulkChangeStatus($any($event.target).value)"><option value="" disabled selected>Đổi trạng thái</option>@for (stName of statusNames(); track stName) { <option [value]="stName">{{ stName }}</option> }</select><select aria-label="Chuyển Sprint" (change)="bulkChangeSprint($any($event.target).value, 'Sprint đã chọn')"><option value="" disabled selected>Chuyển Sprint</option>@for (sprint of sprints(); track sprint.id) { <option [value]="sprint.id">{{ sprint.name }}</option> }</select><button type="button" class="danger-button" (click)="bulkDeleteTasks()">Xóa</button><button type="button" class="icon-button icon-button-dark" title="Bỏ chọn" (click)="clearSelection()"><span class="material-symbols-outlined" aria-hidden="true">close</span></button></aside>
   }
 
   @if (showNewEpicModal()) {
@@ -309,86 +471,6 @@
   }
 </section>
 }
-
-<ng-template #workItemList let-items>
-  <div class="work-item-table">
-    <div class="work-item-header" aria-hidden="true"><span></span><span>Mã</span><span>Công việc</span><span>Epic</span><span>Ưu tiên</span><span>SP</span><span>Trạng thái</span><span>Người xử lý</span><span></span></div>
-    @for (item of items; track item.id) {
-      @let subtasks = getSubtasks(item.id);
-      <div class="work-item-group">
-        <div 
-          cdkDrag
-          [cdkDragData]="item"
-          (contextmenu)="onContextMenu($event, item)"
-          (dblclick)="startEditingTaskTitle(item, $event)"
-          (click)="onWorkItemRowClick(item, $event)"
-          class="work-item-row interactive-card cursor-pointer" 
-          [class.is-selected]="isTaskSelected(item.id)"
-        >
-          <div class="cell-select no-drawer flex items-center gap-1.5">
-            <span cdkDragHandle class="material-symbols-outlined drag-handle text-[18px] text-slate-400 hover:text-slate-700 cursor-grab active:cursor-grabbing select-none shrink-0" title="Giữ để di chuyển">drag_indicator</span>
-            <input type="checkbox" [checked]="isTaskSelected(item.id)" [attr.aria-label]="'Chọn ' + item.issueKey" (change)="toggleTaskSelection(item.id, $event)" />
-            @if (subtasks.length > 0) {
-              <button type="button" class="icon-button icon-button-small" [title]="expandedSubtasks()[item.id] ? 'Thu gọn Sub-task' : 'Mở Sub-task'" (click)="toggleSubtasks(item.id, $event)">
-                <span class="material-symbols-outlined" aria-hidden="true">{{ expandedSubtasks()[item.id] ? 'expand_more' : 'chevron_right' }}</span>
-              </button>
-            }
-          </div>
-          <div class="cell-key cursor-pointer" (click)="openTask(item, $event)"><span class="material-symbols-outlined issue-type-icon" [ngClass]="getIssueTypeColorClass(item.issueType)" [title]="item.issueType" aria-hidden="true">{{ getIssueTypeIcon(item.issueType) }}</span><strong>{{ item.issueKey }}</strong></div>
-          <div class="cell-title flex items-center gap-1.5 flex-wrap">
-            @if (editingTaskId() === item.id) { <input class="title-input" type="text" [ngModel]="editingTaskTitle()" (ngModelChange)="editingTaskTitle.set($event)" (click)="$event.stopPropagation()" (keyup.enter)="saveEditingTaskTitle(item.id)" (blur)="saveEditingTaskTitle(item.id)" /> } @else { <button type="button" class="task-title-button" (click)="openTask(item, $event)">{{ item.title }}</button><button type="button" class="edit-title-button" title="Sửa tên công việc" (click)="startEditingTaskTitle(item, $event)"><span class="material-symbols-outlined" aria-hidden="true">edit</span></button> }
-            @if (isItemReady(item)) {
-              <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200" title="Sẵn sàng thực hiện"><span class="material-symbols-outlined text-[12px] text-emerald-600">check_circle</span>Ready</span>
-            }
-            @if (item.isBlocked) {
-              <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200" [title]="item.blockReason"><span class="material-symbols-outlined text-[12px] text-rose-600">block</span>Blocked</span>
-            }
-            @if (subtasks.length > 0) { <span class="subtask-count">{{ getSubtaskProgress(item.id).done }}/{{ subtasks.length }} Sub-task</span> }
-          </div>
-
-          <div class="cell-epic no-drawer">
-            <button #epicOrigin="cdkOverlayOrigin" cdkOverlayOrigin type="button" class="epic-pill" [attr.aria-expanded]="activeEpicDropdownTaskId() === item.id" (click)="toggleEpicDropdown(item.id, $event)"><span>{{ item.epicName || 'Gán Epic' }}</span><span class="material-symbols-outlined" aria-hidden="true">expand_more</span></button>
-            <ng-template cdkConnectedOverlay [cdkConnectedOverlayOrigin]="epicOrigin" [cdkConnectedOverlayOpen]="activeEpicDropdownTaskId() === item.id" [cdkConnectedOverlayPositions]="startAlignedOverlayPositions" [cdkConnectedOverlayHasBackdrop]="true" cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop" [cdkConnectedOverlayPush]="true" [cdkConnectedOverlayViewportMargin]="12" (backdropClick)="activeEpicDropdownTaskId.set(null)" (detach)="activeEpicDropdownTaskId.set(null)">
-              <div class="overlay-panel option-menu" role="menu"><div class="overlay-title"><strong>Chọn Epic</strong></div><button type="button" role="menuitem" (click)="selectTaskEpic(item.id, null, $event)"><span>Không gán Epic</span>@if (!item.epicName) { <span class="material-symbols-outlined">check</span> }</button>@for (epic of epics(); track epic.id) { <button type="button" role="menuitem" class="epic-option" (click)="selectTaskEpic(item.id, epic.name, $event)"><span>{{ epic.name }}</span>@if (item.epicName === epic.name) { <span class="material-symbols-outlined">check</span> }</button> }</div>
-            </ng-template>
-          </div>
-
-          <button type="button" class="cell-priority no-drawer" [class.priority-urgent]="item.priority === 'Urgent'" [class.priority-high]="item.priority === 'High'" title="Bấm để chuyển mức ưu tiên" (click)="updateInlinePriorityNext(item.id, item.priority, $event)">{{ item.priority }}</button>
-
-          <div class="cell-points no-drawer flex items-center gap-1">
-            @if (editingStoryPointsTaskId() === item.id) {
-              <input type="number" min="0" max="999" [ngModel]="editingStoryPointsValue()" (ngModelChange)="editingStoryPointsValue.set($event)" (click)="$event.stopPropagation()" (keyup.enter)="saveStoryPoints(item.id, $event)" (blur)="saveStoryPoints(item.id, $event)" aria-label="Story Points" />
-            } @else {
-              <button type="button" title="Sửa Story Points" (click)="startEditingStoryPoints(item, $event)">{{ item.storyPoints }}</button>
-            }
-            <button type="button" class="icon-button icon-button-small" (click)="openPoker(item, undefined, $event)" title="Planning Poker ước lượng online">
-              <span class="material-symbols-outlined text-[15px] text-primary" aria-hidden="true">style</span>
-            </button>
-          </div>
-
-          <div class="cell-status no-drawer">
-            <button #statusOrigin="cdkOverlayOrigin" cdkOverlayOrigin type="button" class="status-pill" [class.status-todo]="item.statusName === 'To Do'" [class.status-progress]="item.statusName === 'In Progress'" [class.status-review]="item.statusName === 'Code Review'" [class.status-done]="item.statusName === 'Done'" [attr.aria-expanded]="activeStatusDropdownTaskId() === item.id" (click)="toggleStatusDropdown(item.id, $event)"><span>{{ item.statusName }}</span><span class="material-symbols-outlined" aria-hidden="true">expand_more</span></button>
-            <ng-template cdkConnectedOverlay [cdkConnectedOverlayOrigin]="statusOrigin" [cdkConnectedOverlayOpen]="activeStatusDropdownTaskId() === item.id" [cdkConnectedOverlayPositions]="endAlignedOverlayPositions" [cdkConnectedOverlayHasBackdrop]="true" cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop" [cdkConnectedOverlayPush]="true" [cdkConnectedOverlayViewportMargin]="12" (backdropClick)="activeStatusDropdownTaskId.set(null)" (detach)="activeStatusDropdownTaskId.set(null)">
-              <div class="overlay-panel option-menu status-menu" role="menu">@for (status of statusNames(); track status) { <button type="button" role="menuitem" (click)="updateInlineStatus(item.id, status, $event); activeStatusDropdownTaskId.set(null)"><span class="status-pill" [class.status-todo]="status === 'To Do'" [class.status-progress]="status === 'In Progress'" [class.status-review]="status === 'Code Review'" [class.status-done]="status === 'Done'">{{ status }}</span>@if (item.statusName === status) { <span class="material-symbols-outlined">check</span> }</button> }</div>
-            </ng-template>
-          </div>
-
-          <div class="cell-assignee" [title]="item.assigneeName || 'Chưa gán'"><span class="assignee-avatar">{{ getAssigneeInitials(item.assigneeName) }}</span><span>{{ item.assigneeName || 'Chưa gán' }}</span></div>
-
-          <div class="cell-menu no-drawer">
-            <button #menuOrigin="cdkOverlayOrigin" cdkOverlayOrigin type="button" class="icon-button icon-button-small" title="Thêm thao tác" [attr.aria-expanded]="activeMenuTaskId() === item.id" (click)="toggleRowMenu(item.id, $event)"><span class="material-symbols-outlined" aria-hidden="true">more_vert</span></button>
-            <ng-template cdkConnectedOverlay [cdkConnectedOverlayOrigin]="menuOrigin" [cdkConnectedOverlayOpen]="activeMenuTaskId() === item.id" [cdkConnectedOverlayPositions]="endAlignedOverlayPositions" [cdkConnectedOverlayHasBackdrop]="true" cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop" [cdkConnectedOverlayPush]="true" [cdkConnectedOverlayViewportMargin]="12" (backdropClick)="activeMenuTaskId.set(null)" (detach)="activeMenuTaskId.set(null)">
-              <div class="overlay-panel option-menu action-menu" role="menu"><button type="button" role="menuitem" (click)="assignToMe(item.id, $event)"><span class="material-symbols-outlined">person_add</span><span>Gán cho tôi</span></button><button type="button" role="menuitem" (click)="openSubtaskInput(item.id, $event); activeMenuTaskId.set(null)"><span class="material-symbols-outlined">account_tree</span><span>Thêm Sub-task</span></button><button type="button" role="menuitem" (click)="cloneItem(item.id, $event)"><span class="material-symbols-outlined">content_copy</span><span>Nhân bản</span></button><div class="menu-separator"></div><div class="menu-label">Chuyển Sprint</div>@for (sprint of sprints(); track sprint.id) { <button type="button" role="menuitem" (click)="updateWorkItemSprint(item.id, sprint.id, sprint.name, $event); activeMenuTaskId.set(null)"><span class="material-symbols-outlined">arrow_forward</span><span>{{ sprint.name }}</span></button> }<button type="button" role="menuitem" (click)="updateWorkItemSprint(item.id, 'sp-backlog', 'Backlog Pool', $event); activeMenuTaskId.set(null)"><span class="material-symbols-outlined">inbox</span><span>Backlog</span></button><div class="menu-separator"></div><button type="button" role="menuitem" class="danger-menu-item" (click)="deleteItem(item.id, $event)"><span class="material-symbols-outlined">delete</span><span>Xóa công việc</span></button></div>
-            </ng-template>
-          </div>
-        </div>
-
-        @if (activeSubtaskInputId() === item.id) { <div class="subtask-create"><span class="material-symbols-outlined" aria-hidden="true">subdirectory_arrow_right</span><input type="text" [(ngModel)]="subtaskTitleMap[item.id]" (keyup.enter)="createInlineSubtask(item.id)" placeholder="Tên Sub-task mới" /><button type="button" class="button button-primary" (click)="createInlineSubtask(item.id)">Thêm</button><button type="button" class="button button-secondary" (click)="activeSubtaskInputId.set(null)">Hủy</button></div> }
-        @if (expandedSubtasks()[item.id]) { <div class="subtask-list">@for (subtask of subtasks; track subtask.id) { <button type="button" class="subtask-row" (click)="openTask(subtask, $event)"><span class="material-symbols-outlined" aria-hidden="true">subdirectory_arrow_right</span><strong>{{ subtask.issueKey }}</strong><span>{{ subtask.title }}</span><span class="status-pill" [class.status-todo]="subtask.statusName === 'To Do'" [class.status-progress]="subtask.statusName === 'In Progress'" [class.status-review]="subtask.statusName === 'Code Review'" [class.status-done]="subtask.statusName === 'Done'">{{ subtask.statusName }}</span></button> }</div> }
-      </div>
-    }
-  </div>
-</ng-template>
 
 <!-- ========================================== -->
 <!-- 1. PLANNING POKER MODAL                     -->

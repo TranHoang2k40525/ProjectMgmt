@@ -158,6 +158,53 @@ public class SpecHubStorageService : ISpecHubStorageService
                 return new DocxPreviewDto(fileName, "<p class='text-slate-400'>Tệp Word không chứa nội dung tài liệu chuẩn.</p>", "");
             }
 
+            // 1. Trích xuất tất cả hình ảnh từ word/_rels/document.xml.rels và word/media/
+            var imageMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var relsEntry = archive.GetEntry("word/_rels/document.xml.rels");
+            if (relsEntry != null)
+            {
+                await using var relsStream = relsEntry.Open();
+                var relsDoc = await XDocument.LoadAsync(relsStream, LoadOptions.None, cancellationToken);
+                XNamespace relsNs = "http://schemas.openxmlformats.org/package/2006/relationships";
+                foreach (var rel in relsDoc.Descendants(relsNs + "Relationship"))
+                {
+                    var id = rel.Attribute("Id")?.Value;
+                    var type = rel.Attribute("Type")?.Value ?? "";
+                    var target = rel.Attribute("Target")?.Value ?? "";
+
+                    if (!string.IsNullOrEmpty(id) && type.EndsWith("/image", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(target))
+                    {
+                        var mediaPath = target.StartsWith("media/", StringComparison.OrdinalIgnoreCase)
+                            ? "word/" + target
+                            : target.StartsWith("word/", StringComparison.OrdinalIgnoreCase)
+                                ? target
+                                : "word/" + target.TrimStart('/');
+
+                        var mediaEntry = archive.GetEntry(mediaPath) ?? archive.Entries.FirstOrDefault(e => e.FullName.EndsWith(Path.GetFileName(target), StringComparison.OrdinalIgnoreCase));
+                        if (mediaEntry != null)
+                        {
+                            await using var mediaStream = mediaEntry.Open();
+                            using var ms = new MemoryStream();
+                            await mediaStream.CopyToAsync(ms, cancellationToken);
+                            var bytes = ms.ToArray();
+                            var ext = Path.GetExtension(mediaEntry.FullName).ToLowerInvariant();
+                            var mime = ext switch
+                            {
+                                ".png" => "image/png",
+                                ".jpg" or ".jpeg" => "image/jpeg",
+                                ".gif" => "image/gif",
+                                ".webp" => "image/webp",
+                                ".svg" => "image/svg+xml",
+                                ".bmp" => "image/bmp",
+                                _ => "image/png"
+                            };
+                            imageMap[id] = $"data:{mime};base64,{Convert.ToBase64String(bytes)}";
+                        }
+                    }
+                }
+            }
+
+            // 2. Phân tích cú pháp word/document.xml
             await using var entryStream = entry.Open();
             var doc = await XDocument.LoadAsync(entryStream, LoadOptions.None, cancellationToken);
             XNamespace w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
@@ -165,30 +212,86 @@ public class SpecHubStorageService : ISpecHubStorageService
             var body = doc.Root?.Element(w + "body");
             if (body != null)
             {
+                var usedImages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
                 foreach (var element in body.Elements())
                 {
                     if (element.Name == w + "p")
                     {
-                        var pText = string.Concat(element.Descendants(w + "t").Select(t => t.Value));
-                        if (string.IsNullOrWhiteSpace(pText)) continue;
+                        // Kiểm tra hình ảnh trong paragraph
+                        var imagesInP = new List<string>();
+                        foreach (var blip in element.Descendants().Where(d => d.Name.LocalName == "blip" || d.Name.LocalName == "imagedata"))
+                        {
+                            var rId = blip.Attributes().FirstOrDefault(a => a.Name.LocalName == "embed" || a.Name.LocalName == "id" || a.Name.LocalName == "href")?.Value;
+                            if (!string.IsNullOrEmpty(rId) && imageMap.TryGetValue(rId, out var dataUri))
+                            {
+                                imagesInP.Add(dataUri);
+                                usedImages.Add(rId);
+                            }
+                        }
 
-                        rawTextBuilder.AppendLine(pText);
+                        // Lấy text và formatting từ các runs
+                        var pRunsHtml = new StringBuilder();
+                        var pRawText = new StringBuilder();
+
+                        foreach (var run in element.Elements(w + "r"))
+                        {
+                            var runText = string.Concat(run.Descendants(w + "t").Select(t => t.Value));
+                            if (string.IsNullOrEmpty(runText)) continue;
+
+                            pRawText.Append(runText);
+                            var rPr = run.Element(w + "rPr");
+                            var isBold = rPr?.Element(w + "b") != null;
+                            var isItalic = rPr?.Element(w + "i") != null;
+                            var isUnderline = rPr?.Element(w + "u") != null;
+                            var isStrike = rPr?.Element(w + "strike") != null;
+                            var color = rPr?.Element(w + "color")?.Attribute(w + "val")?.Value;
+
+                            var encoded = System.Net.WebUtility.HtmlEncode(runText);
+                            if (isStrike) encoded = $"<s>{encoded}</s>";
+                            if (isUnderline) encoded = $"<u>{encoded}</u>";
+                            if (isItalic) encoded = $"<em>{encoded}</em>";
+                            if (isBold) encoded = $"<strong>{encoded}</strong>";
+                            if (!string.IsNullOrEmpty(color) && color != "auto")
+                            {
+                                encoded = $"<span style='color: #{color};'>{encoded}</span>";
+                            }
+
+                            pRunsHtml.Append(encoded);
+                        }
+
+                        var pText = pRawText.ToString();
+                        if (!string.IsNullOrWhiteSpace(pText))
+                        {
+                            rawTextBuilder.AppendLine(pText);
+                        }
 
                         // Kiểm tra heading
                         var pStyle = element.Element(w + "pPr")?.Element(w + "pStyle")?.Attribute(w + "val")?.Value;
                         if (!string.IsNullOrEmpty(pStyle) && pStyle.StartsWith("Heading", StringComparison.OrdinalIgnoreCase))
                         {
                             var level = pStyle.Length > 7 && char.IsDigit(pStyle[7]) ? pStyle[7] : '2';
-                            htmlBuilder.Append($"<h{level} class='text-lg font-bold text-slate-900 dark:text-white mt-4 mb-2'>{System.Net.WebUtility.HtmlEncode(pText)}</h{level}>");
+                            htmlBuilder.Append($"<h{level} class='font-bold text-slate-900 dark:text-white mt-5 mb-2 leading-tight {(level == '1' ? "text-2xl border-b pb-1" : level == '2' ? "text-xl" : "text-lg")}'>{pRunsHtml}</h{level}>");
                         }
-                        else
+                        else if (pRunsHtml.Length > 0)
                         {
-                            htmlBuilder.Append($"<p class='text-sm text-slate-700 dark:text-slate-200 mb-2 leading-relaxed'>{System.Net.WebUtility.HtmlEncode(pText)}</p>");
+                            htmlBuilder.Append($"<p class='text-sm text-slate-800 dark:text-slate-200 mb-2.5 leading-relaxed'>{pRunsHtml}</p>");
+                        }
+                        else if (imagesInP.Count == 0)
+                        {
+                            // Empty paragraph spacing
+                            htmlBuilder.Append("<div class='h-2'></div>");
+                        }
+
+                        // Xuất hình ảnh đính kèm theo đoạn
+                        foreach (var imgData in imagesInP)
+                        {
+                            htmlBuilder.Append($"<div class='my-4 flex justify-center'><img src='{imgData}' class='max-w-full h-auto rounded-lg shadow border border-slate-200 dark:border-slate-700' style='max-height: 550px;' alt='Hình ảnh tài liệu' /></div>");
                         }
                     }
                     else if (element.Name == w + "tbl")
                     {
-                        htmlBuilder.Append("<div class='overflow-x-auto my-4'><table class='min-w-full divide-y divide-slate-200 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 text-xs text-left'>");
+                        htmlBuilder.Append("<div class='overflow-x-auto my-5 rounded-lg border border-slate-200 dark:border-slate-700 shadow-xs'><table class='min-w-full divide-y divide-slate-200 dark:divide-slate-800 text-xs text-left'>");
                         var isFirstRow = true;
                         foreach (var row in element.Elements(w + "tr"))
                         {
@@ -199,11 +302,11 @@ public class SpecHubStorageService : ISpecHubStorageService
                                 rawTextBuilder.Append(cellText + "\t");
                                 if (isFirstRow)
                                 {
-                                    htmlBuilder.Append($"<th class='px-3 py-2 bg-slate-100 dark:bg-slate-800 font-bold border-r border-slate-200 dark:border-slate-800'>{System.Net.WebUtility.HtmlEncode(cellText)}</th>");
+                                    htmlBuilder.Append($"<th class='px-3 py-2.5 bg-slate-100 dark:bg-slate-800 font-bold border-r border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white'>{System.Net.WebUtility.HtmlEncode(cellText)}</th>");
                                 }
                                 else
                                 {
-                                    htmlBuilder.Append($"<td class='px-3 py-2 border-t border-r border-slate-200 dark:border-slate-800'>{System.Net.WebUtility.HtmlEncode(cellText)}</td>");
+                                    htmlBuilder.Append($"<td class='px-3 py-2 border-t border-r border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200'>{System.Net.WebUtility.HtmlEncode(cellText)}</td>");
                                 }
                             }
                             htmlBuilder.Append("</tr>");
@@ -211,6 +314,15 @@ public class SpecHubStorageService : ISpecHubStorageService
                             rawTextBuilder.AppendLine();
                         }
                         htmlBuilder.Append("</table></div>");
+                    }
+                }
+
+                // Nếu còn hình ảnh nào chưa được chèn trong body, xuất toàn bộ ở cuối tài liệu
+                foreach (var kvp in imageMap)
+                {
+                    if (!usedImages.Contains(kvp.Key))
+                    {
+                        htmlBuilder.Append($"<div class='my-4 flex justify-center'><img src='{kvp.Value}' class='max-w-full h-auto rounded-lg shadow border border-slate-200 dark:border-slate-700' style='max-height: 550px;' alt='Hình ảnh tài liệu' /></div>");
                     }
                 }
             }
