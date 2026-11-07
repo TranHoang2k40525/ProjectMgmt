@@ -21,11 +21,11 @@
 
 <!-- Global Topbar Header -->
 <header
-  class="app-topbar fixed top-0 w-full h-14 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between px-3 sm:px-4 transition-all shadow-xs">
+  class="app-topbar fixed top-0 w-full h-14 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between px-3 transition-all shadow-xs">
   <!-- Topbar Left: Brand & Collapsible Toggle -->
   <div class="flex items-center gap-2 sm:gap-3 shrink-0">
     <button (click)="toggleSidebar()" title="Thu / Mở Sidebar Menu"
-      class="w-8 h-8 rounded-md flex items-center justify-center text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">
+      class="w-10 h-10 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">
       <span class="material-symbols-outlined text-[20px]">menu</span>
     </button>
 
@@ -195,23 +195,27 @@
 <div class="pt-14 flex min-h-screen bg-slate-50 dark:bg-slate-950">
 
   <!-- App-Level Left Sidebar Navigation -->
-  <aside [class.w-60]="isSidebarExpanded()" [class.w-14]="!isSidebarExpanded()"
+  <aside [class.w-60]="isSidebarExpanded()" [class.w-16]="!isSidebarExpanded()"
     [class.-translate-x-full]="!isSidebarExpanded()" [class.translate-x-0]="isSidebarExpanded()"
-    class="app-sidebar lg:translate-x-0 fixed left-0 top-14 bottom-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-r border-slate-200/80 dark:border-slate-800 flex flex-col justify-between p-2.5 select-none transition-all duration-200 ease-out shadow-xl lg:shadow-none">
-    <div class="flex flex-col gap-3 overflow-x-hidden">
+    class="app-sidebar lg:translate-x-0 fixed left-0 top-14 bottom-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-r border-slate-200/80 dark:border-slate-800 flex flex-col justify-between py-3 px-2 select-none transition-all duration-200 ease-out shadow-xl lg:shadow-none">
+    <div class="flex flex-col gap-3 overflow-x-hidden w-full" [class.items-center]="!isSidebarExpanded()">
 
       <!-- Điều hướng theo 2 cấp: trang chủ (Dành cho bạn, Gần đây, Tổ chức) và tổ chức (Dành cho bạn, Gần đây, Dự án, Cài đặt) -->
-      <nav class="flex flex-col gap-1" [attr.aria-label]="sidebarOrg() ? 'Điều hướng tổ chức' : 'Điều hướng chính'">
+      <nav class="flex flex-col gap-1 w-full" [attr.aria-label]="sidebarOrg() ? 'Điều hướng tổ chức' : 'Điều hướng chính'">
         @if (sidebarOrg(); as org) {
         <a routerLink="/for-you" title="Tất cả tổ chức"
-          class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-primary dark:hover:bg-slate-800 whitespace-nowrap">
+          [class.w-10]="!isSidebarExpanded()" [class.h-10]="!isSidebarExpanded()" [class.p-0]="!isSidebarExpanded()" [class.justify-center]="!isSidebarExpanded()" [class.mx-auto]="!isSidebarExpanded()"
+          [class.w-full]="isSidebarExpanded()" [class.px-3]="isSidebarExpanded()" [class.py-1.5]="isSidebarExpanded()"
+          class="flex items-center gap-2 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-primary dark:hover:bg-slate-800 whitespace-nowrap transition-colors">
           <span class="material-symbols-outlined text-[18px] shrink-0" aria-hidden="true">arrow_back</span>
           @if (isSidebarExpanded()) { <span class="truncate">Tất cả tổ chức</span> }
         </a>
         <a [routerLink]="['/orgs', org.id, 'overview']" [title]="org.name"
-          class="flex items-center gap-2.5 px-3 py-2 mb-1 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800">
+          [class.w-10]="!isSidebarExpanded()" [class.h-10]="!isSidebarExpanded()" [class.p-0]="!isSidebarExpanded()" [class.justify-center]="!isSidebarExpanded()" [class.mx-auto]="!isSidebarExpanded()"
+          [class.w-full]="isSidebarExpanded()" [class.px-3]="isSidebarExpanded()" [class.py-2]="isSidebarExpanded()"
+          class="flex items-center gap-2.5 mb-1 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
           <span
-            class="w-8 h-8 rounded-lg bg-primary-container text-white flex items-center justify-center font-bold text-sm shrink-0"
+            class="w-8 h-8 rounded-lg bg-primary-container text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-2xs"
             aria-hidden="true">{{ org.name.charAt(0).toUpperCase() }}</span>
           @if (isSidebarExpanded()) {
           <span class="min-w-0">
@@ -227,8 +231,10 @@
           [class.bg-primary/10]="currentUrl().includes('/orgs/' + org.id + '/overview')"
           [class.text-primary]="currentUrl().includes('/orgs/' + org.id + '/overview')"
           [class.font-bold]="currentUrl().includes('/orgs/' + org.id + '/overview')"
+          [class.w-10]="!isSidebarExpanded()" [class.h-10]="!isSidebarExpanded()" [class.p-0]="!isSidebarExpanded()" [class.justify-center]="!isSidebarExpanded()" [class.mx-auto]="!isSidebarExpanded()"
+          [class.w-full]="isSidebarExpanded()" [class.px-3]="isSidebarExpanded()" [class.py-2.5]="isSidebarExpanded()"
           [title]="'Tổng quan tổ chức ' + org.name"
-          class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors whitespace-nowrap">
+          class="flex items-center gap-3 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors whitespace-nowrap">
           <span class="material-symbols-outlined text-[20px] shrink-0" aria-hidden="true">dashboard</span>
           @if (isSidebarExpanded()) { <span class="truncate">Tổng quan</span> }
         </a>
@@ -236,7 +242,9 @@
 
         <a [routerLink]="['/orgs', org.id, 'projects']" routerLinkActive="bg-primary/10 text-primary font-bold"
           ariaCurrentWhenActive="page" title="Danh sách dự án của tổ chức"
-          class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors whitespace-nowrap">
+          [class.w-10]="!isSidebarExpanded()" [class.h-10]="!isSidebarExpanded()" [class.p-0]="!isSidebarExpanded()" [class.justify-center]="!isSidebarExpanded()" [class.mx-auto]="!isSidebarExpanded()"
+          [class.w-full]="isSidebarExpanded()" [class.px-3]="isSidebarExpanded()" [class.py-2.5]="isSidebarExpanded()"
+          class="flex items-center gap-3 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors whitespace-nowrap">
           <span class="material-symbols-outlined text-[20px] shrink-0" aria-hidden="true">folder_open</span>
           @if (isSidebarExpanded()) { <span class="truncate">Dự án</span> }
         </a>
@@ -274,7 +282,9 @@
         @if (isOrgOwner(org)) {
         <a [routerLink]="['/orgs', org.id, 'settings']" routerLinkActive="bg-primary/10 text-primary font-bold"
           title="Cài đặt tổ chức (chỉ chủ tổ chức)"
-          class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors whitespace-nowrap">
+          [class.w-10]="!isSidebarExpanded()" [class.h-10]="!isSidebarExpanded()" [class.p-0]="!isSidebarExpanded()" [class.justify-center]="!isSidebarExpanded()" [class.mx-auto]="!isSidebarExpanded()"
+          [class.w-full]="isSidebarExpanded()" [class.px-3]="isSidebarExpanded()" [class.py-2.5]="isSidebarExpanded()"
+          class="flex items-center gap-3 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors whitespace-nowrap">
           <span class="material-symbols-outlined text-[20px] shrink-0" aria-hidden="true">settings</span>
           @if (isSidebarExpanded()) { <span class="truncate">Cài đặt</span> }
         </a>
@@ -303,7 +313,9 @@
         } @else {
         <a routerLink="/for-you" routerLinkActive="bg-primary/10 text-primary font-bold" ariaCurrentWhenActive="page"
           [title]="!isSidebarExpanded() ? 'Dành cho bạn' : 'Công việc của bạn trên mọi tổ chức'"
-          class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors whitespace-nowrap">
+          [class.w-10]="!isSidebarExpanded()" [class.h-10]="!isSidebarExpanded()" [class.p-0]="!isSidebarExpanded()" [class.justify-center]="!isSidebarExpanded()" [class.mx-auto]="!isSidebarExpanded()"
+          [class.w-full]="isSidebarExpanded()" [class.px-3]="isSidebarExpanded()" [class.py-2.5]="isSidebarExpanded()"
+          class="flex items-center gap-3 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors whitespace-nowrap">
           <span class="material-symbols-outlined text-[20px] shrink-0" aria-hidden="true">account_circle</span>
           @if (isSidebarExpanded()) { <span class="truncate">Dành cho bạn</span> }
           @if (currentUrl() !== '/for-you' && focus.primary().score > 20) {
@@ -313,7 +325,8 @@
         <ng-container [ngTemplateOutlet]="recentNav" />
 
         <div
-          class="flex items-center justify-between px-3 pt-3 pb-1 border-t border-slate-200/60 dark:border-slate-800 mt-2">
+          class="flex items-center justify-between pt-3 pb-1 border-t border-slate-200/60 dark:border-slate-800 mt-2 w-full"
+          [class.px-3]="isSidebarExpanded()" [class.px-0]="!isSidebarExpanded()" [class.justify-center]="!isSidebarExpanded()">
           @if (isSidebarExpanded()) {
           <span id="sidebar-orgs-heading" class="text-xs font-bold uppercase tracking-wider text-slate-400">Tổ chức ({{
             organizations().length }})</span>
@@ -322,19 +335,21 @@
             <span class="material-symbols-outlined text-[18px]" aria-hidden="true">add</span>
           </button>
           } @else {
-          <span class="w-full flex justify-center text-slate-400" title="Tổ chức">
+          <span class="w-10 h-6 mx-auto flex items-center justify-center text-slate-400" title="Tổ chức">
             <span class="material-symbols-outlined text-[18px]" aria-hidden="true">corporate_fare</span>
           </span>
           }
         </div>
         <ul [attr.aria-labelledby]="isSidebarExpanded() ? 'sidebar-orgs-heading' : null"
-          [attr.aria-label]="isSidebarExpanded() ? null : 'Tổ chức'" class="flex flex-col gap-0.5">
+          [attr.aria-label]="isSidebarExpanded() ? null : 'Tổ chức'" class="flex flex-col gap-0.5 w-full">
           @for (org of organizations(); track org.id) {
-          <li>
+          <li class="flex justify-center w-full">
             <a [routerLink]="['/orgs', org.id, 'overview']" [title]="org.name"
-              class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-100 hover:text-primary dark:hover:bg-slate-800 whitespace-nowrap">
+              [class.w-10]="!isSidebarExpanded()" [class.h-10]="!isSidebarExpanded()" [class.p-0]="!isSidebarExpanded()" [class.justify-center]="!isSidebarExpanded()" [class.mx-auto]="!isSidebarExpanded()"
+              [class.w-full]="isSidebarExpanded()" [class.px-3]="isSidebarExpanded()" [class.py-2]="isSidebarExpanded()"
+              class="flex items-center gap-2.5 rounded-xl text-sm font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-100 hover:text-primary dark:hover:bg-slate-800 whitespace-nowrap transition-colors">
               <span
-                class="w-6 h-6 rounded-md bg-primary-container text-white flex items-center justify-center font-bold text-xs shrink-0"
+                class="w-7 h-7 rounded-md bg-primary-container text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs"
                 aria-hidden="true">{{ org.name.charAt(0).toUpperCase() }}</span>
               @if (isSidebarExpanded()) {
               <span class="truncate flex-1">{{ org.name }}</span>
@@ -365,11 +380,13 @@
 
       <!-- Gần đây: dùng chung cho cả 2 cấp; ở trong tổ chức chỉ hiện mục của tổ chức đó -->
       <ng-template #recentNav>
-        <div class="relative">
+        <div class="relative w-full">
           <button type="button" (click)="toggleRecentFlyout()" [attr.aria-expanded]="isRecentFlyoutOpen()"
             [title]="sidebarOrg() ? 'Gần đây trong ' + sidebarOrg()!.name : 'Tổ chức, dự án và công việc bạn mở gần đây'"
-            class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left whitespace-nowrap cursor-pointer">
-            <span class="flex items-center gap-3 min-w-0">
+            [class.w-10]="!isSidebarExpanded()" [class.h-10]="!isSidebarExpanded()" [class.p-0]="!isSidebarExpanded()" [class.justify-center]="!isSidebarExpanded()" [class.mx-auto]="!isSidebarExpanded()"
+            [class.w-full]="isSidebarExpanded()" [class.px-3]="isSidebarExpanded()" [class.py-2.5]="isSidebarExpanded()" [class.justify-between]="isSidebarExpanded()"
+            class="flex items-center rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left whitespace-nowrap cursor-pointer">
+            <span class="flex items-center gap-3 min-w-0" [class.justify-center]="!isSidebarExpanded()" [class.w-full]="!isSidebarExpanded()">
               <span class="material-symbols-outlined text-[20px] shrink-0" aria-hidden="true">schedule</span>
               @if (isSidebarExpanded()) { <span class="truncate">Gần đây</span> }
             </span>
@@ -380,7 +397,7 @@
           </button>
           @if (isRecentFlyoutOpen()) {
           <div class="fixed inset-0 z-40 bg-transparent" (click)="closeFlyouts()" aria-hidden="true"></div>
-          <div [class.left-60]="isSidebarExpanded()" [class.left-14]="!isSidebarExpanded()"
+          <div [class.left-60]="isSidebarExpanded()" [class.left-16]="!isSidebarExpanded()"
             class="fixed top-16 z-50 w-72 sm:w-80 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-4 flex flex-col gap-3 animate-fade-in transition-all">
             <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
               <span class="text-sm font-bold text-slate-900 dark:text-white truncate">{{ sidebarOrg() ? 'Gần đây · ' +
@@ -403,10 +420,12 @@
     </div>
 
     <!-- Logout Footer -->
-    <div class="flex flex-col gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-800">
+    <div class="flex flex-col gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-800 w-full" [class.items-center]="!isSidebarExpanded()">
       <button (click)="logout()" title="Đăng xuất khỏi tài khoản hệ thống"
-        class="flex items-center gap-3 w-full px-3 py-2 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer whitespace-nowrap">
-        <span class="material-symbols-outlined text-[20px] shrink-0">logout</span>
+        [class.w-10]="!isSidebarExpanded()" [class.h-10]="!isSidebarExpanded()" [class.p-0]="!isSidebarExpanded()" [class.justify-center]="!isSidebarExpanded()" [class.mx-auto]="!isSidebarExpanded()"
+        [class.w-full]="isSidebarExpanded()" [class.px-3]="isSidebarExpanded()" [class.py-2]="isSidebarExpanded()" [class.gap-3]="isSidebarExpanded()"
+        class="flex items-center rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer whitespace-nowrap">
+        <span class="material-symbols-outlined text-[20px] shrink-0" aria-hidden="true">logout</span>
         @if (isSidebarExpanded()) {
         <span class="truncate">Đăng xuất</span>
         }
@@ -414,13 +433,13 @@
     </div>
   </aside>
 
-  <!-- Main Content Area (Responsive Padding: lg:pl-60 or lg:pl-14, pl-0 on mobile/tablet) -->
-  <main [class.lg:pl-60]="isSidebarExpanded()" [class.lg:pl-14]="!isSidebarExpanded()"
+  <!-- Main Content Area (Responsive Padding: lg:pl-60 or lg:pl-16, pl-0 on mobile/tablet) -->
+  <main [class.lg:pl-60]="isSidebarExpanded()" [class.lg:pl-16]="!isSidebarExpanded()"
     [class.pt-14]="isProjectRoute() && projectService.hasActiveProject()"
     class="app-main w-full pl-0 min-w-0 min-h-[calc(100vh-3.5rem)] flex flex-col transition-all duration-200 ease-out">
     <!-- Context-Aware Project Navigation Sub-Header (PERMANENTLY FIXED top-14, 1-Row Non-Wrapping) -->
     @if (isProjectRoute() && projectService.hasActiveProject()) {
-    <div [class.lg:left-60]="isSidebarExpanded()" [class.lg:left-14]="!isSidebarExpanded()"
+    <div [class.lg:left-60]="isSidebarExpanded()" [class.lg:left-16]="!isSidebarExpanded()"
       class="project-context-bar left-0 fixed top-14 right-0 z-30 h-14 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800 pl-3 sm:pl-6 pr-3 sm:pr-4 flex items-center justify-between gap-2 sm:gap-3 shadow-xs transition-all duration-200 select-none overflow-hidden">
 
       <!-- Project Navigation Tabs (Unified Single Line, Standard Typography & Height) -->
