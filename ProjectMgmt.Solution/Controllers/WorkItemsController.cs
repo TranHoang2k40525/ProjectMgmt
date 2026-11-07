@@ -5,11 +5,15 @@ using DeliveryIntelligence.Application.Services;
 using DeliveryIntelligence.Domain.Entities;
 using DeliveryIntelligence.Domain.UseCases;
 using DeliveryIntelligence.Infrastructure;
+using IdentityExperience.Application.Dto;
+using IdentityExperience.Application.IServices;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Planning.Domain.Entities;
 using Planning.Infrastructure;
 using ProjectMgmt.IdentityAccess.Contracts;
+using ProjectMgmt.Solution.Realtime;
 using ProjectMgmt.Solution.Security;
 
 namespace ProjectMgmt.Solution.Controllers;
@@ -168,7 +172,23 @@ public sealed class WorkItemsController(
         }
         if (issue.AssigneeId != assignee && (id.HasValue || assignee != access.UserId) && !await access.AllowsAsync(projectId, "issue.assign")) return Denied();
         var priorityName = request.Priority == "Urgent" ? "Highest" : request.Priority;
-        var priority = await planning.Priorities.AsNoTracking().FirstOrDefaultAsync(p => p.Name == request.Priority || p.Name == priorityName);
+        var priority = await planning.Priorities.AsNoTracking()
+            .Where(p => p.ProjectId == projectId && (p.Name == request.Priority || p.Name == priorityName || p.Id.ToString() == request.Priority))
+            .FirstOrDefaultAsync();
+
+        priority ??= await planning.Priorities.AsNoTracking()
+            .Where(p => p.ProjectId == null && (p.Name == request.Priority || p.Name == priorityName || p.Id.ToString() == request.Priority))
+            .FirstOrDefaultAsync();
+
+        priority ??= await planning.Priorities.AsNoTracking()
+            .Where(p => p.Name == request.Priority || p.Name == priorityName)
+            .FirstOrDefaultAsync();
+
+        priority ??= await planning.Priorities.AsNoTracking()
+            .Where(p => p.ProjectId == projectId || p.ProjectId == null)
+            .OrderBy(p => p.Level)
+            .FirstOrDefaultAsync();
+
         if (priority is null) return Invalid("Độ ưu tiên không hợp lệ.");
         if (request.Labels.Count > 30 || request.Labels.Any(l => string.IsNullOrWhiteSpace(l) || l.Length > 100)) return Invalid("Nhãn không hợp lệ.");
         var previousStatus = issue.StatusId;
@@ -234,7 +254,12 @@ public sealed class WorkItemsController(
     }
 
     [HttpPost("issues/{id:guid}/comments")]
-    public async Task<IActionResult> AddComment(Guid id, CommentRequest request, [FromServices] IIssueCollaborationService collaboration)
+    public async Task<IActionResult> AddComment(
+        Guid id,
+        CommentRequest request,
+        [FromServices] IIssueCollaborationService collaboration,
+        [FromServices] INotificationServices notifications,
+        [FromServices] IHubContext<NotificationHub> hub)
     {
         var issue = await delivery.Issues.AsNoTracking().SingleOrDefaultAsync(i => i.Id == id && !i.IsDeleted);
         if (issue is null) return NotFound();
@@ -244,7 +269,84 @@ public sealed class WorkItemsController(
             Content = request.Content, ParentCommentId = request.ParentCommentId, MentionedUserIds = request.MentionedUserIds
         }, access.UserId);
         if (added.IsFailure) return Invalid(added.Error.Description);
-        return Ok((await Views([issue])).Single());
+
+        var workItemViews = await Views([issue]);
+        var workItemView = workItemViews.Single();
+
+        // 1. Tên người bình luận
+        var commenter = await userLookup.GetDisplayInfoAsync(access.UserId);
+        var commenterName = commenter?.DisplayName ?? "Một thành viên";
+
+        // 2. Danh sách người nhận thông báo: Người được gán (Assignee), Người tạo (Reporter), Người được nhắc (@mentions)
+        var recipients = new HashSet<Guid>();
+        if (issue.AssigneeId.HasValue && issue.AssigneeId.Value != Guid.Empty && issue.AssigneeId.Value != access.UserId)
+        {
+            recipients.Add(issue.AssigneeId.Value);
+        }
+        if (issue.ReporterId != Guid.Empty && issue.ReporterId != access.UserId)
+        {
+            recipients.Add(issue.ReporterId);
+        }
+        if (request.MentionedUserIds != null)
+        {
+            foreach (var mId in request.MentionedUserIds)
+            {
+                if (mId != Guid.Empty && mId != access.UserId)
+                {
+                    recipients.Add(mId);
+                }
+            }
+        }
+
+        // 3. Gửi thông báo đến từng người nhận
+        var previewContent = request.Content.Length > 150 ? request.Content[..150] + "..." : request.Content;
+        foreach (var recipientId in recipients)
+        {
+            try
+            {
+                var isAssignee = issue.AssigneeId.HasValue && issue.AssigneeId.Value == recipientId;
+                var isMention = request.MentionedUserIds != null && request.MentionedUserIds.Contains(recipientId);
+                var title = isMention
+                    ? $"{commenterName} đã nhắc đến bạn trong bình luận công việc [{workItemView.IssueKey}]"
+                    : isAssignee
+                        ? $"{commenterName} đã bình luận về công việc bạn được giao [{workItemView.IssueKey}]"
+                        : $"{commenterName} đã bình luận về công việc [{workItemView.IssueKey}]";
+
+                await notifications.PublishAsync(new NotificationDto
+                {
+                    UserId = recipientId,
+                    ActorId = access.UserId,
+                    Type = "issue_comment",
+                    Title = title,
+                    Content = previewContent,
+                    EntityType = "Issue",
+                    EntityId = issue.Id,
+                    ProjectId = issue.ProjectId
+                });
+            }
+            catch
+            {
+                // Thông báo là kênh phụ
+            }
+        }
+
+        // 4. Phát SignalR realtime cho tất cả clients
+        try
+        {
+            await hub.Clients.All.SendAsync("WorkItemCommentAdded", new
+            {
+                issueId = issue.Id,
+                projectId = issue.ProjectId,
+                comment = added.Value,
+                workItem = workItemView
+            });
+        }
+        catch
+        {
+            // Bỏ qua lỗi kết nối realtime nếu hub ngắt
+        }
+
+        return Ok(workItemView);
     }
 
     [HttpPost("projects/{projectId:guid}/sprints")]

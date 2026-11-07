@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output, computed, inject, signal } from '@angular/core';
+import { ChangeDetectorRef, Component, EventEmitter, Input, Output, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -7,6 +7,7 @@ import { ProjectManagementService, WorkItem } from '../../../core/services/proje
 import { IdentityService } from '../../../core/services/identity.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { ConfirmDialogService } from '../../../core/services/confirm-dialog.service';
+import { RealtimeService } from '../../../core/realtime/realtime.service';
 import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
 
 @Component({
@@ -303,7 +304,7 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
               <div class="flex items-center justify-between">
                 <span class="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                   <span class="material-symbols-outlined text-[15px] text-slate-500">chat_bubble_outline</span>
-                  <span>Bình luận ({{ (task.comments?.length || 0) }})</span>
+                  <span>Bình luận ({{ localComments().length }})</span>
                 </span>
                 <a [routerLink]="['/issues', task.id]" (click)="dismissed.emit()" class="text-xs text-slate-500 hover:text-slate-900 underline flex items-center gap-1">
                   <span>Trang chi tiết</span>
@@ -520,7 +521,16 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
   `]
 })
 export class TaskDetailDrawerComponent {
-  @Input() task: WorkItem | null = null;
+  @Input() set task(val: WorkItem | null) {
+    this._task = val;
+    this.localComments.set(val?.comments ? [...val.comments] : []);
+  }
+  get task(): WorkItem | null {
+    return this._task;
+  }
+  private _task: WorkItem | null = null;
+  readonly localComments = signal<any[]>([]);
+
   @Output() dismissed = new EventEmitter<void>();
 
   readonly projectService = inject(ProjectManagementService);
@@ -528,6 +538,8 @@ export class TaskDetailDrawerComponent {
   private readonly toastService = inject(ToastService);
   private readonly confirmDialog = inject(ConfirmDialogService);
   private readonly aiApi = inject(AiBreakdownApi, { optional: true });
+  private readonly realtimeService = inject(RealtimeService, { optional: true });
+  private readonly cdr = inject(ChangeDetectorRef);
 
   readonly drawerWidth = signal<number>(640);
   private isResizing = false;
@@ -555,9 +567,28 @@ export class TaskDetailDrawerComponent {
   });
 
   readonly sortedComments = computed(() => {
-    if (!this.task?.comments) return [];
-    return [...this.task.comments].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const list = this.localComments();
+    return [...list].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   });
+
+  constructor() {
+    this.realtimeService?.on<{ issueId: string; comment: any; workItem: WorkItem }>('WorkItemCommentAdded', payload => {
+      if (!payload || !this.task || payload.issueId !== this.task.id) return;
+      if (payload.workItem?.comments) {
+        this.task.comments = payload.workItem.comments;
+        this.localComments.set([...payload.workItem.comments]);
+      } else if (payload.comment) {
+        this.localComments.update(list => {
+          if (list.some(c => c.id === payload.comment.id)) return list;
+          return [payload.comment, ...list];
+        });
+        if (this.task) {
+          this.task.comments = this.localComments();
+        }
+      }
+      this.cdr.markForCheck();
+    });
+  }
 
   readonly isSubtaskComposerOpen = signal(false);
   readonly newSubtaskTitle = signal('');
@@ -942,10 +973,12 @@ export class TaskDetailDrawerComponent {
         next: updated => {
           if (this.task && this.task.id === updated.id) {
             this.task.comments = updated.comments;
+            this.localComments.set(updated.comments ? [...updated.comments] : []);
           }
           this.toastService.success('Bình luận', 'Đã đăng bình luận thành công.');
           this.newCommentText = '';
           this.showMentionDropdown.set(false);
+          this.cdr.markForCheck();
         },
         error: () => {
           this.toastService.error('Bình luận', 'Không thể gửi bình luận lên máy chủ.');
