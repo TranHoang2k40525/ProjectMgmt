@@ -62,6 +62,6 @@ export abstract class WorkspaceDataSource {
 
   /** Công việc giao cho người dùng hiện tại; orgId để lọc theo tổ chức. */
   abstract listMyWork(orgId?: string): Observable<WorkItemSummary[]>;
-  abstract listRecent(orgId?: string): Observable<RecentItem[]>;
+  abstract listRecent(orgId?: string, limit?: number): Observable<RecentItem[]>;
   abstract recordVisit(request: RecordVisitRequest): Observable<void>;
 }

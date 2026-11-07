@@ -312,8 +312,11 @@ export class WorkspaceApiDataSource extends WorkspaceDataSource {
     }));
   }
 
-  listRecent(orgId?: string): Observable<RecentItem[]> {
-    const params = orgId ? new HttpParams().set('orgId', orgId) : new HttpParams();
+  listRecent(orgId?: string, limit: number = 100): Observable<RecentItem[]> {
+    let params = new HttpParams().set('limit', limit.toString());
+    if (orgId) {
+      params = params.set('orgId', orgId);
+    }
     return this.http.get<RecentItem[]>(`${this.base}/users/me/recent`, { params }).pipe(catchError(() => of([])));
   }
 

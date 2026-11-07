@@ -180,20 +180,22 @@ public sealed class WorkspaceController : ControllerBase
     #region 1. Gần đây (Recent Visits)
 
     [HttpGet("api/users/me/recent")]
-    public async Task<IActionResult> GetRecentVisits([FromQuery] Guid? orgId)
+    public async Task<IActionResult> GetRecentVisits([FromQuery] Guid? orgId, [FromQuery] int limit = 100)
     {
         if (CurrentUserId == Guid.Empty) return Unauthorized();
         await EnsureConnectionOpenAsync();
 
+        var safeLimit = Math.Clamp(limit > 0 ? limit : 100, 1, 500);
+
         var list = new List<RecentItemDto>();
         await using var cmd = _db.CreateCommand();
-        cmd.CommandText = @"
+        cmd.CommandText = $@"
             SELECT Kind, ItemId, Title, Subtitle, OrgId, VisitedAt
             FROM UserRecentVisit
             WHERE UserId = @userId
               AND (@orgId IS NULL OR OrgId = @orgId)
             ORDER BY VisitedAt DESC
-            LIMIT 20;";
+            LIMIT {safeLimit};";
         cmd.Parameters.AddWithValue("@userId", CurrentUserId.ToString());
         cmd.Parameters.AddWithValue("@orgId", orgId.HasValue ? orgId.Value.ToString() : (object)DBNull.Value);
 
