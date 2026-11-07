@@ -276,7 +276,7 @@ public sealed class WorkItemsController(
     private static object SprintView(Sprint s, List<Issue> issues) => new { s.Id, s.ProjectId, s.Name, s.Goal, s.StartDate, s.EndDate, status = s.Status == "Active" ? "active" : s.Status == "Completed" ? "completed" : "future", workItemsCount = issues.Count(i => i.SprintId == s.Id), totalStoryPoints = issues.Where(i => i.SprintId == s.Id).Sum(i => i.StoryPoints ?? 0) };
 
     [HttpPost("issues/{id:guid}/attachments")]
-    [RequestSizeLimit(50 * 1024 * 1024)]
+    [RequestSizeLimit(100 * 1024 * 1024)]
     public async Task<IActionResult> Upload(Guid id, IFormFile? file, [FromServices] IIssueCollaborationService collaboration)
     {
         if (file is null || file.Length == 0) return BadRequest(new { error = "Tệp đính kèm không được để trống." });

@@ -320,9 +320,15 @@ export class AppShellComponent {
     this.isMobileSearchOpen.update(value => !value);
   }
 
-  /** Cài đặt tổ chức chỉ hiện với người tạo tổ chức. */
-  isOrgOwner(org: OrganizationSummary): boolean {
-    return org.ownerId === this.workspace.currentUserId();
+  /** Cài đặt tổ chức chỉ hiện với người tạo tổ chức hoặc Quản trị viên hệ thống. */
+  isOrgOwner(org: OrganizationSummary | null | undefined): boolean {
+    if (!org) return false;
+    if (this.identity.isSystemAdmin()) return true;
+    const myId = this.identity.authState().currentUser?.id;
+    if (!myId) return false;
+    if (org.myRole === 'Owner') return true;
+    if (org.ownerId && org.ownerId.toLowerCase() === myId.toLowerCase()) return true;
+    return false;
   }
 
   projectsOf(orgId: string): Project[] {

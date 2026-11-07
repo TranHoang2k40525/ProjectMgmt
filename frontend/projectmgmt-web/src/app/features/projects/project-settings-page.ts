@@ -15,6 +15,7 @@ import {
 import { ConfirmDialogService } from '../../core/services/confirm-dialog.service';
 import { ToastService } from '../../core/services/toast.service';
 import { WorkspaceDataSource } from '../workspace/data/workspace-data-source';
+import { WorkspaceContextService } from '../workspace/workspace-context.service';
 import { WorkflowSettingsPage } from './workflow-settings-page';
 import { BoardSettingsPage } from './board-settings-page';
 import { ProjectMembersPageComponent } from './project-members-page';
@@ -135,7 +136,7 @@ export type ProjectSettingsTab = 'general' | 'issue-types' | 'labels' | 'priorit
         }
 
         <!-- TAB 1: THÔNG TIN CHUNG -->
-        @if (activeTab() === 'general' && project()) {
+        @if (canManageProject() && activeTab() === 'general' && project()) {
           <div class="settings-content">
             <div class="card">
               <h2>Chỉnh sửa thông tin cơ bản</h2>
@@ -208,7 +209,7 @@ export type ProjectSettingsTab = 'general' | 'issue-types' | 'labels' | 'priorit
         }
 
         <!-- TAB 2: QUẢN LÝ LOẠI CÔNG VIỆC DỘNG (ISSUE TYPES) -->
-        @if (activeTab() === 'issue-types') {
+        @if (canManageProject() && activeTab() === 'issue-types') {
           <div class="settings-content">
             <div class="card">
               <div class="flex items-center justify-between mb-4">
@@ -258,7 +259,7 @@ export type ProjectSettingsTab = 'general' | 'issue-types' | 'labels' | 'priorit
         }
 
         <!-- TAB 3: QUẢN LÝ NHÃN DÁN (LABELS) -->
-        @if (activeTab() === 'labels') {
+        @if (canManageProject() && activeTab() === 'labels') {
           <div class="settings-content">
             <div class="card">
               <div class="flex items-center justify-between mb-4">
@@ -302,7 +303,7 @@ export type ProjectSettingsTab = 'general' | 'issue-types' | 'labels' | 'priorit
         }
 
         <!-- TAB: QUẢN LÝ MỨC ĐỘ ƯU TIÊN ĐỘNG (PRIORITIES) TỪ DATABASE -->
-        @if (activeTab() === 'priorities') {
+        @if (canManageProject() && activeTab() === 'priorities') {
           <div class="settings-content">
             <div class="card">
               <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
@@ -357,14 +358,14 @@ export type ProjectSettingsTab = 'general' | 'issue-types' | 'labels' | 'priorit
         }
 
         <!-- TAB 4: CẤU HÌNH WORKFLOW -->
-        @if (activeTab() === 'workflow') {
+        @if (canManageProject() && activeTab() === 'workflow') {
           <div class="settings-content">
             <app-workflow-settings-page [embedded]="true" [projectIdInput]="projectId"></app-workflow-settings-page>
           </div>
         }
 
         <!-- TAB 5: CẤU HÌNH BOARD -->
-        @if (activeTab() === 'board') {
+        @if (canManageProject() && activeTab() === 'board') {
           <div class="settings-content">
             <app-board-settings-page [embedded]="true" [projectIdInput]="projectId"></app-board-settings-page>
           </div>
@@ -699,6 +700,7 @@ export class ProjectSettingsPage implements OnInit {
   private readonly confirmService = inject(ConfirmDialogService);
   private readonly toastService = inject(ToastService);
   private readonly workspaceData = inject(WorkspaceDataSource, { optional: true });
+  private readonly workspaceContext = inject(WorkspaceContextService, { optional: true });
   private readonly identity = inject(IdentityService);
 
   readonly canManageProject = computed(() => {
@@ -708,6 +710,10 @@ export class ProjectSettingsPage implements OnInit {
     const myName = currentUser?.displayName;
     const myEmail = currentUser?.email;
     if (!myId) return false;
+    const org = this.workspaceContext?.currentOrg();
+    if (org && (org.myRole === 'Owner' || (org.ownerId && org.ownerId.toLowerCase() === myId.toLowerCase()))) {
+      return true;
+    }
     const proj = this.project() || this.projectService.currentProject();
     if (proj) {
       if (proj.leadUserId && proj.leadUserId.toLowerCase() === myId.toLowerCase()) return true;
@@ -802,10 +808,12 @@ export class ProjectSettingsPage implements OnInit {
     const routeDataTab = this.route.snapshot.data['tab'] as ProjectSettingsTab | undefined;
     const urlPath = this.router.url;
     if (routeDataTab) {
-      this.activeTab.set(routeDataTab);
+      this.activeTab.set(!this.canManageProject() && routeDataTab !== 'members' ? 'members' : routeDataTab);
     } else if (urlPath.includes('/workflow') || urlPath.includes('/board')) {
-      this.activeTab.set('workflow');
+      this.activeTab.set(this.canManageProject() ? 'workflow' : 'members');
     } else if (urlPath.includes('/members')) {
+      this.activeTab.set('members');
+    } else if (!this.canManageProject()) {
       this.activeTab.set('members');
     }
 

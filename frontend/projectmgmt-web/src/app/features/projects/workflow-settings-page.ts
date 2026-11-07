@@ -13,7 +13,9 @@ import {
 } from '../../core/services/project-management.service';
 import { ConfirmDialogService } from '../../core/services/confirm-dialog.service';
 import { ToastService } from '../../core/services/toast.service';
+import { IdentityService } from '../../core/services/identity.service';
 import { WorkspaceDataSource } from '../workspace/data/workspace-data-source';
+import { WorkspaceContextService } from '../workspace/workspace-context.service';
 import { WorkflowTemplate as OrgWorkflowTemplate } from '../workspace/data/workspace.models';
 
 @Component({
@@ -67,6 +69,13 @@ import { WorkflowTemplate as OrgWorkflowTemplate } from '../workspace/data/works
       </div>
       }
 
+      @if (!canManageWorkflow()) {
+        <div class="p-3.5 mb-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 flex items-center gap-2.5">
+          <span class="material-symbols-outlined text-[20px] text-amber-600 shrink-0">lock</span>
+          <span class="text-xs">Chế độ xem quy trình (Chỉ đọc). Chỉ Quản lý dự án hoặc Scrum Master mới có quyền thay đổi trạng thái và luật chuyển tiếp.</span>
+        </div>
+      }
+
       @if (alertMessage()) {
         <div role="status" class="alert" [class.alert-success]="alertType() === 'success'" [class.alert-error]="alertType() === 'error'">
           {{ alertMessage() }}
@@ -93,7 +102,7 @@ import { WorkflowTemplate as OrgWorkflowTemplate } from '../workspace/data/works
               <option value="preset-enterprise">Enterprise • [Mẫu có sẵn]</option>
             }
           </select>
-          <button class="btn btn-primary flex items-center justify-center gap-1.5" [disabled]="loading() || submitting() || !project()" (click)="applyTemplate()">
+          <button class="btn btn-primary flex items-center justify-center gap-1.5" [disabled]="loading() || submitting() || !project() || !canManageWorkflow()" (click)="applyTemplate()">
             <span class="material-symbols-outlined text-[18px]">auto_fix_high</span>
             <span>{{ submitting() ? 'Đang lưu...' : 'Áp dụng mẫu này' }}</span>
           </button>
@@ -149,10 +158,12 @@ import { WorkflowTemplate as OrgWorkflowTemplate } from '../workspace/data/works
             <h3>Các bước trạng thái trong quy trình ({{ statuses().length }} bước)</h3>
             <p class="hint mb-0">Mỗi trạng thái mang cờ hành vi Scrum giúp hệ thống xác định việc hoàn thành, việc dở dang hoặc việc hủy bỏ.</p>
           </div>
+          @if (canManageWorkflow()) {
           <button type="button" (click)="openAddStatusModal()" class="btn btn-primary flex items-center gap-1.5">
             <span class="material-symbols-outlined text-[18px]">add</span>
             <span>Thêm trạng thái mới</span>
           </button>
+          }
         </div>
 
         <div class="space-y-2">
@@ -180,6 +191,7 @@ import { WorkflowTemplate as OrgWorkflowTemplate } from '../workspace/data/works
                 </div>
               </div>
 
+              @if (canManageWorkflow()) {
               <div class="flex items-center gap-1 shrink-0">
                 <button type="button" (click)="moveStatus(idx, -1)" [disabled]="idx === 0" class="p-1.5 rounded-md text-slate-400 hover:text-slate-700 disabled:opacity-20" title="Di chuyển lên">
                   <span class="material-symbols-outlined text-[18px]">arrow_upward</span>
@@ -194,14 +206,16 @@ import { WorkflowTemplate as OrgWorkflowTemplate } from '../workspace/data/works
                   <span class="material-symbols-outlined text-[18px]">delete</span>
                 </button>
               </div>
+              }
             </div>
           }
         </div>
       </div>
 
       <!-- 3. TRANSITIONS & RULES -->
-      <div class="workflow-grid">
+      <div class="workflow-grid" [class.single-column]="!canManageWorkflow()">
         <!-- Add Transition Form -->
+        @if (canManageWorkflow()) {
         <div class="card form-box">
           <h3>Thêm Transition mới</h3>
           <p class="hint">Định nghĩa một đường đi cho phép Issue di chuyển từ trạng thái nguồn sang trạng thái đích.</p>
@@ -275,6 +289,7 @@ import { WorkflowTemplate as OrgWorkflowTemplate } from '../workspace/data/works
             </button>
           </form>
         </div>
+        }
 
         <!-- Transitions List -->
         <div class="card list-box">
@@ -305,7 +320,9 @@ import { WorkflowTemplate as OrgWorkflowTemplate } from '../workspace/data/works
                     <th>Đích (To)</th>
                     <th>Tên hành động</th>
                     <th>Quyền yêu cầu</th>
-                    <th>Thao tác</th>
+                    @if (canManageWorkflow()) {
+                      <th>Thao tác</th>
+                    }
                   </tr>
                 </thead>
                 <tbody>
@@ -330,6 +347,7 @@ import { WorkflowTemplate as OrgWorkflowTemplate } from '../workspace/data/works
                           <span class="perm-none">issue.transition</span>
                         }
                       </td>
+                      @if (canManageWorkflow()) {
                       <td>
                         <button
                           type="button"
@@ -340,6 +358,7 @@ import { WorkflowTemplate as OrgWorkflowTemplate } from '../workspace/data/works
                           <span class="material-symbols-outlined text-[16px]">delete</span>
                         </button>
                       </td>
+                      }
                     </tr>
                   }
                 </tbody>
@@ -684,6 +703,40 @@ export class WorkflowSettingsPage implements OnInit {
   private readonly confirmService = inject(ConfirmDialogService);
   private readonly toastService = inject(ToastService);
   private readonly workspaceData = inject(WorkspaceDataSource, { optional: true });
+  private readonly identity = inject(IdentityService);
+  private readonly workspaceContext = inject(WorkspaceContextService, { optional: true });
+
+  readonly canManageWorkflow = computed(() => {
+    if (this.identity.isSystemAdmin()) return true;
+    const currentUser = this.identity.authState().currentUser;
+    const myId = currentUser?.id;
+    const myName = currentUser?.displayName;
+    const myEmail = currentUser?.email;
+    if (!myId) return false;
+    const org = this.workspaceContext?.currentOrg();
+    if (org && (org.myRole === 'Owner' || (org.ownerId && org.ownerId.toLowerCase() === myId.toLowerCase()))) {
+      return true;
+    }
+    const proj = this.project() || this.projectService.currentProject();
+    if (proj) {
+      if (proj.leadUserId && proj.leadUserId.toLowerCase() === myId.toLowerCase()) return true;
+      if (proj.leadName && myName && proj.leadName.toLowerCase() === myName.toLowerCase()) return true;
+      if (proj.members) {
+        const m = proj.members.find(x =>
+          (x.userId && x.userId.toLowerCase() === myId.toLowerCase()) ||
+          (x.email && myEmail && x.email.toLowerCase() === myEmail.toLowerCase()) ||
+          (x.displayName && myName && x.displayName.toLowerCase() === myName.toLowerCase())
+        );
+        if (m) {
+          const r = m.role.toLowerCase();
+          if (r.includes('lead') || r.includes('manager') || r.includes('scrum') || r.includes('director') || r.includes('admin') || r.includes('owner')) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  });
 
   @Input() embedded = false;
   @Input() projectIdInput = '';
@@ -789,11 +842,20 @@ export class WorkflowSettingsPage implements OnInit {
 
   private reportError(err: unknown): void {
     this.alertType.set('error');
-    this.alertMessage.set(apiErrorMessage(err, 'Không thể tải cấu hình workflow.'));
+    const status = (err as Record<string, unknown>)?.['status'];
+    if (status === 403) {
+      this.alertMessage.set('Bạn không có quyền thay đổi cấu hình quy trình dự án này. Thao tác này chỉ dành cho Quản lý dự án hoặc Scrum Master.');
+    } else {
+      this.alertMessage.set(apiErrorMessage(err, 'Không thể tải cấu hình workflow.'));
+    }
   }
 
   applyTemplate(): void {
     if (this.submitting() || this.loading()) return;
+    if (!this.canManageWorkflow()) {
+      this.toastService.warning('Phân quyền', 'Chỉ Quản lý dự án hoặc Scrum Master mới có quyền áp dụng mẫu quy trình.');
+      return;
+    }
     this.submitting.set(true); this.alertMessage.set(null);
     const templateToApply = this.selectedTemplateId() || this.selectedTemplate;
     this.projectService.applyWorkflowTemplateToProject(this.projectId, templateToApply).subscribe({
@@ -812,6 +874,10 @@ export class WorkflowSettingsPage implements OnInit {
 
   // --- Dynamic Status CRUD ---
   openAddStatusModal(): void {
+    if (!this.canManageWorkflow()) {
+      this.toastService.warning('Phân quyền', 'Chỉ Quản lý dự án hoặc Scrum Master mới có quyền thay đổi trạng thái.');
+      return;
+    }
     this.editingStatus.set(null);
     this.statusForm = {
       name: '',
@@ -825,6 +891,10 @@ export class WorkflowSettingsPage implements OnInit {
   }
 
   openEditStatusModal(status: ProjectStatus): void {
+    if (!this.canManageWorkflow()) {
+      this.toastService.warning('Phân quyền', 'Chỉ Quản lý dự án hoặc Scrum Master mới có quyền thay đổi trạng thái.');
+      return;
+    }
     this.editingStatus.set(status);
     this.statusForm = {
       name: status.name,
@@ -838,6 +908,7 @@ export class WorkflowSettingsPage implements OnInit {
   }
 
   saveStatus(): void {
+    if (!this.canManageWorkflow()) return;
     const name = this.statusForm.name.trim();
     if (!name) return;
 
@@ -880,6 +951,10 @@ export class WorkflowSettingsPage implements OnInit {
   }
 
   deleteStatus(status: ProjectStatus): void {
+    if (!this.canManageWorkflow()) {
+      this.toastService.warning('Phân quyền', 'Chỉ Quản lý dự án hoặc Scrum Master mới có quyền xóa trạng thái.');
+      return;
+    }
     this.confirmService.confirm({
       title: 'Xóa Trạng Thái Workflow',
       message: `Bạn có chắc muốn xóa trạng thái "${status.name}"? Nếu còn công việc trong trạng thái này, hệ thống sẽ ngăn chặn xóa.`,
@@ -900,6 +975,7 @@ export class WorkflowSettingsPage implements OnInit {
   }
 
   moveStatus(currentIndex: number, direction: -1 | 1): void {
+    if (!this.canManageWorkflow()) return;
     const list = [...this.statuses()];
     const targetIndex = currentIndex + direction;
     if (targetIndex < 0 || targetIndex >= list.length) return;
@@ -921,6 +997,10 @@ export class WorkflowSettingsPage implements OnInit {
 
   // --- Transitions ---
   onCreateTransition(): void {
+    if (!this.canManageWorkflow()) {
+      this.toastService.warning('Phân quyền', 'Chỉ Quản lý dự án hoặc Scrum Master mới có quyền tạo transition.');
+      return;
+    }
     this.alertMessage.set(null);
     if (this.submitting() || !this.project() || !this.newTransition.fromStatusId || !this.newTransition.toStatusId) return;
 
@@ -961,6 +1041,10 @@ export class WorkflowSettingsPage implements OnInit {
   }
 
   onDeleteTransition(t: WorkflowTransition): void {
+    if (!this.canManageWorkflow()) {
+      this.toastService.warning('Phân quyền', 'Chỉ Quản lý dự án hoặc Scrum Master mới có quyền xóa transition.');
+      return;
+    }
     this.confirmService.confirm({
       title: 'Xóa Luật Workflow',
       message: `Bạn có chắc muốn xóa luật chuyển trạng thái từ "${t.fromStatusName}" sang "${t.toStatusName}" không?`,

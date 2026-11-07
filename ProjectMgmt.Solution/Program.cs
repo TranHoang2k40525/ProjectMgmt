@@ -322,10 +322,9 @@ builder.Services.AddScoped<ProjectMgmt.IssueTracking.Contracts.IIssueSkillServic
 // IssueTransitionService không đăng ký: cần IWorkflowValidationService thật của Planning (ValidateOnBuild sẽ chặn khởi động).
 // IssuesController tự dựng service khi contract đó có trong DI.
 var attachmentOpts = builder.Configuration.GetSection(AttachmentOptions.SectionName).Get<AttachmentOptions>() ?? new AttachmentOptions();
-attachmentOpts.MaxFileSizeBytes = Math.Max(attachmentOpts.MaxFileSizeBytes, 50 * 1024 * 1024);
-var allowedExtSet = attachmentOpts.AllowedExtensions.ToHashSet(StringComparer.OrdinalIgnoreCase);
-allowedExtSet.UnionWith([".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".mov", ".webm", ".avi", ".pdf", ".txt", ".csv", ".docx", ".xlsx", ".zip"]);
-attachmentOpts.AllowedExtensions = [.. allowedExtSet];
+attachmentOpts.MaxFileSizeBytes = Math.Max(attachmentOpts.MaxFileSizeBytes, 100 * 1024 * 1024);
+// Cho phép tất cả các loại file (tài liệu, ảnh, mã nguồn .cs, .hs, video, v.v.) trừ danh sách mã độc BlockedExtensions
+attachmentOpts.AllowedExtensions = ["*"];
 builder.Services.AddSingleton(attachmentOpts);
 
 var attachmentsHubPath = Path.Combine(builder.Environment.ContentRootPath, "Attachments_Hub");
