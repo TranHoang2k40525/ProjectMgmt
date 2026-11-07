@@ -23,6 +23,12 @@ public sealed class WorkflowTemplateInput
     [Required] public string TemplateId { get; set; } = "";
 }
 
+public sealed class UpdateBoardModeInput
+{
+    [Required, StringLength(40)] public string Type { get; set; } = "Scrum";
+    [StringLength(150)] public string? Name { get; set; }
+}
+
 [Route("api/projects/{projectId:guid}")]
 public sealed class ProjectCustomizationController(PlanningDbContext db, DeliveryIntelligenceDbContext delivery, ProjectAccess access) : ApiControllerBase
 {
@@ -172,50 +178,56 @@ public sealed class ProjectCustomizationController(PlanningDbContext db, Deliver
     {
         if (!await access.AllowsAsync(projectId, "project.settings.manage")) return Forbid();
         var templateSteps = new List<(string Name, string Category, string? ColorHex)>();
+        string? templateManagementType = null;
         var conn = db.Database.GetDbConnection();
         if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync();
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = @"
-                SELECT StatusesJson FROM organizationworkflowtemplate
+                SELECT StatusesJson, ManagementType FROM organizationworkflowtemplate
                 WHERE IsActive = 1 AND (Id = @tid OR Code = @tid OR REPLACE(Id, 'preset-', '') = @tid)
                 LIMIT 1;";
             var p = cmd.CreateParameter();
             p.ParameterName = "@tid";
             p.Value = input.TemplateId;
             cmd.Parameters.Add(p);
-            var json = (await cmd.ExecuteScalarAsync())?.ToString();
-            if (!string.IsNullOrWhiteSpace(json))
+            await using var reader = await cmd.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
             {
-                try
+                var json = reader.IsDBNull(0) ? null : reader.GetString(0);
+                templateManagementType = reader.IsDBNull(1) ? null : reader.GetString(1);
+                if (!string.IsNullOrWhiteSpace(json))
                 {
-                    using var doc = System.Text.Json.JsonDocument.Parse(json);
-                    foreach (var elem in doc.RootElement.EnumerateArray())
+                    try
                     {
-                        var name = elem.TryGetProperty("Name", out var np) ? np.GetString()
-                            : elem.TryGetProperty("name", out var np2) ? np2.GetString() : null;
-                        if (string.IsNullOrWhiteSpace(name)) continue;
-
-                        var cat = elem.TryGetProperty("Category", out var cp) ? cp.GetString()
-                            : elem.TryGetProperty("category", out var cp2) ? cp2.GetString() : null;
-                        var color = elem.TryGetProperty("ColorHex", out var clp) ? clp.GetString()
-                            : elem.TryGetProperty("colorHex", out var clp2) ? clp2.GetString()
-                            : elem.TryGetProperty("Color", out var clp3) ? clp3.GetString()
-                            : elem.TryGetProperty("color", out var clp4) ? clp4.GetString() : null;
-
-                        var trimmedName = name.Trim();
-                        var resolvedCat = !string.IsNullOrWhiteSpace(cat) ? cat.Trim()
-                            : trimmedName.Equals("Done", StringComparison.OrdinalIgnoreCase) ? "Done"
-                            : (trimmedName.Equals("To Do", StringComparison.OrdinalIgnoreCase) || trimmedName.Equals("Backlog", StringComparison.OrdinalIgnoreCase)) ? "ToDo"
-                            : "InProgress";
-
-                        if (!templateSteps.Any(s => s.Name.Equals(trimmedName, StringComparison.OrdinalIgnoreCase)))
+                        using var doc = System.Text.Json.JsonDocument.Parse(json);
+                        foreach (var elem in doc.RootElement.EnumerateArray())
                         {
-                            templateSteps.Add((trimmedName, resolvedCat, color));
+                            var name = elem.TryGetProperty("Name", out var np) ? np.GetString()
+                                : elem.TryGetProperty("name", out var np2) ? np2.GetString() : null;
+                            if (string.IsNullOrWhiteSpace(name)) continue;
+
+                            var cat = elem.TryGetProperty("Category", out var cp) ? cp.GetString()
+                                : elem.TryGetProperty("category", out var cp2) ? cp2.GetString() : null;
+                            var color = elem.TryGetProperty("ColorHex", out var clp) ? clp.GetString()
+                                : elem.TryGetProperty("colorHex", out var clp2) ? clp2.GetString()
+                                : elem.TryGetProperty("Color", out var clp3) ? clp3.GetString()
+                                : elem.TryGetProperty("color", out var clp4) ? clp4.GetString() : null;
+
+                            var trimmedName = name.Trim();
+                            var resolvedCat = !string.IsNullOrWhiteSpace(cat) ? cat.Trim()
+                                : trimmedName.Equals("Done", StringComparison.OrdinalIgnoreCase) ? "Done"
+                                : (trimmedName.Equals("To Do", StringComparison.OrdinalIgnoreCase) || trimmedName.Equals("Backlog", StringComparison.OrdinalIgnoreCase)) ? "ToDo"
+                                : "InProgress";
+
+                            if (!templateSteps.Any(s => s.Name.Equals(trimmedName, StringComparison.OrdinalIgnoreCase)))
+                            {
+                                templateSteps.Add((trimmedName, resolvedCat, color));
+                            }
                         }
                     }
+                    catch { }
                 }
-                catch { }
             }
         }
 
@@ -324,10 +336,34 @@ public sealed class ProjectCustomizationController(PlanningDbContext db, Deliver
                 });
             }
 
-            // Đồng bộ các cột Board của dự án đúng với các trạng thái trong mẫu
+            // Đồng bộ các cột Board của dự án đúng với các trạng thái trong mẫu.
+            // Nếu dự án chưa có Board, tự động tạo Board mặc định theo loại quy trình (Scrum hoặc Kanban)
             var boards = await db.Boards.Where(b => b.ProjectId == projectId).ToListAsync();
+            if (boards.Count == 0)
+            {
+                var isKanban = string.Equals(templateManagementType, "Kanban", StringComparison.OrdinalIgnoreCase);
+                var newBoard = new Board
+                {
+                    Id = Guid.NewGuid(),
+                    ProjectId = projectId,
+                    Name = isKanban ? "Bảng Kanban" : "Bảng Scrum",
+                    Type = isKanban ? "Kanban" : "Scrum",
+                    IsDefault = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+                db.Boards.Add(newBoard);
+                boards.Add(newBoard);
+            }
+
             foreach (var board in boards)
             {
+                if (!string.IsNullOrWhiteSpace(templateManagementType))
+                {
+                    var isKanban = string.Equals(templateManagementType, "Kanban", StringComparison.OrdinalIgnoreCase);
+                    board.Type = isKanban ? "Kanban" : "Scrum";
+                    board.Name = isKanban ? "Bảng Kanban" : "Bảng Scrum";
+                }
+
                 var columns = await db.BoardColumns.Where(c => c.BoardId == board.Id).ToListAsync();
                 var obsoleteColumns = columns.Where(c => obsoleteIds.Contains(c.StatusId)).ToList();
                 if (obsoleteColumns.Count > 0)
@@ -382,5 +418,33 @@ public sealed class ProjectCustomizationController(PlanningDbContext db, Deliver
                 s.OrderIndex
             }));
         });
+    }
+
+    // Danh sách mức độ ưu tiên (Priorities) từ cơ sở dữ liệu: hỗ trợ mẫu cấu hình mặc định hoặc tùy biến theo dự án
+    [HttpGet("priorities")]
+    public async Task<IActionResult> GetPriorities(Guid projectId)
+    {
+        var list = await db.Priorities.AsNoTracking()
+            .Where(p => p.ProjectId == projectId)
+            .OrderBy(p => p.Level)
+            .ToListAsync();
+
+        if (list.Count == 0)
+        {
+            list = await db.Priorities.AsNoTracking()
+                .Where(p => p.ProjectId == null)
+                .OrderBy(p => p.Level)
+                .ToListAsync();
+        }
+
+        return Ok(list.Select(p => new
+        {
+            p.Id,
+            p.ProjectId,
+            p.Name,
+            p.Level,
+            p.ColorHex,
+            p.IconKey
+        }));
     }
 }

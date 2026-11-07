@@ -13,11 +13,12 @@ import {
 } from '../../core/services/project-management.service';
 import { ConfirmDialogService } from '../../core/services/confirm-dialog.service';
 import { ToastService } from '../../core/services/toast.service';
+import { WorkspaceDataSource } from '../workspace/data/workspace-data-source';
 import { WorkflowSettingsPage } from './workflow-settings-page';
 import { BoardSettingsPage } from './board-settings-page';
 import { ProjectMembersPageComponent } from './project-members-page';
 
-export type ProjectSettingsTab = 'general' | 'issue-types' | 'labels' | 'workflow' | 'board' | 'members';
+export type ProjectSettingsTab = 'general' | 'issue-types' | 'labels' | 'priorities' | 'workflow' | 'board' | 'members';
 
 @Component({
   selector: 'app-project-settings-page',
@@ -78,21 +79,21 @@ export type ProjectSettingsTab = 'general' | 'issue-types' | 'labels' | 'workflo
         </button>
         <button
           type="button"
+          (click)="selectTab('priorities')"
+          [class.active]="activeTab() === 'priorities'"
+          class="tab-item"
+        >
+          <span class="material-symbols-outlined text-[18px]">flag</span>
+          <span>Mức độ ưu tiên (Priorities)</span>
+        </button>
+        <button
+          type="button"
           (click)="selectTab('workflow')"
           [class.active]="activeTab() === 'workflow'"
           class="tab-item"
         >
           <span class="material-symbols-outlined text-[18px]">sync_alt</span>
-          <span>Cấu hình Workflow</span>
-        </button>
-        <button
-          type="button"
-          (click)="selectTab('board')"
-          [class.active]="activeTab() === 'board'"
-          class="tab-item"
-        >
-          <span class="material-symbols-outlined text-[18px]">view_kanban</span>
-          <span>Cấu hình Board</span>
+          <span>Cấu hình Workflow &amp; Board</span>
         </button>
         <button
           type="button"
@@ -278,6 +279,61 @@ export type ProjectSettingsTab = 'general' | 'issue-types' | 'labels' | 'workflo
                   }
                 </div>
               }
+            </div>
+          </div>
+        }
+
+        <!-- TAB: QUẢN LÝ MỨC ĐỘ ƯU TIÊN ĐỘNG (PRIORITIES) TỪ DATABASE -->
+        @if (activeTab() === 'priorities') {
+          <div class="settings-content">
+            <div class="card">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+                <div>
+                  <h2 class="text-base font-bold text-slate-900 dark:text-white">Mức độ ưu tiên công việc (Priorities)</h2>
+                  <p class="text-sm text-slate-500">
+                    Được tải và quản lý động từ cơ sở dữ liệu (bảng <code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-xs font-mono">priority</code>). Sử dụng cho việc đánh dấu và phân loại độ khẩn cấp của Story, Task, Bug.
+                  </p>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5 shrink-0">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    Mẫu chuẩn từ Cơ sở dữ liệu
+                  </span>
+                </div>
+              </div>
+
+              <div class="divide-y divide-slate-100 dark:divide-slate-800">
+                @for (p of projectPriorities(); track p.id) {
+                  <div class="py-3.5 flex items-center justify-between gap-4">
+                    <div class="flex items-center gap-3">
+                      <div class="w-9 h-9 rounded-lg flex items-center justify-center text-white shrink-0 shadow-2xs" [style.backgroundColor]="p.colorHex">
+                        <span class="material-symbols-outlined text-[20px]">{{ p.iconKey || getPriorityIcon(p.level) }}</span>
+                      </div>
+                      <div>
+                        <div class="flex items-center gap-2 flex-wrap">
+                          <span class="font-bold text-slate-800 dark:text-slate-200 text-sm">{{ p.name }}</span>
+                          <span class="px-2 py-0.5 rounded-full text-[11px] font-medium border"
+                            [class.bg-rose-50]="p.level <= 2" [class.text-rose-700]="p.level <= 2" [class.border-rose-200]="p.level <= 2"
+                            [class.bg-amber-50]="p.level === 3" [class.text-amber-700]="p.level === 3" [class.border-amber-200]="p.level === 3"
+                            [class.bg-emerald-50]="p.level >= 4" [class.text-emerald-700]="p.level >= 4" [class.border-emerald-200]="p.level >= 4">
+                            Cấp độ {{ p.level }}
+                          </span>
+                          @if (!p.projectId) {
+                            <span class="px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                              Mặc định hệ thống
+                            </span>
+                          }
+                        </div>
+                        <p class="text-xs text-slate-400 mt-0.5">Mã màu: {{ p.colorHex }} | Biểu tượng: {{ p.iconKey || getPriorityIcon(p.level) }}</p>
+                      </div>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                      <span class="w-3.5 h-3.5 rounded-full shadow-2xs" [style.backgroundColor]="p.colorHex" [title]="'Mã màu: ' + p.colorHex"></span>
+                    </div>
+                  </div>
+                }
+              </div>
             </div>
           </div>
         }
@@ -624,6 +680,7 @@ export class ProjectSettingsPage implements OnInit {
   private readonly projectService = inject(ProjectManagementService);
   private readonly confirmService = inject(ConfirmDialogService);
   private readonly toastService = inject(ToastService);
+  private readonly workspaceData = inject(WorkspaceDataSource, { optional: true });
 
   projectId = '';
   readonly activeTab = signal<ProjectSettingsTab>('general');
@@ -631,6 +688,18 @@ export class ProjectSettingsPage implements OnInit {
   readonly users = signal<UserDisplayInfo[]>([]);
   readonly issueTypes = signal<CustomIssueType[]>([]);
   readonly labels = signal<ProjectLabel[]>([]);
+  readonly projectPriorities = this.projectService.projectPriorities;
+
+  getPriorityIcon(level: number): string {
+    switch (level) {
+      case 1: return 'keyboard_double_arrow_up';
+      case 2: return 'keyboard_arrow_up';
+      case 3: return 'drag_handle';
+      case 4: return 'keyboard_arrow_down';
+      case 5: return 'keyboard_double_arrow_down';
+      default: return 'flag';
+    }
+  }
   readonly loading = signal<boolean>(false);
   readonly saving = signal<boolean>(false);
   readonly error = signal<string | null>(null);
@@ -687,18 +756,18 @@ export class ProjectSettingsPage implements OnInit {
     const urlPath = this.router.url;
     if (routeDataTab) {
       this.activeTab.set(routeDataTab);
-    } else if (urlPath.includes('/workflow')) {
+    } else if (urlPath.includes('/workflow') || urlPath.includes('/board')) {
       this.activeTab.set('workflow');
-    } else if (urlPath.includes('/board')) {
-      this.activeTab.set('board');
     } else if (urlPath.includes('/members')) {
       this.activeTab.set('members');
     }
 
     this.route.queryParamMap.subscribe(q => {
       const tab = q.get('tab') as ProjectSettingsTab | null;
-      if (tab === 'issue-types' || tab === 'labels' || tab === 'general' || tab === 'workflow' || tab === 'board' || tab === 'members') {
+      if (tab === 'issue-types' || tab === 'labels' || tab === 'priorities' || tab === 'general' || tab === 'workflow' || tab === 'members') {
         this.activeTab.set(tab);
+      } else if (tab === 'board') {
+        this.activeTab.set('workflow');
       } else if (!this.route.snapshot.data['tab'] && !this.router.url.includes('/workflow') && !this.router.url.includes('/board') && !this.router.url.includes('/members')) {
         this.activeTab.set('general');
       }
@@ -736,6 +805,28 @@ export class ProjectSettingsPage implements OnInit {
   }
 
   loadUsers(): void {
+    const orgId = this.project()?.orgId;
+    if (orgId && this.workspaceData) {
+      this.workspaceData.listMembers(orgId).subscribe({
+        next: orgMembers => {
+          if (orgMembers && orgMembers.length > 0) {
+            this.users.set(orgMembers.map(m => ({
+              userId: m.userId,
+              displayName: m.displayName || m.email,
+              avatarUrl: m.avatarUrl || undefined
+            })));
+            return;
+          }
+          this.fallbackLoadUsers();
+        },
+        error: () => this.fallbackLoadUsers()
+      });
+    } else {
+      this.fallbackLoadUsers();
+    }
+  }
+
+  private fallbackLoadUsers(): void {
     this.projectService.getUsers().subscribe({
       next: users => this.users.set(users),
       error: () => undefined
@@ -756,6 +847,7 @@ export class ProjectSettingsPage implements OnInit {
           leadUserId: p.leadUserId
         };
         this.loading.set(false);
+        this.loadUsers();
       },
       error: (err) => {
         if (!this.project()) {

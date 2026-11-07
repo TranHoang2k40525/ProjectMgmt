@@ -78,6 +78,15 @@ export interface ProjectStatus {
   orderIndex: number;
 }
 
+export interface ProjectPriority {
+  id: string;
+  projectId?: string | null;
+  name: string;
+  level: number;
+  colorHex: string;
+  iconKey?: string | null;
+}
+
 export interface ProjectLabel {
   id: string;
   projectId: string;
@@ -442,6 +451,15 @@ export class ProjectManagementService {
     { id: 'st-4', name: 'Done', category: 'Done', isInitial: false, orderIndex: 4 }
   ]);
 
+  // Project Priorities Signal (load from DB templates)
+  readonly projectPriorities = signal<ProjectPriority[]>([
+    { id: '33333333-0000-0000-0000-000000000001', name: 'Highest', level: 1, colorHex: '#CD1317', iconKey: 'keyboard_double_arrow_up' },
+    { id: '33333333-0000-0000-0000-000000000002', name: 'High', level: 2, colorHex: '#E9494B', iconKey: 'keyboard_arrow_up' },
+    { id: '33333333-0000-0000-0000-000000000003', name: 'Medium', level: 3, colorHex: '#E97F33', iconKey: 'drag_handle' },
+    { id: '33333333-0000-0000-0000-000000000004', name: 'Low', level: 4, colorHex: '#2A8735', iconKey: 'keyboard_arrow_down' },
+    { id: '33333333-0000-0000-0000-000000000005', name: 'Lowest', level: 5, colorHex: '#57A55A', iconKey: 'keyboard_double_arrow_down' }
+  ]);
+
   // Epics Signal List (real software dev epics)
   readonly epics = signal<EpicItem[]>([
     { id: 'epic-1', key: 'E-1', name: 'Kiến trúc Nền tảng & Xác thực (Auth & RBAC)', color: 'purple', description: 'Hạ tầng Microservices và bảo mật', status: 'Done' },
@@ -508,9 +526,10 @@ export class ProjectManagementService {
     forkJoin({
       data: this.http.get<{ workItems: WorkItem[]; sprints: Sprint[]; epics: EpicItem[]; statuses: ProjectStatus[] }>(`${this.baseUrl}/projects/${projectId}/workspace`),
       types: this.getIssueTypes(projectId),
-      members: this.rbac.getProjectMembers(projectId).pipe(catchError(() => of({ members: [] })))
+      members: this.rbac.getProjectMembers(projectId).pipe(catchError(() => of({ members: [] }))),
+      priorities: this.getProjectPriorities(projectId).pipe(catchError(() => of([])))
     }).subscribe({
-      next: ({ data, members, types }) => {
+      next: ({ data, members, types, priorities }) => {
         if (this.currentProject().id !== projectId) return;
         const resolvedMembers: ProjectMember[] = (members.members ?? []).map(m => ({
           id: m.userId ?? '',
@@ -553,6 +572,9 @@ export class ProjectManagementService {
           this.sprints.set(data.sprints);
           this.epics.set(data.epics);
           this.projectStatuses.set(data.statuses);
+          if (priorities && priorities.length > 0) {
+            this.projectPriorities.set(priorities);
+          }
           const openId = this.activeDrawerTask()?.id;
           if (openId) this.activeDrawerTask.set(normalizedItems.find(i => i.id === openId) ?? null);
         }
@@ -955,6 +977,11 @@ export class ProjectManagementService {
       }),
       map(() => true)
     );
+  }
+
+  // --- Dynamic Project Priorities ---
+  getProjectPriorities(projectId: string): Observable<ProjectPriority[]> {
+    return this.http.get<ProjectPriority[]>(`${this.baseUrl}/projects/${projectId}/priorities`);
   }
 
   // --- Dynamic Workflow Statuses ---

@@ -37,6 +37,14 @@ export class ProfilePageComponent implements OnInit {
     this.isAvatarModalOpen.set(true);
   }
 
+  goBackToProject(): void {
+    if (this.projectService.hasActiveProject()) {
+      this.router.navigate(['/board']);
+    } else {
+      this.router.navigate(['/for-you']);
+    }
+  }
+
   readonly contextRole = computed(() => {
     if (this.projectService.hasActiveProject()) {
       const proj = this.projectService.currentProject();

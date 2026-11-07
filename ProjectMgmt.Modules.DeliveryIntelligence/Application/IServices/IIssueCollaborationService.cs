@@ -58,7 +58,28 @@ public class AttachmentOptions
 {
     public const string SectionName = "Attachments";
 
-    public long MaxFileSizeBytes { get; set; } = 10 * 1024 * 1024;
+    public long MaxFileSizeBytes { get; set; } = 50 * 1024 * 1024; // 50MB
 
-    public string[] AllowedExtensions { get; set; } = [".pdf", ".png", ".jpg", ".jpeg", ".txt", ".csv", ".docx", ".xlsx", ".zip"];
+    /// <summary>
+    /// Các định dạng tệp thực thi / nguy cơ mã độc tuyệt đối bị cấm tải lên hệ thống.
+    /// </summary>
+    public string[] BlockedExtensions { get; set; } =
+    [
+        ".exe", ".bat", ".cmd", ".sh", ".vbs", ".msi", ".dll", ".com", ".scr", ".pif",
+        ".reg", ".ps1", ".vbe", ".jse", ".wsf", ".wsh", ".msc", ".bin", ".hta", ".cpl",
+        ".jar", ".apk"
+    ];
+
+    public string[] AllowedExtensions { get; set; } =
+    [
+        // Documents & Office
+        ".pdf", ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt", ".txt", ".csv", ".rtf", ".odt", ".ods",
+        // Images & Graphics
+        ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".ico",
+        // Source code (hỗ trợ .cs, .hs, .ts, .js, .py, .go, .rs, .c, .cpp, v.v.)
+        ".cs", ".hs", ".ts", ".js", ".py", ".c", ".cpp", ".h", ".hpp", ".java", ".go", ".rs", ".php",
+        ".rb", ".html", ".css", ".scss", ".less", ".json", ".xml", ".yaml", ".yml", ".md", ".sql",
+        // Archives
+        ".zip", ".rar", ".7z", ".tar", ".gz"
+    ];
 }

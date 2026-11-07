@@ -277,14 +277,15 @@ public sealed class WorkItemsController(
 
     [HttpPost("issues/{id:guid}/attachments")]
     [RequestSizeLimit(50 * 1024 * 1024)]
-    public async Task<IActionResult> Upload(Guid id, IFormFile file, [FromServices] IIssueCollaborationService collaboration)
+    public async Task<IActionResult> Upload(Guid id, IFormFile? file, [FromServices] IIssueCollaborationService collaboration)
     {
+        if (file is null || file.Length == 0) return BadRequest(new { error = "Tệp đính kèm không được để trống." });
         var issue = await delivery.Issues.AsNoTracking().SingleOrDefaultAsync(i => i.Id == id && !i.IsDeleted);
         if (issue is null) return NotFound();
         if (!await access.AllowsAsync(issue.ProjectId, "issue.update")) return Denied();
         await using var content = file.OpenReadStream();
         var uploaded = await collaboration.UploadAttachmentAsync(id, file.FileName, file.Length, content, access.UserId);
-        if (uploaded.IsFailure) return Invalid(uploaded.Error.Description);
+        if (uploaded.IsFailure) return BadRequest(new { error = uploaded.Error.Description });
         var attachment = uploaded.Value;
         return Ok(new { attachment.Id, attachment.FileName, attachment.FileSizeBytes, attachment.CreatedAt });
     }

@@ -17,11 +17,29 @@ public class IssueCollaborationService : IIssueCollaborationService
         [".png"] = "image/png",
         [".jpg"] = "image/jpeg",
         [".jpeg"] = "image/jpeg",
+        [".gif"] = "image/gif",
+        [".webp"] = "image/webp",
+        [".svg"] = "image/svg+xml",
         [".txt"] = "text/plain",
         [".csv"] = "text/csv",
         [".docx"] = "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        [".doc"] = "application/msword",
         [".xlsx"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        [".zip"] = "application/zip"
+        [".xls"] = "application/vnd.ms-excel",
+        [".pptx"] = "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        [".ppt"] = "application/vnd.ms-powerpoint",
+        [".zip"] = "application/zip",
+        [".rar"] = "application/x-rar-compressed",
+        [".7z"] = "application/x-7z-compressed",
+        [".cs"] = "text/plain",
+        [".hs"] = "text/plain",
+        [".ts"] = "text/plain",
+        [".js"] = "text/javascript",
+        [".py"] = "text/plain",
+        [".json"] = "application/json",
+        [".xml"] = "application/xml",
+        [".md"] = "text/markdown",
+        [".sql"] = "text/plain"
     };
 
     private readonly IIssueRepository _issues;
@@ -246,13 +264,31 @@ public class IssueCollaborationService : IIssueCollaborationService
     {
         ArgumentNullException.ThrowIfNull(content);
         var extension = Path.GetExtension(fileName ?? string.Empty).ToLowerInvariant();
-        if (length <= 0 || length > _attachmentOptions.MaxFileSizeBytes
-            || !_attachmentOptions.AllowedExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
+        if (length <= 0)
         {
-            var allowed = string.Join(", ", _attachmentOptions.AllowedExtensions);
-            return Result<AttachmentDto>.Failure(Error.Validation(
-                "ATTACHMENT_FILE_INVALID",
-                $"Chỉ nhận tệp {allowed}, tối đa {_attachmentOptions.MaxFileSizeBytes / (1024 * 1024)} MB."));
+            return Result<AttachmentDto>.Failure(Error.Validation("ATTACHMENT_EMPTY", "Tệp tải lên không được để trống."));
+        }
+
+        if (length > _attachmentOptions.MaxFileSizeBytes)
+        {
+            return Result<AttachmentDto>.Failure(Error.Validation("ATTACHMENT_TOO_LARGE",
+                $"Kích thước tệp vượt quá giới hạn cho phép ({_attachmentOptions.MaxFileSizeBytes / (1024 * 1024)} MB)."));
+        }
+
+        // Kiểm tra mã độc / tệp thực thi bị cấm
+        if (_attachmentOptions.BlockedExtensions != null && _attachmentOptions.BlockedExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
+        {
+            return Result<AttachmentDto>.Failure(Error.Validation("ATTACHMENT_MALWARE_BLOCKED",
+                "Tệp thực thi hoặc có nguy cơ độc hại (.exe, .bat, .dll, ...) bị nghiêm cấm vì lý do an toàn hệ thống."));
+        }
+
+        // Kiểm tra danh sách tệp hợp lệ nếu có cấu hình giới hạn
+        if (_attachmentOptions.AllowedExtensions != null && _attachmentOptions.AllowedExtensions.Length > 0
+            && !_attachmentOptions.AllowedExtensions.Contains("*")
+            && !_attachmentOptions.AllowedExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
+        {
+            return Result<AttachmentDto>.Failure(Error.Validation("ATTACHMENT_FILE_INVALID",
+                $"Định dạng tệp '{extension}' không được hỗ trợ. Vui lòng đính kèm tệp tài liệu, mã nguồn (.cs, .hs,...), hình ảnh hoặc nén (.zip)."));
         }
 
         if (await _issues.GetByIdAsync(issueId) is null)

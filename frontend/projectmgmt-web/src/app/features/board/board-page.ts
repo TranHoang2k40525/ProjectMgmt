@@ -52,6 +52,13 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
   readonly items = this.projectService.workItems;
   readonly epics = this.projectService.epics;
 
+  readonly boardTitle = computed(() => {
+    const p = this.projectService.currentProject();
+    if ((p as any)?.boardName) return (p as any).boardName;
+    if ((p as any)?.managementType === 'Kanban' || p?.type === 'Kanban') return 'Bảng Kanban';
+    return 'Bảng Scrum';
+  });
+
   readonly filteredItems = computed(() => {
     let list = this.items();
     const query = this.searchQuery().trim().toLowerCase();
@@ -225,7 +232,6 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
     const item = event.item.data as WorkItem;
     if (item && item.statusName !== targetStatus) {
       this.animateBoardChange(() => this.projectService.updateWorkItemStatus(item.id, targetStatus));
-      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     }
   }
 
@@ -255,14 +261,12 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
           };
           const targetStatus = statusMap[val] || val;
           this.animateBoardChange(() => this.projectService.updateWorkItemStatus(item.id, targetStatus));
-          this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
         }
         break;
 
       case 'assign': {
         const myName = this.identityService.authState().currentUser?.displayName || 'Tôi';
         this.projectService.updateWorkItemAssignee(item.id, myName);
-        this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
         break;
       }
 
@@ -278,7 +282,7 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
 
       case 'copy':
         navigator.clipboard?.writeText?.(`${item.issueKey}: ${item.title}`);
-        this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
+        this.toastService.success('Đã sao chép', `Đã chép [${item.issueKey}] vào bộ nhớ tạm.`);
         break;
 
       case 'delete':
@@ -303,7 +307,6 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
       const item = this.items().find(i => i.id === taskId);
       if (item) {
         this.projectService.updateWorkItem({ ...item, title: newTitle });
-        this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
       }
     }
     this.inlineEditingTaskId.set(null);
@@ -334,18 +337,15 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
     if (direction === 'next' && idx < statuses.length - 1) {
       const nextStatus = statuses[idx + 1];
       this.animateBoardChange(() => this.projectService.updateWorkItemStatus(task.id, nextStatus));
-      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     } else if (direction === 'prev' && idx > 0) {
       const prevStatus = statuses[idx - 1];
       this.animateBoardChange(() => this.projectService.updateWorkItemStatus(task.id, prevStatus));
-      this.toastService.info('Lùi Trạng Thái', `Công việc [${task.issueKey}] về ${prevStatus}`);
     }
   }
 
   updateInlineStatus(taskId: string, statusName: string, event?: Event): void {
     if (event) event.stopPropagation();
     this.animateBoardChange(() => this.projectService.updateWorkItemStatus(taskId, statusName));
-    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
   }
 
   updateInlineAssignee(taskId: string, assigneeName: string, event?: Event): void {
@@ -391,7 +391,6 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
     if (event) event.stopPropagation();
     const myName = this.identityService.authState().currentUser?.displayName || 'Tôi';
     this.projectService.updateWorkItemAssignee(taskId, myName);
-    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     this.activeMenuTaskId.set(null);
   }
 
@@ -399,7 +398,7 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
     if (event) event.stopPropagation();
     const cloned = this.projectService.cloneWorkItem(taskId);
     if (cloned) {
-      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
+      this.toastService.success('Nhân bản', 'Đã tạo bản sao công việc thành công.');
     }
     this.activeMenuTaskId.set(null);
   }

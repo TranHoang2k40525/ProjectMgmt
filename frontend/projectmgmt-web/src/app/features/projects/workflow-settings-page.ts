@@ -1,7 +1,7 @@
 import { forkJoin } from 'rxjs';
 import { apiErrorMessage } from '../../core/http/api-error-message';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, Input, OnInit, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, OnInit, inject, signal, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
@@ -81,16 +81,16 @@ import { WorkflowTemplate as OrgWorkflowTemplate } from '../workspace/data/works
         <h3>Áp dụng mẫu quy trình Scrum chuẩn (Từ Cơ sở dữ liệu)</h3>
         <p class="hint">Áp dụng đúng danh sách bước trạng thái, luồng chuyển tiếp và cột Board của mẫu quy trình đã chọn từ cơ sở dữ liệu.</p>
         <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
-          <select id="workflowTemplate" class="form-control sm:max-w-md" [(ngModel)]="selectedTemplate">
+          <select id="workflowTemplate" class="form-control sm:max-w-md" [ngModel]="selectedTemplateId()" (ngModelChange)="onTemplateChange($event)">
             @for (tpl of availableWorkflowTemplates(); track tpl.id) {
               <option [value]="tpl.id">
                 {{ tpl.name }} {{ tpl.isPreset ? '• [Mẫu có sẵn]' : '• [Mẫu riêng của tổ chức]' }}
               </option>
             } @empty {
-              <option value="scrum-std">Scrum tiêu chuẩn (Mặc định)</option>
-              <option value="agile-qa">Agile QA</option>
-              <option value="kanban-simple">Kanban tinh gọn</option>
-              <option value="enterprise">Doanh nghiệp</option>
+              <option value="preset-scrum-std">Scrum chuẩn • [Mẫu có sẵn]</option>
+              <option value="preset-agile-qa">Agile + QA • [Mẫu có sẵn]</option>
+              <option value="preset-kanban-simple">Kanban đơn giản • [Mẫu có sẵn]</option>
+              <option value="preset-enterprise">Enterprise • [Mẫu có sẵn]</option>
             }
           </select>
           <button class="btn btn-primary flex items-center justify-center gap-1.5" [disabled]="loading() || submitting() || !project()" (click)="applyTemplate()">
@@ -98,6 +98,48 @@ import { WorkflowTemplate as OrgWorkflowTemplate } from '../workspace/data/works
             <span>{{ submitting() ? 'Đang lưu...' : 'Áp dụng mẫu này' }}</span>
           </button>
         </div>
+
+        <!-- Xem trước ngay lập tức các bước trạng thái khi chọn bất kỳ mẫu nào -->
+        @if (selectedTemplateData(); as tpl) {
+          <div class="mt-4 pt-4 border-t border-slate-200/80 dark:border-slate-800">
+            <div class="flex items-center justify-between gap-2 mb-2.5">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-[18px] text-primary">visibility</span>
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  Xem trước các bước trong quy trình: <span class="text-primary normal-case font-bold">{{ tpl.name }}</span>
+                </span>
+              </div>
+              <span class="text-[11px] px-2 py-0.5 rounded-full font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                {{ tpl.managementType }} • {{ tpl.statuses.length }} bước trạng thái
+              </span>
+            </div>
+
+            <!-- Pipeline trạng thái trực quan -->
+            <div class="flex items-center gap-2 flex-wrap p-3 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-800">
+              @for (st of tpl.statuses; track $index; let last = $last) {
+                <div class="flex items-center gap-2">
+                  <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-2xs">
+                    <span class="w-2.5 h-2.5 rounded-full shrink-0"
+                      [class.bg-sky-500]="st.category === 'ToDo'"
+                      [class.bg-amber-500]="st.category === 'InProgress'"
+                      [class.bg-emerald-500]="st.category === 'Done'">
+                    </span>
+                    <span class="text-xs font-bold text-slate-800 dark:text-slate-200">{{ st.name }}</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                      [class.bg-sky-50]="st.category === 'ToDo'" [class.text-sky-700]="st.category === 'ToDo'"
+                      [class.bg-amber-50]="st.category === 'InProgress'" [class.text-amber-700]="st.category === 'InProgress'"
+                      [class.bg-emerald-50]="st.category === 'Done'" [class.text-emerald-700]="st.category === 'Done'">
+                      {{ st.category === 'ToDo' ? 'Khởi tạo' : st.category === 'Done' ? 'Hoàn tất' : 'Đang làm' }}
+                    </span>
+                  </div>
+                  @if (!last) {
+                    <span class="material-symbols-outlined text-[16px] text-slate-400 shrink-0">arrow_forward</span>
+                  }
+                </div>
+              }
+            </div>
+          </div>
+        }
       </div>
 
       <!-- 2. QUẢN LÝ CÁC TRẠNG THÁI QUY TRÌNH (DYNAMIC STATUSES) -->
@@ -656,7 +698,19 @@ export class WorkflowSettingsPage implements OnInit {
   readonly alertMessage = signal<string | null>(null);
   readonly alertType = signal<'success' | 'error'>('success');
 
-  selectedTemplate = 'scrum-std';
+  selectedTemplate = 'preset-scrum-std';
+  readonly selectedTemplateId = signal<string>('preset-scrum-std');
+
+  readonly selectedTemplateData = computed(() => {
+    const tid = this.selectedTemplateId();
+    const list = this.availableWorkflowTemplates();
+    return list.find(t => t.id === tid || t.id.replace('preset-', '') === tid || t.id === `preset-${tid}`) || list[0] || null;
+  });
+
+  onTemplateChange(id: string): void {
+    this.selectedTemplateId.set(id);
+    this.selectedTemplate = id;
+  }
 
   // Modal Status
   readonly showStatusModal = signal<boolean>(false);
@@ -703,7 +757,8 @@ export class WorkflowSettingsPage implements OnInit {
           this.workspaceData.listWorkflowTemplates(p.orgId).subscribe({
             next: templates => {
               this.availableWorkflowTemplates.set(templates);
-              if (templates.length > 0 && !templates.some(t => t.id === this.selectedTemplate)) {
+              if (templates.length > 0 && !templates.some(t => t.id === this.selectedTemplateId())) {
+                this.selectedTemplateId.set(templates[0].id);
                 this.selectedTemplate = templates[0].id;
               }
             },
@@ -740,14 +795,16 @@ export class WorkflowSettingsPage implements OnInit {
   applyTemplate(): void {
     if (this.submitting() || this.loading()) return;
     this.submitting.set(true); this.alertMessage.set(null);
-    this.projectService.applyWorkflowTemplateToProject(this.projectId, this.selectedTemplate).subscribe({
+    const templateToApply = this.selectedTemplateId() || this.selectedTemplate;
+    this.projectService.applyWorkflowTemplateToProject(this.projectId, templateToApply).subscribe({
       next: (statuses) => {
         this.submitting.set(false);
         this.statuses.set(statuses);
         this.alertType.set('success');
         this.alertMessage.set('Đã lưu mẫu workflow vào dự án.');
-        this.toastService.success('Mẫu Workflow', 'Đã áp dụng mẫu workflow thành công');
+        this.toastService.success('Mẫu Workflow', 'Đã áp dụng mẫu quy trình thành công.');
         this.loadWorkflowData();
+        this.projectService.loadWorkspace(this.projectId);
       },
       error: err => { this.submitting.set(false); this.reportError(err); }
     });

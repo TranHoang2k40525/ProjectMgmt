@@ -164,10 +164,9 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
                   (ngModelChange)="onFieldChange()"
                   class="h-7 px-2 rounded text-xs font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-slate-900"
                 >
-                  <option value="Low">Low</option>
-                  <option value="Medium">Medium</option>
-                  <option value="High">High</option>
-                  <option value="Urgent">Urgent</option>
+                  @for (p of availablePriorities(); track p.id) {
+                    <option [value]="p.name">{{ p.name }}</option>
+                  }
                 </select>
               </div>
 
@@ -585,6 +584,16 @@ export class TaskDetailDrawerComponent {
     const dynamic = this.projectService.projectStatuses().map(s => s.name);
     return dynamic.length > 0 ? dynamic : ['To Do', 'In Progress', 'Code Review', 'Done'];
   });
+  readonly availablePriorities = computed(() => {
+    const fromService = this.projectService.projectPriorities();
+    return fromService.length > 0 ? fromService : [
+      { id: '1', name: 'Highest', level: 1, colorHex: '#CD1317' },
+      { id: '2', name: 'High', level: 2, colorHex: '#E9494B' },
+      { id: '3', name: 'Medium', level: 3, colorHex: '#E97F33' },
+      { id: '4', name: 'Low', level: 4, colorHex: '#2A8735' },
+      { id: '5', name: 'Lowest', level: 5, colorHex: '#57A55A' }
+    ];
+  });
 
 
   getAssigneeAvatar(name?: string): string | null {
@@ -810,7 +819,6 @@ export class TaskDetailDrawerComponent {
         this.task.epicId = undefined;
       }
       this.projectService.updateWorkItem(this.task);
-      this.toastService.info('Đang lưu công việc', 'Vui lòng chờ xác nhận từ máy chủ.');
     }
   }
 
@@ -819,7 +827,7 @@ export class TaskDetailDrawerComponent {
     const title = this.newSubtaskTitle().trim();
     if (!title) return;
     this.projectService.createSubTask(this.task.id, title);
-    this.toastService.info('Đang lưu công việc con', 'Vui lòng chờ xác nhận từ máy chủ.');
+    this.toastService.success('Công việc con', 'Đã thêm công việc con.');
     this.cancelSubtaskComposer();
   }
 
@@ -832,7 +840,7 @@ export class TaskDetailDrawerComponent {
     if (!this.task) return;
     const cloned = this.projectService.cloneWorkItem(this.task.id);
     if (cloned) {
-      this.toastService.info('Đang lưu bản sao', 'Vui lòng chờ xác nhận từ máy chủ.');
+      this.toastService.success('Nhân bản', `Đã tạo bản sao cho [${this.task.issueKey}].`);
     }
   }
 
@@ -919,9 +927,10 @@ export class TaskDetailDrawerComponent {
           }
         });
       },
-      error: () => {
+      error: (err: any) => {
         this.isUploadingAttachment.set(false);
-        this.toastService.error('Đính kèm', 'Lỗi khi tải tệp đính kèm lên máy chủ.');
+        const errorMsg = err?.error?.error || err?.error?.detail || err?.error?.message || err?.message || 'Lỗi khi tải tệp đính kèm lên máy chủ.';
+        this.toastService.error('Đính kèm', errorMsg);
       }
     });
   }

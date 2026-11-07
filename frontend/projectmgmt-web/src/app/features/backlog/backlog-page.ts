@@ -144,8 +144,8 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
   isRowPopoverActive(taskId: string): boolean {
     return this.activeMenuTaskId() === taskId ||
-           this.activeStatusDropdownTaskId() === taskId ||
-           this.activeEpicDropdownTaskId() === taskId;
+      this.activeStatusDropdownTaskId() === taskId ||
+      this.activeEpicDropdownTaskId() === taskId;
   }
 
   hasSprintActivePopover(sprintId: string): boolean {
@@ -342,14 +342,12 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
           };
           const targetStatus = statusMap[val] || val;
           this.projectService.updateWorkItemStatus(item.id, targetStatus);
-          this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
         }
         break;
 
       case 'assign': {
         const myName = this.identityService.authState().currentUser?.displayName || 'Tôi';
         this.projectService.updateWorkItemAssignee(item.id, myName);
-        this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
         break;
       }
 
@@ -365,7 +363,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
       case 'copy':
         navigator.clipboard?.writeText?.(`${item.issueKey}: ${item.title}`);
-        this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
+        this.toastService.success('Đã sao chép', `Đã sao chép [${item.issueKey}] vào bộ nhớ tạm.`);
         break;
 
       case 'delete':
@@ -410,7 +408,6 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     if (title) {
       const item = this.workItems().find(task => task.id === taskId);
       if (item) this.projectService.updateWorkItem({ ...item, title });
-      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     }
     this.editingTaskId.set(null);
   }
@@ -426,19 +423,28 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     const value = Math.max(0, Math.min(999, Number(this.editingStoryPointsValue()) || 0));
     this.projectService.updateWorkItemStoryPoints(taskId, value);
     this.editingStoryPointsTaskId.set(null);
-    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
   }
 
   updateInlinePriorityNext(taskId: string, currentPriority: WorkItem['priority'], event?: Event): void {
     if (event) event.stopPropagation();
-    const map: Record<WorkItem['priority'], WorkItem['priority']> = {
-      'Low': 'Medium',
-      'Medium': 'High',
-      'High': 'Urgent',
-      'Urgent': 'Low'
-    };
-    const nextP = map[currentPriority] || 'Medium';
-    this.projectService.updateWorkItemPriority(taskId, nextP);
+    const priorities = this.projectService.projectPriorities();
+    if (priorities && priorities.length > 0) {
+      const names = priorities.map(p => p.name);
+      const idx = names.findIndex(n => n.toLowerCase() === (currentPriority || '').toLowerCase());
+      const nextIdx = (idx + 1) % names.length;
+      this.projectService.updateWorkItemPriority(taskId, names[nextIdx]);
+    } else {
+      const map: Record<string, string> = {
+        'Low': 'Medium',
+        'Medium': 'High',
+        'High': 'Urgent',
+        'Urgent': 'Low',
+        'Highest': 'High',
+        'Lowest': 'Low'
+      };
+      const nextP = map[currentPriority] || 'Medium';
+      this.projectService.updateWorkItemPriority(taskId, nextP);
+    }
   }
 
   toggleStatusDropdown(taskId: string, event: Event): void {
@@ -929,7 +935,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     const name = this.editingSprintName().trim();
     if (name) {
       this.projectService.updateSprintInfo(sprintId, name, this.editingStartDate(), this.editingEndDate(), this.editingSprintGoal());
-      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
+      this.toastService.success('Cập nhật Sprint', `Đã cập nhật thông tin Sprint "${name}".`);
     }
     this.editingSprintId.set(null);
   }
@@ -955,7 +961,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
   createSprint(): void {
     this.projectService.addNewSprint();
-    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
+    this.toastService.success('Tạo Sprint', 'Đã thêm Sprint mới.');
   }
 
   getAssigneeInitials(name?: string): string {
@@ -997,8 +1003,9 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
   createEpic(): void {
     if (!this.newEpicName.trim()) return;
-    this.projectService.addEpic(this.newEpicName.trim(), this.newEpicColor);
-    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
+    const name = this.newEpicName.trim();
+    this.projectService.addEpic(name, this.newEpicColor);
+    this.toastService.success('Tạo Epic', `Đã tạo Epic "${name}".`);
     this.newEpicName = '';
     this.showNewEpicModal.set(false);
   }
@@ -1055,7 +1062,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     if (!title || !title.trim()) return;
 
     this.projectService.createSubTask(parentId, title.trim());
-    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
+    this.toastService.success('Thêm việc con', 'Đã thêm công việc con.');
     this.subtaskTitleMap[parentId] = '';
     this.activeSubtaskInputId.set(null);
   }
@@ -1080,7 +1087,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
       assigneeName: currentUserName
     });
 
-    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
+    this.toastService.success('Thêm công việc', 'Đã thêm công việc mới.');
     this.inlineTaskTitleMap[sprintId] = '';
     this.inlineTaskTypeMap[sprintId] = 'Story';
     this.activeInlineSprintId.set(null);
@@ -1091,7 +1098,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     if (event) event.stopPropagation();
     if (sprint.status === 'future') {
       this.projectService.updateSprintStatus(sprint.id, 'active');
-      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
+      this.toastService.success('Kích hoạt Sprint', `Sprint "${sprint.name}" đã bắt đầu.`);
     } else if (sprint.status === 'active') {
       this.openRolloverWizard(sprint, event);
     } else {
@@ -1120,13 +1127,11 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   updateInlineStatus(taskId: string, statusName: string, event?: Event): void {
     if (event) event.stopPropagation();
     this.projectService.updateWorkItemStatus(taskId, statusName);
-    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
   }
 
   updateInlineAssignee(taskId: string, assigneeName: string, event?: Event): void {
     if (event) event.stopPropagation();
     this.projectService.updateWorkItemAssignee(taskId, assigneeName);
-    this.toastService.info('Gán Người Xử Lý', `Gán cho ${assigneeName}`);
   }
 
   updateInlinePriority(taskId: string, priority: WorkItem['priority'], event?: Event): void {
@@ -1160,7 +1165,6 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     if (event) event.stopPropagation();
     const myName = this.identityService.authState().currentUser?.displayName || 'Tôi';
     this.projectService.updateWorkItemAssignee(taskId, myName);
-    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     this.activeMenuTaskId.set(null);
   }
 
@@ -1168,7 +1172,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     if (event) event.stopPropagation();
     const cloned = this.projectService.cloneWorkItem(taskId);
     if (cloned) {
-      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
+      this.toastService.success('Nhân bản', 'Đã tạo bản sao công việc thành công.');
     }
     this.activeMenuTaskId.set(null);
   }
@@ -1200,7 +1204,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     const ids = this.selectedTaskIds();
     if (ids.length === 0) return;
     this.projectService.bulkUpdateStatus(ids, newStatus);
-    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
+    this.toastService.success('Cập nhật hàng loạt', `Đã chuyển ${ids.length} việc sang ${newStatus}.`);
     this.clearSelection();
   }
 
@@ -1209,7 +1213,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     if (ids.length === 0) return;
     const sprintName = this.sprints().find(s => s.id === sprintId)?.name ?? fallbackSprintName;
     this.projectService.bulkUpdateSprint(ids, sprintId, sprintName);
-    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
+    this.toastService.success('Chuyển Sprint hàng loạt', `Đã chuyển ${ids.length} việc sang ${sprintName}.`);
     this.clearSelection();
   }
 

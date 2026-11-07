@@ -27,6 +27,7 @@ import { WorkspaceDataSource } from '../../features/workspace/data/workspace-dat
 import { ORG_ROLE_LABELS, OrganizationSummary, RecentItem } from '../../features/workspace/data/workspace.models';
 import { WorkspaceContextService } from '../../features/workspace/workspace-context.service';
 import { WorkspaceNavigation } from '../../features/workspace/workspace-navigation';
+import { QuickProfileModalComponent } from '../../shared/components/quick-profile-modal/quick-profile-modal.component';
 
 @Component({
   selector: 'app-shell',
@@ -46,7 +47,8 @@ import { WorkspaceNavigation } from '../../features/workspace/workspace-navigati
     MotionDirective,
     AvatarModalComponent,
     CreateOrgModalComponent,
-    RecentListComponent
+    RecentListComponent,
+    QuickProfileModalComponent
   ],
   templateUrl: './app-shell.html',
   styleUrl: './app-shell.scss'
@@ -146,6 +148,11 @@ export class AppShellComponent {
 
   // Flyout Popups State
   readonly isRecentFlyoutOpen = signal<boolean>(false);
+  readonly isQuickProfileOpen = signal<boolean>(false);
+
+  openQuickProfile(): void {
+    this.isQuickProfileOpen.set(true);
+  }
 
   // Sidebar 2 cấp: trang chủ (Tổ chức) và tổ chức đang xem (Dự án, Cài đặt)
   readonly projectsList = this.projectService.allProjectsList;
@@ -159,9 +166,24 @@ export class AppShellComponent {
     const url = this.currentUrl();
     const match = /^\/orgs\/([^/?#]+)/.exec(url);
     if (match) return decodeURIComponent(match[1]);
-    return this.isProjectRoute() || url.startsWith('/issues/') ? this.activeProject().orgId || null : null;
+    if (this.isProjectRoute() || url.startsWith('/issues/')) {
+      return this.activeProject().orgId || null;
+    }
+    // Giữ nguyên tổ chức nếu đang có dự án được chọn (tránh mất context khi xem hồ sơ hoặc trang khác)
+    if (this.projectService.hasActiveProject() && this.activeProject()?.orgId) {
+      return this.activeProject().orgId;
+    }
+    return null;
   });
   readonly sidebarOrg = computed(() => this.organizations().find(org => org.id === this.currentOrgId()) ?? null);
+
+  readonly currentBoardTabTitle = computed(() => {
+    const p = this.activeProject();
+    if ((p as any)?.boardName) return (p as any).boardName;
+    if ((p as any)?.managementType === 'Kanban' || p?.type === 'Kanban') return 'Kanban';
+    if ((p as any)?.managementType === 'Scrum' || p?.type === 'Scrum') return 'Scrum';
+    return 'Scrum';
+  });
 
   /** Vai trò theo ngữ cảnh hiện tại (Dự án -> Tổ chức -> Tài khoản cá nhân, tuyệt đối không gán Admin toàn cục) */
   readonly currentContextRole = computed(() => {
@@ -190,14 +212,27 @@ export class AppShellComponent {
 
   readonly canManageActiveProject = computed(() => {
     if (this.identity.isSystemAdmin()) return true;
-    const myId = this.identity.authState().currentUser?.id;
+    const currentUser = this.identity.authState().currentUser;
+    const myId = currentUser?.id;
+    const myName = currentUser?.displayName;
+    const myEmail = currentUser?.email;
     if (!myId) return false;
     const org = this.sidebarOrg();
-    if (org && org.ownerId && org.ownerId.toLowerCase() === myId.toLowerCase()) return true;
+    if (org && (org.myRole === 'owner' || (org.ownerId && org.ownerId.toLowerCase() === myId.toLowerCase()))) return true;
     const proj = this.activeProject();
     if (proj.leadUserId && proj.leadUserId.toLowerCase() === myId.toLowerCase()) return true;
-    const myMember = (proj.members || []).find(m => m.userId && m.userId.toLowerCase() === myId.toLowerCase());
-    if (myMember && (myMember.role === 'Project Lead' || myMember.role === 'Scrum Master')) return true;
+    if (proj.leadName && myName && proj.leadName.toLowerCase() === myName.toLowerCase()) return true;
+    const myMember = (proj.members || []).find(m =>
+      (m.userId && m.userId.toLowerCase() === myId.toLowerCase()) ||
+      (m.email && myEmail && m.email.toLowerCase() === myEmail.toLowerCase()) ||
+      (m.displayName && myName && m.displayName.toLowerCase() === myName.toLowerCase())
+    );
+    if (myMember) {
+      const role = myMember.role.toLowerCase();
+      if (role.includes('lead') || role.includes('manager') || role.includes('scrum') || role.includes('director') || role.includes('admin') || role.includes('owner')) {
+        return true;
+      }
+    }
     return false;
   });
 
