@@ -3,6 +3,7 @@ import { Injectable, computed, effect, inject, signal, untracked } from '@angula
 import { EMPTY, Observable, Subject, catchError, concatMap, defer, finalize, forkJoin, map, of, tap } from 'rxjs';
 import { ToastService } from './toast.service';
 import { RbacApi } from '../api/rbac.api';
+import { RealtimeService } from '../realtime/realtime.service';
 import { environment } from '../../../environments/environment';
 import { resolveAvatarUrl } from '../utils/avatar.utils';
 import { TOKEN_STORE } from '../auth/token-store';
@@ -85,6 +86,21 @@ export interface ProjectPriority {
   level: number;
   colorHex: string;
   iconKey?: string | null;
+  isCustom?: boolean;
+}
+
+export interface PriorityTemplateItem {
+  name: string;
+  level: number;
+  colorHex: string;
+  iconKey?: string | null;
+}
+
+export interface PriorityTemplate {
+  id: string;
+  name: string;
+  description: string;
+  items: PriorityTemplateItem[];
 }
 
 export interface ProjectLabel {
@@ -478,6 +494,7 @@ export class ProjectManagementService {
 
   private readonly toast = inject(ToastService);
   private readonly rbac = inject(RbacApi);
+  private readonly realtime = inject(RealtimeService, { optional: true });
   readonly pendingSaves = signal(0);
   readonly saveError = signal<string | null>(null);
   readonly workspaceLoading = signal(false);
@@ -486,6 +503,7 @@ export class ProjectManagementService {
   private readonly writes = new Subject<{ epoch: number; request: () => Observable<unknown> }>();
 
   constructor() {
+    this.initRealtimeSubscriptions();
     this.writes.pipe(concatMap(job => defer(() => job.epoch === this.queueEpoch ? job.request() : EMPTY).pipe(
       catchError((error: { title?: string; message?: string; detail?: string }) => {
         this.queueEpoch++;
@@ -511,6 +529,36 @@ export class ProjectManagementService {
         this.customIssueTypes.set([]); this.workItems.set([]); this.sprints.set([]); this.epics.set([]); this.activeDrawerTask.set(null);
         if (id) this.loadWorkspace(id);
       });
+    });
+  }
+
+  private initRealtimeSubscriptions(): void {
+    this.realtime?.on<{ issueId: string; projectId: string; comment: any; workItem: WorkItem }>('WorkItemCommentAdded', payload => {
+      if (!payload) return;
+      this.workItems.update(items => items.map(item => {
+        if (item.id === payload.issueId) {
+          if (payload.workItem) return payload.workItem;
+          const currentComments = item.comments ? [...item.comments] : [];
+          if (!currentComments.some(c => c.id === payload.comment?.id)) {
+            currentComments.push(payload.comment);
+          }
+          return { ...item, comments: currentComments };
+        }
+        return item;
+      }));
+
+      const active = this.activeDrawerTask();
+      if (active && active.id === payload.issueId) {
+        if (payload.workItem) {
+          this.activeDrawerTask.set(payload.workItem);
+        } else {
+          const currentComments = active.comments ? [...active.comments] : [];
+          if (!currentComments.some(c => c.id === payload.comment?.id)) {
+            currentComments.push(payload.comment);
+          }
+          this.activeDrawerTask.set({ ...active, comments: currentComments });
+        }
+      }
     });
   }
 
@@ -721,7 +769,18 @@ export class ProjectManagementService {
   getIssue(id: string): Observable<WorkItem> { return this.http.get<WorkItem>(`${this.baseUrl}/issues/${id}`); }
   saveIssue(item: WorkItem): Observable<WorkItem> { return this.http.put<WorkItem>(`${this.baseUrl}/issues/${item.id}`, { ...item, parentId: item.parentId || null, assigneeId: item.assigneeId || null, epicId: item.epicId || null, sprintId: item.sprintId || null, labels: item.labels ?? [] }); }
   createIssue(projectId: string, item: Partial<WorkItem>): Observable<WorkItem> { return this.http.post<WorkItem>(`${this.baseUrl}/projects/${projectId}/issues`, item); }
-  postComment(id: string, content: string): Observable<WorkItem> { return this.http.post<WorkItem>(`${this.baseUrl}/issues/${id}/comments`, { content }); }
+  postComment(id: string, content: string): Observable<WorkItem> {
+    return this.http.post<WorkItem>(`${this.baseUrl}/issues/${id}/comments`, { content }).pipe(
+      tap(updated => {
+        if (updated) {
+          this.workItems.update(items => items.map(i => i.id === updated.id ? updated : i));
+          if (this.activeDrawerTask()?.id === updated.id) {
+            this.activeDrawerTask.set(updated);
+          }
+        }
+      })
+    );
+  }
   uploadAttachment(id: string, file: File): Observable<unknown> {
     const body = new FormData(); body.append('file', file); return this.http.post(`${this.baseUrl}/issues/${id}/attachments`, body);
   }
@@ -981,7 +1040,57 @@ export class ProjectManagementService {
 
   // --- Dynamic Project Priorities ---
   getProjectPriorities(projectId: string): Observable<ProjectPriority[]> {
-    return this.http.get<ProjectPriority[]>(`${this.baseUrl}/projects/${projectId}/priorities`);
+    return this.http.get<ProjectPriority[]>(`${this.baseUrl}/projects/${projectId}/priorities`).pipe(
+      tap(priorities => {
+        if (priorities && priorities.length > 0) {
+          this.projectPriorities.set(priorities);
+        }
+      })
+    );
+  }
+
+  loadProjectPriorities(projectId: string): Observable<ProjectPriority[]> {
+    return this.getProjectPriorities(projectId);
+  }
+
+  getPriorityTemplates(projectId: string): Observable<PriorityTemplate[]> {
+    return this.http.get<PriorityTemplate[]>(`${this.baseUrl}/projects/${projectId}/priorities/templates`);
+  }
+
+  applyPriorityTemplate(projectId: string, templateId: string): Observable<ProjectPriority[]> {
+    return this.http.post<ProjectPriority[]>(`${this.baseUrl}/projects/${projectId}/priorities/apply-template`, { templateId }).pipe(
+      tap(priorities => this.projectPriorities.set(priorities))
+    );
+  }
+
+  createProjectPriority(projectId: string, input: { name: string; level: number; colorHex: string; iconKey?: string | null }): Observable<ProjectPriority> {
+    return this.http.post<ProjectPriority>(`${this.baseUrl}/projects/${projectId}/priorities`, input).pipe(
+      tap(created => {
+        this.projectPriorities.update(list => [...list, created].sort((a, b) => a.level - b.level));
+      })
+    );
+  }
+
+  updateProjectPriority(projectId: string, priorityId: string, input: { name: string; level: number; colorHex: string; iconKey?: string | null }): Observable<ProjectPriority> {
+    return this.http.put<ProjectPriority>(`${this.baseUrl}/projects/${projectId}/priorities/${priorityId}`, input).pipe(
+      tap(updated => {
+        this.projectPriorities.update(list => list.map(p => p.id === priorityId ? updated : p).sort((a, b) => a.level - b.level));
+      })
+    );
+  }
+
+  deleteProjectPriority(projectId: string, priorityId: string): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/projects/${projectId}/priorities/${priorityId}`).pipe(
+      tap(() => {
+        this.projectPriorities.update(list => list.filter(p => p.id !== priorityId));
+      })
+    );
+  }
+
+  resetProjectPriorities(projectId: string): Observable<ProjectPriority[]> {
+    return this.http.post<ProjectPriority[]>(`${this.baseUrl}/projects/${projectId}/priorities/reset`, {}).pipe(
+      tap(priorities => this.projectPriorities.set(priorities))
+    );
   }
 
   // --- Dynamic Workflow Statuses ---

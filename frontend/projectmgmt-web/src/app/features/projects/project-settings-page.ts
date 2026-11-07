@@ -9,6 +9,9 @@ import {
   Project,
   ProjectLabel,
   ProjectManagementService,
+  ProjectPriority,
+  PriorityTemplate,
+  PriorityTemplateItem,
   UpdateProjectRequest,
   UserDisplayInfo
 } from '../../core/services/project-management.service';
@@ -304,31 +307,107 @@ export type ProjectSettingsTab = 'general' | 'issue-types' | 'labels' | 'priorit
 
         <!-- TAB: QUẢN LÝ MỨC ĐỘ ƯU TIÊN ĐỘNG (PRIORITIES) TỪ DATABASE -->
         @if (canManageProject() && activeTab() === 'priorities') {
-          <div class="settings-content">
+          <div class="settings-content space-y-6">
+            <!-- 1. CHỌN VÀ ÁP DỤNG MẪU MỨC ĐỘ ƯU TIÊN HỆ THỐNG / DATABASE -->
             <div class="card">
-              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
                 <div>
-                  <h2 class="text-base font-bold text-slate-900 dark:text-white">Mức độ ưu tiên công việc (Priorities)</h2>
+                  <h2 class="text-base font-bold text-slate-900 dark:text-white">Áp dụng mẫu mức độ ưu tiên chuẩn (Từ Cơ sở dữ liệu)</h2>
                   <p class="text-sm text-slate-500">
-                    Được tải và quản lý động từ cơ sở dữ liệu (bảng <code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-xs font-mono">priority</code>). Sử dụng cho việc đánh dấu và phân loại độ khẩn cấp của Story, Task, Bug.
+                    Áp dụng danh sách các mức độ ưu tiên theo chuẩn ngành (Scrum 5 cấp, Agile 4 cấp, Tối giản 3 cấp, Hỗ trợ sự cố 4 cấp) cho riêng dự án này.
                   </p>
                 </div>
-                <div class="flex items-center gap-2">
-                  <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5 shrink-0">
-                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                    Mẫu chuẩn từ Cơ sở dữ liệu
-                  </span>
+              </div>
+
+              <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+                <select id="priorityTemplateSelect" class="form-control sm:max-w-md" [ngModel]="selectedPriorityTemplateId()" (ngModelChange)="onPriorityTemplateChange($event)">
+                  @for (tpl of priorityTemplates(); track tpl.id) {
+                    <option [value]="tpl.id">{{ tpl.name }} • [Mẫu hệ thống]</option>
+                  }
+                </select>
+                <button type="button" class="btn btn-primary flex items-center justify-center gap-1.5" [disabled]="submittingPriority() || !canManageProject()" (click)="applySelectedPriorityTemplate()">
+                  <span class="material-symbols-outlined text-[18px]">auto_fix_high</span>
+                  <span>{{ submittingPriority() ? 'Đang lưu...' : 'Áp dụng mẫu này' }}</span>
+                </button>
+              </div>
+
+              <!-- Xem trước trực quan các mức độ trong mẫu đã chọn -->
+              @if (selectedPriorityTemplateData(); as tpl) {
+                <div class="mt-4 pt-4 border-t border-slate-200/80 dark:border-slate-800">
+                  <div class="flex items-center justify-between gap-2 mb-2.5">
+                    <div class="flex items-center gap-2">
+                      <span class="material-symbols-outlined text-[18px] text-primary">visibility</span>
+                      <span class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                        Xem trước các mức độ trong mẫu: <span class="text-primary normal-case font-bold">{{ tpl.name }}</span>
+                      </span>
+                    </div>
+                    <span class="text-[11px] px-2 py-0.5 rounded-full font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      {{ tpl.items.length }} mức độ ưu tiên
+                    </span>
+                  </div>
+
+                  <div class="flex items-center gap-2 flex-wrap p-3 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-800">
+                    @for (it of tpl.items; track it.name; let last = $last) {
+                      <div class="flex items-center gap-2">
+                        <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-2xs">
+                          <div class="w-6 h-6 rounded flex items-center justify-center text-white shrink-0 shadow-2xs" [style.backgroundColor]="it.colorHex">
+                            <span class="material-symbols-outlined text-[15px]">{{ it.iconKey || getPriorityIcon(it.level) }}</span>
+                          </div>
+                          <span class="text-xs font-bold text-slate-800 dark:text-slate-200">{{ it.name }}</span>
+                          <span class="text-[10px] px-1.5 py-0.5 rounded font-medium bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                            Cấp {{ it.level }}
+                          </span>
+                        </div>
+                        @if (!last) {
+                          <span class="material-symbols-outlined text-[16px] text-slate-400 shrink-0">arrow_forward</span>
+                        }
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+
+            <!-- 2. DANH SÁCH MỨC ĐỘ ƯU TIÊN HIỆN HÀNH CỦA DỰ ÁN & TÙY BIẾN -->
+            <div class="card">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                <div>
+                  <h2 class="text-base font-bold text-slate-900 dark:text-white">Mức độ ưu tiên của dự án ({{ projectPriorities().length }} mức độ)</h2>
+                  <p class="text-sm text-slate-500">
+                    Các mức độ này được áp dụng trực tiếp cho Backlog, Scrum Board và chi tiết công việc trong dự án này.
+                  </p>
+                </div>
+                <div class="flex items-center gap-2 flex-wrap">
+                  @if (isProjectCustomPriorities()) {
+                    <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center gap-1.5 shrink-0">
+                      <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+                      Tùy biến riêng của dự án
+                    </span>
+                    <button type="button" (click)="resetPrioritiesToDefault()" [disabled]="submittingPriority()" class="btn btn-sm btn-secondary flex items-center gap-1 text-slate-600 dark:text-slate-300 hover:text-slate-900 cursor-pointer" title="Khôi phục về mẫu chuẩn hệ thống">
+                      <span class="material-symbols-outlined text-[16px]">restart_alt</span>
+                      <span>Khôi phục mặc định</span>
+                    </button>
+                  } @else {
+                    <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5 shrink-0">
+                      <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                      Mặc định hệ thống
+                    </span>
+                  }
+                  <button type="button" (click)="openAddPriorityModal()" class="btn btn-primary flex items-center gap-1.5 shrink-0">
+                    <span class="material-symbols-outlined text-[18px]">add</span>
+                    <span>Thêm mức ưu tiên</span>
+                  </button>
                 </div>
               </div>
 
               <div class="divide-y divide-slate-100 dark:divide-slate-800">
-                @for (p of projectPriorities(); track p.id) {
+                @for (p of projectPriorities(); track p.id; let idx = $index) {
                   <div class="py-3.5 flex items-center justify-between gap-4">
-                    <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-3 min-w-0">
                       <div class="w-9 h-9 rounded-lg flex items-center justify-center text-white shrink-0 shadow-2xs" [style.backgroundColor]="p.colorHex">
                         <span class="material-symbols-outlined text-[20px]">{{ p.iconKey || getPriorityIcon(p.level) }}</span>
                       </div>
-                      <div>
+                      <div class="min-w-0">
                         <div class="flex items-center gap-2 flex-wrap">
                           <span class="font-bold text-slate-800 dark:text-slate-200 text-sm">{{ p.name }}</span>
                           <span class="px-2 py-0.5 rounded-full text-[11px] font-medium border"
@@ -338,8 +417,12 @@ export type ProjectSettingsTab = 'general' | 'issue-types' | 'labels' | 'priorit
                             Cấp độ {{ p.level }}
                           </span>
                           @if (!p.projectId) {
-                            <span class="px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                               Mặc định hệ thống
+                            </span>
+                          } @else {
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                              Tùy biến dự án
                             </span>
                           }
                         </div>
@@ -347,8 +430,19 @@ export type ProjectSettingsTab = 'general' | 'issue-types' | 'labels' | 'priorit
                       </div>
                     </div>
 
-                    <div class="flex items-center gap-2">
-                      <span class="w-3.5 h-3.5 rounded-full shadow-2xs" [style.backgroundColor]="p.colorHex" [title]="'Mã màu: ' + p.colorHex"></span>
+                    <div class="flex items-center gap-1 shrink-0">
+                      <button type="button" (click)="movePriority(idx, -1)" [disabled]="idx === 0 || submittingPriority()" class="p-1.5 rounded-md text-slate-400 hover:text-slate-700 disabled:opacity-20 transition-colors" title="Tăng cấp độ ưu tiên (lên trên)">
+                        <span class="material-symbols-outlined text-[18px]">arrow_upward</span>
+                      </button>
+                      <button type="button" (click)="movePriority(idx, 1)" [disabled]="idx === projectPriorities().length - 1 || submittingPriority()" class="p-1.5 rounded-md text-slate-400 hover:text-slate-700 disabled:opacity-20 transition-colors" title="Giảm cấp độ ưu tiên (xuống dưới)">
+                        <span class="material-symbols-outlined text-[18px]">arrow_downward</span>
+                      </button>
+                      <button type="button" (click)="openEditPriorityModal(p)" class="p-1.5 rounded-md text-slate-500 hover:text-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" title="Chỉnh sửa mức ưu tiên">
+                        <span class="material-symbols-outlined text-[18px]">edit</span>
+                      </button>
+                      <button type="button" (click)="deletePriority(p)" class="p-1.5 rounded-md text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors" title="Xóa mức ưu tiên">
+                        <span class="material-symbols-outlined text-[18px]">delete</span>
+                      </button>
                     </div>
                   </div>
                 }
@@ -486,6 +580,86 @@ export type ProjectSettingsTab = 'general' | 'issue-types' | 'labels' | 'priorit
             <div class="mt-6 flex items-center justify-end gap-2">
               <button type="button" (click)="showLabelModal.set(false)" class="btn btn-secondary">Hủy bỏ</button>
               <button type="button" (click)="saveLabel()" [disabled]="!labelForm.name.trim()" class="btn btn-primary">Lưu nhãn</button>
+            </div>
+          </div>
+        </div>
+      }
+
+      <!-- MODAL TẠO / SỬA MỨC ĐỘ ƯU TIÊN (PRIORITY) -->
+      @if (showPriorityModal()) {
+        <div class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-150">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary">{{ editingPriority() ? 'edit' : 'flag' }}</span>
+                <span>{{ editingPriority() ? 'Sửa Mức Độ Ưu Tiên' : 'Thêm Mức Độ Ưu Tiên Mới' }}</span>
+              </h3>
+              <button type="button" (click)="showPriorityModal.set(false)" class="text-slate-400 hover:text-slate-600">
+                <span class="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <div class="space-y-4">
+              <!-- Live Preview -->
+              <div class="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-8 h-8 rounded-lg flex items-center justify-center text-white shadow-2xs" [style.backgroundColor]="priorityForm.colorHex">
+                    <span class="material-symbols-outlined text-[18px]">{{ priorityForm.iconKey || getPriorityIcon(priorityForm.level) }}</span>
+                  </div>
+                  <div>
+                    <span class="font-bold text-xs text-slate-800 dark:text-slate-100">{{ priorityForm.name || 'Tên mức độ' }}</span>
+                    <span class="ml-2 text-[10px] px-1.5 py-0.5 rounded font-medium bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                      Cấp độ {{ priorityForm.level }}
+                    </span>
+                  </div>
+                </div>
+                <span class="text-[11px] font-mono text-slate-400">{{ priorityForm.colorHex }}</span>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Tên mức độ <span class="text-red-500">*</span></label>
+                <input type="text" [(ngModel)]="priorityForm.name" placeholder="Highest, Urgent, High, Critical, Bình thường..." class="form-control" />
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Cấp độ ưu tiên (Level)</label>
+                <input type="number" min="1" max="10" [(ngModel)]="priorityForm.level" class="form-control" />
+                <small class="text-[11px] text-slate-400 mt-1 block">Cấp 1 là mức ưu tiên cao nhất / khẩn cấp nhất, cấp tăng dần mức độ giảm dần.</small>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Mã màu (Hex)</label>
+                <div class="flex items-center gap-2 mb-2">
+                  <input type="color" [(ngModel)]="priorityForm.colorHex" class="w-9 h-9 rounded-lg border border-slate-300 cursor-pointer p-0.5" />
+                  <input type="text" [(ngModel)]="priorityForm.colorHex" class="form-control font-mono text-xs" />
+                </div>
+                <div class="flex flex-wrap gap-2 pt-1">
+                  @for (col of samplePriorityColors; track col) {
+                    <button type="button" (click)="priorityForm.colorHex = col" [attr.aria-label]="'Chọn màu ' + col" class="w-6 h-6 rounded-full border-2 border-white shadow-2xs hover:scale-110 transition-transform" [style.backgroundColor]="col">
+                      <span class="sr-only">Màu {{ col }}</span>
+                    </button>
+                  }
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Biểu tượng Material Symbols</label>
+                <input type="text" [(ngModel)]="priorityForm.iconKey" placeholder="keyboard_double_arrow_up, arrow_upward, flag, priority_high..." class="form-control font-mono text-xs mb-2" />
+                <div class="flex flex-wrap gap-1.5 pt-1">
+                  @for (ico of samplePriorityIcons; track ico) {
+                    <button type="button" (click)="priorityForm.iconKey = ico" [class.bg-primary]="priorityForm.iconKey === ico" [class.text-white]="priorityForm.iconKey === ico" class="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" [title]="ico">
+                      <span class="material-symbols-outlined text-[18px]">{{ ico }}</span>
+                    </button>
+                  }
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-6 flex items-center justify-end gap-2">
+              <button type="button" (click)="showPriorityModal.set(false)" class="btn btn-secondary">Hủy bỏ</button>
+              <button type="button" (click)="savePriority()" [disabled]="!priorityForm.name.trim() || submittingPriority()" class="btn btn-primary">
+                {{ submittingPriority() ? 'Đang lưu...' : 'Lưu mức ưu tiên' }}
+              </button>
             </div>
           </div>
         </div>
@@ -743,6 +917,41 @@ export class ProjectSettingsPage implements OnInit {
   readonly labels = signal<ProjectLabel[]>([]);
   readonly projectPriorities = this.projectService.projectPriorities;
 
+  // Cấu hình mức độ ưu tiên động (Dynamic Priorities & Templates)
+  readonly priorityTemplates = signal<PriorityTemplate[]>([]);
+  readonly selectedPriorityTemplateId = signal<string>('scrum-std-5');
+  readonly selectedPriorityTemplateData = computed(() => {
+    const tpls = this.priorityTemplates();
+    const selId = this.selectedPriorityTemplateId();
+    return tpls.find(t => t.id === selId) || tpls[0] || null;
+  });
+  readonly submittingPriority = signal<boolean>(false);
+  readonly isProjectCustomPriorities = computed(() => {
+    return this.projectPriorities().some(p => !!p.projectId || p.isCustom);
+  });
+  readonly showPriorityModal = signal<boolean>(false);
+  readonly editingPriority = signal<ProjectPriority | null>(null);
+
+  priorityForm = {
+    name: '',
+    level: 3,
+    colorHex: '#E97F33',
+    iconKey: 'drag_handle'
+  };
+
+  samplePriorityColors = [
+    '#CD1317', '#E53E3E', '#E9494B', '#DD6B20', '#E97F33',
+    '#D69E2E', '#319795', '#2A8735', '#38A169', '#57A55A',
+    '#3182CE', '#6366F1', '#805AD5', '#718096'
+  ];
+
+  samplePriorityIcons = [
+    'keyboard_double_arrow_up', 'keyboard_arrow_up', 'drag_handle',
+    'keyboard_arrow_down', 'keyboard_double_arrow_down', 'flag',
+    'priority_high', 'bolt', 'warning', 'notification_important',
+    'emergency', 'hourglass_top'
+  ];
+
   getPriorityIcon(level: number): string {
     switch (level) {
       case 1: return 'keyboard_double_arrow_up';
@@ -793,6 +1002,7 @@ export class ProjectSettingsPage implements OnInit {
         this.loadUsers();
         this.loadIssueTypes();
         this.loadLabels();
+        this.loadPriorityTemplates();
       }
     });
   }
@@ -833,6 +1043,7 @@ export class ProjectSettingsPage implements OnInit {
       this.loadUsers();
       this.loadIssueTypes();
       this.loadLabels();
+      this.loadPriorityTemplates();
     }
   }
 
@@ -1099,6 +1310,213 @@ export class ProjectSettingsPage implements OnInit {
           },
           error: (err) => this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể xóa nhãn.'))
         });
+      }
+    });
+  }
+
+  // ==================== CẤU HÌNH MỨC ĐỘ ƯU TIÊN (PRIORITIES) ====================
+  loadPriorityTemplates(): void {
+    if (!this.projectId) return;
+    this.projectService.getPriorityTemplates(this.projectId).subscribe({
+      next: (tpls) => {
+        if (tpls && tpls.length > 0) {
+          this.priorityTemplates.set(tpls);
+          if (!this.selectedPriorityTemplateId() || !tpls.some(t => t.id === this.selectedPriorityTemplateId())) {
+            this.selectedPriorityTemplateId.set(tpls[0].id);
+          }
+        }
+      },
+      error: () => {}
+    });
+    this.projectService.loadProjectPriorities(this.projectId).subscribe();
+  }
+
+  onPriorityTemplateChange(templateId: string): void {
+    this.selectedPriorityTemplateId.set(templateId);
+  }
+
+  applySelectedPriorityTemplate(): void {
+    if (!this.canManageProject() || !this.projectId) return;
+    const templateId = this.selectedPriorityTemplateId();
+    if (!templateId) return;
+
+    this.confirmService.confirm({
+      title: 'Áp dụng mẫu mức độ ưu tiên',
+      message: 'Bạn có chắc chắn muốn áp dụng mẫu này cho dự án? Các mức độ ưu tiên hiện tại của dự án sẽ được thay thế bằng danh sách của mẫu đã chọn.',
+      type: 'info',
+      confirmText: 'Áp dụng',
+      cancelText: 'Hủy',
+      onConfirm: () => {
+        this.submittingPriority.set(true);
+        this.projectService.applyPriorityTemplate(this.projectId, templateId).subscribe({
+          next: () => {
+            this.submittingPriority.set(false);
+            this.toastService.success('Thành công', 'Đã áp dụng mẫu mức độ ưu tiên cho dự án.');
+          },
+          error: (err) => {
+            this.submittingPriority.set(false);
+            this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể áp dụng mẫu mức độ ưu tiên.'));
+          }
+        });
+      }
+    });
+  }
+
+  resetPrioritiesToDefault(): void {
+    if (!this.canManageProject() || !this.projectId) return;
+    this.confirmService.confirm({
+      title: 'Khôi phục mặc định hệ thống',
+      message: 'Bạn có chắc muốn xóa tất cả cấu hình riêng và đưa mức độ ưu tiên của dự án về mẫu chuẩn mặc định của hệ thống?',
+      type: 'warning',
+      confirmText: 'Khôi phục',
+      cancelText: 'Hủy',
+      onConfirm: () => {
+        this.submittingPriority.set(true);
+        this.projectService.resetProjectPriorities(this.projectId).subscribe({
+          next: () => {
+            this.submittingPriority.set(false);
+            this.toastService.success('Thành công', 'Đã đưa mức độ ưu tiên về mặc định hệ thống.');
+          },
+          error: (err) => {
+            this.submittingPriority.set(false);
+            this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể khôi phục mặc định.'));
+          }
+        });
+      }
+    });
+  }
+
+  openAddPriorityModal(): void {
+    this.editingPriority.set(null);
+    const currentCount = this.projectPriorities().length;
+    this.priorityForm = {
+      name: '',
+      level: currentCount + 1,
+      colorHex: '#3B82F6',
+      iconKey: 'flag'
+    };
+    this.showPriorityModal.set(true);
+  }
+
+  openEditPriorityModal(p: ProjectPriority): void {
+    this.editingPriority.set(p);
+    this.priorityForm = {
+      name: p.name,
+      level: p.level,
+      colorHex: p.colorHex || '#3B82F6',
+      iconKey: p.iconKey || this.getPriorityIcon(p.level)
+    };
+    this.showPriorityModal.set(true);
+  }
+
+  savePriority(): void {
+    const name = this.priorityForm.name.trim();
+    if (!name || !this.projectId) return;
+    const editing = this.editingPriority();
+    this.submittingPriority.set(true);
+
+    if (editing) {
+      this.projectService.updateProjectPriority(this.projectId, editing.id, {
+        name,
+        level: this.priorityForm.level,
+        colorHex: this.priorityForm.colorHex,
+        iconKey: this.priorityForm.iconKey
+      }).subscribe({
+        next: () => {
+          this.submittingPriority.set(false);
+          this.showPriorityModal.set(false);
+          this.toastService.success('Mức độ ưu tiên', `Đã cập nhật mức ưu tiên "${name}".`);
+        },
+        error: (err) => {
+          this.submittingPriority.set(false);
+          this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể cập nhật mức ưu tiên.'));
+        }
+      });
+    } else {
+      this.projectService.createProjectPriority(this.projectId, {
+        name,
+        level: this.priorityForm.level,
+        colorHex: this.priorityForm.colorHex,
+        iconKey: this.priorityForm.iconKey
+      }).subscribe({
+        next: () => {
+          this.submittingPriority.set(false);
+          this.showPriorityModal.set(false);
+          this.toastService.success('Mức độ ưu tiên', `Đã thêm mức ưu tiên "${name}".`);
+        },
+        error: (err) => {
+          this.submittingPriority.set(false);
+          this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể tạo mức ưu tiên.'));
+        }
+      });
+    }
+  }
+
+  deletePriority(p: ProjectPriority): void {
+    if (this.projectPriorities().length <= 1) {
+      this.toastService.warning('Cảnh báo', 'Dự án phải có ít nhất 1 mức độ ưu tiên.');
+      return;
+    }
+    this.confirmService.confirm({
+      title: 'Xóa mức độ ưu tiên',
+      message: `Bạn có chắc muốn xóa mức độ ưu tiên "${p.name}"? Các công việc đang gán mức này sẽ được chuyển về mức ưu tiên mặc định.`,
+      type: 'danger',
+      confirmText: 'Xóa',
+      cancelText: 'Hủy',
+      onConfirm: () => {
+        this.submittingPriority.set(true);
+        this.projectService.deleteProjectPriority(this.projectId, p.id).subscribe({
+          next: () => {
+            this.submittingPriority.set(false);
+            this.toastService.success('Đã Xóa', `Đã xóa mức ưu tiên "${p.name}".`);
+          },
+          error: (err) => {
+            this.submittingPriority.set(false);
+            this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể xóa mức ưu tiên.'));
+          }
+        });
+      }
+    });
+  }
+
+  movePriority(currentIndex: number, direction: -1 | 1): void {
+    const list = [...this.projectPriorities()];
+    const targetIndex = currentIndex + direction;
+    if (targetIndex < 0 || targetIndex >= list.length || !this.projectId) return;
+
+    const currentItem = list[currentIndex];
+    const targetItem = list[targetIndex];
+
+    const oldLevel = currentItem.level;
+    const targetLevel = targetItem.level === oldLevel ? (direction === -1 ? oldLevel - 1 : oldLevel + 1) : targetItem.level;
+
+    this.submittingPriority.set(true);
+    this.projectService.updateProjectPriority(this.projectId, currentItem.id, {
+      name: currentItem.name,
+      level: targetLevel,
+      colorHex: currentItem.colorHex,
+      iconKey: currentItem.iconKey
+    }).subscribe({
+      next: () => {
+        this.projectService.updateProjectPriority(this.projectId, targetItem.id, {
+          name: targetItem.name,
+          level: oldLevel,
+          colorHex: targetItem.colorHex,
+          iconKey: targetItem.iconKey
+        }).subscribe({
+          next: () => {
+            this.submittingPriority.set(false);
+            this.toastService.success('Thành công', 'Đã thay đổi thứ tự ưu tiên.');
+          },
+          error: () => {
+            this.submittingPriority.set(false);
+            this.projectService.loadProjectPriorities(this.projectId).subscribe();
+          }
+        });
+      },
+      error: (err) => {
+        this.submittingPriority.set(false);
+        this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể cập nhật thứ tự mức ưu tiên.'));
       }
     });
   }

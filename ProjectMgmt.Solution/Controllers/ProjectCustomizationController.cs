@@ -29,6 +29,19 @@ public sealed class UpdateBoardModeInput
     [StringLength(150)] public string? Name { get; set; }
 }
 
+public sealed class PriorityInput
+{
+    [Required, StringLength(40)] public string Name { get; set; } = "";
+    [Range(1, 20)] public int Level { get; set; } = 3;
+    [Required, RegularExpression("^#[0-9a-fA-F]{6}$")] public string ColorHex { get; set; } = "#E97F33";
+    [StringLength(50)] public string? IconKey { get; set; } = "flag";
+}
+
+public sealed class ApplyPriorityTemplateInput
+{
+    [Required] public string TemplateId { get; set; } = "";
+}
+
 [Route("api/projects/{projectId:guid}")]
 public sealed class ProjectCustomizationController(PlanningDbContext db, DeliveryIntelligenceDbContext delivery, ProjectAccess access) : ApiControllerBase
 {
@@ -420,22 +433,54 @@ public sealed class ProjectCustomizationController(PlanningDbContext db, Deliver
         });
     }
 
-    // Danh sách mức độ ưu tiên (Priorities) từ cơ sở dữ liệu: hỗ trợ mẫu cấu hình mặc định hoặc tùy biến theo dự án
+    private static readonly (string Id, string Name, string Description, (string Name, int Level, string ColorHex, string IconKey)[] Items)[] PresetPriorityTemplates =
+    [
+        ("scrum-std-5", "Scrum chuẩn (5 cấp độ)", "Mẫu mặc định hệ thống với 5 cấp độ từ Highest đến Lowest",
+        [
+            ("Highest", 1, "#CD1317", "keyboard_double_arrow_up"),
+            ("High", 2, "#E9494B", "keyboard_arrow_up"),
+            ("Medium", 3, "#E97F33", "drag_handle"),
+            ("Low", 4, "#2A8735", "keyboard_arrow_down"),
+            ("Lowest", 5, "#57A55A", "keyboard_double_arrow_down")
+        ]),
+        ("agile-devops-4", "Agile / DevOps (4 cấp độ)", "Mẫu 4 cấp độ ngắn gọn: Urgent, High, Normal, Low",
+        [
+            ("Urgent", 1, "#E11D48", "priority_high"),
+            ("High", 2, "#EA580C", "arrow_upward"),
+            ("Normal", 3, "#0284C7", "drag_handle"),
+            ("Low", 4, "#16A34A", "arrow_downward")
+        ]),
+        ("simple-3", "Tối giản (3 cấp độ)", "Mẫu 3 cấp độ căn bản: High, Medium, Low",
+        [
+            ("High", 1, "#DC2626", "arrow_upward"),
+            ("Medium", 2, "#D97706", "drag_handle"),
+            ("Low", 3, "#16A34A", "arrow_downward")
+        ]),
+        ("incident-support-4", "Hỗ trợ & Sự cố (4 cấp độ)", "Mẫu xử lý sự cố / ticket hỗ trợ: Blocker, Critical, Major, Minor",
+        [
+            ("Blocker", 1, "#991B1B", "block"),
+            ("Critical", 2, "#DC2626", "warning"),
+            ("Major", 3, "#D97706", "error_outline"),
+            ("Minor", 4, "#2563EB", "info")
+        ])
+    ];
+
+    // 1. Danh sách mức độ ưu tiên (Priorities) của dự án
     [HttpGet("priorities")]
     public async Task<IActionResult> GetPriorities(Guid projectId)
     {
-        var list = await db.Priorities.AsNoTracking()
+        var customList = await db.Priorities.AsNoTracking()
             .Where(p => p.ProjectId == projectId)
             .OrderBy(p => p.Level)
             .ToListAsync();
 
-        if (list.Count == 0)
-        {
-            list = await db.Priorities.AsNoTracking()
+        var isCustom = customList.Count > 0;
+        var list = isCustom
+            ? customList
+            : await db.Priorities.AsNoTracking()
                 .Where(p => p.ProjectId == null)
                 .OrderBy(p => p.Level)
                 .ToListAsync();
-        }
 
         return Ok(list.Select(p => new
         {
@@ -444,7 +489,259 @@ public sealed class ProjectCustomizationController(PlanningDbContext db, Deliver
             p.Name,
             p.Level,
             p.ColorHex,
-            p.IconKey
+            p.IconKey,
+            IsCustom = isCustom
+        }));
+    }
+
+    // 2. Danh sách mẫu mức độ ưu tiên có sẵn
+    [HttpGet("priorities/templates")]
+    public IActionResult GetPriorityTemplates(Guid projectId)
+    {
+        return Ok(PresetPriorityTemplates.Select(t => new
+        {
+            t.Id,
+            t.Name,
+            t.Description,
+            Items = t.Items.Select(i => new
+            {
+                Name = i.Name,
+                Level = i.Level,
+                ColorHex = i.ColorHex,
+                IconKey = i.IconKey
+            })
+        }));
+    }
+
+    // 3. Áp dụng mẫu mức độ ưu tiên cho dự án
+    [HttpPost("priorities/apply-template")]
+    public async Task<IActionResult> ApplyPriorityTemplate(Guid projectId, [FromBody] ApplyPriorityTemplateInput input)
+    {
+        if (!await access.AllowsAsync(projectId, "project.settings.manage"))
+            return Forbid();
+
+        var targetTemplate = PresetPriorityTemplates.FirstOrDefault(t => t.Id == input.TemplateId);
+        if (string.IsNullOrEmpty(targetTemplate.Id))
+        {
+            targetTemplate = PresetPriorityTemplates[0];
+        }
+
+        var existing = await db.Priorities.Where(p => p.ProjectId == projectId).ToListAsync();
+        db.Priorities.RemoveRange(existing);
+
+        var created = new List<Priority>();
+        foreach (var item in targetTemplate.Items)
+        {
+            var p = new Priority
+            {
+                Id = Guid.NewGuid(),
+                ProjectId = projectId,
+                Name = item.Name,
+                Level = item.Level,
+                ColorHex = item.ColorHex,
+                IconKey = item.IconKey
+            };
+            db.Priorities.Add(p);
+            created.Add(p);
+        }
+
+        await db.SaveChangesAsync();
+
+        return Ok(created.OrderBy(p => p.Level).Select(p => new
+        {
+            p.Id,
+            p.ProjectId,
+            p.Name,
+            p.Level,
+            p.ColorHex,
+            p.IconKey,
+            IsCustom = true
+        }));
+    }
+
+    // 4. Thêm mức độ ưu tiên mới vào dự án
+    [HttpPost("priorities")]
+    public async Task<IActionResult> CreatePriority(Guid projectId, [FromBody] PriorityInput input)
+    {
+        if (!await access.AllowsAsync(projectId, "project.settings.manage"))
+            return Forbid();
+
+        var hasCustom = await db.Priorities.AnyAsync(p => p.ProjectId == projectId);
+        if (!hasCustom)
+        {
+            // Dự án chưa có tùy biến riêng, clone mặc định hệ thống vào dự án trước
+            var defaults = await db.Priorities.AsNoTracking().Where(p => p.ProjectId == null).OrderBy(p => p.Level).ToListAsync();
+            foreach (var d in defaults)
+            {
+                db.Priorities.Add(new Priority
+                {
+                    Id = Guid.NewGuid(),
+                    ProjectId = projectId,
+                    Name = d.Name,
+                    Level = d.Level,
+                    ColorHex = d.ColorHex,
+                    IconKey = d.IconKey
+                });
+            }
+        }
+
+        var newP = new Priority
+        {
+            Id = Guid.NewGuid(),
+            ProjectId = projectId,
+            Name = input.Name.Trim(),
+            Level = input.Level,
+            ColorHex = input.ColorHex.Trim(),
+            IconKey = string.IsNullOrWhiteSpace(input.IconKey) ? "flag" : input.IconKey.Trim()
+        };
+        db.Priorities.Add(newP);
+        await db.SaveChangesAsync();
+
+        return CreatedAtAction(nameof(GetPriorities), new { projectId }, new
+        {
+            newP.Id,
+            newP.ProjectId,
+            newP.Name,
+            newP.Level,
+            newP.ColorHex,
+            newP.IconKey,
+            IsCustom = true
+        });
+    }
+
+    // 5. Cập nhật mức độ ưu tiên của dự án
+    [HttpPut("priorities/{id:guid}")]
+    public async Task<IActionResult> UpdatePriority(Guid projectId, Guid id, [FromBody] PriorityInput input)
+    {
+        if (!await access.AllowsAsync(projectId, "project.settings.manage"))
+            return Forbid();
+
+        var hasCustom = await db.Priorities.AnyAsync(p => p.ProjectId == projectId);
+        if (!hasCustom)
+        {
+            // Dự án đang dùng system defaults, cần clone hệ thống thành bản ghi riêng của dự án
+            var defaults = await db.Priorities.AsNoTracking().Where(p => p.ProjectId == null).OrderBy(p => p.Level).ToListAsync();
+            Priority? targetCloned = null;
+            foreach (var d in defaults)
+            {
+                var clone = new Priority
+                {
+                    Id = Guid.NewGuid(),
+                    ProjectId = projectId,
+                    Name = d.Id == id ? input.Name.Trim() : d.Name,
+                    Level = d.Id == id ? input.Level : d.Level,
+                    ColorHex = d.Id == id ? input.ColorHex.Trim() : d.ColorHex,
+                    IconKey = d.Id == id ? (string.IsNullOrWhiteSpace(input.IconKey) ? "flag" : input.IconKey.Trim()) : d.IconKey
+                };
+                db.Priorities.Add(clone);
+                if (d.Id == id) targetCloned = clone;
+            }
+            await db.SaveChangesAsync();
+            return Ok(new
+            {
+                targetCloned?.Id,
+                ProjectId = projectId,
+                Name = input.Name.Trim(),
+                Level = input.Level,
+                ColorHex = input.ColorHex.Trim(),
+                IconKey = input.IconKey,
+                IsCustom = true
+            });
+        }
+
+        var p = await db.Priorities.FirstOrDefaultAsync(x => x.Id == id && x.ProjectId == projectId);
+        if (p is null) return NotFound(new { error = "Không tìm thấy mức ưu tiên cần cập nhật trong dự án." });
+
+        p.Name = input.Name.Trim();
+        p.Level = input.Level;
+        p.ColorHex = input.ColorHex.Trim();
+        p.IconKey = string.IsNullOrWhiteSpace(input.IconKey) ? "flag" : input.IconKey.Trim();
+
+        await db.SaveChangesAsync();
+
+        return Ok(new
+        {
+            p.Id,
+            p.ProjectId,
+            p.Name,
+            p.Level,
+            p.ColorHex,
+            p.IconKey,
+            IsCustom = true
+        });
+    }
+
+    // 6. Xóa mức độ ưu tiên khỏi dự án
+    [HttpDelete("priorities/{id:guid}")]
+    public async Task<IActionResult> DeletePriority(Guid projectId, Guid id)
+    {
+        if (!await access.AllowsAsync(projectId, "project.settings.manage"))
+            return Forbid();
+
+        var hasCustom = await db.Priorities.AnyAsync(p => p.ProjectId == projectId);
+        if (!hasCustom)
+        {
+            // Clone mặc định hệ thống vào dự án ngoại trừ bản ghi bị xóa
+            var defaults = await db.Priorities.AsNoTracking().Where(p => p.ProjectId == null).OrderBy(p => p.Level).ToListAsync();
+            if (defaults.Count <= 1)
+                return BadRequest(new { error = "Dự án phải có ít nhất 1 mức độ ưu tiên." });
+
+            foreach (var d in defaults.Where(d => d.Id != id))
+            {
+                db.Priorities.Add(new Priority
+                {
+                    Id = Guid.NewGuid(),
+                    ProjectId = projectId,
+                    Name = d.Name,
+                    Level = d.Level,
+                    ColorHex = d.ColorHex,
+                    IconKey = d.IconKey
+                });
+            }
+            await db.SaveChangesAsync();
+            return NoContent();
+        }
+
+        var count = await db.Priorities.CountAsync(p => p.ProjectId == projectId);
+        if (count <= 1)
+            return BadRequest(new { error = "Dự án phải có ít nhất 1 mức độ ưu tiên." });
+
+        var p = await db.Priorities.FirstOrDefaultAsync(x => x.Id == id && x.ProjectId == projectId);
+        if (p is null) return NotFound(new { error = "Không tìm thấy mức ưu tiên cần xóa." });
+
+        db.Priorities.Remove(p);
+        await db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    // 7. Khôi phục về mặc định hệ thống
+    [HttpPost("priorities/reset")]
+    public async Task<IActionResult> ResetPriorities(Guid projectId)
+    {
+        if (!await access.AllowsAsync(projectId, "project.settings.manage"))
+            return Forbid();
+
+        var customList = await db.Priorities.Where(p => p.ProjectId == projectId).ToListAsync();
+        if (customList.Count > 0)
+        {
+            db.Priorities.RemoveRange(customList);
+            await db.SaveChangesAsync();
+        }
+
+        var defaults = await db.Priorities.AsNoTracking()
+            .Where(p => p.ProjectId == null)
+            .OrderBy(p => p.Level)
+            .ToListAsync();
+
+        return Ok(defaults.Select(p => new
+        {
+            p.Id,
+            p.ProjectId,
+            p.Name,
+            p.Level,
+            p.ColorHex,
+            p.IconKey,
+            IsCustom = false
         }));
     }
 }
