@@ -432,7 +432,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
       const names = priorities.map(p => p.name);
       const idx = names.findIndex(n => n.toLowerCase() === (currentPriority || '').toLowerCase());
       const nextIdx = (idx + 1) % names.length;
-      this.projectService.updateWorkItemPriority(taskId, names[nextIdx]);
+      this.projectService.updateWorkItemPriority(taskId, names[nextIdx] as any);
     } else {
       const map: Record<string, string> = {
         'Low': 'Medium',
@@ -443,7 +443,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
         'Lowest': 'Low'
       };
       const nextP = map[currentPriority] || 'Medium';
-      this.projectService.updateWorkItemPriority(taskId, nextP);
+      this.projectService.updateWorkItemPriority(taskId, nextP as any);
     }
   }
 

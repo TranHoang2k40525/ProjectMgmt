@@ -1,8 +1,9 @@
 import { apiErrorMessage } from '../../core/http/api-error-message';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, OnInit, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { IdentityService } from '../../core/services/identity.service';
 import {
   CustomIssueType,
   Project,
@@ -50,6 +51,7 @@ export type ProjectSettingsTab = 'general' | 'issue-types' | 'labels' | 'priorit
 
       <!-- Navigation Tabs -->
       <div class="settings-tabs">
+        @if (canManageProject()) {
         <button
           type="button"
           (click)="selectTab('general')"
@@ -95,6 +97,7 @@ export type ProjectSettingsTab = 'general' | 'issue-types' | 'labels' | 'priorit
           <span class="material-symbols-outlined text-[18px]">sync_alt</span>
           <span>Cấu hình Workflow &amp; Board</span>
         </button>
+        }
         <button
           type="button"
           (click)="selectTab('members')"
@@ -116,6 +119,21 @@ export type ProjectSettingsTab = 'general' | 'issue-types' | 'labels' | 'priorit
           {{ error() }}
         </div>
       } @else {
+        <!-- Chỉ Quản lý dự án trở lên mới được xem cấu hình -->
+        @if (!canManageProject() && activeTab() !== 'members') {
+          <div class="p-8 my-6 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 flex flex-col items-center text-center gap-3 animate-fade-in">
+            <span class="material-symbols-outlined text-[42px] text-amber-600">lock</span>
+            <h3 class="text-base font-bold">Chỉ dành cho Quản lý dự án</h3>
+            <p class="text-xs max-w-md text-amber-800 dark:text-amber-300">
+              Bạn đang ở vai trò không có quyền cấu hình dự án. Chỉ Giám đốc dự án, Quản lý dự án hoặc Scrum Master mới có thể xem và chỉnh sửa thông tin này.
+            </p>
+            <button type="button" (click)="selectTab('members')" class="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 dark:bg-amber-600 text-white text-xs font-bold transition-all cursor-pointer">
+              <span class="material-symbols-outlined text-[16px]">badge</span>
+              <span>Xem danh sách thành viên</span>
+            </button>
+          </div>
+        }
+
         <!-- TAB 1: THÔNG TIN CHUNG -->
         @if (activeTab() === 'general' && project()) {
           <div class="settings-content">
@@ -681,6 +699,35 @@ export class ProjectSettingsPage implements OnInit {
   private readonly confirmService = inject(ConfirmDialogService);
   private readonly toastService = inject(ToastService);
   private readonly workspaceData = inject(WorkspaceDataSource, { optional: true });
+  private readonly identity = inject(IdentityService);
+
+  readonly canManageProject = computed(() => {
+    if (this.identity.isSystemAdmin()) return true;
+    const currentUser = this.identity.authState().currentUser;
+    const myId = currentUser?.id;
+    const myName = currentUser?.displayName;
+    const myEmail = currentUser?.email;
+    if (!myId) return false;
+    const proj = this.project() || this.projectService.currentProject();
+    if (proj) {
+      if (proj.leadUserId && proj.leadUserId.toLowerCase() === myId.toLowerCase()) return true;
+      if (proj.leadName && myName && proj.leadName.toLowerCase() === myName.toLowerCase()) return true;
+      if (proj.members) {
+        const m = proj.members.find(x =>
+          (x.userId && x.userId.toLowerCase() === myId.toLowerCase()) ||
+          (x.email && myEmail && x.email.toLowerCase() === myEmail.toLowerCase()) ||
+          (x.displayName && myName && x.displayName.toLowerCase() === myName.toLowerCase())
+        );
+        if (m) {
+          const r = m.role.toLowerCase();
+          if (r.includes('lead') || r.includes('manager') || r.includes('scrum') || r.includes('director') || r.includes('admin') || r.includes('owner')) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  });
 
   projectId = '';
   readonly activeTab = signal<ProjectSettingsTab>('general');
@@ -765,11 +812,11 @@ export class ProjectSettingsPage implements OnInit {
     this.route.queryParamMap.subscribe(q => {
       const tab = q.get('tab') as ProjectSettingsTab | null;
       if (tab === 'issue-types' || tab === 'labels' || tab === 'priorities' || tab === 'general' || tab === 'workflow' || tab === 'members') {
-        this.activeTab.set(tab);
+        this.activeTab.set(!this.canManageProject() && tab !== 'members' ? 'members' : tab);
       } else if (tab === 'board') {
-        this.activeTab.set('workflow');
+        this.activeTab.set(this.canManageProject() ? 'workflow' : 'members');
       } else if (!this.route.snapshot.data['tab'] && !this.router.url.includes('/workflow') && !this.router.url.includes('/board') && !this.router.url.includes('/members')) {
-        this.activeTab.set('general');
+        this.activeTab.set(this.canManageProject() ? 'general' : 'members');
       }
     });
 
@@ -795,6 +842,10 @@ export class ProjectSettingsPage implements OnInit {
   }
 
   selectTab(tab: ProjectSettingsTab): void {
+    if (!this.canManageProject() && tab !== 'members') {
+      this.toastService.warning('Phân quyền', 'Chỉ Quản lý dự án trở lên mới có quyền truy cập cài đặt cấu hình.');
+      return;
+    }
     this.activeTab.set(tab);
     if (this.projectId) {
       void this.router.navigate(['/projects', this.projectId, 'settings'], {

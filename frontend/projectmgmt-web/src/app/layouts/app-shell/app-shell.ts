@@ -218,7 +218,7 @@ export class AppShellComponent {
     const myEmail = currentUser?.email;
     if (!myId) return false;
     const org = this.sidebarOrg();
-    if (org && (org.myRole === 'owner' || (org.ownerId && org.ownerId.toLowerCase() === myId.toLowerCase()))) return true;
+    if (org && (org.myRole === 'Owner' || (org.ownerId && org.ownerId.toLowerCase() === myId.toLowerCase()))) return true;
     const proj = this.activeProject();
     if (proj.leadUserId && proj.leadUserId.toLowerCase() === myId.toLowerCase()) return true;
     if (proj.leadName && myName && proj.leadName.toLowerCase() === myName.toLowerCase()) return true;
