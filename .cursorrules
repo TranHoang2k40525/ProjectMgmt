@@ -1,0 +1,27 @@
+# Cursor Rules & Project Guidelines
+# Bắt buộc tuân thủ cho tất cả các tương tác trong dự án này
+
+# 1. BẢO MẬT & CHỐNG RÒ RỈ SECRET/KEY (ZERO LEAKAGE)
+- TUYỆT ĐỐI KHÔNG commit hay hardcode API key, JWT Signing Key, database password, SMTP app password, PAT token vào git.
+- Mọi bí mật môi trường dev BẮT BUỘC lưu ở `ProjectMgmt.Solution/appsettings.Local.json` hoặc `.env` (đã được .gitignore bảo vệ).
+- File công khai (appsettings.json, appsettings.Development.json, .env.example) CHỈ chứa placeholder an toàn.
+- Che dấu (masking) thông tin nhạy cảm khi trả lời user hoặc in log.
+- Không commit thư mục publish/binaries (publish_output/, bin/, obj/, dist/, *.dll, *.exe, *.pdb).
+- Luôn kiểm tra `git diff` trước khi commit.
+
+# 2. TỐI ƯU TỐC ĐỘ PHẢN HỒI & HIỆU SUẤT
+- Trả lời ngắn gọn, súc tích, đi thẳng vào bản chất kỹ thuật, không chào hỏi rườm rà.
+- Đọc đúng file và vị trí cần sửa, tối ưu hóa công cụ, không lặp thao tác.
+- Luôn tạo `ProjectMgmt.Solution/app_offline.htm` trước khi chạy `dotnet build` và xóa sau khi build xong.
+- Chạy `npm run build` để kiểm tra TypeScript compilation frontend.
+- Tự động commit và push lên nhánh `hoangtv` (`git push origin hoangtv`) khi xong việc.
+
+# 3. QUY TẮC ICON & EMOJI (STRICT NO-KEYBOARD-EMOJI)
+- TUYỆT ĐỐI KHÔNG DÙNG RAW EMOJI TỪ BÀN PHÍM trong HTML, TS, SCSS, nhãn UI, modal.
+- BẮT BUỘC dùng Google Material Symbols Outlined:
+  `<span class="material-symbols-outlined text-[16px] text-primary" aria-hidden="true">icon_name</span>`
+
+# 4. HIERARCHICAL SCRUM RBAC
+- Quyền hạn: Org Owner > Lead (Project Director) > Scrum Master / Project Manager > Developer / QA > Viewer.
+- Developer, QA, Viewer không thấy nút Cài đặt dự án và bị chặn truy cập route settings.
+- Chống leo thang đặc quyền (Anti-Privilege Escalation).

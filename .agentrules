@@ -1,0 +1,26 @@
+# AI Agent Rules & Project Standards (Universal)
+# Bắt buộc cho mọi AI Agent (Antigravity, Gemini, Copilot, Cline, Claude Code, OpenAI Codex, v.v.)
+
+## 1. ZERO-SECRET-LEAKAGE (BẢO MẬT TUYỆT ĐỐI)
+- KHÔNG BAO GIỜ hardcode hoặc commit mật khẩu database, connection string thực tế, Gmail app password, JWT signing key, OTP hash key, Private key vào tệp được Git theo dõi.
+- Dùng `ProjectMgmt.Solution/appsettings.Local.json` hoặc `.env` cho cấu hình thật ở máy local (đã nằm trong .gitignore).
+- File công khai (appsettings.json, appsettings.Development.json) chỉ dùng placeholder an toàn.
+- Masking thông tin nhạy cảm khi hiển thị hoặc trao đổi với người dùng.
+- Untrack và chặn toàn bộ thư mục publish/binary (publish_output/, bin/, obj/).
+- Rà soát `git diff` trước khi commit.
+
+## 2. HIỆU SUẤT & TỐC ĐỘ PHẢN HỒI (HIGH SPEED & ZERO FLUFF)
+- Trả lời súc tích, ngắn gọn, báo cáo thẳng giải pháp và kết quả, không chào hỏi lan man.
+- Tối ưu hóa lượt gọi công cụ (tool calls), thao tác dứt điểm.
+- Quy trình build:
+  - Backend: Tạo `ProjectMgmt.Solution/app_offline.htm` trước khi build (`dotnet build`) và xóa sau khi hoàn tất.
+  - Frontend: Kiểm tra bằng `npm run build`.
+- Tự động commit và push lên nhánh `hoangtv` (`git push origin hoangtv`).
+
+## 3. STRICT NO-KEYBOARD-EMOJI RULE
+- Nghiêm cấm chèn emoji bàn phím thô vào UI/code (HTML, TS, CSS).
+- Mọi biểu tượng dùng Google Material Symbols Outlined.
+
+## 4. HIERARCHICAL SCRUM RBAC
+- Quyền hạn phân cấp nghiêm ngặt từ trên xuống: Org Owner > Project Lead > Scrum Master > Dev/QA > Viewer.
+- Developer, QA, Viewer không có quyền thấy nút Cài đặt và bị chặn bởi `projectManagerGuard`.

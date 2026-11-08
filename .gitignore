@@ -10,8 +10,16 @@
 !.env.example
 !.env.test.example
 appsettings.Local.json
+**/appsettings.Local.json
+**/appsettings.*.Local.json
 **/appsettings.Staging.json
 **/appsettings.Production.json
+publish_output/
+**/publish_output/
+**/*.pfx
+**/*.key
+**/*.pem
+**/secrets.json
 *.user
 *.suo
 .audit-tmp/

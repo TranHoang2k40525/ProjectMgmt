@@ -312,7 +312,7 @@ interface CandidateOrgMember {
                   type="text"
                   [ngModel]="newMemberEmail"
                   (ngModelChange)="onEmailsInput($event)"
-                  placeholder="Nhập email (ví dụ: hoangteam2004@gmail.com, ngăn cách nhiều email bằng dấu ;)"
+                  placeholder="Nhập email (ví dụ: member@company.com, ngăn cách nhiều email bằng dấu ;)"
                   class="h-10 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                 />
                 <span class="text-[11px] text-slate-400">Hệ thống sẽ gửi cả Email và Thông báo thời gian thực (SignalR) tới người nhận.</span>
