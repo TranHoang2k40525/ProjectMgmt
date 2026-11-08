@@ -3,6 +3,7 @@ import { inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
 import { orgOwnerGuard } from './features/workspace/guards/org-owner.guard';
+import { projectManagerGuard } from './core/guards/project-manager.guard';
 import { WorkspaceContextService } from './features/workspace/workspace-context.service';
 
 /** /projects và /projects/new đưa về tổ chức mở gần nhất; chưa có thì về trang chủ để chọn tổ chức. */
@@ -67,11 +68,11 @@ export const routes: Routes = [
         ]
       },
       { path: 'invite/:token', loadComponent: () => import('./features/workspace/invite/invite-accept-page').then(m => m.InviteAcceptPageComponent) },
-      { path: 'projects/:id/settings', loadComponent: () => import('./features/projects/project-settings-page').then(m => m.ProjectSettingsPage) },
-      { path: 'projects/:id/settings/workflow', data: { tab: 'workflow' }, loadComponent: () => import('./features/projects/project-settings-page').then(m => m.ProjectSettingsPage) },
-      { path: 'projects/:id/workflow', data: { tab: 'workflow' }, loadComponent: () => import('./features/projects/project-settings-page').then(m => m.ProjectSettingsPage) },
-      { path: 'projects/:id/settings/board', data: { tab: 'board' }, loadComponent: () => import('./features/projects/project-settings-page').then(m => m.ProjectSettingsPage) },
-      { path: 'projects/:id/boards', data: { tab: 'board' }, loadComponent: () => import('./features/projects/project-settings-page').then(m => m.ProjectSettingsPage) },
+      { path: 'projects/:id/settings', canActivate: [projectManagerGuard], loadComponent: () => import('./features/projects/project-settings-page').then(m => m.ProjectSettingsPage) },
+      { path: 'projects/:id/settings/workflow', canActivate: [projectManagerGuard], data: { tab: 'workflow' }, loadComponent: () => import('./features/projects/project-settings-page').then(m => m.ProjectSettingsPage) },
+      { path: 'projects/:id/workflow', canActivate: [projectManagerGuard], data: { tab: 'workflow' }, loadComponent: () => import('./features/projects/project-settings-page').then(m => m.ProjectSettingsPage) },
+      { path: 'projects/:id/settings/board', canActivate: [projectManagerGuard], data: { tab: 'board' }, loadComponent: () => import('./features/projects/project-settings-page').then(m => m.ProjectSettingsPage) },
+      { path: 'projects/:id/boards', canActivate: [projectManagerGuard], data: { tab: 'board' }, loadComponent: () => import('./features/projects/project-settings-page').then(m => m.ProjectSettingsPage) },
       { path: 'projects/:id/board-settings', redirectTo: 'projects/:id/settings/board' },
       { path: 'backlog', loadComponent: () => import('./features/backlog/backlog-page').then(m => m.BacklogPage) },
       { path: 'board', loadComponent: () => import('./features/board/board-page').then(m => m.BoardPage) },

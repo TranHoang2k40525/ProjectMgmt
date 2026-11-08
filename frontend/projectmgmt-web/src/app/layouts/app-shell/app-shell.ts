@@ -217,22 +217,33 @@ export class AppShellComponent {
     const myName = currentUser?.displayName;
     const myEmail = currentUser?.email;
     if (!myId) return false;
+
     const org = this.sidebarOrg();
-    if (org && (org.myRole === 'Owner' || (org.ownerId && org.ownerId.toLowerCase() === myId.toLowerCase()))) return true;
+    if (org && (org.myRole === 'Owner' || (org.ownerId && org.ownerId.toLowerCase() === myId.toLowerCase()))) {
+      return true;
+    }
+
     const proj = this.activeProject();
-    if (proj.leadUserId && proj.leadUserId.toLowerCase() === myId.toLowerCase()) return true;
-    if (proj.leadName && myName && proj.leadName.toLowerCase() === myName.toLowerCase()) return true;
-    const myMember = (proj.members || []).find(m =>
+    if (!proj || !proj.id) return false;
+
+    // Giám đốc dự án / Người phụ trách cao nhất (LeadUserId)
+    if (proj.leadUserId && proj.leadUserId.toLowerCase() === myId.toLowerCase()) {
+      return true;
+    }
+
+    // Kiểm tra vai trò trong dự án: chỉ Quản lý dự án / Scrum Master mới có quyền Cài đặt
+    const members = proj.members || [];
+    const myMember = members.find(m =>
       (m.userId && m.userId.toLowerCase() === myId.toLowerCase()) ||
       (m.email && myEmail && m.email.toLowerCase() === myEmail.toLowerCase()) ||
       (m.displayName && myName && m.displayName.toLowerCase() === myName.toLowerCase())
     );
+
     if (myMember) {
-      const role = myMember.role.toLowerCase();
-      if (role.includes('lead') || role.includes('manager') || role.includes('scrum') || role.includes('director') || role.includes('admin') || role.includes('owner')) {
-        return true;
-      }
+      const role = (myMember.role || '').toLowerCase();
+      return role.includes('lead') || role.includes('manager') || role.includes('scrum') || role.includes('director') || role.includes('owner');
     }
+
     return false;
   });
 

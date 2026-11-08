@@ -884,26 +884,26 @@ export class ProjectSettingsPage implements OnInit {
     const myName = currentUser?.displayName;
     const myEmail = currentUser?.email;
     if (!myId) return false;
+
     const org = this.workspaceContext?.currentOrg();
     if (org && (org.myRole === 'Owner' || (org.ownerId && org.ownerId.toLowerCase() === myId.toLowerCase()))) {
       return true;
     }
+
     const proj = this.project() || this.projectService.currentProject();
-    if (proj) {
-      if (proj.leadUserId && proj.leadUserId.toLowerCase() === myId.toLowerCase()) return true;
-      if (proj.leadName && myName && proj.leadName.toLowerCase() === myName.toLowerCase()) return true;
-      if (proj.members) {
-        const m = proj.members.find(x =>
-          (x.userId && x.userId.toLowerCase() === myId.toLowerCase()) ||
-          (x.email && myEmail && x.email.toLowerCase() === myEmail.toLowerCase()) ||
-          (x.displayName && myName && x.displayName.toLowerCase() === myName.toLowerCase())
-        );
-        if (m) {
-          const r = m.role.toLowerCase();
-          if (r.includes('lead') || r.includes('manager') || r.includes('scrum') || r.includes('director') || r.includes('admin') || r.includes('owner')) {
-            return true;
-          }
-        }
+    if (proj && proj.id) {
+      if (proj.leadUserId && proj.leadUserId.toLowerCase() === myId.toLowerCase()) {
+        return true;
+      }
+      const members = proj.members || [];
+      const m = members.find(x =>
+        (x.userId && x.userId.toLowerCase() === myId.toLowerCase()) ||
+        (x.email && myEmail && x.email.toLowerCase() === myEmail.toLowerCase()) ||
+        (x.displayName && myName && x.displayName.toLowerCase() === myName.toLowerCase())
+      );
+      if (m) {
+        const r = (m.role || '').toLowerCase();
+        return r.includes('lead') || r.includes('manager') || r.includes('scrum') || r.includes('director') || r.includes('owner');
       }
     }
     return false;
@@ -1103,6 +1103,16 @@ export class ProjectSettingsPage implements OnInit {
     });
   }
 
+  private checkPageAccess(): void {
+    const isManager = this.canManageProject();
+    const routeDataTab = this.route.snapshot.data['tab'] as ProjectSettingsTab | undefined;
+    const url = this.router.url;
+    if (!isManager && routeDataTab !== 'members' && !url.includes('/members')) {
+      this.toastService.warning('Phân quyền', 'Chỉ Quản lý dự án trở lên mới có quyền truy cập Cài đặt dự án.');
+      void this.router.navigate(['/projects', this.projectId, 'summary']);
+    }
+  }
+
   loadProject(): void {
     if (!this.project()) {
       this.loading.set(true);
@@ -1110,7 +1120,16 @@ export class ProjectSettingsPage implements OnInit {
     this.error.set(null);
     this.projectService.getProjectById(this.projectId).subscribe({
       next: (p) => {
-        this.project.set(p);
+        this.projectService.loadProjectMembers(this.projectId).subscribe({
+          next: members => {
+            this.project.set({ ...p, members });
+            this.checkPageAccess();
+          },
+          error: () => {
+            this.project.set(p);
+            this.checkPageAccess();
+          }
+        });
         this.editForm = {
           name: p.name,
           description: p.description || '',
