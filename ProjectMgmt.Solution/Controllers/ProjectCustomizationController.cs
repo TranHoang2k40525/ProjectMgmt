@@ -320,10 +320,11 @@ public sealed class ProjectCustomizationController(PlanningDbContext db, Deliver
             }
 
             // Làm mới toàn bộ WorkflowTransitions theo đúng quy trình của mẫu mới (cho phép chuyển tiếp tiến và lùi liền kề)
-            if (transitions.Count > 0)
-            {
-                db.WorkflowTransitions.RemoveRange(transitions);
-            }
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM WorkflowTransition WHERE ProjectId = {projectId}");
+            db.ChangeTracker.Entries<WorkflowTransition>()
+                .Where(e => e.Entity.ProjectId == projectId)
+                .ToList()
+                .ForEach(e => e.State = EntityState.Detached);
 
             for (var i = 0; i < sequence.Count - 1; i++)
             {
@@ -374,7 +375,15 @@ public sealed class ProjectCustomizationController(PlanningDbContext db, Deliver
                 {
                     var isKanban = string.Equals(templateManagementType, "Kanban", StringComparison.OrdinalIgnoreCase);
                     board.Type = isKanban ? "Kanban" : "Scrum";
-                    board.Name = isKanban ? "Bảng Kanban" : "Bảng Scrum";
+
+                    // Tránh ghi đè trùng tên UQ_Board_Name (ProjectId, Name) khi dự án có nhiều bảng
+                    var targetDefaultName = isKanban ? "Bảng Kanban" : "Bảng Scrum";
+                    var otherDefaultName = isKanban ? "Bảng Scrum" : "Bảng Kanban";
+                    if (string.Equals(board.Name, otherDefaultName, StringComparison.OrdinalIgnoreCase) &&
+                        !boards.Any(b => b.Id != board.Id && string.Equals(b.Name, targetDefaultName, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        board.Name = targetDefaultName;
+                    }
                 }
 
                 var columns = await db.BoardColumns.Where(c => c.BoardId == board.Id).ToListAsync();
