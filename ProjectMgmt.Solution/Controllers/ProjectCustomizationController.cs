@@ -377,6 +377,7 @@ public sealed class ProjectCustomizationController(PlanningDbContext db, Deliver
             var boards = await db.Boards.Where(b => b.ProjectId == projectId).ToListAsync();
             if (boards.Count == 0)
             {
+                var isKanban = string.Equals(templateManagementType, "Kanban", StringComparison.OrdinalIgnoreCase);
                 var newBoard = new Board
                 {
                     Id = Guid.NewGuid(),
@@ -394,6 +395,7 @@ public sealed class ProjectCustomizationController(PlanningDbContext db, Deliver
             {
                 if (!string.IsNullOrWhiteSpace(templateManagementType))
                 {
+                    var isKanban = string.Equals(templateManagementType, "Kanban", StringComparison.OrdinalIgnoreCase);
                     board.Type = isKanban ? "Kanban" : "Scrum";
                 }
 

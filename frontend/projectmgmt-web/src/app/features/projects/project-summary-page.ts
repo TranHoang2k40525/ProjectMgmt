@@ -37,7 +37,7 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
         <div class="summary-hero-action flex items-center gap-3 z-10">
           <a routerLink="/board" class="px-4 py-2 rounded-xl bg-white text-[#1b4332] hover:bg-slate-100 text-xs font-bold shadow-md transition-all flex items-center gap-1.5">
             <span class="material-symbols-outlined text-[18px]">view_kanban</span>
-            Mở Bảng Scrum
+            Mở Bảng
           </a>
         </div>
       </div>

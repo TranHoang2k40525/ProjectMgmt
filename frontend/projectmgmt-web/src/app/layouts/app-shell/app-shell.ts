@@ -16,7 +16,6 @@ import { ExcelImportModalComponent } from '../../shared/components/excel-import-
 import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/confirm-dialog';
 import { RouteTransitionLayerComponent } from '../../shared/motion/route-transition-layer/route-transition-layer';
 import { MotionOrchestratorService } from '../../core/motion/motion-orchestrator.service';
-import { MotionDirective } from '../../shared/motion/motion.directive';
 import { FocusRecommendationService } from '../../core/attention/focus-recommendation.service';
 import { RecentWorkService } from '../../core/attention/recent-work.service';
 import { AvatarModalComponent } from '../../shared/components/avatar-modal/avatar-modal.component';
@@ -44,7 +43,6 @@ import { QuickProfileModalComponent } from '../../shared/components/quick-profil
     ExcelImportModalComponent,
     ConfirmDialogComponent,
     RouteTransitionLayerComponent,
-    MotionDirective,
     AvatarModalComponent,
     CreateOrgModalComponent,
     RecentListComponent,
