@@ -179,12 +179,25 @@ export class AppShellComponent {
 
   readonly currentBoardTabTitle = computed(() => {
     const p = this.activeProject();
-    if ((p as any)?.managementType === 'Kanban' || p?.type === 'Kanban') return 'Kanban';
-    if ((p as any)?.managementType === 'Scrum' || p?.type === 'Scrum') return 'Scrum';
+    // 1. Ưu tiên tên Tab / Tên Workflow mà người dùng đã chọn áp dụng
+    if ((p as any)?.boardTabTitle) return (p as any).boardTabTitle;
+    if ((p as any)?.workflowName) {
+      const w = (p as any).workflowName.replace(/^Bảng\s+/i, '').trim();
+      if (w) return w;
+    }
+    // 2. Tiếp theo từ tên Board thực tế trong cơ sở dữ liệu
     if ((p as any)?.boardName) {
       const trimmed = (p as any).boardName.replace(/^Bảng\s+/i, '').trim();
       if (trimmed) return trimmed;
     }
+    // 3. Kiểm tra lưu vết trong sessionStorage theo dự án
+    if (typeof sessionStorage !== 'undefined' && p?.id) {
+      const saved = sessionStorage.getItem(`projectmgmt.workflow-name.${p.id}`);
+      if (saved) return saved.replace(/^Bảng\s+/i, '').trim();
+    }
+    // 4. Fallback theo loại quy trình quản lý
+    if ((p as any)?.managementType === 'Kanban' || p?.type === 'Kanban') return 'Kanban';
+    if ((p as any)?.managementType === 'Scrum' || p?.type === 'Scrum') return 'Scrum';
     return 'Scrum';
   });
 

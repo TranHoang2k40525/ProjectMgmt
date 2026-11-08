@@ -192,12 +192,13 @@ public sealed class ProjectCustomizationController(PlanningDbContext db, Deliver
         if (!await access.AllowsAsync(projectId, "project.settings.manage")) return Forbid();
         var templateSteps = new List<(string Name, string Category, string? ColorHex)>();
         string? templateManagementType = null;
+        string? templateName = null;
         var conn = db.Database.GetDbConnection();
         if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync();
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = @"
-                SELECT StatusesJson, ManagementType FROM organizationworkflowtemplate
+                SELECT StatusesJson, ManagementType, Name FROM organizationworkflowtemplate
                 WHERE IsActive = 1 AND (Id = @tid OR Code = @tid OR REPLACE(Id, 'preset-', '') = @tid)
                 LIMIT 1;";
             var p = cmd.CreateParameter();
@@ -209,6 +210,7 @@ public sealed class ProjectCustomizationController(PlanningDbContext db, Deliver
             {
                 var json = reader.IsDBNull(0) ? null : reader.GetString(0);
                 templateManagementType = reader.IsDBNull(1) ? null : reader.GetString(1);
+                templateName = reader.IsDBNull(2) ? null : reader.GetString(2);
                 if (!string.IsNullOrWhiteSpace(json))
                 {
                     try
@@ -246,6 +248,26 @@ public sealed class ProjectCustomizationController(PlanningDbContext db, Deliver
 
         if (templateSteps.Count == 0)
             return BadRequest(new { title = "Mẫu workflow không tồn tại trong cơ sở dữ liệu." });
+
+        if (string.IsNullOrWhiteSpace(templateName))
+        {
+            var rawTid = (input.TemplateId ?? "").Trim().ToLowerInvariant();
+            templateName = rawTid switch
+            {
+                "preset-scrum-std" or "scrum-std" => "Scrum chuẩn",
+                "preset-kanban-simple" or "kanban-simple" => "Kanban đơn giản",
+                "preset-agile-qa" or "agile-qa" => "Agile + QA",
+                "preset-enterprise" or "enterprise" => "Enterprise",
+                "preset-devops-ci" or "devops-ci" => "DevOps CI/CD",
+                _ => (input.TemplateId ?? "").Replace("preset-", "").Replace("-", " ").Trim()
+            };
+        }
+
+        var isKanban = string.Equals(templateManagementType, "Kanban", StringComparison.OrdinalIgnoreCase);
+        var resolvedWorkflowName = !string.IsNullOrWhiteSpace(templateName) ? templateName.Trim() : (isKanban ? "Kanban đơn giản" : "Scrum chuẩn");
+        var targetBoardName = resolvedWorkflowName.StartsWith("Bảng ", StringComparison.OrdinalIgnoreCase)
+            ? resolvedWorkflowName
+            : $"Bảng {resolvedWorkflowName}";
 
         return await db.Database.CreateExecutionStrategy().ExecuteAsync<IActionResult>(async () =>
         {
@@ -355,12 +377,11 @@ public sealed class ProjectCustomizationController(PlanningDbContext db, Deliver
             var boards = await db.Boards.Where(b => b.ProjectId == projectId).ToListAsync();
             if (boards.Count == 0)
             {
-                var isKanban = string.Equals(templateManagementType, "Kanban", StringComparison.OrdinalIgnoreCase);
                 var newBoard = new Board
                 {
                     Id = Guid.NewGuid(),
                     ProjectId = projectId,
-                    Name = isKanban ? "Bảng Kanban" : "Bảng Scrum",
+                    Name = targetBoardName,
                     Type = isKanban ? "Kanban" : "Scrum",
                     IsDefault = true,
                     CreatedAt = DateTime.UtcNow
@@ -373,17 +394,15 @@ public sealed class ProjectCustomizationController(PlanningDbContext db, Deliver
             {
                 if (!string.IsNullOrWhiteSpace(templateManagementType))
                 {
-                    var isKanban = string.Equals(templateManagementType, "Kanban", StringComparison.OrdinalIgnoreCase);
                     board.Type = isKanban ? "Kanban" : "Scrum";
+                }
 
-                    // Tránh ghi đè trùng tên UQ_Board_Name (ProjectId, Name) khi dự án có nhiều bảng
-                    var targetDefaultName = isKanban ? "Bảng Kanban" : "Bảng Scrum";
-                    var otherDefaultName = isKanban ? "Bảng Scrum" : "Bảng Kanban";
-                    if ((string.Equals(board.Name, otherDefaultName, StringComparison.OrdinalIgnoreCase) ||
-                         (board.IsDefault && (board.Name.Contains("Scrum", StringComparison.OrdinalIgnoreCase) || board.Name.Contains("Kanban", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(board.Name)))) &&
-                        !boards.Any(b => b.Id != board.Id && string.Equals(b.Name, targetDefaultName, StringComparison.OrdinalIgnoreCase)))
+                // Cập nhật tên Board theo mẫu Workflow được chọn
+                if (board.IsDefault || boards.Count == 1 || board.Name.Contains("Scrum", StringComparison.OrdinalIgnoreCase) || board.Name.Contains("Kanban", StringComparison.OrdinalIgnoreCase) || board.Name.StartsWith("Bảng ", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!boards.Any(b => b.Id != board.Id && string.Equals(b.Name, targetBoardName, StringComparison.OrdinalIgnoreCase)))
                     {
-                        board.Name = targetDefaultName;
+                        board.Name = targetBoardName;
                     }
                 }
 
@@ -427,6 +446,11 @@ public sealed class ProjectCustomizationController(PlanningDbContext db, Deliver
 
             await db.SaveChangesAsync();
             await transaction.CommitAsync();
+
+            var tabName = resolvedWorkflowName.Replace("Bảng ", "").Trim();
+            Response.Headers["X-Workflow-Name"] = Uri.EscapeDataString(tabName);
+            Response.Headers["X-Board-Name"] = Uri.EscapeDataString(targetBoardName);
+            Response.Headers["X-Management-Type"] = isKanban ? "Kanban" : "Scrum";
 
             return Ok(sequence.Select(s => new
             {

@@ -781,6 +781,14 @@ export class WorkflowSettingsPage implements OnInit {
         if (found) {
           this.selectedTemplateId.set(found.id);
           this.selectedTemplate = found.id;
+          const tabTitle = (found.name || '').replace(/^Bảng\s+/i, '').trim();
+          this.projectService.currentProject.update(p => ({
+            ...p,
+            workflowName: tabTitle,
+            boardTabTitle: tabTitle,
+            boardName: found.name.startsWith('Bảng ') ? found.name : `Bảng ${found.name}`,
+            workflowTemplateId: found.id
+          }));
           return;
         }
       }
@@ -813,6 +821,20 @@ export class WorkflowSettingsPage implements OnInit {
       if (bestMatch && maxScore > 0) {
         this.selectedTemplateId.set(bestMatch.id);
         this.selectedTemplate = bestMatch.id;
+        const matchedName = bestMatch.name || '';
+        if (matchedName) {
+          const tabTitle = matchedName.replace(/^Bảng\s+/i, '').trim();
+          if (typeof sessionStorage !== 'undefined' && this.projectId) {
+            sessionStorage.setItem(`projectmgmt.workflow-name.${this.projectId}`, tabTitle);
+          }
+          this.projectService.currentProject.update(p => ({
+            ...p,
+            workflowName: tabTitle,
+            boardTabTitle: tabTitle,
+            boardName: matchedName.startsWith('Bảng ') ? matchedName : `Bảng ${matchedName}`,
+            workflowTemplateId: bestMatch!.id
+          }));
+        }
         return;
       }
     }
@@ -928,30 +950,38 @@ export class WorkflowSettingsPage implements OnInit {
     }
     this.submitting.set(true); this.alertMessage.set(null);
     const templateToApply = this.selectedTemplateId() || this.selectedTemplate;
-    this.projectService.applyWorkflowTemplateToProject(this.projectId, templateToApply).subscribe({
+    const matchedTpl = this.availableWorkflowTemplates().find(t => t.id === templateToApply)
+      || this.selectedTemplateData();
+    const templateName = matchedTpl?.name || templateToApply;
+    const tabTitle = templateName.replace(/^Bảng\s+/i, '').trim();
+    const bName = templateName.startsWith('Bảng ') ? templateName : `Bảng ${templateName}`;
+
+    this.projectService.applyWorkflowTemplateToProject(this.projectId, templateToApply, templateName).subscribe({
       next: (statuses) => {
         this.submitting.set(false);
         this.statuses.set(statuses);
         this.alertType.set('success');
         this.alertMessage.set('Đã lưu mẫu workflow vào dự án.');
-        this.toastService.success('Mẫu Workflow', 'Đã áp dụng mẫu quy trình thành công.');
+        this.toastService.success('Mẫu Workflow', `Đã áp dụng mẫu quy trình "${templateName}" thành công.`);
 
-        // Lưu lựa chọn vào sessionStorage để bảo lưu trạng thái người dùng chọn
+        // Lưu lựa chọn và tên workflow vào sessionStorage để bảo lưu trạng thái người dùng chọn
         if (typeof sessionStorage !== 'undefined') {
           sessionStorage.setItem(`projectmgmt.workflow-template.${this.projectId}`, templateToApply);
+          sessionStorage.setItem(`projectmgmt.workflow-name.${this.projectId}`, tabTitle);
         }
         this.selectedTemplateId.set(templateToApply);
         this.selectedTemplate = templateToApply;
 
-        // Cập nhật ngay lập tức loại quản lý của dự án cho Reactive UI
-        const matchedTpl = this.availableWorkflowTemplates().find(t => t.id === templateToApply);
+        // Cập nhật ngay lập tức loại quản lý và tên workflow của dự án cho Reactive UI
         const newMType = matchedTpl?.managementType || (templateToApply.toLowerCase().includes('kanban') ? 'Kanban' : 'Scrum');
-        const newBoardName = newMType === 'Kanban' ? 'Bảng Kanban' : 'Bảng Scrum';
         this.projectService.currentProject.update(p => ({
           ...p,
           type: newMType,
           managementType: newMType,
-          boardName: newBoardName
+          boardName: bName,
+          boardTabTitle: tabTitle,
+          workflowName: tabTitle,
+          workflowTemplateId: templateToApply
         }));
 
         this.loadWorkflowData();

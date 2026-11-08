@@ -55,6 +55,18 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
   readonly boardTitle = computed(() => {
     const p = this.projectService.currentProject();
     if ((p as any)?.boardName) return (p as any).boardName;
+    if ((p as any)?.workflowName) {
+      const w = (p as any).workflowName;
+      return w.startsWith('Bảng ') ? w : `Bảng ${w}`;
+    }
+    if ((p as any)?.boardTabTitle) {
+      const t = (p as any).boardTabTitle;
+      return t.startsWith('Bảng ') ? t : `Bảng ${t}`;
+    }
+    if (typeof sessionStorage !== 'undefined' && p?.id) {
+      const saved = sessionStorage.getItem(`projectmgmt.workflow-name.${p.id}`);
+      if (saved) return saved.startsWith('Bảng ') ? saved : `Bảng ${saved}`;
+    }
     if ((p as any)?.managementType === 'Kanban' || p?.type === 'Kanban') return 'Bảng Kanban';
     return 'Bảng Scrum';
   });

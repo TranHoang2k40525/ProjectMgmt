@@ -40,6 +40,11 @@ export interface Project {
   projectKey: string;
   name: string;
   type?: string;
+  boardName?: string;
+  boardTabTitle?: string;
+  workflowName?: string;
+  workflowTemplateId?: string;
+  managementType?: string;
   description?: string | null;
   leadUserId: string;
   leadName?: string;
@@ -636,14 +641,26 @@ export class ProjectManagementService {
         const defaultBoard = (boards && boards.length > 0)
           ? (boards.find(b => b.isDefault) || boards[0])
           : null;
+        const bName = defaultBoard?.name || (this.currentProject() as any)?.boardName || 'Bảng Scrum';
+        const tabTitle = bName.replace(/^Bảng\s+/i, '').trim() || (this.currentProject() as any)?.workflowName || 'Scrum';
         const bType = defaultBoard?.type || (this.currentProject() as any)?.managementType || 'Scrum';
-        const bName = defaultBoard?.name || (bType === 'Kanban' ? 'Bảng Kanban' : 'Bảng Scrum');
+
+        // Lấy tên workflow đã lưu từ sessionStorage (nếu có)
+        const savedWorkflowName = typeof sessionStorage !== 'undefined'
+          ? sessionStorage.getItem(`projectmgmt.workflow-name.${projectId}`)
+          : null;
+        const finalTabTitle = savedWorkflowName || tabTitle;
+        const finalBoardName = savedWorkflowName
+          ? (savedWorkflowName.startsWith('Bảng ') ? savedWorkflowName : `Bảng ${savedWorkflowName}`)
+          : bName;
 
         this.currentProject.update(p => ({
           ...p,
           type: bType,
           managementType: bType,
-          boardName: bName,
+          boardName: finalBoardName,
+          boardTabTitle: finalTabTitle,
+          workflowName: finalTabTitle,
           members: resolvedMembers
         }));
       },
@@ -1413,18 +1430,39 @@ export class ProjectManagementService {
     );
   }
 
-  applyWorkflowTemplateToProject(projectId: string, templateId: string): Observable<ProjectStatus[]> {
+  applyWorkflowTemplateToProject(projectId: string, templateId: string, templateName?: string): Observable<ProjectStatus[]> {
     return this.http.post<ProjectStatus[]>(`${this.baseUrl}/projects/${projectId}/workflow/template`, { templateId }).pipe(
       tap(statuses => {
+        let resolvedTitle = templateName;
+        if (!resolvedTitle) {
+          const rawId = templateId.toLowerCase();
+          if (rawId.includes('kanban')) resolvedTitle = 'Kanban đơn giản';
+          else if (rawId.includes('qa')) resolvedTitle = 'Agile + QA';
+          else if (rawId.includes('enterprise')) resolvedTitle = 'Enterprise';
+          else if (rawId.includes('scrum')) resolvedTitle = 'Scrum chuẩn';
+          else resolvedTitle = templateId.replace('preset-', '');
+        }
+
+        const tabTitle = resolvedTitle.replace(/^Bảng\s+/i, '').trim();
+        const bName = resolvedTitle.startsWith('Bảng ') ? resolvedTitle : `Bảng ${resolvedTitle}`;
         const isKanban = templateId.toLowerCase().includes('kanban');
         const mType = isKanban ? 'Kanban' : 'Scrum';
-        const bName = isKanban ? 'Bảng Kanban' : 'Bảng Scrum';
+
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem(`projectmgmt.workflow-template.${projectId}`, templateId);
+          sessionStorage.setItem(`projectmgmt.workflow-name.${projectId}`, tabTitle);
+        }
+
         this.currentProject.update(p => ({
           ...p,
           type: mType,
           managementType: mType,
-          boardName: bName
+          boardName: bName,
+          boardTabTitle: tabTitle,
+          workflowName: tabTitle,
+          workflowTemplateId: templateId
         }));
+
         if (this.currentProject().id === projectId) {
           this.projectStatuses.set(statuses);
           this.loadWorkspace(projectId);
