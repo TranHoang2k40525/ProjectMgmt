@@ -535,11 +535,15 @@ export class ProjectManagementService {
   private initRealtimeSubscriptions(): void {
     this.realtime?.on<{ issueId: string; projectId: string; comment: any; workItem: WorkItem }>('WorkItemCommentAdded', payload => {
       if (!payload) return;
+      const targetId = String(payload.issueId || (payload as any).IssueId || payload.workItem?.id || '').toLowerCase();
+      if (!targetId) return;
+
       this.workItems.update(items => items.map(item => {
-        if (item.id === payload.issueId) {
+        if (String(item.id).toLowerCase() === targetId) {
           if (payload.workItem) return payload.workItem;
           const currentComments = item.comments ? [...item.comments] : [];
-          if (!currentComments.some(c => c.id === payload.comment?.id)) {
+          const cId = String(payload.comment?.id ?? payload.comment?.Id ?? '');
+          if (payload.comment && !currentComments.some(c => String(c.id).toLowerCase() === cId.toLowerCase())) {
             currentComments.push(payload.comment);
           }
           return { ...item, comments: currentComments };
@@ -548,12 +552,13 @@ export class ProjectManagementService {
       }));
 
       const active = this.activeDrawerTask();
-      if (active && active.id === payload.issueId) {
+      if (active && String(active.id).toLowerCase() === targetId) {
         if (payload.workItem) {
           this.activeDrawerTask.set(payload.workItem);
         } else {
           const currentComments = active.comments ? [...active.comments] : [];
-          if (!currentComments.some(c => c.id === payload.comment?.id)) {
+          const cId = String(payload.comment?.id ?? payload.comment?.Id ?? '');
+          if (payload.comment && !currentComments.some(c => String(c.id).toLowerCase() === cId.toLowerCase())) {
             currentComments.push(payload.comment);
           }
           this.activeDrawerTask.set({ ...active, comments: currentComments });
@@ -769,12 +774,12 @@ export class ProjectManagementService {
   getIssue(id: string): Observable<WorkItem> { return this.http.get<WorkItem>(`${this.baseUrl}/issues/${id}`); }
   saveIssue(item: WorkItem): Observable<WorkItem> { return this.http.put<WorkItem>(`${this.baseUrl}/issues/${item.id}`, { ...item, parentId: item.parentId || null, assigneeId: item.assigneeId || null, epicId: item.epicId || null, sprintId: item.sprintId || null, labels: item.labels ?? [] }); }
   createIssue(projectId: string, item: Partial<WorkItem>): Observable<WorkItem> { return this.http.post<WorkItem>(`${this.baseUrl}/projects/${projectId}/issues`, item); }
-  postComment(id: string, content: string): Observable<WorkItem> {
-    return this.http.post<WorkItem>(`${this.baseUrl}/issues/${id}/comments`, { content }).pipe(
+  postComment(id: string, content: string, mentionedUserIds?: string[]): Observable<WorkItem> {
+    return this.http.post<WorkItem>(`${this.baseUrl}/issues/${id}/comments`, { content, mentionedUserIds: mentionedUserIds ?? [] }).pipe(
       tap(updated => {
         if (updated) {
-          this.workItems.update(items => items.map(i => i.id === updated.id ? updated : i));
-          if (this.activeDrawerTask()?.id === updated.id) {
+          this.workItems.update(items => items.map(i => String(i.id).toLowerCase() === String(updated.id).toLowerCase() ? updated : i));
+          if (this.activeDrawerTask() && String(this.activeDrawerTask()!.id).toLowerCase() === String(updated.id).toLowerCase()) {
             this.activeDrawerTask.set(updated);
           }
         }

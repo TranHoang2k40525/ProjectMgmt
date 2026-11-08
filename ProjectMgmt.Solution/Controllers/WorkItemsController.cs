@@ -298,6 +298,28 @@ public sealed class WorkItemsController(
             }
         }
 
+        // Tự động quét thêm các @mentions trong nội dung bình luận nếu có
+        if (request.Content.Contains('@'))
+        {
+            try
+            {
+                var allActiveUsers = await userLookup.GetAllActiveDisplayInfoAsync();
+                foreach (var u in allActiveUsers)
+                {
+                    if (!string.IsNullOrWhiteSpace(u.DisplayName) &&
+                        request.Content.Contains($"@{u.DisplayName}", StringComparison.OrdinalIgnoreCase) &&
+                        u.UserId != access.UserId)
+                    {
+                        recipients.Add(u.UserId);
+                    }
+                }
+            }
+            catch
+            {
+                // Bỏ qua nếu lỗi quét người dùng
+            }
+        }
+
         // 3. Gửi thông báo đến từng người nhận
         var previewContent = request.Content.Length > 150 ? request.Content[..150] + "..." : request.Content;
         foreach (var recipientId in recipients)

@@ -572,7 +572,12 @@ export class IdentityService {
     this.notifications.update(list => [model, ...list.filter(n => n.id !== model.id)]);
     if (!model.isRead) {
       this.unreadCount.update(c => c + 1);
-      this.toast?.info(model.title, model.message, model.actionUrl);
+      // Không hiển thị toast popup nổi trên màn hình cho thông báo bình luận (issue_comment),
+      // thông báo vẫn được lưu vào chuông thông báo (bell) để xem khi cần mà không làm phiền trải nghiệm.
+      const isCommentNotification = (dto.type ?? '').toLowerCase().includes('comment') || (model.type ?? '').toLowerCase().includes('comment');
+      if (!isCommentNotification) {
+        this.toast?.info(model.title, model.message, model.actionUrl);
+      }
     }
   }
 

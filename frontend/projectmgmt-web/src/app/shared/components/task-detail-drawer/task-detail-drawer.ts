@@ -1,9 +1,9 @@
-import { ChangeDetectorRef, Component, EventEmitter, Input, Output, computed, inject, signal } from '@angular/core';
+import { ChangeDetectorRef, Component, EventEmitter, Input, OnDestroy, Output, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AiBreakdownApi } from '../../../core/api/ai-breakdown.api';
-import { ProjectManagementService, WorkItem } from '../../../core/services/project-management.service';
+import { ProjectManagementService, WorkItem, ProjectMember } from '../../../core/services/project-management.service';
 import { IdentityService } from '../../../core/services/identity.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { ConfirmDialogService } from '../../../core/services/confirm-dialog.service';
@@ -20,23 +20,28 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
         <!-- Backdrop close click -->
         <button type="button" aria-label="Đóng chi tiết công việc" class="task-drawer-dismiss flex-1 bg-transparent border-0" (click)="dismissed.emit()"></button>
 
-        <!-- Slide-over Right Drawer Container (Resizable Width, Full Width on Mobile) -->
+        <!-- Slide-over Right Drawer Container (Resizable Width, Full Width on Split-Screen / Mobile) -->
         <div
-          [style.width.px]="drawerWidth()"
+          [style.width.px]="isNarrowScreen() ? null : drawerWidth()"
+          [class.w-full]="isNarrowScreen()"
+          [class.max-w-full]="isNarrowScreen()"
+          [class.sm:max-w-full]="isNarrowScreen()"
           class="jira-drawer relative bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col h-full overflow-hidden animate-slide-left transition-all duration-75 w-full max-w-full sm:max-w-[90vw]"
         >
-          <!-- Resizable Left Edge Drag Handle (Hidden on Mobile) -->
-          <div
-            (mousedown)="startResizing($event)"
-            title="Kéo thả để mở rộng hoặc thu gọn độ rộng bảng chi tiết"
-            class="hidden sm:flex absolute left-0 top-0 bottom-0 w-2 hover:w-3 bg-slate-200 hover:bg-primary dark:bg-slate-800 cursor-col-resize z-50 items-center justify-center transition-all group"
-          >
-            <div class="w-0.5 h-8 bg-slate-400 group-hover:bg-white rounded-full"></div>
-          </div>
+          <!-- Resizable Left Edge Drag Handle (Hidden when Narrow or Resizing not suitable) -->
+          @if (!isNarrowScreen()) {
+            <div
+              (mousedown)="startResizing($event)"
+              title="Kéo thả để mở rộng hoặc thu gọn độ rộng bảng chi tiết"
+              class="hidden sm:flex absolute left-0 top-0 bottom-0 w-2 hover:w-3 bg-slate-200 hover:bg-primary dark:bg-slate-800 cursor-col-resize z-50 items-center justify-center transition-all group"
+            >
+              <div class="w-0.5 h-8 bg-slate-400 group-hover:bg-white rounded-full"></div>
+            </div>
+          }
           
           <!-- Drawer Top Navigation Header -->
-          <div class="task-drawer-header flex items-center justify-between px-6 py-3.5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-            <div class="flex items-center gap-2.5">
+          <div class="task-drawer-header flex items-center justify-between px-4 sm:px-6 py-3 sm:py-3.5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
+            <div class="flex items-center gap-2.5 min-w-0">
               <span
                 class="w-6 h-6 rounded-md inline-flex items-center justify-center text-white shrink-0 shadow-2xs"
                 [style.backgroundColor]="getIssueTypeColor(task)"
@@ -44,21 +49,21 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
               >
                 <span class="material-symbols-outlined text-[15px]">{{ getIssueTypeIcon(task) }}</span>
               </span>
-              <span class="px-2.5 py-0.5 rounded text-xs font-mono font-bold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700" [style.color]="getIssueTypeColor(task)">
+              <span class="px-2.5 py-0.5 rounded text-xs font-mono font-bold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shrink-0" [style.color]="getIssueTypeColor(task)">
                 {{ task.issueKey }}
               </span>
-              <span class="text-xs text-slate-500 font-medium">{{ task.sprintName ? ('Sprint: ' + task.sprintName) : (projectService.currentProject().name || 'Dự án') }}</span>
+              <span class="text-xs text-slate-500 font-medium truncate">{{ task.sprintName ? ('Sprint: ' + task.sprintName) : (projectService.currentProject().name || 'Dự án') }}</span>
             </div>
 
-            <div class="flex items-center gap-1">
-              <button (click)="cloneTask()" class="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-700 transition-colors" title="Nhân bản">
+            <div class="flex items-center gap-1 shrink-0">
+              <button (click)="cloneTask()" class="w-8 h-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 flex items-center justify-center transition-colors cursor-pointer" title="Nhân bản">
                 <span class="material-symbols-outlined text-[18px]">content_copy</span>
               </button>
-              <button (click)="deleteTask()" class="p-1 rounded hover:bg-rose-50 text-slate-500 hover:text-rose-600 transition-colors" title="Xóa">
+              <button (click)="deleteTask()" class="w-8 h-8 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 flex items-center justify-center transition-colors cursor-pointer" title="Xóa">
                 <span class="material-symbols-outlined text-[18px]">delete</span>
               </button>
               <div class="h-3.5 w-px bg-slate-200 dark:bg-slate-800 mx-1"></div>
-              <button (click)="dismissed.emit()" class="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-700 transition-colors">
+              <button (click)="dismissed.emit()" class="w-8 h-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 flex items-center justify-center transition-colors cursor-pointer" title="Đóng">
                 <span class="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
@@ -141,15 +146,15 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
               </div>
             }
 
-            <!-- Metadata Properties Grid -->
-            <div class="task-meta-grid grid grid-cols-2 sm:grid-cols-3 gap-3 p-3.5 rounded bg-slate-50/70 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
+            <!-- Metadata Properties Grid (Responsive 1/2/3 cols for half-screen & mobile) -->
+            <div class="task-meta-grid grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 p-3.5 sm:p-4 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
               <!-- Status Dropdown -->
-              <div class="flex flex-col gap-1">
-                <span class="text-xs font-medium text-slate-500">Trạng thái</span>
+              <div class="flex flex-col gap-1 min-w-0">
+                <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Trạng thái</span>
                 <select
                   [(ngModel)]="task.statusName"
                   (ngModelChange)="onFieldChange()"
-                  class="h-7 px-2 rounded text-xs font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-slate-900"
+                  class="h-8 px-2.5 rounded-lg text-xs font-semibold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary shadow-2xs cursor-pointer w-full"
                 >
                   @for (st of availableStatusNames(); track st) {
                     <option [value]="st">{{ st }}</option>
@@ -158,12 +163,12 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
               </div>
 
               <!-- Priority -->
-              <div class="flex flex-col gap-1">
-                <span class="text-xs font-medium text-slate-500">Độ ưu tiên</span>
+              <div class="flex flex-col gap-1 min-w-0">
+                <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Độ ưu tiên</span>
                 <select
                   [(ngModel)]="task.priority"
                   (ngModelChange)="onFieldChange()"
-                  class="h-7 px-2 rounded text-xs font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-slate-900"
+                  class="h-8 px-2.5 rounded-lg text-xs font-semibold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary shadow-2xs cursor-pointer w-full"
                 >
                   @for (p of availablePriorities(); track p.id) {
                     <option [value]="p.name">{{ p.name }}</option>
@@ -172,9 +177,9 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
               </div>
 
               <!-- Assignee -->
-              <div class="flex flex-col gap-1">
-                <span class="text-xs font-medium text-slate-500">Người thực hiện</span>
-                <div class="flex items-center gap-1.5">
+              <div class="flex flex-col gap-1 min-w-0">
+                <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Người thực hiện</span>
+                <div class="flex items-center gap-1.5 w-full min-w-0">
                   @if (getAssigneeAvatar(task.assigneeName); as av) {
                     <img [src]="av" [alt]="task.assigneeName || 'Avatar'" class="w-6 h-6 rounded-full object-cover shrink-0 border border-slate-200 dark:border-slate-700" />
                   } @else if (task.assigneeName) {
@@ -185,7 +190,7 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
                   <select
                     [(ngModel)]="task.assigneeName"
                     (ngModelChange)="onFieldChange()"
-                    class="h-7 px-2 rounded text-xs font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-slate-900 flex-1 min-w-0"
+                    class="h-8 px-2 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary flex-1 min-w-0 shadow-2xs cursor-pointer"
                   >
                     <option [value]="undefined">Chưa chỉ định</option>
                     @for (m of projectMembers(); track m.id) {
@@ -196,21 +201,21 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
               </div>
 
               <!-- Story Points -->
-              <div class="flex flex-col gap-1">
-                <span class="text-xs font-medium text-slate-500">Story Points</span>
+              <div class="flex flex-col gap-1 min-w-0">
+                <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Story Points</span>
                 <input
                   type="number"
                   min="1"
                   max="21"
                   [(ngModel)]="task.storyPoints"
                   (ngModelChange)="onFieldChange()"
-                  class="h-7 w-full px-2 rounded text-xs font-mono font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-slate-900"
+                  class="h-8 w-full px-2.5 rounded-lg text-xs font-mono font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary shadow-2xs"
                 />
               </div>
 
               <!-- Estimated Hours -->
-              <div class="flex flex-col gap-1">
-                <span class="text-xs font-medium text-slate-500">Giờ ước tính (h)</span>
+              <div class="flex flex-col gap-1 min-w-0">
+                <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Giờ ước tính (h)</span>
                 <input
                   type="number"
                   min="0"
@@ -218,13 +223,13 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
                   [(ngModel)]="task.estimatedHours"
                   (ngModelChange)="onFieldChange()"
                   placeholder="0.0"
-                  class="h-7 w-full px-2 rounded text-xs font-mono font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-slate-900"
+                  class="h-8 w-full px-2.5 rounded-lg text-xs font-mono font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary shadow-2xs"
                 />
               </div>
 
               <!-- Remaining Hours -->
-              <div class="flex flex-col gap-1">
-                <span class="text-xs font-medium text-slate-500">Giờ còn lại (h)</span>
+              <div class="flex flex-col gap-1 min-w-0">
+                <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Giờ còn lại (h)</span>
                 <input
                   type="number"
                   min="0"
@@ -232,7 +237,7 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
                   [(ngModel)]="task.remainingHours"
                   (ngModelChange)="onFieldChange()"
                   placeholder="0.0"
-                  class="h-7 w-full px-2 rounded text-xs font-mono font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-slate-900"
+                  class="h-8 w-full px-2.5 rounded-lg text-xs font-mono font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary shadow-2xs"
                 />
               </div>
             </div>
@@ -378,7 +383,7 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
                     (click)="insertMention(m)"
                     class="w-full px-3 py-1.5 flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-left text-xs cursor-pointer transition-colors"
                   >
-                    @if (getAssigneeAvatar(m.displayName); as av) {
+                    @if (getMemberAvatar(m); as av) {
                       <img [src]="av" [alt]="m.displayName" class="w-5 h-5 rounded-full object-cover shrink-0" />
                     } @else {
                       <div class="w-5 h-5 rounded-full bg-primary/10 text-primary font-bold text-[10px] flex items-center justify-center shrink-0">
@@ -520,7 +525,7 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
     }
   `]
 })
-export class TaskDetailDrawerComponent {
+export class TaskDetailDrawerComponent implements OnDestroy {
   @Input() set task(val: WorkItem | null) {
     this._task = val;
     this.localComments.set(val?.comments ? [...val.comments] : []);
@@ -540,6 +545,14 @@ export class TaskDetailDrawerComponent {
   private readonly aiApi = inject(AiBreakdownApi, { optional: true });
   private readonly realtimeService = inject(RealtimeService, { optional: true });
   private readonly cdr = inject(ChangeDetectorRef);
+
+  readonly windowWidth = signal<number>(typeof window !== 'undefined' ? window.innerWidth : 1200);
+  readonly isNarrowScreen = computed(() => this.windowWidth() < 860);
+  private readonly resizeListener = () => {
+    if (typeof window !== 'undefined') {
+      this.windowWidth.set(window.innerWidth);
+    }
+  };
 
   readonly drawerWidth = signal<number>(640);
   private isResizing = false;
@@ -572,15 +585,32 @@ export class TaskDetailDrawerComponent {
   });
 
   constructor() {
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', this.resizeListener);
+    }
+
     this.realtimeService?.on<{ issueId: string; comment: any; workItem: WorkItem }>('WorkItemCommentAdded', payload => {
-      if (!payload || !this.task || payload.issueId !== this.task.id) return;
-      if (payload.workItem?.comments) {
-        this.task.comments = payload.workItem.comments;
-        this.localComments.set([...payload.workItem.comments]);
+      if (!payload || !this.task) return;
+      const matchId = String(payload.issueId || (payload as any).IssueId || payload.workItem?.id || '').toLowerCase();
+      const currentId = String(this.task.id || '').toLowerCase();
+      if (!matchId || !currentId || matchId !== currentId) return;
+
+      const rawComments = payload.workItem?.comments || (payload.workItem as any)?.Comments;
+      if (Array.isArray(rawComments)) {
+        this.task.comments = [...rawComments];
+        this.localComments.set([...rawComments]);
       } else if (payload.comment) {
+        const c = payload.comment;
+        const newCommentObj = {
+          id: c.id ?? c.Id,
+          authorName: c.authorName ?? c.AuthorName ?? 'Thành viên',
+          authorAvatar: c.authorAvatar ?? c.AuthorAvatar,
+          content: c.content ?? c.Content ?? '',
+          createdAt: c.createdAt ?? c.CreatedAt ?? new Date().toISOString()
+        };
         this.localComments.update(list => {
-          if (list.some(c => c.id === payload.comment.id)) return list;
-          return [payload.comment, ...list];
+          if (list.some(item => String(item.id).toLowerCase() === String(newCommentObj.id).toLowerCase())) return list;
+          return [newCommentObj, ...list];
         });
         if (this.task) {
           this.task.comments = this.localComments();
@@ -588,6 +618,12 @@ export class TaskDetailDrawerComponent {
       }
       this.cdr.markForCheck();
     });
+  }
+
+  ngOnDestroy(): void {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('resize', this.resizeListener);
+    }
   }
 
   readonly isSubtaskComposerOpen = signal(false);
@@ -629,6 +665,11 @@ export class TaskDetailDrawerComponent {
 
   getAssigneeAvatar(name?: string): string | null {
     return this.projectService.getMemberAvatar(name, this.task?.assigneeAvatar);
+  }
+
+  getMemberAvatar(m: ProjectMember): string | null {
+    if (m?.avatarUrl) return resolveAvatarUrl(m.avatarUrl);
+    return this.projectService.getMemberAvatar(m?.userId || m?.displayName);
   }
 
   getIssueTypeIcon(item: WorkItem): string {
@@ -812,6 +853,7 @@ export class TaskDetailDrawerComponent {
   }
 
   startResizing(event: MouseEvent): void {
+    if (this.isNarrowScreen()) return;
     event.preventDefault();
     this.isResizing = true;
     const onMouseMove = (moveEvent: MouseEvent) => {
@@ -969,11 +1011,19 @@ export class TaskDetailDrawerComponent {
   submitComment(): void {
     const text = this.newCommentText.trim();
     if (this.task && text) {
-      this.projectService.postComment(this.task.id, text).subscribe({
+      const mentionedUserIds: string[] = [];
+      const members = this.projectMembers();
+      for (const m of members) {
+        if (m.displayName && text.includes(`@${m.displayName}`)) {
+          mentionedUserIds.push(m.userId);
+        }
+      }
+
+      this.projectService.postComment(this.task.id, text, mentionedUserIds).subscribe({
         next: updated => {
-          if (this.task && this.task.id === updated.id) {
-            this.task.comments = updated.comments;
-            this.localComments.set(updated.comments ? [...updated.comments] : []);
+          if (this.task && String(this.task.id).toLowerCase() === String(updated.id).toLowerCase()) {
+            this.task.comments = updated.comments ? [...updated.comments] : [];
+            this.localComments.set(this.task.comments);
           }
           this.toastService.success('Bình luận', 'Đã đăng bình luận thành công.');
           this.newCommentText = '';
