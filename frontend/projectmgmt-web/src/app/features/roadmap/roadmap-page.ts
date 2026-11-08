@@ -653,8 +653,8 @@ export interface RoadmapGroupProgress {
                           </button>
                           <div class="flex flex-col min-w-0">
                             <div class="flex items-center gap-2 flex-wrap">
-                              <span class="material-symbols-outlined text-[16px] text-violet-600 dark:text-violet-400" aria-hidden="true">bolt</span>
-                              <span class="text-xs font-mono font-bold text-violet-600 dark:text-violet-400">{{ epic.key }}</span>
+                              <span class="material-symbols-outlined text-[16px] text-primary" aria-hidden="true">bolt</span>
+                              <span class="text-xs font-mono font-bold text-primary">{{ epic.key }}</span>
                               <button
                                 type="button"
                                 (click)="toggleGroup(epic.id)"
@@ -666,7 +666,7 @@ export interface RoadmapGroupProgress {
                             </span>
                           </div>
                         </div>
-                        <span class="px-2 py-0.5 rounded-lg text-xs font-mono font-bold bg-violet-500/10 text-violet-600 dark:text-violet-400 shrink-0">
+                        <span class="px-2 py-0.5 rounded-lg text-xs font-mono font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shrink-0">
                           {{ prog.donePoints }}/{{ prog.totalPoints }} SP
                         </span>
                       </div>
@@ -678,7 +678,7 @@ export interface RoadmapGroupProgress {
                           </span>
                         </div>
                         <div class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                          <div class="h-full bg-violet-600 rounded-full transition-all duration-300" [style.width.%]="prog.percent"></div>
+                          <div class="h-full bg-primary rounded-full transition-all duration-300" [style.width.%]="prog.percent"></div>
                         </div>
                       </div>
                     </div>
@@ -693,16 +693,16 @@ export interface RoadmapGroupProgress {
 
                       <div
                         (click)="toggleGroup(epic.id)"
-                        class="relative z-20 h-9 rounded-xl border border-violet-300 dark:border-violet-700 bg-violet-100/90 dark:bg-violet-950/70 shadow-2xs flex items-center overflow-hidden cursor-pointer"
+                        class="relative z-20 h-9 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100/90 dark:bg-slate-800/80 shadow-2xs flex items-center overflow-hidden cursor-pointer"
                         [style.left.%]="bar.leftPercent"
                         [style.width.%]="bar.widthPercent"
                       >
-                        <div class="absolute left-0 top-0 bottom-0 bg-violet-600 transition-all duration-300 opacity-90" [style.width.%]="prog.percent"></div>
+                        <div class="absolute left-0 top-0 bottom-0 bg-primary transition-all duration-300 opacity-90" [style.width.%]="prog.percent"></div>
                         <div class="relative z-10 px-3 flex items-center justify-between w-full gap-2 text-xs font-bold whitespace-nowrap overflow-hidden">
                           <span
                             class="truncate"
                             [class.text-white]="prog.percent >= 45"
-                            [class.text-violet-950]="prog.percent < 45"
+                            [class.text-slate-900]="prog.percent < 45"
                             [class.dark:text-white]="true"
                           >
                             {{ epic.name }} · {{ prog.shortLabel }}
@@ -717,7 +717,7 @@ export interface RoadmapGroupProgress {
                       @let itemBar = getWorkItemBarLayout(item);
                       <div
                         (click)="openTaskDetail(item)"
-                        class="flex items-stretch border-b border-slate-100 dark:border-slate-800/70 bg-slate-50/40 dark:bg-slate-900/60 hover:bg-violet-50/40 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
+                        class="flex items-stretch border-b border-slate-100 dark:border-slate-800/70 bg-slate-50/40 dark:bg-slate-900/60 hover:bg-slate-100/60 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
                       >
                         <div class="w-[380px] shrink-0 pl-11 pr-4 py-2.5 border-r border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
                           <div class="flex items-center gap-2 min-w-0">
@@ -1289,10 +1289,10 @@ export class RoadmapPageComponent {
       label: `${percent}% Hoàn thành (${doneCount}/${totalCount} việc)`,
       shortLabel: `${percent}% (${doneCount}/${totalCount} việc)`,
       statusBadgeLabel: epic.status,
-      barTrackClass: 'bg-violet-100 dark:bg-violet-950/60 border-violet-300 dark:border-violet-700',
-      barFillClass: 'bg-violet-600',
-      badgeClass: 'bg-violet-500/15 text-violet-700 dark:text-violet-300',
-      dotClass: 'bg-violet-500'
+      barTrackClass: 'bg-slate-100 dark:bg-slate-800/60 border-slate-300 dark:border-slate-700',
+      barFillClass: 'bg-primary',
+      badgeClass: 'bg-primary/10 text-primary dark:text-emerald-400',
+      dotClass: 'bg-primary'
     };
   }
 

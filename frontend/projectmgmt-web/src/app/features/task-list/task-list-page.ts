@@ -82,13 +82,13 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
                 <button
                   type="button"
                   (click)="toggleEpicFilter(epic.name)"
-                  [class.bg-purple-50]="selectedEpic() === epic.name"
-                  [class.dark:bg-purple-950/60]="selectedEpic() === epic.name"
-                  [class.text-purple-700]="selectedEpic() === epic.name"
-                  [class.dark:text-purple-300]="selectedEpic() === epic.name"
+                  [class.bg-primary/10]="selectedEpic() === epic.name"
+                  [class.dark:bg-primary/20]="selectedEpic() === epic.name"
+                  [class.text-primary]="selectedEpic() === epic.name"
+                  [class.dark:text-emerald-400]="selectedEpic() === epic.name"
                   class="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                 >
-                  <span class="w-2 h-2 rounded bg-purple-500 shrink-0"></span>
+                  <span class="w-2 h-2 rounded bg-primary shrink-0"></span>
                   <span class="truncate">{{ epic.name }}</span>
                 </button>
               } @empty {
@@ -170,9 +170,9 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
                         [class.bg-blue-50]="item.statusName === 'In Progress'"
                         [class.text-blue-700]="item.statusName === 'In Progress'"
                         [class.border-blue-200]="item.statusName === 'In Progress'"
-                        [class.bg-purple-50]="item.statusName === 'Code Review'"
-                        [class.text-purple-700]="item.statusName === 'Code Review'"
-                        [class.border-purple-200]="item.statusName === 'Code Review'"
+                        [class.bg-teal-50]="item.statusName === 'Code Review'"
+                        [class.text-teal-700]="item.statusName === 'Code Review'"
+                        [class.border-teal-200]="item.statusName === 'Code Review'"
                         [class.bg-emerald-50]="item.statusName === 'Done'"
                         [class.text-emerald-700]="item.statusName === 'Done'"
                         [class.border-emerald-200]="item.statusName === 'Done'"

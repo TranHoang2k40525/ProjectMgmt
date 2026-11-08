@@ -188,7 +188,11 @@ export class AppShellComponent {
       const trimmed = (p as any).boardName.replace(/^Bảng\s+/i, '').trim();
       if (trimmed) return trimmed;
     }
-    // 3. Kiểm tra lưu vết trong sessionStorage theo dự án
+    // 3. Kiểm tra lưu vết trong localStorage hoặc sessionStorage theo dự án
+    if (typeof localStorage !== 'undefined' && p?.id) {
+      const saved = localStorage.getItem(`projectmgmt.workflow-name.${p.id}`);
+      if (saved) return saved.replace(/^Bảng\s+/i, '').trim();
+    }
     if (typeof sessionStorage !== 'undefined' && p?.id) {
       const saved = sessionStorage.getItem(`projectmgmt.workflow-name.${p.id}`);
       if (saved) return saved.replace(/^Bảng\s+/i, '').trim();
@@ -469,7 +473,7 @@ export class AppShellComponent {
   logout(): void {
     this.confirmService.confirm({
       title: 'Xác Nhận Đăng Xuất',
-      message: 'Bạn có chắc chắn muốn đăng xuất khỏi Hệ thống Quản lý Dự án Scrum tích hợp AI?',
+      message: 'Bạn có chắc chắn muốn đăng xuất khỏi Hệ thống Quản lý Dự án Enterprise?',
       type: 'danger',
       confirmText: 'Đăng xuất ngay',
       cancelText: 'Hủy bỏ',

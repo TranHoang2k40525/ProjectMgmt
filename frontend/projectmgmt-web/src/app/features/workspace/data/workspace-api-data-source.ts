@@ -203,7 +203,10 @@ export class WorkspaceApiDataSource extends WorkspaceDataSource {
 
   /** Lỗi thì dùng các mẫu có sẵn (backend áp được trực tiếp qua `workflow/template`). */
   listWorkflowTemplates(orgId: string): Observable<WorkflowTemplate[]> {
-    return this.http.get<WorkflowTemplate[]>(`${this.org(orgId)}/workflow-templates`).pipe(catchError(() => of(presetWorkflowTemplates())));
+    return this.http.get<WorkflowTemplate[]>(`${this.org(orgId)}/workflow-templates`).pipe(
+      map(list => (list && list.length > 0) ? list : presetWorkflowTemplates()),
+      catchError(() => of(presetWorkflowTemplates()))
+    );
   }
 
   createWorkflowTemplate(orgId: string, request: SaveWorkflowTemplateRequest): Observable<WorkflowTemplate> {

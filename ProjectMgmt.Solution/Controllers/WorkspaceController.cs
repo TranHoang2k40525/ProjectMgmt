@@ -1315,6 +1315,15 @@ public sealed class WorkspaceController : ControllerBase
             });
         }
 
+        var presets = GetSystemPresets();
+        foreach (var p in presets)
+        {
+            if (!templates.Any(t => t.Id == p.Id || t.Name.Equals(p.Name, StringComparison.OrdinalIgnoreCase)))
+            {
+                templates.Add(p);
+            }
+        }
+
         if (!templates.Any(t => t.IsDefault) && templates.Count > 0)
         {
             templates[0].IsDefault = true;

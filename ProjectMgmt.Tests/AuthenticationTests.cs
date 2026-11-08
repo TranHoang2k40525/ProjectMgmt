@@ -529,6 +529,18 @@ public class FakeEmailService : IEmailService
         RecipientEmail = recipientEmail;
         return Task.FromResult(DeliverySucceeds);
     }
+
+    public Task<bool> SendOrganizationInvitationAsync(
+        string recipientEmail,
+        string recipientName,
+        string orgName,
+        string inviterName,
+        string roleName,
+        string inviteAcceptUrl)
+    {
+        RecipientEmail = recipientEmail;
+        return Task.FromResult(DeliverySucceeds);
+    }
 }
 
 public class FakeTokenService : ITokenService

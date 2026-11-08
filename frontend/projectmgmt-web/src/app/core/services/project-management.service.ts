@@ -645,22 +645,27 @@ export class ProjectManagementService {
         const tabTitle = bName.replace(/^Bảng\s+/i, '').trim() || (this.currentProject() as any)?.workflowName || 'Scrum';
         const bType = defaultBoard?.type || (this.currentProject() as any)?.managementType || 'Scrum';
 
-        // Lấy tên workflow đã lưu từ sessionStorage (nếu có)
-        const savedWorkflowName = typeof sessionStorage !== 'undefined'
-          ? sessionStorage.getItem(`projectmgmt.workflow-name.${projectId}`)
-          : null;
+        // Lấy tên workflow đã lưu từ localStorage / sessionStorage (nếu có)
+        const savedWorkflowName = (typeof localStorage !== 'undefined' ? localStorage.getItem(`projectmgmt.workflow-name.${projectId}`) : null)
+          || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(`projectmgmt.workflow-name.${projectId}`) : null);
+        const savedWorkflowTemplate = (typeof localStorage !== 'undefined' ? localStorage.getItem(`projectmgmt.workflow-template.${projectId}`) : null)
+          || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(`projectmgmt.workflow-template.${projectId}`) : null);
+
         const finalTabTitle = savedWorkflowName || tabTitle;
         const finalBoardName = savedWorkflowName
           ? (savedWorkflowName.startsWith('Bảng ') ? savedWorkflowName : `Bảng ${savedWorkflowName}`)
           : bName;
+        const isKanban = (savedWorkflowTemplate?.toLowerCase().includes('kanban') || savedWorkflowName?.toLowerCase().includes('kanban') || bType === 'Kanban');
+        const finalType = isKanban ? 'Kanban' : bType;
 
         this.currentProject.update(p => ({
           ...p,
-          type: bType,
-          managementType: bType,
+          type: finalType,
+          managementType: finalType,
           boardName: finalBoardName,
           boardTabTitle: finalTabTitle,
           workflowName: finalTabTitle,
+          workflowTemplateId: savedWorkflowTemplate || (p as any)?.workflowTemplateId,
           members: resolvedMembers
         }));
       },
@@ -1431,28 +1436,31 @@ export class ProjectManagementService {
   }
 
   applyWorkflowTemplateToProject(projectId: string, templateId: string, templateName?: string): Observable<ProjectStatus[]> {
-    return this.http.post<ProjectStatus[]>(`${this.baseUrl}/projects/${projectId}/workflow/template`, { templateId }).pipe(
+    let resolvedTitle = templateName;
+    if (!resolvedTitle) {
+      const rawId = templateId.toLowerCase();
+      if (rawId.includes('kanban')) resolvedTitle = 'Kanban đơn giản';
+      else if (rawId.includes('qa')) resolvedTitle = 'Agile + QA';
+      else if (rawId.includes('enterprise')) resolvedTitle = 'Enterprise';
+      else if (rawId.includes('scrum')) resolvedTitle = 'Scrum chuẩn';
+      else resolvedTitle = templateId.replace('preset-', '');
+    }
+    const tabTitle = resolvedTitle.replace(/^Bảng\s+/i, '').trim();
+    const bName = resolvedTitle.startsWith('Bảng ') ? resolvedTitle : `Bảng ${resolvedTitle}`;
+    const isKanban = templateId.toLowerCase().includes('kanban') || resolvedTitle.toLowerCase().includes('kanban');
+    const mType = isKanban ? 'Kanban' : 'Scrum';
+
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(`projectmgmt.workflow-template.${projectId}`, templateId);
+      localStorage.setItem(`projectmgmt.workflow-name.${projectId}`, tabTitle);
+    }
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(`projectmgmt.workflow-template.${projectId}`, templateId);
+      sessionStorage.setItem(`projectmgmt.workflow-name.${projectId}`, tabTitle);
+    }
+
+    return this.http.post<ProjectStatus[]>(`${this.baseUrl}/projects/${projectId}/workflow/template`, { templateId, templateName: resolvedTitle }).pipe(
       tap(statuses => {
-        let resolvedTitle = templateName;
-        if (!resolvedTitle) {
-          const rawId = templateId.toLowerCase();
-          if (rawId.includes('kanban')) resolvedTitle = 'Kanban đơn giản';
-          else if (rawId.includes('qa')) resolvedTitle = 'Agile + QA';
-          else if (rawId.includes('enterprise')) resolvedTitle = 'Enterprise';
-          else if (rawId.includes('scrum')) resolvedTitle = 'Scrum chuẩn';
-          else resolvedTitle = templateId.replace('preset-', '');
-        }
-
-        const tabTitle = resolvedTitle.replace(/^Bảng\s+/i, '').trim();
-        const bName = resolvedTitle.startsWith('Bảng ') ? resolvedTitle : `Bảng ${resolvedTitle}`;
-        const isKanban = templateId.toLowerCase().includes('kanban');
-        const mType = isKanban ? 'Kanban' : 'Scrum';
-
-        if (typeof sessionStorage !== 'undefined') {
-          sessionStorage.setItem(`projectmgmt.workflow-template.${projectId}`, templateId);
-          sessionStorage.setItem(`projectmgmt.workflow-name.${projectId}`, tabTitle);
-        }
-
         this.currentProject.update(p => ({
           ...p,
           type: mType,

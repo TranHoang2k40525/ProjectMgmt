@@ -517,4 +517,127 @@ button, .btn {
   transition: all 0.15s ease-out !important;
 }
 
+/* ==========================================================================
+   Animate UI - Enterprise Design System & Micro-Interactions
+   (Unified palette, 3D tactile elevation, 60fps performance, zero AI-slop)
+   ========================================================================== */
+.animate-ui-card {
+  position: relative;
+  background-color: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 0.75rem; /* 12px */
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.04), 0 1px 2px -1px rgba(15, 23, 42, 0.02);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s ease;
+  will-change: transform, box-shadow;
+
+  :host-context(.dark) &,
+  .dark & {
+    background-color: #0f172a;
+    border-color: rgba(51, 65, 85, 0.7);
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.2);
+  }
+
+  &:hover {
+    border-color: rgba(203, 213, 225, 1);
+    box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
+
+    :host-context(.dark) &,
+    .dark & {
+      border-color: rgba(71, 85, 105, 0.9);
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+    }
+  }
+}
+
+.animate-ui-btn-primary {
+  background-color: #1b4332;
+  color: #ffffff;
+  border: 1px solid #143527;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  font-size: 0.8125rem;
+  padding: 0.5rem 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+
+  &:hover:not(:disabled) {
+    background-color: #2d6a4f;
+    border-color: #245740;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px -2px rgba(27, 67, 50, 0.25);
+  }
+
+  &:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+}
+
+.animate-ui-btn-secondary {
+  background-color: #ffffff;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  font-size: 0.8125rem;
+  padding: 0.5rem 0.875rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.03);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+
+  :host-context(.dark) &,
+  .dark & {
+    background-color: #1e293b;
+    color: #f1f5f9;
+    border-color: #334155;
+  }
+
+  &:hover:not(:disabled) {
+    background-color: #f8fafc;
+    border-color: #cbd5e1;
+    transform: translateY(-1px);
+
+    :host-context(.dark) &,
+    .dark & {
+      background-color: #334155;
+      border-color: #475569;
+    }
+  }
+
+  &:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+}
+
+.animate-ui-tab-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #64748b;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+
+  &:hover {
+    color: #0f172a;
+    background-color: rgba(241, 245, 249, 0.8);
+  }
+
+  &.is-active {
+    color: #1b4332;
+    background-color: #ffffff;
+    box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.08), 0 1px 2px -1px rgba(15, 23, 42, 0.04);
+  }
+}
+
+
 

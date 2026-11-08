@@ -21,6 +21,7 @@ public sealed class IssueTypeInput
 public sealed class WorkflowTemplateInput
 {
     [Required] public string TemplateId { get; set; } = "";
+    public string? TemplateName { get; set; }
 }
 
 public sealed class UpdateBoardModeInput
@@ -249,6 +250,11 @@ public sealed class ProjectCustomizationController(PlanningDbContext db, Deliver
         if (templateSteps.Count == 0)
             return BadRequest(new { title = "Mẫu workflow không tồn tại trong cơ sở dữ liệu." });
 
+        if (!string.IsNullOrWhiteSpace(input.TemplateName))
+        {
+            templateName = input.TemplateName.Trim();
+        }
+
         if (string.IsNullOrWhiteSpace(templateName))
         {
             var rawTid = (input.TemplateId ?? "").Trim().ToLowerInvariant();
@@ -263,7 +269,9 @@ public sealed class ProjectCustomizationController(PlanningDbContext db, Deliver
             };
         }
 
-        var isKanban = string.Equals(templateManagementType, "Kanban", StringComparison.OrdinalIgnoreCase);
+        var isKanban = string.Equals(templateManagementType, "Kanban", StringComparison.OrdinalIgnoreCase)
+            || (input.TemplateId ?? "").Contains("kanban", StringComparison.OrdinalIgnoreCase)
+            || (templateName ?? "").Contains("kanban", StringComparison.OrdinalIgnoreCase);
         var resolvedWorkflowName = !string.IsNullOrWhiteSpace(templateName) ? templateName.Trim() : (isKanban ? "Kanban đơn giản" : "Scrum chuẩn");
         var targetBoardName = resolvedWorkflowName.StartsWith("Bảng ", StringComparison.OrdinalIgnoreCase)
             ? resolvedWorkflowName
@@ -391,20 +399,24 @@ public sealed class ProjectCustomizationController(PlanningDbContext db, Deliver
                 boards.Add(newBoard);
             }
 
+            var primaryBoard = boards.FirstOrDefault(b => b.IsDefault) ?? boards[0];
+            primaryBoard.Type = isKanban ? "Kanban" : "Scrum";
+            primaryBoard.Name = targetBoardName;
+
             foreach (var board in boards)
             {
-                if (!string.IsNullOrWhiteSpace(templateManagementType))
+                if (board.Id != primaryBoard.Id)
                 {
-                    var isKanban = string.Equals(templateManagementType, "Kanban", StringComparison.OrdinalIgnoreCase);
-                    board.Type = isKanban ? "Kanban" : "Scrum";
-                }
-
-                // Cập nhật tên Board theo mẫu Workflow được chọn
-                if (board.IsDefault || boards.Count == 1 || board.Name.Contains("Scrum", StringComparison.OrdinalIgnoreCase) || board.Name.Contains("Kanban", StringComparison.OrdinalIgnoreCase) || board.Name.StartsWith("Bảng ", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (!boards.Any(b => b.Id != board.Id && string.Equals(b.Name, targetBoardName, StringComparison.OrdinalIgnoreCase)))
+                    if (!string.IsNullOrWhiteSpace(templateManagementType))
                     {
-                        board.Name = targetBoardName;
+                        board.Type = isKanban ? "Kanban" : "Scrum";
+                    }
+                    if (board.Name.Contains("Scrum", StringComparison.OrdinalIgnoreCase) || board.Name.Contains("Kanban", StringComparison.OrdinalIgnoreCase) || board.Name.StartsWith("Bảng ", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (!boards.Any(b => b.Id != board.Id && string.Equals(b.Name, targetBoardName, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            board.Name = targetBoardName;
+                        }
                     }
                 }
 

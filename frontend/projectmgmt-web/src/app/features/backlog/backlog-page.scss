@@ -165,10 +165,17 @@ select:focus-visible {
   background: #0052cc;
 }
 
-.is-active-purple {
-  color: #403294;
-  border-color: #c0b6f2;
-  background: #eae6ff;
+.is-active-epic {
+  color: #1b4332;
+  border-color: #2d6a4f;
+  background: #d8f3dc;
+  font-weight: 600;
+
+  @media (prefers-color-scheme: dark) {
+    color: #d8f3dc;
+    border-color: #2d6a4f;
+    background: rgba(45, 106, 79, 0.35);
+  }
 }
 
 .active-dot {

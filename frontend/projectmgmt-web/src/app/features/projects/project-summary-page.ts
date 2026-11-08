@@ -3,13 +3,13 @@ import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { gsap } from 'gsap';
 import { ProjectManagementService } from '../../core/services/project-management.service';
-
+import { CardTiltDirective } from '../../shared/motion/card-tilt.directive';
 import { NoProjectStateComponent } from '../../shared/components/no-project-state/no-project-state.component';
 
 @Component({
   selector: 'app-project-summary-page',
   standalone: true,
-  imports: [CommonModule, RouterLink, NoProjectStateComponent],
+  imports: [CommonModule, RouterLink, NoProjectStateComponent, CardTiltDirective],
   template: `
     @if (!projectService.hasActiveProject()) {
       <app-no-project-state featureName="Tổng quan Dự án"></app-no-project-state>
@@ -17,39 +17,43 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
     <div class="project-summary-page flex flex-col gap-6 animate-fade-in">
       
       <!-- Top Banner Header -->
-      <div class="summary-hero flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-2xl bg-gradient-to-r from-[#1b4332] via-[#2d6a4f] to-[#1b4332] text-white shadow-xl relative overflow-hidden">
-        <div class="absolute -right-10 -bottom-10 w-64 h-64 bg-emerald-400/20 rounded-full blur-3xl pointer-events-none"></div>
-
+      <div class="summary-hero flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-2xl bg-[#0f172a] text-white border border-slate-800 shadow-lg relative overflow-hidden">
         <div class="summary-hero-copy flex items-center gap-4 z-10">
-          <div class="w-14 h-14 rounded-2xl bg-white/15 backdrop-blur-md ring-1 ring-white/30 shrink-0 flex items-center justify-center text-xl font-bold font-mono text-white shadow-inner">
+          <div class="w-14 h-14 rounded-2xl bg-white/10 ring-1 ring-white/20 shrink-0 flex items-center justify-center text-xl font-bold font-mono text-white shadow-inner">
             {{ currentProject().projectKey ? currentProject().projectKey.slice(0, 2) : 'PJ' }}
           </div>
           <div class="flex flex-col">
             <div class="flex items-center gap-2">
-              <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-white/20 text-white">Scrum Agile</span>
-              <span class="text-xs text-emerald-200">Mã dự án: {{ currentProject().projectKey || '--' }}</span>
+              <span class="px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                {{ currentProject().workflowName || currentProject().boardTabTitle || 'Agile Workflow' }}
+              </span>
+              <span class="text-xs text-slate-300 font-mono">Mã dự án: {{ currentProject().projectKey || '--' }}</span>
             </div>
-            <h1 class="text-xl font-extrabold tracking-tight mt-0.5">{{ currentProject().name || 'Chưa chọn dự án' }}</h1>
-            <p class="text-xs text-slate-200">{{ currentProject().description || 'Chưa có mô tả dự án.' }}</p>
+            <h1 class="text-xl font-extrabold tracking-tight mt-1 text-white">{{ currentProject().name || 'Chưa chọn dự án' }}</h1>
+            <p class="text-xs text-slate-400 max-w-2xl mt-0.5">{{ currentProject().description || 'Không gian quản lý tiến độ, backlog và thực thi nhiệm vụ dự án.' }}</p>
           </div>
         </div>
 
         <div class="summary-hero-action flex items-center gap-3 z-10">
-          <a routerLink="/board" class="px-4 py-2 rounded-xl bg-white text-[#1b4332] hover:bg-slate-100 text-xs font-bold shadow-md transition-all flex items-center gap-1.5">
+          <a routerLink="/board" class="animate-ui-btn-primary text-xs shadow-md">
             <span class="material-symbols-outlined text-[18px]">view_kanban</span>
             Mở Bảng
+          </a>
+          <a routerLink="/backlog" class="animate-ui-btn-secondary text-xs">
+            <span class="material-symbols-outlined text-[18px]">format_list_bulleted</span>
+            Xem Backlog
           </a>
         </div>
       </div>
 
-      <!-- Bento Grid Layout Container -->
+      <!-- Bento Grid Layout Container with 3D Tilt Feedback -->
       <div class="summary-kpi-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         
         <!-- KPI Tile 1: Done -->
-        <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+        <div appCardTilt class="animate-ui-card p-5 flex flex-col justify-between cursor-default">
           <div class="flex items-center justify-between text-emerald-600 dark:text-emerald-400">
             <span class="text-xs font-bold uppercase tracking-wider">Đã hoàn thành</span>
-            <div class="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 flex items-center justify-center">
+            <div class="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 flex items-center justify-center border border-emerald-200/60 dark:border-emerald-800/40">
               <span class="material-symbols-outlined text-[20px]">check_circle</span>
             </div>
           </div>
@@ -60,10 +64,10 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
         </div>
 
         <!-- KPI Tile 2: In Progress -->
-        <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+        <div appCardTilt class="animate-ui-card p-5 flex flex-col justify-between cursor-default">
           <div class="flex items-center justify-between text-blue-600 dark:text-blue-400">
             <span class="text-xs font-bold uppercase tracking-wider">Đang thực hiện</span>
-            <div class="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 flex items-center justify-center">
+            <div class="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/60 flex items-center justify-center border border-blue-200/60 dark:border-blue-800/40">
               <span class="material-symbols-outlined text-[20px]">sync</span>
             </div>
           </div>
@@ -74,34 +78,34 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
         </div>
 
         <!-- KPI Tile 3: Active Sprint -->
-        <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
-          <div class="flex items-center justify-between text-indigo-600 dark:text-indigo-400">
+        <div appCardTilt class="animate-ui-card p-5 flex flex-col justify-between cursor-default">
+          <div class="flex items-center justify-between text-slate-700 dark:text-slate-300">
             <span class="text-xs font-bold uppercase tracking-wider">Sprint Hiện Tại</span>
-            <div class="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 flex items-center justify-center">
+            <div class="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-200 dark:border-slate-700">
               <span class="material-symbols-outlined text-[20px]">directions_run</span>
             </div>
           </div>
           <div class="mt-4 flex flex-col">
             @if (activeSprint(); as sp) {
-              <span class="text-base font-bold text-slate-900 dark:text-white">{{ sp.name }}</span>
-              <span class="text-[11px] text-slate-400">{{ sp.startDate || 'N/A' }} - {{ sp.endDate || 'N/A' }} ({{ sp.totalStoryPoints }} Story Pts)</span>
+              <span class="text-base font-bold text-slate-900 dark:text-white truncate">{{ sp.name }}</span>
+              <span class="text-[11px] text-slate-400 mt-0.5">{{ sp.startDate || 'N/A' }} - {{ sp.endDate || 'N/A' }} ({{ sp.totalStoryPoints }} Story Pts)</span>
             } @else {
               <span class="text-base font-bold text-slate-900 dark:text-white">Chưa có Sprint</span>
-              <span class="text-[11px] text-slate-400">Chưa có chu kỳ chạy</span>
+              <span class="text-[11px] text-slate-400 mt-0.5">Chưa có chu kỳ chạy</span>
             }
           </div>
         </div>
 
-        <!-- KPI Tile 4: AI Health Score -->
-        <div class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
-          <div class="flex items-center justify-between text-purple-600 dark:text-purple-400">
+        <!-- KPI Tile 4: Scope Progress -->
+        <div appCardTilt class="animate-ui-card p-5 flex flex-col justify-between cursor-default">
+          <div class="flex items-center justify-between text-teal-600 dark:text-teal-400">
             <span class="text-xs font-bold uppercase tracking-wider">Tiến Độ Dự Án</span>
-            <div class="w-8 h-8 rounded-xl bg-purple-50 dark:bg-purple-950/60 flex items-center justify-center">
-              <span class="material-symbols-outlined text-[20px]">psychology</span>
+            <div class="w-9 h-9 rounded-xl bg-teal-50 dark:bg-teal-950/60 flex items-center justify-center border border-teal-200/60 dark:border-teal-800/40">
+              <span class="material-symbols-outlined text-[20px]">donut_large</span>
             </div>
           </div>
           <div class="mt-4 flex items-baseline gap-2">
-            <span class="text-3xl font-extrabold text-emerald-500">
+            <span class="text-3xl font-extrabold text-slate-900 dark:text-white">
               {{ totalCount() > 0 ? ((completedCount() / totalCount()) * 100 | number:'1.0-0') + '%' : '0%' }}
             </span>
             <span class="text-xs text-slate-400">{{ completedCount() }}/{{ totalCount() }} hoàn thành</span>
@@ -114,13 +118,16 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
       <div class="summary-main-grid grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         <!-- Tile Left: Status Overview Donut Visual -->
-        <div class="lg:col-span-2 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col gap-6">
+        <div class="lg:col-span-2 animate-ui-card p-6 flex flex-col gap-6">
           <div class="summary-status-header flex items-center justify-between">
             <div class="flex flex-col">
               <h3 class="text-base font-bold text-slate-900 dark:text-white">Tổng Quan Trạng Thái Công Việc</h3>
               <p class="text-xs text-slate-400">Phân bố công việc theo trạng thái trong dự án</p>
             </div>
-            <a routerLink="/task-list" class="text-xs font-bold text-primary hover:underline">Xem tất cả công việc &rarr;</a>
+            <a routerLink="/task-list" class="text-xs font-bold text-primary hover:underline flex items-center gap-1">
+              Xem tất cả công việc
+              <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+            </a>
           </div>
 
           <div class="flex flex-col md:flex-row items-center justify-around gap-8 py-4">
@@ -155,7 +162,7 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
                 <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">In Progress (Đang làm): {{ inProgressCount() }}</span>
               </div>
               <div class="flex items-center gap-3">
-                <span class="w-3.5 h-3.5 rounded-md bg-purple-500"></span>
+                <span class="w-3.5 h-3.5 rounded-md bg-teal-500"></span>
                 <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">Code Review (Duyệt): {{ codeReviewCount() }}</span>
               </div>
               <div class="flex items-center gap-3">
@@ -167,22 +174,34 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
 
           <div class="summary-priority-box pt-4 border-t border-slate-100 dark:border-slate-800">
             <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Phân bổ theo Độ ưu tiên</h4>
-            <div class="flex items-center gap-4 text-xs font-medium">
-              <span class="text-red-500 font-semibold">Khẩn cấp (Urgent): {{ urgentCount() }}</span>
-              <span class="text-orange-500 font-semibold">Cao (High): {{ highCount() }}</span>
-              <span class="text-blue-500 font-semibold">Trung bình (Medium): {{ mediumCount() }}</span>
-              <span class="text-slate-500 font-semibold">Thấp (Low): {{ lowCount() }}</span>
+            <div class="flex flex-wrap items-center gap-4 text-xs font-medium">
+              <span class="text-rose-500 font-semibold flex items-center gap-1">
+                <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+                Khẩn cấp: {{ urgentCount() }}
+              </span>
+              <span class="text-amber-500 font-semibold flex items-center gap-1">
+                <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                Cao: {{ highCount() }}
+              </span>
+              <span class="text-blue-500 font-semibold flex items-center gap-1">
+                <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+                Trung bình: {{ mediumCount() }}
+              </span>
+              <span class="text-slate-500 font-semibold flex items-center gap-1">
+                <span class="w-2 h-2 rounded-full bg-slate-400"></span>
+                Thấp: {{ lowCount() }}
+              </span>
             </div>
           </div>
         </div>
 
         <!-- Tile Right: Activity Stream -->
-        <div class="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col gap-4">
+        <div class="animate-ui-card p-6 flex flex-col gap-4">
           <h3 class="text-base font-bold text-slate-900 dark:text-white">Dòng Hoạt Động Mới</h3>
 
           <div class="flex flex-col gap-3">
             @for (act of recentActivities(); track act.id) {
-              <div class="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40">
+              <div class="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/60 hover:bg-slate-100/70 dark:hover:bg-slate-800 transition-colors">
                 @if (getActorAvatar(act.actorName, act.actorAvatar); as avatarUrl) {
                   <img [src]="avatarUrl" [alt]="act.actorName" class="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-slate-200 dark:ring-slate-700" />
                 } @else {
@@ -190,15 +209,15 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
                     {{ act.actorName.charAt(0) }}
                   </div>
                 }
-                <div class="flex flex-col text-xs">
-                  <span class="font-bold text-slate-900 dark:text-white">{{ act.actorName }}</span>
-                  <span class="text-slate-600 dark:text-slate-300">{{ act.action }} <span class="font-semibold text-primary">[{{ act.issueKey }}]</span></span>
+                <div class="flex flex-col text-xs min-w-0">
+                  <span class="font-bold text-slate-900 dark:text-white truncate">{{ act.actorName }}</span>
+                  <span class="text-slate-600 dark:text-slate-300">{{ act.action }} <span class="font-semibold text-primary font-mono">[{{ act.issueKey }}]</span></span>
                   <span class="text-[10px] text-slate-400 mt-1">{{ act.timestamp }}</span>
                 </div>
               </div>
             } @empty {
-              <div class="py-8 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-1">
-                <span class="material-symbols-outlined text-2xl text-slate-300">history_toggle_off</span>
+              <div class="py-8 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
+                <span class="material-symbols-outlined text-3xl text-slate-300">history_toggle_off</span>
                 <span>Chưa có hoạt động nào được ghi nhận trong dự án</span>
               </div>
             }
@@ -220,11 +239,11 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
 
     @media (max-width: 767px) {
       .project-summary-page { gap: 1rem; }
-      .summary-hero { align-items: stretch; padding: 1rem; }
+      .summary-hero { align-items: stretch; padding: 1.25rem; }
       .summary-hero-copy { align-items: flex-start; }
-      .summary-hero-copy h1 { line-height: 1.15; }
-      .summary-hero-action, .summary-hero-action a { width: 100%; }
-      .summary-hero-action a { justify-content: center; min-height: 44px; }
+      .summary-hero-copy h1 { line-height: 1.2; }
+      .summary-hero-action { flex-direction: column; width: 100%; }
+      .summary-hero-action a { width: 100%; justify-content: center; min-height: 40px; }
       .summary-kpi-grid { grid-template-columns: minmax(0, 1fr); gap: .75rem; }
       .summary-status-header { align-items: flex-start; flex-direction: column; gap: .75rem; }
     }

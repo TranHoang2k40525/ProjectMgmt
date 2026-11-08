@@ -671,7 +671,7 @@ export class SpecHubPageComponent implements OnInit {
       case '.webp':
       case '.svg':
       case '.bmp':
-        return 'text-purple-500';
+        return 'text-teal-600';
       case '.md':
         return 'text-cyan-500';
       case '.txt':
