@@ -25,3 +25,4 @@
 - Quyền hạn: Org Owner > Lead (Project Director) > Scrum Master / Project Manager > Developer / QA > Viewer.
 - Developer, QA, Viewer không thấy nút Cài đặt dự án và bị chặn truy cập route settings.
 - Chống leo thang đặc quyền (Anti-Privilege Escalation).
+

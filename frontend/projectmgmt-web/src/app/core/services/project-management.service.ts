@@ -580,9 +580,10 @@ export class ProjectManagementService {
       data: this.http.get<{ workItems: WorkItem[]; sprints: Sprint[]; epics: EpicItem[]; statuses: ProjectStatus[] }>(`${this.baseUrl}/projects/${projectId}/workspace`),
       types: this.getIssueTypes(projectId),
       members: this.rbac.getProjectMembers(projectId).pipe(catchError(() => of({ members: [] }))),
-      priorities: this.getProjectPriorities(projectId).pipe(catchError(() => of([])))
+      priorities: this.getProjectPriorities(projectId).pipe(catchError(() => of([]))),
+      boards: this.getBoards(projectId).pipe(catchError(() => of([])))
     }).subscribe({
-      next: ({ data, members, types, priorities }) => {
+      next: ({ data, members, types, priorities, boards }) => {
         if (this.currentProject().id !== projectId) return;
         const resolvedMembers: ProjectMember[] = (members.members ?? []).map(m => ({
           id: m.userId ?? '',
@@ -631,7 +632,20 @@ export class ProjectManagementService {
           const openId = this.activeDrawerTask()?.id;
           if (openId) this.activeDrawerTask.set(normalizedItems.find(i => i.id === openId) ?? null);
         }
-        this.currentProject.update(p => ({ ...p, members: resolvedMembers }));
+
+        const defaultBoard = (boards && boards.length > 0)
+          ? (boards.find(b => b.isDefault) || boards[0])
+          : null;
+        const bType = defaultBoard?.type || (this.currentProject() as any)?.managementType || 'Scrum';
+        const bName = defaultBoard?.name || (bType === 'Kanban' ? 'Bảng Kanban' : 'Bảng Scrum');
+
+        this.currentProject.update(p => ({
+          ...p,
+          type: bType,
+          managementType: bType,
+          boardName: bName,
+          members: resolvedMembers
+        }));
       },
       error: (e: { title?: string }) => { if (this.currentProject().id === projectId) this.saveError.set(e.title ?? 'Không thể tải công việc.'); this.workspaceLoading.set(false); },
       complete: () => this.workspaceLoading.set(false)
@@ -1402,6 +1416,15 @@ export class ProjectManagementService {
   applyWorkflowTemplateToProject(projectId: string, templateId: string): Observable<ProjectStatus[]> {
     return this.http.post<ProjectStatus[]>(`${this.baseUrl}/projects/${projectId}/workflow/template`, { templateId }).pipe(
       tap(statuses => {
+        const isKanban = templateId.toLowerCase().includes('kanban');
+        const mType = isKanban ? 'Kanban' : 'Scrum';
+        const bName = isKanban ? 'Bảng Kanban' : 'Bảng Scrum';
+        this.currentProject.update(p => ({
+          ...p,
+          type: mType,
+          managementType: mType,
+          boardName: bName
+        }));
         if (this.currentProject().id === projectId) {
           this.projectStatuses.set(statuses);
           this.loadWorkspace(projectId);

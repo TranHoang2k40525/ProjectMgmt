@@ -59,6 +59,11 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
     return 'Bảng Scrum';
   });
 
+  readonly isKanbanBoard = computed(() => {
+    const p = this.projectService.currentProject();
+    return (p as any)?.managementType === 'Kanban' || p?.type === 'Kanban' || ((p as any)?.boardName || '').toLowerCase().includes('kanban');
+  });
+
   readonly filteredItems = computed(() => {
     let list = this.items();
     const query = this.searchQuery().trim().toLowerCase();

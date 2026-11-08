@@ -179,9 +179,12 @@ export class AppShellComponent {
 
   readonly currentBoardTabTitle = computed(() => {
     const p = this.activeProject();
-    if ((p as any)?.boardName) return (p as any).boardName;
     if ((p as any)?.managementType === 'Kanban' || p?.type === 'Kanban') return 'Kanban';
     if ((p as any)?.managementType === 'Scrum' || p?.type === 'Scrum') return 'Scrum';
+    if ((p as any)?.boardName) {
+      const trimmed = (p as any).boardName.replace(/^Bảng\s+/i, '').trim();
+      if (trimmed) return trimmed;
+    }
     return 'Scrum';
   });
 

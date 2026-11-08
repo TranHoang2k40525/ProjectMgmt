@@ -379,7 +379,8 @@ public sealed class ProjectCustomizationController(PlanningDbContext db, Deliver
                     // Tránh ghi đè trùng tên UQ_Board_Name (ProjectId, Name) khi dự án có nhiều bảng
                     var targetDefaultName = isKanban ? "Bảng Kanban" : "Bảng Scrum";
                     var otherDefaultName = isKanban ? "Bảng Scrum" : "Bảng Kanban";
-                    if (string.Equals(board.Name, otherDefaultName, StringComparison.OrdinalIgnoreCase) &&
+                    if ((string.Equals(board.Name, otherDefaultName, StringComparison.OrdinalIgnoreCase) ||
+                         (board.IsDefault && (board.Name.Contains("Scrum", StringComparison.OrdinalIgnoreCase) || board.Name.Contains("Kanban", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(board.Name)))) &&
                         !boards.Any(b => b.Id != board.Id && string.Equals(b.Name, targetDefaultName, StringComparison.OrdinalIgnoreCase)))
                     {
                         board.Name = targetDefaultName;

@@ -763,6 +763,78 @@ export class WorkflowSettingsPage implements OnInit {
   onTemplateChange(id: string): void {
     this.selectedTemplateId.set(id);
     this.selectedTemplate = id;
+    if (typeof sessionStorage !== 'undefined' && this.projectId) {
+      sessionStorage.setItem(`projectmgmt.workflow-template.${this.projectId}`, id);
+    }
+  }
+
+  private syncSelectedTemplateWithProject(templates?: OrgWorkflowTemplate[]): void {
+    const list = templates || this.availableWorkflowTemplates();
+    if (!list || list.length === 0) return;
+
+    // 1. Kiểm tra sessionStorage nếu người dùng vừa chọn/áp dụng mẫu cho dự án này
+    const storageKey = `projectmgmt.workflow-template.${this.projectId}`;
+    if (typeof sessionStorage !== 'undefined') {
+      const savedTid = sessionStorage.getItem(storageKey);
+      if (savedTid) {
+        const found = list.find(t => t.id === savedTid || t.id.replace('preset-', '') === savedTid.replace('preset-', ''));
+        if (found) {
+          this.selectedTemplateId.set(found.id);
+          this.selectedTemplate = found.id;
+          return;
+        }
+      }
+    }
+
+    // 2. Nhận diện chính xác theo danh sách trạng thái thực tế của dự án
+    const currentStatuses = this.statuses();
+    if (currentStatuses && currentStatuses.length > 0) {
+      const currentNames = currentStatuses.map(s => (s.name || '').trim().toLowerCase());
+      let bestMatch: OrgWorkflowTemplate | null = null;
+      let maxScore = -1;
+
+      for (const tpl of list) {
+        const tplSteps: string[] = (tpl.statuses || []).map((s: any) => String(s.name || s.Name || '').trim().toLowerCase());
+        if (tplSteps.length === 0) continue;
+
+        const matched = tplSteps.filter((step: string) => currentNames.includes(step)).length;
+        const exactLength = tplSteps.length === currentStatuses.length;
+
+        let score = matched * 10;
+        if (exactLength) score += 25;
+        if (matched === tplSteps.length && matched === currentStatuses.length) score += 100;
+
+        if (score > maxScore && matched > 0) {
+          maxScore = score;
+          bestMatch = tpl;
+        }
+      }
+
+      if (bestMatch && maxScore > 0) {
+        this.selectedTemplateId.set(bestMatch.id);
+        this.selectedTemplate = bestMatch.id;
+        return;
+      }
+    }
+
+    // 3. Nhận diện theo ManagementType / BoardType của dự án
+    const proj = this.projectService.currentProject();
+    const mType = (proj as any)?.managementType || (proj as any)?.type;
+    if (mType) {
+      const matchedByType = list.find(t => (t.managementType || '').toLowerCase() === mType.toLowerCase());
+      if (matchedByType) {
+        this.selectedTemplateId.set(matchedByType.id);
+        this.selectedTemplate = matchedByType.id;
+        return;
+      }
+    }
+
+    // 4. Fallback mặc định an toàn
+    if (!list.some(t => t.id === this.selectedTemplateId())) {
+      const defaultTpl = list.find(t => t.isDefault) || list[0];
+      this.selectedTemplateId.set(defaultTpl.id);
+      this.selectedTemplate = defaultTpl.id;
+    }
   }
 
   // Modal Status
@@ -810,10 +882,7 @@ export class WorkflowSettingsPage implements OnInit {
           this.workspaceData.listWorkflowTemplates(p.orgId).subscribe({
             next: templates => {
               this.availableWorkflowTemplates.set(templates);
-              if (templates.length > 0 && !templates.some(t => t.id === this.selectedTemplateId())) {
-                this.selectedTemplateId.set(templates[0].id);
-                this.selectedTemplate = templates[0].id;
-              }
+              this.syncSelectedTemplateWithProject(templates);
             },
             error: () => undefined
           });
@@ -835,6 +904,7 @@ export class WorkflowSettingsPage implements OnInit {
         this.statuses.set(data.statuses);
         this.transitions.set(data.transitions);
         this.loading.set(false);
+        this.syncSelectedTemplateWithProject();
       },
       error: err => { this.loading.set(false); this.reportError(err); }
     });
@@ -865,6 +935,25 @@ export class WorkflowSettingsPage implements OnInit {
         this.alertType.set('success');
         this.alertMessage.set('Đã lưu mẫu workflow vào dự án.');
         this.toastService.success('Mẫu Workflow', 'Đã áp dụng mẫu quy trình thành công.');
+
+        // Lưu lựa chọn vào sessionStorage để bảo lưu trạng thái người dùng chọn
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem(`projectmgmt.workflow-template.${this.projectId}`, templateToApply);
+        }
+        this.selectedTemplateId.set(templateToApply);
+        this.selectedTemplate = templateToApply;
+
+        // Cập nhật ngay lập tức loại quản lý của dự án cho Reactive UI
+        const matchedTpl = this.availableWorkflowTemplates().find(t => t.id === templateToApply);
+        const newMType = matchedTpl?.managementType || (templateToApply.toLowerCase().includes('kanban') ? 'Kanban' : 'Scrum');
+        const newBoardName = newMType === 'Kanban' ? 'Bảng Kanban' : 'Bảng Scrum';
+        this.projectService.currentProject.update(p => ({
+          ...p,
+          type: newMType,
+          managementType: newMType,
+          boardName: newBoardName
+        }));
+
         this.loadWorkflowData();
         this.projectService.loadWorkspace(this.projectId);
       },

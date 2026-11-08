@@ -24,3 +24,4 @@
 ## 4. HIERARCHICAL SCRUM RBAC
 - Quyền hạn phân cấp nghiêm ngặt từ trên xuống: Org Owner > Project Lead > Scrum Master > Dev/QA > Viewer.
 - Developer, QA, Viewer không có quyền thấy nút Cài đặt và bị chặn bởi `projectManagerGuard`.
+
