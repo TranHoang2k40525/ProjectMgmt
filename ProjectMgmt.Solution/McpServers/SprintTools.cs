@@ -73,14 +73,54 @@ public class SprintTools
         ProjectScopeGuard.Validate(scope, project.OrgId, projectId);
 
         var pastSprints = await _planning.Sprints.AsNoTracking()
-            .Where(s => s.ProjectId == projectId && s.Status == "completed")
-            .OrderByDescending(s => s.EndDate)
+            .Where(s => s.ProjectId == projectId && (s.Status == "Completed" || s.Status == "completed"))
+            .OrderByDescending(s => s.EndDate ?? s.StartDate)
+            .ThenByDescending(s => s.OrderIndex)
             .Take(5)
             .ToListAsync(ct);
 
-        var sprintIds = pastSprints.Select(s => s.Id).ToList();
+        var activeSprint = await _planning.Sprints.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.ProjectId == projectId && (s.Status == "Active" || s.Status == "active"), ct);
 
-        double avgVelocity = 25.0;
+        var sprintIds = pastSprints.Select(s => s.Id).ToList();
+        if (activeSprint != null)
+        {
+            sprintIds.Add(activeSprint.Id);
+        }
+
+        var doneStatusIds = new HashSet<Guid>();
+        try
+        {
+            var statuses = await _planning.WorkflowStatuses.AsNoTracking()
+                .Where(ws => ws.Category == "done" || ws.Name == "Done" || ws.Name == "Hoàn thành")
+                .Select(ws => ws.Id)
+                .ToListAsync(ct);
+            doneStatusIds = statuses.ToHashSet();
+        }
+        catch
+        {
+            // Ignore if WorkflowStatuses not available
+        }
+
+        var sprintIssues = sprintIds.Count > 0
+            ? await _delivery.Issues.AsNoTracking()
+                .Where(i => i.ProjectId == projectId && !i.IsDeleted && i.SprintId != null && sprintIds.Contains(i.SprintId.Value) && i.ParentId == null)
+                .Select(i => new
+                {
+                    i.Id,
+                    i.IssueNumber,
+                    i.SprintId,
+                    i.Title,
+                    i.StoryPoints,
+                    i.EstimatedHours,
+                    i.StatusId,
+                    i.ResolvedAt,
+                    i.AssigneeId
+                })
+                .ToListAsync(ct)
+            : [];
+
+        double avgVelocity = 24.0;
         try
         {
             var velocities = await _delivery.SprintVelocities.AsNoTracking()
@@ -91,23 +131,87 @@ public class SprintTools
             {
                 avgVelocity = velocities.Average(v => (double)v.CompletedPoints);
             }
+            else if (pastSprints.Count > 0)
+            {
+                var pastPointsPerSprint = pastSprints
+                    .Select(s => sprintIssues
+                        .Where(i => i.SprintId == s.Id && (i.ResolvedAt != null || doneStatusIds.Contains(i.StatusId)))
+                        .Sum(i => (double)(i.StoryPoints ?? 0m)))
+                    .Where(pts => pts > 0)
+                    .ToList();
+
+                if (pastPointsPerSprint.Count > 0)
+                {
+                    avgVelocity = pastPointsPerSprint.Average();
+                }
+            }
         }
         catch
         {
-            // Fallback if view doesn't exist or has no entries
-            avgVelocity = 25.0;
+            avgVelocity = 24.0;
         }
 
+        var projectKey = project.ProjectKey ?? "QLDA";
+
+        var recentSprintDetails = pastSprints.Select(s =>
+        {
+            var sIssues = sprintIssues.Where(i => i.SprintId == s.Id).ToList();
+            var completed = sIssues.Where(i => i.ResolvedAt != null || doneStatusIds.Contains(i.StatusId)).ToList();
+            var unfinished = sIssues.Except(completed).ToList();
+
+            return new
+            {
+                s.Id,
+                s.Name,
+                s.Goal,
+                s.Status,
+                s.StartDate,
+                s.EndDate,
+                CompletedStoryPoints = completed.Sum(i => i.StoryPoints ?? 0m),
+                CompletedTasksCount = completed.Count,
+                UnfinishedRolloverCount = unfinished.Count,
+                CompletedTasks = completed.Select(i => new
+                {
+                    IssueKey = $"{projectKey}-{i.IssueNumber}",
+                    i.Title,
+                    StoryPoints = i.StoryPoints ?? 0m,
+                    EstimatedHours = i.EstimatedHours ?? 0m,
+                    i.AssigneeId
+                }).ToList()
+            };
+        }).ToList();
+
         var unfinishedBugs = await _delivery.Issues.AsNoTracking()
-            .Where(i => i.ProjectId == projectId && !i.IsDeleted)
+            .Where(i => i.ProjectId == projectId && !i.IsDeleted && i.ParentId == null && i.ResolvedAt == null && !doneStatusIds.Contains(i.StatusId))
+            .OrderBy(i => i.RankOrder)
             .Take(20)
-            .Select(i => new { i.Id, i.IssueNumber, i.Title, i.StoryPoints })
+            .Select(i => new
+            {
+                i.Id,
+                IssueKey = $"{projectKey}-{i.IssueNumber}",
+                i.Title,
+                i.StoryPoints,
+                i.EstimatedHours,
+                i.SprintId,
+                i.AssigneeId
+            })
             .ToListAsync(ct);
 
         var result = new
         {
             AverageVelocity = Math.Round(avgVelocity, 1),
-            RecentSprints = pastSprints.Select(s => new { s.Id, s.Name, s.Goal, s.Status }),
+            ActiveSprint = activeSprint != null
+                ? new
+                {
+                    activeSprint.Id,
+                    activeSprint.Name,
+                    activeSprint.Goal,
+                    activeSprint.StartDate,
+                    activeSprint.EndDate,
+                    CommittedPoints = sprintIssues.Where(i => i.SprintId == activeSprint.Id).Sum(i => i.StoryPoints ?? 0m)
+                }
+                : null,
+            RecentSprints = recentSprintDetails,
             OpenBugsAndTechnicalDebt = unfinishedBugs
         };
 
