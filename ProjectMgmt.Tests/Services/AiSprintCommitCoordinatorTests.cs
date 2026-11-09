@@ -19,12 +19,7 @@ public class AiSprintCommitCoordinatorTests
     {
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            modelBuilder.Entity<Organization>(b => b.HasKey(x => x.Id));
-            modelBuilder.Entity<Project>(b => b.HasKey(x => x.Id));
-            modelBuilder.Entity<Sprint>(b => b.HasKey(x => x.Id));
-            modelBuilder.Entity<IssueType>(b => b.HasKey(x => x.Id));
-            modelBuilder.Entity<WorkflowStatus>(b => b.HasKey(x => x.Id));
-            modelBuilder.Entity<Priority>(b => b.HasKey(x => x.Id));
+            base.OnModelCreating(modelBuilder);
         }
     }
 
@@ -32,9 +27,7 @@ public class AiSprintCommitCoordinatorTests
     {
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            modelBuilder.Entity<Issue>(b => b.HasKey(x => x.Id));
-            modelBuilder.Entity<AcceptanceCriteria>(b => b.HasKey(x => x.Id));
-            modelBuilder.Entity<ActivityLog>(b => b.HasKey(x => x.Id));
+            base.OnModelCreating(modelBuilder);
         }
     }
 

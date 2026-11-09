@@ -80,6 +80,12 @@ public class AiAgentController : ControllerBase
             return;
         }
 
+        if (request.ProjectId == Guid.Empty)
+        {
+            Response.StatusCode = StatusCodes.Status400BadRequest;
+            return;
+        }
+
         Response.StatusCode = StatusCodes.Status200OK;
         Response.ContentType = "text/event-stream; charset=utf-8";
         Response.Headers["Cache-Control"] = "no-cache, no-transform";
@@ -265,6 +271,13 @@ public class AiAgentController : ControllerBase
             return NotFound(new { code = "PROPOSAL_EXPIRED", message = "Phiên đề xuất đã hết hạn. Vui lòng thực hiện phân tách lại." });
         }
 
+        var project = await _planningDb.Projects.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == proposal.ProjectId && !p.IsDeleted, ct);
+        if (project == null)
+        {
+            return NotFound(new { code = "PROJECT_NOT_FOUND", message = "Dự án liên quan không tồn tại hoặc đã bị xóa." });
+        }
+
         if (!await _projectAccess.AllowsAsync(proposal.ProjectId, "project.read"))
         {
             return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Không có quyền thao tác trên dự án này." });
@@ -274,13 +287,6 @@ public class AiAgentController : ControllerBase
         if (targetTask == null)
         {
             return NotFound(new { code = "TASK_NOT_FOUND", message = $"Không tìm thấy Task với Id '{request.TaskId}' trong đề xuất hiện tại." });
-        }
-
-        var project = await _planningDb.Projects.AsNoTracking()
-            .FirstOrDefaultAsync(p => p.Id == proposal.ProjectId && !p.IsDeleted, ct);
-        if (project == null)
-        {
-            return NotFound(new { code = "PROJECT_NOT_FOUND", message = "Dự án liên quan không tồn tại hoặc đã bị xóa." });
         }
 
         var scope = new ProjectScopeContext(project.OrgId, proposal.ProjectId, userId.Value);
