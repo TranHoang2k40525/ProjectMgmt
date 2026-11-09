@@ -36,6 +36,13 @@ using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
 using MySqlConnector;
+using ProjectMgmt.Core.Ai;
+using ProjectMgmt.Core.Staging;
+using ProjectMgmt.Core.VectorSearch;
+using ProjectMgmt.Core.Tracing;
+using ProjectMgmt.Solution.McpServers;
+using ProjectMgmt.Solution.Services.Ai;
+using ProjectMgmt.Solution.Services.Ai.Adapters;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -339,6 +346,39 @@ builder.Services.AddScoped<ProjectMgmt.IssueTracking.Contracts.IIssueReadService
 builder.Services.AddScoped<ProjectMgmt.IssueTracking.Contracts.IIssueSprintService>(services => services.GetRequiredService<IssueContractService>());
 // IIssueCreationService chưa đăng ký: cần IIssueNumberGenerator thật từ Planning.
 
+// --- AI Core Configuration & Resilience Services (Milestone M1 & M2) ---
+builder.Services.Configure<AiOptions>(builder.Configuration.GetSection("Ai"));
+builder.Services.Configure<RedisOptions>(builder.Configuration.GetSection("Redis"));
+builder.Services.Configure<QdrantOptions>(builder.Configuration.GetSection("Qdrant"));
+builder.Services.Configure<LangfuseOptions>(builder.Configuration.GetSection("Langfuse"));
+
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<MemoryStateStagingService>();
+builder.Services.AddScoped<IStateStagingService, ResilientStateStagingService>();
+builder.Services.AddScoped<IVectorSearchService, ResilientVectorSearchService>();
+builder.Services.AddScoped<IAiTraceService, ResilientTraceService>();
+
+// --- AI Model Client & External Providers (Milestone M2) ---
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<IAiModelClient, MultiProviderAiModelClient>();
+builder.Services.AddScoped<IExternalStagingProvider, StackExchangeRedisStagingProvider>();
+builder.Services.AddScoped<IExternalVectorSearchProvider, QdrantVectorSearchProvider>();
+builder.Services.AddScoped<IExternalTraceExporter, LangfuseTraceExporter>();
+builder.Services.AddScoped<ISpecKeywordFallbackProvider, SpecHubKeywordFallbackProvider>();
+
+// --- In-Process MCP Tool Classes & Registry (Milestone M2) ---
+builder.Services.AddScoped<SpecHubTools>();
+builder.Services.AddScoped<BacklogTools>();
+builder.Services.AddScoped<SprintTools>();
+builder.Services.AddScoped<TeamTools>();
+builder.Services.AddScoped<PlanningTools>();
+builder.Services.AddScoped<IMcpToolRegistry, McpToolRegistry>();
+
+// --- Document Text Extractor & Sprint Decomposition Pipeline (Milestone M2 & M3) ---
+builder.Services.AddScoped<IAiDocumentTextExtractor, AiDocumentTextExtractor>();
+builder.Services.AddScoped<IAiSprintDecompositionService, AiSprintDecompositionService>();
+builder.Services.AddScoped<IAiSprintCommitCoordinator, AiSprintCommitCoordinator>();
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -415,6 +455,8 @@ CREATE TABLE IF NOT EXISTS SprintMessage (
         {
             Log.Warning(ex, "Could not ensure SprintMessage table exists");
         }
+
+        await TestAccountSeeder.SeedAsync(scope.ServiceProvider);
     }
     catch
     {

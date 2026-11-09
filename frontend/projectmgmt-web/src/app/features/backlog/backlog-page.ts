@@ -23,11 +23,12 @@ import { ToastService } from '../../core/services/toast.service';
 import { ContextMenuComponent, ContextMenuItemAction } from '../../shared/components/context-menu.component';
 
 import { NoProjectStateComponent } from '../../shared/components/no-project-state/no-project-state.component';
+import { AiDecomposeModalComponent } from './components/ai-decompose-modal/ai-decompose-modal';
 
 @Component({
   selector: 'app-backlog-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, OverlayModule, DragDropModule, ContextMenuComponent, NoProjectStateComponent],
+  imports: [CommonModule, FormsModule, OverlayModule, DragDropModule, ContextMenuComponent, NoProjectStateComponent, AiDecomposeModalComponent],
   templateUrl: './backlog-page.html',
   styleUrl: './backlog-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -59,7 +60,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     const proj = this.projectService.currentProject();
     if (proj.leadUserId && proj.leadUserId.toLowerCase() === myId.toLowerCase()) return true;
     const myMember = (proj.members || []).find(m => m.userId && m.userId.toLowerCase() === myId.toLowerCase());
-    if (myMember && (myMember.role === 'Project Lead' || myMember.role === 'Scrum Master')) return true;
+    if (myMember && ['Project Lead', 'ProjectManager', 'Scrum Master', 'ScrumMaster', 'ProductOwner'].includes(myMember.role)) return true;
     return false;
   });
 
@@ -85,6 +86,21 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   showNewEpicModal = signal<boolean>(false);
   newEpicName = '';
   newEpicColor = 'purple';
+
+  // AI Decompose Modal State
+  showAiDecomposeModal = signal<boolean>(false);
+
+  openAiDecomposeModal(): void {
+    this.showAiDecomposeModal.set(true);
+  }
+
+  onAiProposalApplied(): void {
+    this.showAiDecomposeModal.set(false);
+    const proj = this.projectService.currentProject();
+    if (proj?.id) {
+      this.projectService.selectProject(proj);
+    }
+  }
 
   // Sub-task Inline Expansion State
   expandedSubtasks = signal<Record<string, boolean>>({});

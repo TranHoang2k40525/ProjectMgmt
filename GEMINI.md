@@ -4,24 +4,31 @@
 
 ---
 
-## 1. BẢO MẬT TUYỆT ĐỐI & CHỐNG RÒ RỈ SECRET/KEY (STRICT ZERO-SECRET-LEAKAGE RULE)
-- **CẤM TUYỆT ĐỐI HARDCODE HOẶC COMMIT SECRET VÀO GIT**:
+## 1. BẢO MẬT TUYỆT ĐỐI & CHỐNG RÒ RỈ SECRET/KEY/URL/IP (STRICT ZERO-SECRET-LEAKAGE RULE)
+- **CẤM TUYỆT ĐỐI HARDCODE HOẶC COMMIT SECRET, URL, IP VÀO GIT**:
   - Nghiêm cấm đưa bất kỳ thông tin nhạy cảm nào vào các tệp được Git theo dõi (source code `.cs`, `.ts`, `.html`, `.json`, `.yml`, cấu hình public):
-    - Mật khẩu Database, Connection Strings thực tế.
-    - Mật khẩu ứng dụng Gmail (SMTP App Password), API Keys, OAuth Secrets.
+    - Mật khẩu Database, Connection Strings thực tế (MySQL, Redis).
+    - API Keys nhà cung cấp AI (Gemini, Claude, OpenAI, Qdrant, Langfuse).
+    - Mật khẩu ứng dụng Gmail (SMTP App Password), OAuth Secrets, Personal Access Tokens (PAT).
     - Khóa ký JWT (`SigningKey`), Khóa băm OTP (`HashKey`), Private Keys (`.pem`, `.pfx`, `.key`).
-    - Personal Access Tokens (PAT), Cloud credentials.
+    - Địa chỉ IP thực tế (public IP hoặc private IP nội bộ hệ thống, ngoại trừ loopback `127.0.0.1` hoặc `localhost`).
+    - URL máy chủ thực tế (Production URLs, Cloud API endpoints nhạy cảm của dịch vụ đám mây).
 - **MỌI SECRET PHÁT TRIỂN CỤC BỘ BẮT BUỘC LƯU TẠI TỆP ĐƯỢC BẢO VỆ**:
   - Thông tin cấu hình thực tế ở môi trường local của lập trình viên BẮT BUỘC đặt trong `ProjectMgmt.Solution/appsettings.Local.json` hoặc `.env`.
   - Hai tệp này đã được cấu hình trong `.gitignore` và tuyệt đối KHÔNG BAO GIỜ được xóa khỏi `.gitignore` hay commit lên remote.
 - **TỆP CẤU HÌNH CÔNG KHAI CHỈ DÙNG PLACEHOLDER AN TOÀN**:
-  - Các tệp `appsettings.json`, `appsettings.Development.json`, `.env.example`, `appsettings.*.example.json` chỉ được chứa giá trị mẫu an toàn (ví dụ: `YOUR_DATABASE_PASSWORD`, `YOUR_SMTP_APP_PASSWORD`, `GENERATE_YOUR_SECURE_JWT_SIGNING_KEY_MINIMUM_32_BYTES_BASE64`).
+  - Các tệp `appsettings.json`, `appsettings.Development.json`, `.env.example`, `appsettings.*.example.json` chỉ được chứa giá trị mẫu an toàn:
+    - AI Keys: `YOUR_GEMINI_API_KEY`, `YOUR_CLAUDE_API_KEY`, `YOUR_OPENAI_API_KEY`
+    - Redis: `YOUR_REDIS_HOST`, `YOUR_REDIS_PASSWORD`
+    - Qdrant: `YOUR_QDRANT_HOST`, `YOUR_QDRANT_API_KEY`
+    - Langfuse: `YOUR_LANGFUSE_HOST`, `YOUR_LANGFUSE_PUBLIC_KEY`, `YOUR_LANGFUSE_SECRET_KEY`
+    - Database/Auth: `YOUR_DATABASE_PASSWORD`, `YOUR_SMTP_APP_PASSWORD`, `GENERATE_YOUR_SECURE_JWT_SIGNING_KEY_MINIMUM_32_BYTES_BASE64`
 - **CHE DẤU (MASKING) THÔNG TIN BÍ MẬT TRONG PHẢN HỒI & LOG**:
-  - Agent khi in log, hiển thị mẫu hoặc trao đổi với người dùng phải chủ động che giấu (masking) thông tin mật khẩu, token và email cá nhân (ví dụ: `hoang***@gmail.com`, `Pass: "******"`).
+  - Agent khi in log, hiển thị mẫu hoặc trao đổi với người dùng phải chủ động che giấu (masking) thông tin mật khẩu, token và email cá nhân (ví dụ: `hoang***@gmail.com`, `Pass: "******"`, `AIzaSy***`).
 - **CẤM COMMIT FILE BUILD OUTPUT / BINARIES**:
   - Tuyệt đối không commit các thư mục đầu ra như `publish_output/`, `bin/`, `obj/`, `dist/`, các tệp `.dll`, `.exe`, `.pdb`.
 - **PRE-COMMIT SECURITY AUDIT**:
-  - Trước khi thực hiện `git add` và `git commit`, Agent BẮT BUỘC phải chạy `git diff` rà soát toàn bộ thay đổi, đảm bảo 100% không có bất kỳ secret/key thực tế nào bị đưa vào commit.
+  - Trước khi thực hiện `git add` và `git commit`, Agent BẮT BUỘC phải chạy `git diff` rà soát toàn bộ thay đổi, đảm bảo 100% không có bất kỳ secret/key/URL/IP thực tế nào bị đưa vào commit.
 
 ---
 

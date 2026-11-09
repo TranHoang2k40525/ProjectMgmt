@@ -1,0 +1,852 @@
+<div
+  class="ai-modal-backdrop"
+  data-testid="ai-decompose-modal"
+  (dragover)="onDragOver($event)"
+  (dragleave)="onDragLeave($event)"
+  (drop)="onDrop($event)"
+  (paste)="onClipboardPaste($event)"
+>
+  <div class="ai-modal-shell" [class.is-drag-over]="isDragOver()" (click)="$event.stopPropagation()">
+    <!-- Modal Header -->
+    <header class="ai-modal-header">
+      <div class="header-title-group">
+        <div class="header-icon-box">
+          <span class="material-symbols-outlined" aria-hidden="true">account_tree</span>
+        </div>
+        <div>
+          <h2>AI Phân tách Kế hoạch Sprint &amp; Công việc</h2>
+          <p>{{ projectName }} ({{ projectKey }}) · Phân tích tài liệu đặc tả, biên bản họp &amp; đề xuất Sprint tự động</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        @if (!proposal() && !isStreaming()) {
+          <button
+            type="button"
+            class="btn-spec-shortcut"
+            data-testid="btn-ai-use-spec-hub"
+            (click)="useProjectSpecContext()"
+            title="Phân tách ngay từ tài liệu đặc tả trong Spec Hub của dự án"
+          >
+            <span class="material-symbols-outlined" aria-hidden="true">folder_open</span>
+            <span>Phân tích Tài liệu Dự án (Spec Hub)</span>
+          </button>
+        }
+        <button type="button" class="icon-close-btn" data-testid="btn-ai-close-modal" aria-label="Đóng cửa sổ" (click)="closeModal()">
+          <span class="material-symbols-outlined" aria-hidden="true">close</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Scrollable Body -->
+    <div class="ai-modal-body">
+      <!-- Upper Workspace: Chat History & Realtime Agent Execution Pipeline -->
+      <section class="ai-conversation-zone" aria-label="Nội dung tương tác và tiến trình thực thi">
+        @if (chatHistory().length === 0 && !isStreaming() && !proposal()) {
+          <div class="empty-prompt-guide">
+            <div class="guide-icon">
+              <span class="material-symbols-outlined" aria-hidden="true">description</span>
+            </div>
+            <h3>Nhập nội dung cuộc họp, dán tài liệu hoặc đính kèm tệp đặc tả</h3>
+            <p>
+              Hỗ trợ đính kèm <strong>.docx, .pdf, .txt, .md, .xlsx</strong> hoặc nhấn <strong>Ctrl + V</strong> để dán trực tiếp nội dung từ bên ngoài.
+              Hệ thống Agent sẽ kiểm tra bảo mật, tra cứu MCP Spec Hub, đối chiếu năng lực thành viên và đề xuất Sprint tiếp theo kèm Sprint Goal.
+            </p>
+            <div class="guide-quick-chips">
+              <button type="button" class="quick-chip" (click)="useProjectSpecContext()">
+                <span class="material-symbols-outlined" aria-hidden="true">menu_book</span>
+                <span>Sử dụng tài liệu có sẵn trong dự án {{ projectName }}</span>
+              </button>
+            </div>
+          </div>
+        }
+
+        <!-- Conversation Turns -->
+        @if (chatHistory().length > 0) {
+          <div class="chat-turns-list">
+            @for (turn of chatHistory(); track turn.id) {
+              <div class="chat-turn" [class.turn-user]="turn.role === 'user'" [class.turn-agent]="turn.role === 'agent'">
+                <div class="turn-avatar">
+                  <span class="material-symbols-outlined" aria-hidden="true">
+                    {{ turn.role === 'user' ? 'person' : 'terminal' }}
+                  </span>
+                </div>
+                <div class="turn-content">
+                  <div class="turn-meta">
+                    <strong>{{ turn.role === 'user' ? 'Yêu cầu của bạn' : 'Hệ thống Agent Scrum' }}</strong>
+                    <span>{{ turn.timestamp }}</span>
+                  </div>
+                  @if (turn.fileName) {
+                    <div class="attached-file-pill">
+                      <span class="material-symbols-outlined" aria-hidden="true">attach_file</span>
+                      <strong>{{ turn.fileName }}</strong>
+                      @if (turn.fileSizeLabel) {
+                        <span>({{ turn.fileSizeLabel }})</span>
+                      }
+                    </div>
+                  }
+                  <p>{{ turn.text }}</p>
+                </div>
+              </div>
+            }
+          </div>
+        }
+
+        <!-- Realtime Agent Multi-Step Execution Card (SSE Progress) -->
+        @if (isStreaming() || stepsLog().length > 0) {
+          <div class="agent-progress-card" data-testid="ai-progress-panel" [class.is-running]="isStreaming()">
+            <div class="progress-card-header">
+              <div class="progress-status-left">
+                <span class="material-symbols-outlined status-icon" [class.spin-icon]="isStreaming()" aria-hidden="true">
+                  {{ isStreaming() ? 'autorenew' : 'verified' }}
+                </span>
+                <div>
+                  <strong>{{ isStreaming() ? currentStepLabel() : 'Hoàn tất quy trình phân tách Sprint' }}</strong>
+                  <p>{{ isStreaming() ? currentStepDetail() : 'Đã kiểm chứng tiêu chí nghiệm thu & cân bằng tải thành viên' }}</p>
+                </div>
+              </div>
+              <div class="progress-percent-badge" data-testid="ai-progress-percent">
+                {{ isStreaming() ? currentPercent() : 100 }}%
+              </div>
+            </div>
+
+            <div class="progress-bar-track">
+              <div class="progress-bar-fill" [style.width.%]="isStreaming() ? currentPercent() : 100"></div>
+            </div>
+
+            <!-- 5 Pipeline Steps Grid -->
+            <div class="pipeline-steps-grid">
+              @for (stepDef of pipelineStepDefinitions; track stepDef.index) {
+                @let state = getStepStatus(stepDef.index);
+                <div
+                  class="pipeline-step-item"
+                  [class.step-done]="state === 'done'"
+                  [class.step-active]="state === 'active'"
+                  [class.step-pending]="state === 'pending'"
+                  [attr.data-testid]="'ai-step-' + stepDef.index"
+                >
+                  <span class="material-symbols-outlined step-icon" aria-hidden="true">
+                    {{ state === 'done' ? 'check_circle' : (state === 'active' ? 'pending' : stepDef.icon) }}
+                  </span>
+                  <span class="step-label">{{ stepDef.index }}. {{ stepDef.label }}</span>
+                </div>
+              }
+            </div>
+
+            <!-- MCP Tool Calls Log -->
+            @if (toolCallsLog().length > 0) {
+              <div class="mcp-tools-strip" data-testid="ai-mcp-tools-log">
+                <span class="mcp-strip-label">
+                  <span class="material-symbols-outlined" aria-hidden="true">hub</span>
+                  MCP Tools đã thực thi:
+                </span>
+                <div class="mcp-tool-chips">
+                  @for (tool of toolCallsLog(); track $index) {
+                    <span class="mcp-chip" [title]="tool.summaryVi">
+                      <span class="material-symbols-outlined" aria-hidden="true">check</span>
+                      <code>{{ tool.toolName }}</code>
+                      <span>{{ tool.summaryVi }}</span>
+                      @if (tool.durationMs !== undefined && tool.durationMs !== null) {
+                        <small>{{ tool.durationMs }}ms</small>
+                      }
+                    </span>
+                  }
+                </div>
+              </div>
+            }
+
+            <!-- Live Streaming Thoughts Preview -->
+            @if (isStreaming() && streamedThoughts()) {
+              <div class="thought-stream-box" data-testid="ai-thought-stream">
+                <div class="thought-header">
+                  <span class="material-symbols-outlined" aria-hidden="true">psychology</span>
+                  <span>Luồng phân tích thời gian thực:</span>
+                </div>
+                <pre>{{ streamedThoughts() }}</pre>
+              </div>
+            }
+          </div>
+        }
+
+        @if (errorMessage()) {
+          <div class="ai-error-banner" data-testid="ai-error-banner" role="alert">
+            <span class="material-symbols-outlined" aria-hidden="true">warning</span>
+            <span>{{ errorMessage() }}</span>
+          </div>
+        }
+      </section>
+
+      <!-- Proposed Sprint & Tasks Section (Reference Image 4) -->
+      @if (proposal(); as prop) {
+        <section class="proposal-workspace" data-testid="ai-proposal-section" aria-label="Đề xuất Sprint và danh sách công việc">
+          <!-- Sprint Goal & Summary Bar -->
+          <div class="sprint-goal-card">
+            <div class="goal-top-row">
+              <div class="goal-badge">
+                <span class="material-symbols-outlined" aria-hidden="true">flag</span>
+                <span>MỤC TIÊU SPRINT ĐỀ XUẤT (SPRINT GOAL)</span>
+              </div>
+
+              <div class="sprint-metrics">
+                <span class="metric-pill">
+                  <span class="material-symbols-outlined" aria-hidden="true">format_list_bulleted</span>
+                  <strong>{{ prop.tasks.length }}</strong> công việc
+                </span>
+                <span class="metric-pill">
+                  <span class="material-symbols-outlined" aria-hidden="true">style</span>
+                  <strong>{{ totalCalculatedSp() }}</strong> SP
+                </span>
+                <span class="metric-pill">
+                  <span class="material-symbols-outlined" aria-hidden="true">schedule</span>
+                  <strong>{{ totalCalculatedHours() }}</strong> giờ
+                </span>
+              </div>
+            </div>
+
+            <div class="goal-input-row">
+              <input
+                type="text"
+                class="sprint-goal-input"
+                data-testid="ai-sprint-goal-input"
+                [(ngModel)]="prop.sprintGoal"
+                (blur)="persistProposalEdits()"
+                placeholder="Nhập mục tiêu Sprint..."
+                aria-label="Mục tiêu Sprint đề xuất"
+              />
+            </div>
+
+            @if (prop.rationale) {
+              <p class="sprint-rationale-note">
+                <span class="material-symbols-outlined" aria-hidden="true">verified</span>
+                <span>{{ prop.rationale }}</span>
+              </p>
+            }
+
+            <!-- Proposal Action Toolbar -->
+            <div class="proposal-toolbar">
+              <div class="toolbar-left">
+                @if (selectedTasksCount() > 0) {
+                  <button
+                    type="button"
+                    class="btn-outline-action"
+                    data-testid="btn-ai-regenerate-selected"
+                    [disabled]="isRegeneratingBatch()"
+                    (click)="regenerateSelectedTasksWithFeedback(promptInput())"
+                  >
+                    <span class="material-symbols-outlined" aria-hidden="true">autorenew</span>
+                    <span>AI Làm lại ({{ selectedTasksCount() }}) việc đã chọn</span>
+                  </button>
+                }
+
+                <button
+                  type="button"
+                  class="btn-outline-action"
+                  data-testid="btn-ai-toggle-regenerate-all"
+                  [disabled]="isRegeneratingBatch()"
+                  (click)="showRegenerateAllBar.update(v => !v)"
+                >
+                  <span class="material-symbols-outlined" aria-hidden="true">refresh</span>
+                  <span>Làm lại toàn bộ</span>
+                </button>
+              </div>
+
+              <div class="toolbar-right">
+                <button
+                  type="button"
+                  class="btn-commit-sprint"
+                  data-testid="btn-ai-apply-sprint"
+                  [disabled]="isApplying() || prop.tasks.length === 0"
+                  (click)="commitSprintProposal()"
+                >
+                  <span class="material-symbols-outlined" aria-hidden="true">
+                    {{ isApplying() ? 'sync' : 'check_circle' }}
+                  </span>
+                  <span>{{ isApplying() ? 'Đang đưa vào Sprint...' : 'Áp dụng vào Sprint tiếp theo' }}</span>
+                </button>
+              </div>
+            </div>
+
+            @if (showRegenerateAllBar()) {
+              <div class="regenerate-all-bar" data-testid="ai-regenerate-all-bar">
+                <input
+                  type="text"
+                  data-testid="ai-regenerate-all-input"
+                  [ngModel]="regenerateAllFeedback()"
+                  (ngModelChange)="regenerateAllFeedback.set($event)"
+                  (keyup.enter)="submitRegenerateAll()"
+                  placeholder="Nhập yêu cầu điều chỉnh toàn bộ danh sách công việc hoặc Sprint Goal..."
+                />
+                <button
+                  type="button"
+                  class="btn-confirm-regen"
+                  data-testid="btn-ai-confirm-regenerate-all"
+                  [disabled]="isRegeneratingBatch()"
+                  (click)="submitRegenerateAll()"
+                >
+                  <span class="material-symbols-outlined" aria-hidden="true">send</span>
+                  <span>{{ isRegeneratingBatch() ? 'Đang xử lý...' : 'Tạo lại' }}</span>
+                </button>
+              </div>
+            }
+          </div>
+
+          <!-- Proposed Work Items Table (Reference Image 4 Layout) -->
+          <div class="proposal-table-card" data-testid="ai-proposal-table">
+            <div class="proposal-table-header">
+              <span class="col-check">
+                <input
+                  type="checkbox"
+                  aria-label="Chọn tất cả công việc đề xuất"
+                  (change)="toggleSelectAllTasks($event)"
+                />
+              </span>
+              <span>Mã</span>
+              <span>Công việc</span>
+              <span>Epic</span>
+              <span>Ưu tiên</span>
+              <span>SP</span>
+              <span>Trạng thái</span>
+              <span>Người xử lý</span>
+              <span></span>
+            </div>
+
+            @for (task of prop.tasks; track task.id; let idx = $index) {
+              @let taskCode = getTaskDisplayCode(idx);
+              <div class="proposal-task-group">
+                <div
+                  class="proposal-task-row"
+                  data-testid="ai-task-row"
+                  [class.is-active-drawer]="activeDrawerTaskId() === task.id"
+                  (click)="openTaskDrawer(task, $event)"
+                >
+                  <!-- Checkbox & Subtask Expand -->
+                  <div class="cell-select" (click)="$event.stopPropagation()">
+                    <span class="material-symbols-outlined drag-dots" aria-hidden="true">drag_indicator</span>
+                    <input
+                      type="checkbox"
+                      data-testid="ai-task-checkbox"
+                      [checked]="!!selectedTaskIds()[task.id]"
+                      (change)="toggleTaskCheckbox(task.id, $event)"
+                      [attr.aria-label]="'Chọn ' + task.title"
+                    />
+                    @if (task.subtasks && task.subtasks.length > 0) {
+                      <button
+                        type="button"
+                        class="subtask-expand-btn"
+                        (click)="toggleSubtaskExpand(task.id, $event)"
+                        [title]="expandedSubtasks()[task.id] ? 'Thu gọn việc con' : 'Mở việc con'"
+                      >
+                        <span class="material-symbols-outlined" aria-hidden="true">
+                          {{ expandedSubtasks()[task.id] ? 'expand_more' : 'chevron_right' }}
+                        </span>
+                      </button>
+                    }
+                  </div>
+
+                  <!-- Code Badge -->
+                  <div class="cell-code">
+                    <span class="type-icon-badge" [class.type-story]="task.type === 'Story'" [class.type-bug]="task.type === 'Bug'">
+                      <span class="material-symbols-outlined" aria-hidden="true">
+                        {{ task.type === 'Bug' ? 'bug_report' : (task.type === 'Story' ? 'bookmark' : 'task_alt') }}
+                      </span>
+                    </span>
+                    <strong>{{ taskCode }}</strong>
+                  </div>
+
+                  <!-- Title + Ready Badge + Subtask Count -->
+                  <div class="cell-work">
+                    @if (inlineEditingTitleId() === task.id) {
+                      <input
+                        type="text"
+                        class="inline-title-input"
+                        [(ngModel)]="task.title"
+                        (click)="$event.stopPropagation()"
+                        (blur)="inlineEditingTitleId.set(null); persistProposalEdits()"
+                        (keyup.enter)="inlineEditingTitleId.set(null); persistProposalEdits()"
+                      />
+                    } @else {
+                      <span class="task-title-text">{{ task.title }}</span>
+                      <button
+                        type="button"
+                        class="inline-edit-icon"
+                        title="Sửa nhanh tiêu đề"
+                        (click)="$event.stopPropagation(); inlineEditingTitleId.set(task.id)"
+                      >
+                        <span class="material-symbols-outlined" aria-hidden="true">edit</span>
+                      </button>
+                    }
+
+                    <span class="ready-badge">
+                      <span class="material-symbols-outlined" aria-hidden="true">check_circle</span>
+                      <span>Ready</span>
+                    </span>
+
+                    @if (task.subtasks && task.subtasks.length > 0) {
+                      <span class="subtask-count-pill" (click)="toggleSubtaskExpand(task.id, $event)">
+                        {{ task.subtasks.length }} việc con
+                      </span>
+                    }
+                  </div>
+
+                  <!-- Epic Selector -->
+                  <div class="cell-epic" (click)="$event.stopPropagation()">
+                    <select
+                      class="epic-select-pill"
+                      [ngModel]="task.epicTitle || ''"
+                      (ngModelChange)="onEpicChange(task, $event)"
+                      aria-label="Chọn Epic"
+                    >
+                      @if (task.epicTitle && !epics.some(e => e.name === task.epicTitle)) {
+                        <option [value]="task.epicTitle">{{ task.epicTitle }}</option>
+                      }
+                      <option value="">Gán Epic</option>
+                      @for (epic of epics; track epic.id) {
+                        <option [value]="epic.name">{{ epic.name }}</option>
+                      }
+                    </select>
+                  </div>
+
+                  <!-- Priority Pill -->
+                  <div class="cell-priority" (click)="cyclePriority(task, $event)">
+                    <span
+                      class="priority-badge"
+                      [class.prio-high]="task.priority === 'High' || task.priority === 'Highest'"
+                      [class.prio-low]="task.priority === 'Low'"
+                      title="Nhấn để đổi độ ưu tiên"
+                    >
+                      {{ task.priority || 'Medium' }}
+                    </span>
+                  </div>
+
+                  <!-- Story Points -->
+                  <div class="cell-sp" (click)="$event.stopPropagation()">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      class="sp-number-box"
+                      data-testid="ai-row-sp-input"
+                      [(ngModel)]="task.storyPoints"
+                      (ngModelChange)="onTaskFieldChanged()"
+                      (blur)="persistProposalEdits()"
+                      aria-label="Story Points"
+                    />
+                    <span class="material-symbols-outlined sp-card-icon" aria-hidden="true">style</span>
+                  </div>
+
+                  <!-- Status Pill -->
+                  <div class="cell-status" (click)="$event.stopPropagation()">
+                    <span class="status-badge">
+                      <span>{{ task.status || 'To Do' }}</span>
+                      <span class="material-symbols-outlined" aria-hidden="true">expand_more</span>
+                    </span>
+                  </div>
+
+                  <!-- Assignee Selector -->
+                  <div class="cell-assignee" (click)="$event.stopPropagation()">
+                    <div class="assignee-box">
+                      @if (getMemberAvatar(task.assigneeName); as avatarUrl) {
+                        <img [src]="avatarUrl" [alt]="task.assigneeName || ''" class="member-avatar-img" />
+                      } @else {
+                        <span class="member-avatar-fallback">{{ getMemberInitials(task.assigneeName) }}</span>
+                      }
+                      <select
+                        class="assignee-select"
+                        [ngModel]="task.assigneeName || ''"
+                        (ngModelChange)="onAssigneeChange(task, $event)"
+                        aria-label="Chọn người xử lý"
+                      >
+                        <option value="">Chưa gán</option>
+                        @for (m of members; track m.id) {
+                          <option [value]="m.displayName">{{ m.displayName }}</option>
+                        }
+                      </select>
+                    </div>
+                  </div>
+
+                  <!-- Row Actions -->
+                  <div class="cell-more" (click)="$event.stopPropagation()">
+                    <button
+                      type="button"
+                      class="row-action-btn"
+                      title="Xem & chỉnh sửa chi tiết"
+                      (click)="openTaskDrawer(task, $event)"
+                    >
+                      <span class="material-symbols-outlined" aria-hidden="true">more_vert</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Expanded Subtasks List -->
+                @if (expandedSubtasks()[task.id] && task.subtasks && task.subtasks.length > 0) {
+                  <div class="subtasks-expanded-list">
+                    @for (sub of task.subtasks; track sub.id) {
+                      <div class="subtask-row-item" (click)="openTaskDrawer(task, $event)">
+                        <span class="subtask-branch-icon material-symbols-outlined" aria-hidden="true">subdirectory_arrow_right</span>
+                        <span class="subtask-role-badge">{{ sub.role || 'Tech' }}</span>
+                        <span class="subtask-title">{{ sub.title }}</span>
+                        <span class="subtask-hours">{{ sub.estimatedHours }}h</span>
+                        <span class="subtask-assignee">{{ sub.assigneeName || task.assigneeName || 'Chưa gán' }}</span>
+                      </div>
+                    }
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        </section>
+      }
+    </div>
+
+    <!-- Bottom Input Bar (Reference Image 3 Style: Clean Minimal Pill Bar + Attachments + Paste) -->
+    <footer class="ai-input-dock">
+      <!-- Attachment / Pasted Document Chips -->
+      @if (attachedFile() || pastedDocumentText()) {
+        <div class="input-attachments-bar">
+          @if (attachedFile(); as f) {
+            <div class="attachment-chip" data-testid="ai-attached-file-chip">
+              <span class="material-symbols-outlined" aria-hidden="true">description</span>
+              <strong>{{ f.name }}</strong>
+              <span>({{ formatFileSize(f.size) }})</span>
+              <button type="button" aria-label="Gỡ tệp đính kèm" (click)="removeAttachedFile()">
+                <span class="material-symbols-outlined" aria-hidden="true">close</span>
+              </button>
+            </div>
+          }
+          @if (pastedDocumentText(); as pText) {
+            <div class="attachment-chip" data-testid="ai-pasted-doc-chip">
+              <span class="material-symbols-outlined" aria-hidden="true">content_paste</span>
+              <strong>Tài liệu đã dán từ Clipboard</strong>
+              <span>({{ pText.length }} ký tự)</span>
+              <button type="button" aria-label="Xóa văn bản đã dán" (click)="clearPastedDocument()">
+                <span class="material-symbols-outlined" aria-hidden="true">close</span>
+              </button>
+            </div>
+          }
+        </div>
+      }
+
+      <div class="gemini-style-bar">
+        <label class="attach-plus-btn" title="Đính kèm tệp đặc tả (.docx, .pdf, .txt, .md, .xlsx)">
+          <input
+            type="file"
+            class="sr-only"
+            data-testid="ai-file-input"
+            accept=".docx,.pdf,.txt,.md,.xlsx,.csv,.json"
+            (change)="onFileSelected($event)"
+          />
+          <span class="material-symbols-outlined" aria-hidden="true">add</span>
+        </label>
+
+        <input
+          type="text"
+          class="prompt-text-input"
+          data-testid="ai-prompt-input"
+          [ngModel]="promptInput()"
+          (ngModelChange)="promptInput.set($event)"
+          (keyup.enter)="submitDecompose()"
+          [placeholder]="
+            selectedTasksCount() > 0
+              ? 'Nhập mô tả để AI làm lại ' + selectedTasksCount() + ' công việc đã chọn (các việc khác giữ nguyên)...'
+              : 'Nhập yêu cầu phân tách Sprint, dán nội dung cuộc họp (Ctrl+V) hoặc đính kèm tài liệu...'
+          "
+        />
+
+        <div class="bar-right-controls">
+          <span class="agent-mode-pill" title="Chế độ State-Graph Agent">
+            <span>Agent · Scrum</span>
+            <span class="material-symbols-outlined" aria-hidden="true">expand_more</span>
+          </span>
+
+          <button
+            type="button"
+            class="send-action-btn"
+            data-testid="btn-ai-send"
+            [disabled]="isStreaming()"
+            (click)="submitDecompose()"
+            title="Gửi yêu cầu phân tách"
+          >
+            <span class="material-symbols-outlined" aria-hidden="true">
+              {{ isStreaming() ? 'hourglass_top' : 'arrow_upward' }}
+            </span>
+          </button>
+        </div>
+      </div>
+    </footer>
+
+    <!-- Proposed Task Detail Drawer (Reference Image 5 Layout Adapted for AI Proposal) -->
+    @if (activeDrawerTask(); as detailTask) {
+      <div class="drawer-backdrop" (click)="closeTaskDrawer()"></div>
+      <aside
+        class="ai-task-drawer"
+        data-testid="ai-task-detail-drawer"
+        aria-label="Chi tiết công việc đề xuất"
+        (click)="$event.stopPropagation()"
+      >
+        <header class="drawer-top-bar">
+          <div class="drawer-key-group">
+            <span class="type-icon-badge" [class.type-story]="detailTask.type === 'Story'" [class.type-bug]="detailTask.type === 'Bug'">
+              <span class="material-symbols-outlined" aria-hidden="true">
+                {{ detailTask.type === 'Bug' ? 'bug_report' : 'task_alt' }}
+              </span>
+            </span>
+            <strong class="drawer-code">{{ projectKey }}-AI</strong>
+            <span class="drawer-sprint-badge">Đề xuất Sprint tiếp theo</span>
+          </div>
+
+          <div class="drawer-top-actions">
+            <button
+              type="button"
+              class="drawer-icon-btn"
+              title="Xóa công việc khỏi đề xuất"
+              (click)="deleteProposedTask(detailTask.id, $event)"
+            >
+              <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+            </button>
+            <button
+              type="button"
+              class="drawer-icon-btn"
+              data-testid="btn-close-task-drawer"
+              title="Đóng chi tiết"
+              (click)="closeTaskDrawer()"
+            >
+              <span class="material-symbols-outlined" aria-hidden="true">close</span>
+            </button>
+          </div>
+        </header>
+
+        <div class="drawer-scroll-content">
+          <!-- Task Title -->
+          <div class="drawer-title-block">
+            <input
+              type="text"
+              class="drawer-title-input"
+              data-testid="drawer-task-title"
+              [(ngModel)]="detailTask.title"
+              (ngModelChange)="onTaskFieldChanged()"
+              placeholder="Tên công việc..."
+            />
+          </div>
+
+          <!-- 6-Field Metadata Box (Matching Reference Image 5) -->
+          <div class="drawer-meta-grid">
+            <label class="meta-field">
+              <span>TRẠNG THÁI</span>
+              <select [(ngModel)]="detailTask.status" (ngModelChange)="onTaskFieldChanged()">
+                <option value="To Do">Chưa làm (To Do)</option>
+                <option value="In Progress">Đang làm (In Progress)</option>
+                <option value="Done">Hoàn thành (Done)</option>
+              </select>
+            </label>
+
+            <label class="meta-field">
+              <span>ĐỘ ƯU TIÊN</span>
+              <select [(ngModel)]="detailTask.priority" (ngModelChange)="onTaskFieldChanged()">
+                <option value="Highest">Highest</option>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
+              </select>
+            </label>
+
+            <label class="meta-field">
+              <span>NGƯỜI THỰC HIỆN</span>
+              <select
+                [ngModel]="detailTask.assigneeName || ''"
+                (ngModelChange)="onAssigneeChange(detailTask, $event)"
+              >
+                <option value="">Chưa gán</option>
+                @for (m of members; track m.id) {
+                  <option [value]="m.displayName">{{ m.displayName }}</option>
+                }
+              </select>
+            </label>
+
+            <label class="meta-field">
+              <span>STORY POINTS</span>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                data-testid="drawer-story-points"
+                [(ngModel)]="detailTask.storyPoints"
+                (ngModelChange)="onTaskFieldChanged()"
+              />
+            </label>
+
+            <label class="meta-field">
+              <span>GIỜ ƯỚC TÍNH (H)</span>
+              <input
+                type="number"
+                min="0"
+                max="1000"
+                step="0.5"
+                data-testid="drawer-estimated-hours"
+                [(ngModel)]="detailTask.estimatedHours"
+                (ngModelChange)="detailTask.remainingHours = detailTask.estimatedHours; onTaskFieldChanged()"
+              />
+            </label>
+
+            <label class="meta-field">
+              <span>GIỜ CÒN LẠI (H)</span>
+              <input
+                type="number"
+                min="0"
+                max="1000"
+                step="0.5"
+                [(ngModel)]="detailTask.remainingHours"
+                (ngModelChange)="onTaskFieldChanged()"
+              />
+            </label>
+          </div>
+
+          <!-- AI Single-Task Regeneration Box -->
+          <div class="drawer-ai-regen-box">
+            <div class="regen-box-title">
+              <span class="material-symbols-outlined" aria-hidden="true">autorenew</span>
+              <strong>Yêu cầu AI làm lại riêng công việc này</strong>
+            </div>
+            <div class="regen-box-controls">
+              <input
+                type="text"
+                data-testid="drawer-regenerate-input"
+                [ngModel]="drawerRegenerateFeedback()"
+                (ngModelChange)="drawerRegenerateFeedback.set($event)"
+                (keyup.enter)="regenerateSingleTaskInDrawer()"
+                placeholder="VD: Chia nhỏ thêm subtask bảo mật, tăng lên 8 SP..."
+              />
+              <button
+                type="button"
+                data-testid="btn-drawer-regenerate-task"
+                [disabled]="isRegeneratingSingle() || !drawerRegenerateFeedback().trim()"
+                (click)="regenerateSingleTaskInDrawer()"
+              >
+                <span class="material-symbols-outlined" aria-hidden="true">
+                  {{ isRegeneratingSingle() ? 'sync' : 'bolt' }}
+                </span>
+                <span>{{ isRegeneratingSingle() ? 'Đang làm lại...' : 'Làm lại Task này' }}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Detailed Description -->
+          <div class="drawer-section">
+            <div class="section-label">
+              <strong>Mô tả chi tiết</strong>
+            </div>
+            <textarea
+              rows="4"
+              class="drawer-textarea"
+              data-testid="drawer-description"
+              [(ngModel)]="detailTask.description"
+              (ngModelChange)="onTaskFieldChanged()"
+              placeholder="Mô tả chi tiết phạm vi thực hiện công việc..."
+            ></textarea>
+          </div>
+
+          <!-- Subtasks Section -->
+          <div class="drawer-section">
+            <div class="section-header-row">
+              <div class="section-label">
+                <span class="material-symbols-outlined" aria-hidden="true">subdirectory_arrow_right</span>
+                <strong>Công việc con ({{ detailTask.subtasks.length || 0 }})</strong>
+              </div>
+              <button type="button" class="text-add-btn" data-testid="btn-drawer-add-subtask" (click)="addSubtask(detailTask)">
+                + Thêm việc con
+              </button>
+            </div>
+
+            @if (detailTask.subtasks && detailTask.subtasks.length > 0) {
+              <div class="drawer-subtasks-list">
+                @for (sub of detailTask.subtasks; track sub.id; let sIdx = $index) {
+                  <div class="drawer-subtask-item">
+                    <select [(ngModel)]="sub.role" class="sub-role-select" aria-label="Vai trò">
+                      <option value="Backend">Backend</option>
+                      <option value="Frontend">Frontend</option>
+                      <option value="QA">QA</option>
+                      <option value="DevOps">DevOps</option>
+                    </select>
+                    <input
+                      type="text"
+                      class="sub-title-input"
+                      [(ngModel)]="sub.title"
+                      placeholder="Tên công việc con..."
+                    />
+                    <input
+                      type="number"
+                      min="0.5"
+                      max="200"
+                      step="0.5"
+                      class="sub-hours-input"
+                      [(ngModel)]="sub.estimatedHours"
+                      title="Số giờ ước tính"
+                    />
+                    <span class="sub-unit">h</span>
+                    <button type="button" class="sub-del-btn" aria-label="Xóa việc con" (click)="removeSubtask(detailTask, sIdx)">
+                      <span class="material-symbols-outlined" aria-hidden="true">close</span>
+                    </button>
+                  </div>
+                }
+              </div>
+            } @else {
+              <p class="empty-muted-note">Chưa có công việc con.</p>
+            }
+          </div>
+
+          <!-- Acceptance Criteria Section -->
+          <div class="drawer-section">
+            <div class="section-header-row">
+              <div class="section-label">
+                <span class="material-symbols-outlined" aria-hidden="true">fact_check</span>
+                <strong>Tiêu chí nghiệm thu ({{ detailTask.acceptanceCriteria.length || 0 }})</strong>
+              </div>
+              <button type="button" class="text-add-btn" data-testid="btn-drawer-add-ac" (click)="addAcceptanceCriterion(detailTask)">
+                + Thêm tiêu chí
+              </button>
+            </div>
+
+            @if (detailTask.acceptanceCriteria && detailTask.acceptanceCriteria.length > 0) {
+              <div class="drawer-ac-list">
+                @for (ac of detailTask.acceptanceCriteria; track trackByIndex($index); let acIdx = $index) {
+                  <div class="drawer-ac-item">
+                    <span class="material-symbols-outlined ac-check-icon" aria-hidden="true">check_circle</span>
+                    <input
+                      type="text"
+                      class="ac-text-input"
+                      [(ngModel)]="detailTask.acceptanceCriteria[acIdx]"
+                      (ngModelChange)="onTaskFieldChanged()"
+                    />
+                    <button type="button" class="sub-del-btn" aria-label="Xóa tiêu chí" (click)="removeAcceptanceCriterion(detailTask, acIdx)">
+                      <span class="material-symbols-outlined" aria-hidden="true">close</span>
+                    </button>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+
+          <!-- MCP Document Citations & AI Rationale -->
+          <div class="drawer-section drawer-rationale-card">
+            <div class="section-label">
+              <span class="material-symbols-outlined" aria-hidden="true">menu_book</span>
+              <strong>Trích dẫn Tài liệu MCP &amp; Lập luận Phân bổ</strong>
+            </div>
+            @if (detailTask.aiRationale) {
+              <p class="rationale-text">{{ detailTask.aiRationale }}</p>
+            }
+            @if (detailTask.documentCitations && detailTask.documentCitations.length > 0) {
+              <div class="citation-chips">
+                @for (cite of detailTask.documentCitations; track $index) {
+                  <span class="citation-badge">
+                    <span class="material-symbols-outlined" aria-hidden="true">description</span>
+                    <span>{{ cite }}</span>
+                  </span>
+                }
+              </div>
+            }
+          </div>
+        </div>
+      </aside>
+    }
+  </div>
+</div>
