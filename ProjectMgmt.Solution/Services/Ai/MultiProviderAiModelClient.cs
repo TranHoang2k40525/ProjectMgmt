@@ -130,6 +130,17 @@ public sealed class MultiProviderAiModelClient : IAiModelClient
         }
     }
 
+    private static string NormalizeGeminiModel(string? rawModel)
+    {
+        var m = (rawModel ?? string.Empty).Trim().ToLowerInvariant().Replace(" ", "-");
+        if (m.StartsWith("models/")) m = m["models/".Length..];
+        if (string.IsNullOrEmpty(m) || m.Contains("2.5") || m.Contains("2.0") || m.Contains("1.5"))
+        {
+            return "gemini-3-flash-preview";
+        }
+        return m;
+    }
+
     private async Task StreamGeminiAsync(
         AiPrompt prompt,
         (string ApiKey, string Endpoint, string ModelName, int MaxTokens, double Temperature) settings,
@@ -137,108 +148,143 @@ public sealed class MultiProviderAiModelClient : IAiModelClient
         CancellationToken ct)
     {
         var client = _httpClientFactory.CreateClient("AiClient");
-        var model = prompt.Model ?? settings.ModelName;
-        var url = $"{settings.Endpoint.TrimEnd('/')}/v1beta/models/{model}:streamGenerateContent?alt=sse&key={settings.ApiKey}";
+        var primaryModel = NormalizeGeminiModel(prompt.Model ?? settings.ModelName);
+        var candidateModels = new List<string> { primaryModel, "gemini-3-flash-preview", "gemini-3.8-flash", "gemini-3.5-flash" }.Distinct().ToList();
 
-        var contents = new List<object>();
-        foreach (var msg in prompt.Messages)
-        {
-            var role = msg.Role switch
-            {
-                AiRole.Assistant => "model",
-                _ => "user"
-            };
-            contents.Add(new
-            {
-                role,
-                parts = new object[] { new { text = msg.Content ?? string.Empty } }
-            });
-        }
+        Exception? lastException = null;
+        var streamCompleted = false;
 
-        var requestBody = new Dictionary<string, object>
+        foreach (var model in candidateModels)
         {
-            ["contents"] = contents,
-            ["generationConfig"] = new
+            var url = $"{settings.Endpoint.TrimEnd('/')}/v1beta/models/{model}:streamGenerateContent?alt=sse&key={settings.ApiKey}";
+
+            var contents = new List<object>();
+            foreach (var msg in prompt.Messages)
             {
-                temperature = prompt.Temperature ?? settings.Temperature,
-                maxOutputTokens = prompt.MaxTokens ?? settings.MaxTokens
+                var role = msg.Role switch
+                {
+                    AiRole.Assistant => "model",
+                    _ => "user"
+                };
+                contents.Add(new
+                {
+                    role,
+                    parts = new object[] { new { text = msg.Content ?? string.Empty } }
+                });
             }
-        };
 
-        if (!string.IsNullOrWhiteSpace(prompt.SystemInstruction))
-        {
-            requestBody["systemInstruction"] = new
+            var requestBody = new Dictionary<string, object>
             {
-                parts = new object[] { new { text = prompt.SystemInstruction } }
+                ["contents"] = contents,
+                ["generationConfig"] = new
+                {
+                    temperature = prompt.Temperature ?? settings.Temperature,
+                    maxOutputTokens = prompt.MaxTokens ?? settings.MaxTokens
+                }
             };
-        }
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, url)
-        {
-            Content = JsonContent.Create(requestBody)
-        };
-
-        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
-        response.EnsureSuccessStatusCode();
-
-        await using var stream = await response.Content.ReadAsStreamAsync(ct);
-        using var reader = new StreamReader(stream, Encoding.UTF8);
-
-        string? line;
-        while ((line = await reader.ReadLineAsync(ct)) != null)
-        {
-            if (string.IsNullOrWhiteSpace(line) || !line.StartsWith("data: ")) continue;
-            var dataJson = line[6..].Trim();
-            if (string.IsNullOrWhiteSpace(dataJson)) continue;
+            if (!string.IsNullOrWhiteSpace(prompt.SystemInstruction))
+            {
+                requestBody["systemInstruction"] = new
+                {
+                    parts = new object[] { new { text = prompt.SystemInstruction } }
+                };
+            }
 
             try
             {
-                var doc = JsonNode.Parse(dataJson);
-                var candidates = doc?["candidates"]?.AsArray();
-                if (candidates != null && candidates.Count > 0)
+                using var request = new HttpRequestMessage(HttpMethod.Post, url)
                 {
-                    var parts = candidates[0]?["content"]?["parts"]?.AsArray();
-                    if (parts != null)
-                    {
-                        foreach (var part in parts)
-                        {
-                            var text = part?["text"]?.GetValue<string>();
-                            var isThought = part?["thought"]?.GetValue<bool>() ?? false;
+                    Content = JsonContent.Create(requestBody)
+                };
+                request.Headers.TryAddWithoutValidation("x-goog-api-key", settings.ApiKey);
 
-                            if (!string.IsNullOrEmpty(text))
+                using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errBody = await response.Content.ReadAsStringAsync(ct);
+                    _logger.LogWarning("[GeminiStream] Model {Model} returned {StatusCode}: {ErrorBody}", model, response.StatusCode, errBody);
+                    continue;
+                }
+
+                await using var stream = await response.Content.ReadAsStreamAsync(ct);
+                using var reader = new StreamReader(stream, Encoding.UTF8);
+
+                string? line;
+                var hasReceivedAnyContent = false;
+                while ((line = await reader.ReadLineAsync(ct)) != null)
+                {
+                    if (string.IsNullOrWhiteSpace(line) || !line.StartsWith("data: ")) continue;
+                    var dataJson = line[6..].Trim();
+                    if (string.IsNullOrWhiteSpace(dataJson)) continue;
+
+                    try
+                    {
+                        var doc = JsonNode.Parse(dataJson);
+                        var candidates = doc?["candidates"]?.AsArray();
+                        if (candidates != null && candidates.Count > 0)
+                        {
+                            var parts = candidates[0]?["content"]?["parts"]?.AsArray();
+                            if (parts != null)
                             {
-                                if (isThought)
+                                foreach (var part in parts)
                                 {
-                                    await onChunk(AiStreamChunk.Thought(text));
+                                    var text = part?["text"]?.GetValue<string>();
+                                    var isThought = part?["thought"]?.GetValue<bool>() ?? false;
+
+                                    if (!string.IsNullOrEmpty(text))
+                                    {
+                                        hasReceivedAnyContent = true;
+                                        if (isThought)
+                                        {
+                                            await onChunk(AiStreamChunk.Thought(text));
+                                        }
+                                        else
+                                        {
+                                            await onChunk(AiStreamChunk.Content(text));
+                                        }
+                                    }
+                                    else if (part?["functionCall"] != null)
+                                    {
+                                        var fn = part["functionCall"]!;
+                                        var fnName = fn["name"]?.GetValue<string>() ?? string.Empty;
+                                        var args = fn["args"]?.ToJsonString() ?? "{}";
+                                        await onChunk(AiStreamChunk.ToolCall(fnName, Guid.NewGuid().ToString("N"), args));
+                                    }
                                 }
-                                else
-                                {
-                                    await onChunk(AiStreamChunk.Content(text));
-                                }
-                            }
-                            else if (part?["functionCall"] != null)
-                            {
-                                var fn = part["functionCall"]!;
-                                var fnName = fn["name"]?.GetValue<string>() ?? string.Empty;
-                                var args = fn["args"]?.ToJsonString() ?? "{}";
-                                await onChunk(AiStreamChunk.ToolCall(fnName, Guid.NewGuid().ToString("N"), args));
                             }
                         }
+
+                        var usageNode = doc?["usageMetadata"];
+                        if (usageNode != null)
+                        {
+                            var promptToks = usageNode["promptTokenCount"]?.GetValue<int>() ?? 0;
+                            var candToks = usageNode["candidatesTokenCount"]?.GetValue<int>() ?? 0;
+                            await onChunk(AiStreamChunk.Done("stop", new AiUsageInfo { PromptTokens = promptToks, CompletionTokens = candToks }));
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "[GeminiStream] Lỗi parse SSE chunk");
                     }
                 }
 
-                var usageNode = doc?["usageMetadata"];
-                if (usageNode != null)
+                if (hasReceivedAnyContent)
                 {
-                    var promptToks = usageNode["promptTokenCount"]?.GetValue<int>() ?? 0;
-                    var candToks = usageNode["candidatesTokenCount"]?.GetValue<int>() ?? 0;
-                    await onChunk(AiStreamChunk.Done("stop", new AiUsageInfo { PromptTokens = promptToks, CompletionTokens = candToks }));
+                    streamCompleted = true;
+                    break;
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (!ct.IsCancellationRequested)
             {
-                _logger.LogWarning(ex, "[GeminiStream] Lỗi parse SSE chunk");
+                lastException = ex;
+                _logger.LogWarning(ex, "[GeminiStream] Thử nghiệm model {Model} thất bại, chuyển sang model dự phòng", model);
             }
+        }
+
+        if (!streamCompleted && lastException != null)
+        {
+            throw lastException;
         }
     }
 

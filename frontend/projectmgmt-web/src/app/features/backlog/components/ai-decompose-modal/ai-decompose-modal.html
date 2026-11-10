@@ -92,77 +92,68 @@
           </div>
         }
 
-        <!-- Realtime Agent Multi-Step Execution Card (SSE Progress) -->
-        @if (isStreaming() || stepsLog().length > 0) {
-          <div class="agent-progress-card" data-testid="ai-progress-panel" [class.is-running]="isStreaming()">
-            <div class="progress-card-header">
-              <div class="progress-status-left">
-                <span class="material-symbols-outlined status-icon" [class.spin-icon]="isStreaming()" aria-hidden="true">
-                  {{ isStreaming() ? 'autorenew' : 'verified' }}
-                </span>
-                <div>
-                  <strong>{{ isStreaming() ? currentStepLabel() : 'Hoàn tất quy trình phân tách Sprint' }}</strong>
-                  <p>{{ isStreaming() ? currentStepDetail() : 'Đã kiểm chứng tiêu chí nghiệm thu & cân bằng tải thành viên' }}</p>
-                </div>
-              </div>
-              <div class="progress-percent-badge" data-testid="ai-progress-percent">
-                {{ isStreaming() ? currentPercent() : 100 }}%
-              </div>
-            </div>
-
-            <div class="progress-bar-track">
-              <div class="progress-bar-fill" [style.width.%]="isStreaming() ? currentPercent() : 100"></div>
-            </div>
-
-            <!-- 5 Pipeline Steps Grid -->
-            <div class="pipeline-steps-grid">
-              @for (stepDef of pipelineStepDefinitions; track stepDef.index) {
-                @let state = getStepStatus(stepDef.index);
-                <div
-                  class="pipeline-step-item"
-                  [class.step-done]="state === 'done'"
-                  [class.step-active]="state === 'active'"
-                  [class.step-pending]="state === 'pending'"
-                  [attr.data-testid]="'ai-step-' + stepDef.index"
-                >
-                  <span class="material-symbols-outlined step-icon" aria-hidden="true">
-                    {{ state === 'done' ? 'check_circle' : (state === 'active' ? 'pending' : stepDef.icon) }}
-                  </span>
-                  <span class="step-label">{{ stepDef.index }}. {{ stepDef.label }}</span>
-                </div>
-              }
-            </div>
-
-            <!-- MCP Tool Calls Log -->
-            @if (toolCallsLog().length > 0) {
-              <div class="mcp-tools-strip" data-testid="ai-mcp-tools-log">
-                <span class="mcp-strip-label">
-                  <span class="material-symbols-outlined" aria-hidden="true">hub</span>
-                  MCP Tools đã thực thi:
-                </span>
-                <div class="mcp-tool-chips">
-                  @for (tool of toolCallsLog(); track $index) {
-                    <span class="mcp-chip" [title]="tool.summaryVi">
-                      <span class="material-symbols-outlined" aria-hidden="true">check</span>
-                      <code>{{ tool.toolName }}</code>
-                      <span>{{ tool.summaryVi }}</span>
-                      @if (tool.durationMs !== undefined && tool.durationMs !== null) {
-                        <small>{{ tool.durationMs }}ms</small>
-                      }
-                    </span>
+        <!-- Realtime Agent Interactive Execution Stream (Claude Code / Gemini CLI Style - Image 2 & 3) -->
+        @if (isStreaming() || toolCallsLog().length > 0) {
+          <div class="agent-live-stream-zone" data-testid="ai-progress-panel">
+            <!-- Tool Actions Stream (Collapsible Action Banners matching Image 2) -->
+            @for (tool of toolCallsLog(); track $index; let tIdx = $index) {
+              <div
+                class="agent-action-banner"
+                [class.is-expanded]="expandedToolIndices()[tIdx]"
+                (click)="toggleToolLog(tIdx)"
+                [attr.data-testid]="'ai-action-banner-' + tIdx"
+              >
+                <div class="action-banner-row">
+                  <span class="material-symbols-outlined action-status-icon" aria-hidden="true">check_circle</span>
+                  <span class="action-title-text">Running {{ tool.summaryVi || tool.toolName }} &gt;</span>
+                  @if (tool.durationMs !== undefined && tool.durationMs !== null) {
+                    <span class="action-duration-pill">{{ tool.durationMs }}ms</span>
                   }
+                  <span class="material-symbols-outlined action-chevron-icon" aria-hidden="true">
+                    {{ expandedToolIndices()[tIdx] ? 'expand_less' : 'chevron_right' }}
+                  </span>
                 </div>
+                @if (expandedToolIndices()[tIdx]) {
+                  <div class="action-banner-body">
+                    <div class="action-detail-item">
+                      <span class="detail-label">Công cụ MCP:</span>
+                      <code>{{ tool.toolName }}</code>
+                    </div>
+                    @if (tool.toolArguments) {
+                      <div class="action-detail-item">
+                        <span class="detail-label">Tham số đầu vào:</span>
+                        <pre>{{ tool.toolArguments | json }}</pre>
+                      </div>
+                    }
+                  </div>
+                }
               </div>
             }
 
-            <!-- Live Streaming Thoughts Preview -->
-            @if (isStreaming() && streamedThoughts()) {
-              <div class="thought-stream-box" data-testid="ai-thought-stream">
-                <div class="thought-header">
-                  <span class="material-symbols-outlined" aria-hidden="true">psychology</span>
-                  <span>Luồng phân tích thời gian thực:</span>
+            <!-- Animated Thinking Constellation Indicator (Matching Image 3) -->
+            @if (isStreaming()) {
+              <div class="agent-thinking-row" data-testid="ai-thinking-indicator">
+                <div class="constellation-symbol" aria-hidden="true">
+                  <span class="c-dot c-dot-top"></span>
+                  <div class="c-dot-bottom-row">
+                    <span class="c-dot c-dot-bl"></span>
+                    <span class="c-dot c-dot-br"></span>
+                  </div>
                 </div>
-                <pre>{{ streamedThoughts() }}</pre>
+                <span class="thinking-label">{{ currentStepDetail() || 'Analyzing integration steps...' }}</span>
+              </div>
+            }
+
+            <!-- Realtime Live Stream SSE Output -->
+            @if (isStreaming() && streamedThoughts()) {
+              <div class="agent-live-stream-box" data-testid="ai-thought-stream">
+                <div class="stream-box-header">
+                  <span class="material-symbols-outlined" aria-hidden="true">terminal</span>
+                  <span>Luồng suy luận &amp; sinh dữ liệu thời gian thực (SSE Stream):</span>
+                </div>
+                <div class="stream-box-body">
+                  <pre>{{ streamedThoughts() }}</pre>
+                </div>
               </div>
             }
           </div>
@@ -176,10 +167,10 @@
         }
       </section>
 
-      <!-- Proposed Sprint & Tasks Section (Reference Image 4) -->
+      <!-- Proposed Sprint & Tasks Section (Prioritized Content Layout) -->
       @if (proposal(); as prop) {
         <section class="proposal-workspace" data-testid="ai-proposal-section" aria-label="Đề xuất Sprint và danh sách công việc">
-          <!-- Sprint Goal & Summary Bar -->
+          <!-- Sprint Goal & Summary Bar (Main Content Prioritized) -->
           <div class="sprint-goal-card">
             <div class="goal-top-row">
               <div class="goal-badge">
@@ -216,10 +207,49 @@
             </div>
 
             @if (prop.rationale) {
-              <p class="sprint-rationale-note">
+              <div class="sprint-rationale-box">
                 <span class="material-symbols-outlined" aria-hidden="true">verified</span>
-                <span>{{ prop.rationale }}</span>
-              </p>
+                <p>{{ prop.rationale }}</p>
+              </div>
+            }
+
+            <!-- Hashtags Strip (Directly Below Main Content) -->
+            @if (proposalTags().length > 0) {
+              <div class="proposal-hashtags-row" data-testid="ai-proposal-hashtags">
+                <span class="hashtags-label">
+                  <span class="material-symbols-outlined" aria-hidden="true">tag</span>
+                  <span>Chủ đề chính:</span>
+                </span>
+                <div class="hashtags-pills">
+                  @for (tag of proposalTags(); track tag) {
+                    <span class="hashtag-pill">{{ tag }}</span>
+                  }
+                </div>
+              </div>
+            }
+
+            <!-- Spec Hub Citations Strip (With Clickable Links into Spec Hub) -->
+            @if (allUniqueCitations().length > 0) {
+              <div class="proposal-citations-row" data-testid="ai-proposal-citations">
+                <span class="citations-label">
+                  <span class="material-symbols-outlined" aria-hidden="true">menu_book</span>
+                  <span>Tài liệu đặc tả liên quan (Spec Hub):</span>
+                </span>
+                <div class="citations-pills">
+                  @for (cite of allUniqueCitations(); track $index) {
+                    <button
+                      type="button"
+                      class="citation-doc-btn"
+                      (click)="openSpecDoc(cite)"
+                      title="Mở tài liệu này trong Spec Hub"
+                    >
+                      <span class="material-symbols-outlined" aria-hidden="true">description</span>
+                      <span>{{ cite }}</span>
+                      <span class="material-symbols-outlined link-icon" aria-hidden="true">open_in_new</span>
+                    </button>
+                  }
+                </div>
+              </div>
             }
 
             <!-- Proposal Action Toolbar -->
@@ -353,7 +383,7 @@
                     <strong>{{ taskCode }}</strong>
                   </div>
 
-                  <!-- Title + Ready Badge + Subtask Count -->
+                  <!-- Title + Ready Badge + Subtask Count + Tags & Citations -->
                   <div class="cell-work">
                     @if (inlineEditingTitleId() === task.id) {
                       <input
@@ -376,16 +406,38 @@
                       </button>
                     }
 
-                    <span class="ready-badge">
-                      <span class="material-symbols-outlined" aria-hidden="true">check_circle</span>
-                      <span>Ready</span>
-                    </span>
-
-                    @if (task.subtasks && task.subtasks.length > 0) {
-                      <span class="subtask-count-pill" (click)="toggleSubtaskExpand(task.id, $event)">
-                        {{ task.subtasks.length }} việc con
+                    <div class="task-metadata-pills">
+                      <span class="ready-badge">
+                        <span class="material-symbols-outlined" aria-hidden="true">check_circle</span>
+                        <span>Ready</span>
                       </span>
-                    }
+
+                      @if (task.subtasks && task.subtasks.length > 0) {
+                        <span class="subtask-count-pill" (click)="toggleSubtaskExpand(task.id, $event)">
+                          {{ task.subtasks.length }} việc con
+                        </span>
+                      }
+
+                      @if (task.tags && task.tags.length > 0) {
+                        @for (tTag of task.tags; track tTag) {
+                          <span class="task-mini-tag">{{ tTag }}</span>
+                        }
+                      }
+
+                      @if (task.documentCitations && task.documentCitations.length > 0) {
+                        @for (cite of task.documentCitations; track $index) {
+                          <button
+                            type="button"
+                            class="task-cite-pill"
+                            (click)="openSpecDoc(cite, task.documentId); $event.stopPropagation()"
+                            title="Mở trích dẫn trong Spec Hub"
+                          >
+                            <span class="material-symbols-outlined" aria-hidden="true">description</span>
+                            <span>{{ cite }}</span>
+                          </button>
+                        }
+                      }
+                    </div>
                   </div>
 
                   <!-- Epic Selector -->
@@ -553,8 +605,8 @@
         />
 
         <div class="bar-right-controls">
-          <span class="agent-mode-pill" title="Chế độ State-Graph Agent">
-            <span>Agent · Scrum</span>
+          <span class="agent-mode-pill" title="Mô hình AI đang kết nối">
+            <span>{{ selectedModel() }}</span>
             <span class="material-symbols-outlined" aria-hidden="true">expand_more</span>
           </span>
 
@@ -572,6 +624,7 @@
           </button>
         </div>
       </div>
+      <p class="gemini-disclaimer">Gemini là một AI và có thể mắc sai sót. Vui lòng kiểm tra lại thông tin quan trọng.</p>
     </footer>
 
     <!-- Proposed Task Detail Drawer (Reference Image 5 Layout Adapted for AI Proposal) -->

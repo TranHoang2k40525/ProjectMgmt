@@ -10,6 +10,7 @@ public sealed class AiSprintProposalDto
     public Guid? TargetSprintId { get; set; }
     public string SprintGoal { get; set; } = string.Empty;
     public string Rationale { get; set; } = string.Empty;
+    public List<string> Tags { get; set; } = [];
     public decimal TotalEstimatedHours { get; set; }
     public decimal TotalStoryPoints { get; set; }
     public List<ProposedTaskDto> Tasks { get; set; } = [];
@@ -32,9 +33,11 @@ public sealed class ProposedTaskDto
     public decimal RemainingHours { get; set; } = 8;
     public Guid? AssigneeUserId { get; set; }
     public string? AssigneeName { get; set; }
+    public List<string> Tags { get; set; } = [];
     public List<string> SuggestedSkills { get; set; } = [];
     public List<string> AcceptanceCriteria { get; set; } = [];
     public List<string> DocumentCitations { get; set; } = [];
+    public Guid? DocumentId { get; set; }
     public string? AiRationale { get; set; }
     public List<ProposedSubTaskDto> Subtasks { get; set; } = [];
 }

@@ -1,6 +1,8 @@
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using ProjectMgmt.Core.Resilience;
 
 namespace ProjectMgmt.Core.Staging;
@@ -18,6 +20,22 @@ public sealed class ResilientStateStagingService : IStateStagingService
     private readonly ILogger<ResilientStateStagingService> _logger;
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly bool _redisEnabled;
+
+    [ActivatorUtilitiesConstructor]
+    public ResilientStateStagingService(
+        MemoryStateStagingService memoryFallback,
+        IOptions<RedisOptions> redisOptions,
+        IExternalStagingProvider? primaryProvider = null,
+        ILogger<ResilientStateStagingService>? logger = null)
+        : this(
+            memoryFallback,
+            primaryProvider,
+            null,
+            redisOptions?.Value?.Enabled ?? false,
+            TimeSpan.FromMilliseconds(redisOptions?.Value?.TimeoutMs > 0 ? redisOptions.Value.TimeoutMs : 3000),
+            logger)
+    {
+    }
 
     public ResilientStateStagingService(
         MemoryStateStagingService memoryFallback,

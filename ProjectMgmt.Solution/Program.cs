@@ -354,12 +354,23 @@ builder.Services.Configure<LangfuseOptions>(builder.Configuration.GetSection("La
 
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<MemoryStateStagingService>();
-builder.Services.AddScoped<IStateStagingService, ResilientStateStagingService>();
+builder.Services.AddScoped<IStateStagingService>(sp =>
+{
+    var memory = sp.GetRequiredService<MemoryStateStagingService>();
+    var redisOptions = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<RedisOptions>>();
+    var primary = sp.GetService<IExternalStagingProvider>();
+    var logger = sp.GetService<ILogger<ResilientStateStagingService>>();
+    return new ResilientStateStagingService(memory, redisOptions, primary, logger);
+});
 builder.Services.AddScoped<IVectorSearchService, ResilientVectorSearchService>();
 builder.Services.AddScoped<IAiTraceService, ResilientTraceService>();
 
 // --- AI Model Client & External Providers (Milestone M2) ---
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient("AiClient", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(180);
+});
 builder.Services.AddScoped<IAiModelClient, MultiProviderAiModelClient>();
 builder.Services.AddScoped<IExternalStagingProvider, StackExchangeRedisStagingProvider>();
 builder.Services.AddScoped<IExternalVectorSearchProvider, QdrantVectorSearchProvider>();

@@ -1120,6 +1120,7 @@ export class ProjectSettingsPage implements OnInit {
     this.error.set(null);
     this.projectService.getProjectById(this.projectId).subscribe({
       next: (p) => {
+        this.projectService.selectProject(p);
         this.projectService.loadProjectMembers(this.projectId).subscribe({
           next: members => {
             this.project.set({ ...p, members });

@@ -86,21 +86,39 @@ public class ProjectManagementService : IProjectManagementService
     public async Task<Result<IReadOnlyList<ProjectDto>>> GetProjectsAsync(Guid? orgId = null)
     {
         var projects = await _repository.GetAllProjectsAsync(orgId);
-        IReadOnlyList<ProjectDto> dtos = projects.Select(x => new ProjectDto(
-            x.Id,
-            x.OrgId,
-            x.ProjectKey,
-            x.Name,
-            x.Description,
-            x.CreatedByUserId,
-            x.LeadUserId,
-            x.IssueCounter,
-            x.IsArchived,
-            x.IsDeleted,
-            x.CreatedAt,
-            x.UpdatedAt)).ToList();
+        var dtos = new List<ProjectDto>(projects.Count);
+        foreach (var x in projects)
+        {
+            var dto = new ProjectDto(
+                x.Id,
+                x.OrgId,
+                x.ProjectKey,
+                x.Name,
+                x.Description,
+                x.CreatedByUserId,
+                x.LeadUserId,
+                x.IssueCounter,
+                x.IsArchived,
+                x.IsDeleted,
+                x.CreatedAt,
+                x.UpdatedAt);
 
-        return Result<IReadOnlyList<ProjectDto>>.Success(dtos);
+            var boards = await _repository.GetBoardsByProjectAsync(x.Id);
+            if (boards.Count > 0)
+            {
+                var def = boards.FirstOrDefault(b => b.IsDefault) ?? boards[0];
+                dto.BoardName = def.Name;
+                dto.BoardType = def.Type;
+                dto.ManagementType = def.Type;
+                var trimmed = def.Name.StartsWith("Bảng ", StringComparison.OrdinalIgnoreCase)
+                    ? def.Name.Substring(5).Trim()
+                    : def.Name.Trim();
+                dto.WorkflowName = trimmed;
+            }
+            dtos.Add(dto);
+        }
+
+        return Result<IReadOnlyList<ProjectDto>>.Success((IReadOnlyList<ProjectDto>)dtos);
     }
 
     public async Task<Result<ProjectDto>> GetProjectByIdAsync(Guid projectId)
@@ -124,6 +142,19 @@ public class ProjectManagementService : IProjectManagementService
             project.IsDeleted,
             project.CreatedAt,
             project.UpdatedAt);
+
+        var boards = await _repository.GetBoardsByProjectAsync(project.Id);
+        if (boards.Count > 0)
+        {
+            var def = boards.FirstOrDefault(b => b.IsDefault) ?? boards[0];
+            dto.BoardName = def.Name;
+            dto.BoardType = def.Type;
+            dto.ManagementType = def.Type;
+            var trimmed = def.Name.StartsWith("Bảng ", StringComparison.OrdinalIgnoreCase)
+                ? def.Name.Substring(5).Trim()
+                : def.Name.Trim();
+            dto.WorkflowName = trimmed;
+        }
 
         return Result<ProjectDto>.Success(dto);
     }
@@ -262,6 +293,19 @@ public class ProjectManagementService : IProjectManagementService
             project.CreatedAt,
             project.UpdatedAt);
 
+        var boards = await _repository.GetBoardsByProjectAsync(project.Id);
+        if (boards.Count > 0)
+        {
+            var def = boards.FirstOrDefault(b => b.IsDefault) ?? boards[0];
+            dto.BoardName = def.Name;
+            dto.BoardType = def.Type;
+            dto.ManagementType = def.Type;
+            var trimmed = def.Name.StartsWith("Bảng ", StringComparison.OrdinalIgnoreCase)
+                ? def.Name.Substring(5).Trim()
+                : def.Name.Trim();
+            dto.WorkflowName = trimmed;
+        }
+
         return Result<ProjectDto>.Success(dto);
     }
 
@@ -302,6 +346,19 @@ public class ProjectManagementService : IProjectManagementService
             project.IsDeleted,
             project.CreatedAt,
             project.UpdatedAt);
+
+        var boards = await _repository.GetBoardsByProjectAsync(project.Id);
+        if (boards.Count > 0)
+        {
+            var def = boards.FirstOrDefault(b => b.IsDefault) ?? boards[0];
+            dto.BoardName = def.Name;
+            dto.BoardType = def.Type;
+            dto.ManagementType = def.Type;
+            var trimmed = def.Name.StartsWith("Bảng ", StringComparison.OrdinalIgnoreCase)
+                ? def.Name.Substring(5).Trim()
+                : def.Name.Trim();
+            dto.WorkflowName = trimmed;
+        }
 
         return Result<ProjectDto>.Success(dto);
     }

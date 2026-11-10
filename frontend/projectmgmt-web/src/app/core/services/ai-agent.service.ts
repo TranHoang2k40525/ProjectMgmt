@@ -28,9 +28,11 @@ export interface ProposedTaskDto {
   remainingHours: number;
   assigneeUserId?: string | null;
   assigneeName?: string | null;
+  tags?: string[];
   suggestedSkills: string[];
   acceptanceCriteria: string[];
   documentCitations: string[];
+  documentId?: string | null;
   aiRationale?: string | null;
   subtasks: ProposedSubTaskDto[];
 }
@@ -41,6 +43,7 @@ export interface AiSprintProposalDto {
   targetSprintId?: string | null;
   sprintGoal: string;
   rationale: string;
+  tags?: string[];
   totalEstimatedHours: number;
   totalStoryPoints: number;
   tasks: ProposedTaskDto[];

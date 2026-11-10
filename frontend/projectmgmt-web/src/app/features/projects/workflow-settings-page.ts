@@ -934,6 +934,18 @@ export class WorkflowSettingsPage implements OnInit {
       if ((cachedProj as any)?.workflowTemplateId) {
         this.selectedTemplateId.set((cachedProj as any).workflowTemplateId);
         this.selectedTemplate = (cachedProj as any).workflowTemplateId;
+      } else if (!savedTid) {
+        const wName = ((cachedProj as any)?.workflowName || (cachedProj as any)?.boardTabTitle || (cachedProj as any)?.boardName || '').toLowerCase();
+        if (wName.includes('kanban')) {
+          this.selectedTemplateId.set('preset-kanban-simple');
+          this.selectedTemplate = 'preset-kanban-simple';
+        } else if (wName.includes('qa')) {
+          this.selectedTemplateId.set('preset-agile-qa');
+          this.selectedTemplate = 'preset-agile-qa';
+        } else if (wName.includes('enterprise')) {
+          this.selectedTemplateId.set('preset-enterprise');
+          this.selectedTemplate = 'preset-enterprise';
+        }
       }
       const cachedStatuses = this.projectService.projectStatuses?.() ?? [];
       if (cachedStatuses.length > 0) {

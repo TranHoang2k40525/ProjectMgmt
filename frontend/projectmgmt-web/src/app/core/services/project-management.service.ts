@@ -41,6 +41,7 @@ export interface Project {
   name: string;
   type?: string;
   boardName?: string;
+  boardType?: string;
   boardTabTitle?: string;
   workflowName?: string;
   workflowTemplateId?: string;
@@ -844,12 +845,41 @@ export class ProjectManagementService {
       this.allProjectsList.set(projects);
       const selected = this.currentProject().id || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('projectmgmt.selected-project') : null);
       const next = projects.find(p => p.id === selected) ?? projects[0] ?? this.emptyProject;
-      this.currentProject.set(next.id === this.currentProject().id ? { ...this.currentProject(), ...next } : next);
+      const tabTitle = next.boardTabTitle
+        || next.workflowName
+        || (next.boardName ? next.boardName.replace(/^Bảng\s+/i, '').trim() : '')
+        || (next.managementType === 'Kanban' || next.type === 'Kanban' ? 'Kanban' : 'Scrum');
+      const bName = next.boardName || `Bảng ${tabTitle}`;
+      const normalizedNext: Project = {
+        ...next,
+        boardTabTitle: tabTitle,
+        workflowName: tabTitle,
+        boardName: bName,
+        type: next.boardType || next.managementType || next.type || 'Scrum',
+        managementType: next.boardType || next.managementType || next.type || 'Scrum'
+      };
+      this.currentProject.set(next.id === this.currentProject().id ? { ...this.currentProject(), ...normalizedNext } : normalizedNext);
     }));
   }
 
   selectProject(project: Project): void {
-    this.currentProject.set(project);
+    const tabTitle = project.boardTabTitle
+      || project.workflowName
+      || (project.boardName ? project.boardName.replace(/^Bảng\s+/i, '').trim() : '')
+      || (project.managementType === 'Kanban' || project.type === 'Kanban' ? 'Kanban' : 'Scrum');
+    const bName = project.boardName || `Bảng ${tabTitle}`;
+    const normalized: Project = {
+      ...project,
+      boardTabTitle: tabTitle,
+      workflowName: tabTitle,
+      boardName: bName,
+      type: project.boardType || project.managementType || project.type || 'Scrum',
+      managementType: project.boardType || project.managementType || project.type || 'Scrum'
+    };
+    if (typeof sessionStorage !== 'undefined' && project.id) {
+      sessionStorage.setItem('projectmgmt.selected-project', project.id);
+    }
+    this.currentProject.set(normalized);
   }
 
   createProject(req: CreateProjectRequest): Observable<Project> {
@@ -1485,10 +1515,8 @@ export class ProjectManagementService {
           workflowTemplateId: templateId
         } : item));
 
-        if (this.currentProject().id === projectId) {
-          this.projectStatuses.set(statuses);
-          this.loadWorkspace(projectId);
-        }
+        this.projectStatuses.set(statuses);
+        this.loadWorkspace(projectId);
       })
     );
   }

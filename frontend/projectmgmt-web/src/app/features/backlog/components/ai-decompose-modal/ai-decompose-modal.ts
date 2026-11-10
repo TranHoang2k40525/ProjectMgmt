@@ -11,6 +11,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import {
   AiAgentService,
   AiSprintProposalDto,
@@ -52,6 +53,7 @@ export interface ChatTurn {
 export class AiDecomposeModalComponent implements OnDestroy {
   private readonly aiService = inject(AiAgentService);
   private readonly toastService = inject(ToastService);
+  private readonly router = inject(Router);
 
   @Input({ required: true }) projectId = '';
   @Input() projectName = 'Dự án';
@@ -80,8 +82,10 @@ export class AiDecomposeModalComponent implements OnDestroy {
   readonly currentStepDetail = signal<string>('');
   readonly stepsLog = signal<AiStepProgressEvent[]>([]);
   readonly toolCallsLog = signal<AiToolCallEvent[]>([]);
+  readonly expandedToolIndices = signal<Record<number, boolean>>({});
   readonly streamedThoughts = signal<string>('');
   readonly errorMessage = signal<string | null>(null);
+  readonly selectedModel = signal<string>('Gemini 3.5 Flash');
 
   // Proposal & Selection state
   readonly proposal = signal<AiSprintProposalDto | null>(null);
@@ -136,6 +140,52 @@ export class AiDecomposeModalComponent implements OnDestroy {
     if (!prop) return 0;
     return prop.tasks.reduce((sum, t) => sum + (Number(t.estimatedHours) || 0), 0);
   });
+
+  readonly proposalTags = computed<string[]>(() => {
+    const prop = this.proposal();
+    if (!prop) return [];
+    if (prop.tags && prop.tags.length > 0) return prop.tags;
+    const tagSet = new Set<string>();
+    tagSet.add('#ScrumSprint');
+    tagSet.add('#SpecHub');
+    for (const t of prop.tasks) {
+      if (t.tags && t.tags.length > 0) {
+        for (const tg of t.tags) tagSet.add(tg.startsWith('#') ? tg : `#${tg}`);
+      } else {
+        tagSet.add(`#${t.type}`);
+      }
+    }
+    return Array.from(tagSet).slice(0, 8);
+  });
+
+  readonly allUniqueCitations = computed<string[]>(() => {
+    const prop = this.proposal();
+    if (!prop) return [];
+    const citeSet = new Set<string>();
+    for (const t of prop.tasks) {
+      if (t.documentCitations) {
+        for (const c of t.documentCitations) {
+          if (c && c.trim()) citeSet.add(c.trim());
+        }
+      }
+    }
+    if (citeSet.size === 0) {
+      citeSet.add('Tài liệu Đặc tả Kiến trúc Spec Hub');
+    }
+    return Array.from(citeSet);
+  });
+
+  toggleToolLog(idx: number): void {
+    this.expandedToolIndices.update((prev) => ({ ...prev, [idx]: !prev[idx] }));
+  }
+
+  openSpecDoc(citationText?: string, documentId?: string | null): void {
+    if (documentId) {
+      this.router.navigate(['/projects', this.projectId, 'documents'], { queryParams: { docId: documentId } });
+    } else {
+      this.router.navigate(['/projects', this.projectId, 'documents']);
+    }
+  }
 
   ngOnDestroy(): void {
     this.cancelStream();

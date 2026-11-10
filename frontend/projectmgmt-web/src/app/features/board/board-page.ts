@@ -63,6 +63,10 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
       const w = (p as any).workflowName;
       return w.startsWith('Bảng ') ? w : `Bảng ${w}`;
     }
+    if ((p as any)?.boardName) {
+      const bn = (p as any).boardName;
+      return bn.startsWith('Bảng ') ? bn : `Bảng ${bn}`;
+    }
     if (typeof localStorage !== 'undefined' && p?.id) {
       const saved = localStorage.getItem(`projectmgmt.workflow-name.${p.id}`)
         || localStorage.getItem(`projectmgmt.workflow-name.${p.id.toLowerCase()}`);
@@ -223,8 +227,11 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnInit(): void {
     const currentProj = this.projectService.currentProject();
-    if (currentProj?.id && (!currentProj.members || currentProj.members.length === 0)) {
-      this.projectService.loadProjectMembers(currentProj.id).subscribe();
+    if (currentProj?.id) {
+      if (!currentProj.members || currentProj.members.length === 0) {
+        this.projectService.loadProjectMembers(currentProj.id).subscribe();
+      }
+      this.projectService.loadWorkspace(currentProj.id);
     }
   }
 
