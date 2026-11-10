@@ -96,7 +96,8 @@ public class TeamTools
 
         // Project members and roles
         var projectMemberRoles = await _identity.UserRoles.AsNoTracking()
-            .Where(ur => ur.ScopeType == "Project" && ur.ScopeId == projectId)
+            .Where(ur => (ur.ScopeType == "Project" && ur.ScopeId == projectId) ||
+                         (ur.ScopeType == "Organization" && ur.ScopeId == project.OrgId))
             .ToListAsync(ct);
 
         var userIds = projectMemberRoles.Select(ur => ur.UserId).Distinct().ToList();

@@ -519,28 +519,147 @@
                   </div>
                 </div>
 
-                <!-- Expanded Subtasks List (Tree Wire Branch Connector) -->
+                <!-- Expanded Subtasks List (Tree Wire Branch Connector matching Image 3 & Image 4) -->
                 @if (expandedSubtasks()[task.id] && task.subtasks && task.subtasks.length > 0) {
-                  <div class="subtasks-expanded-list">
+                  <div class="subtasks-expanded-list" data-testid="ai-subtasks-tree">
                     @for (sub of task.subtasks; track sub.id; let sIdx = $index; let isLast = $last) {
-                      <div class="subtask-row-item" (click)="openTaskDrawer(task, $event)">
-                        <div class="subtask-tree-wire" [class.is-last]="isLast" aria-hidden="true">
-                          <span class="wire-stem"></span>
-                          <span class="wire-curve"></span>
+                      @let subtaskCode = taskCode + '.' + (sIdx + 1);
+                      <div
+                        class="proposal-task-row is-subtask-row"
+                        data-testid="ai-subtask-row"
+                        [class.is-active-drawer]="activeDrawerSubtask()?.subtask?.id === sub.id"
+                        (click)="openSubtaskDrawer(task, sub, $event)"
+                      >
+                        <!-- Tree Wire Branch under parent drag handle (Image 3) -->
+                        <div class="cell-select is-subtask-select" (click)="$event.stopPropagation()">
+                          <div class="subtask-tree-wire" [class.is-last]="isLast" aria-hidden="true">
+                            <span class="wire-stem"></span>
+                            <span class="wire-curve"></span>
+                          </div>
+                          <input
+                            type="checkbox"
+                            data-testid="ai-subtask-checkbox"
+                            [checked]="!!selectedTaskIds()[sub.id]"
+                            (change)="toggleTaskCheckbox(sub.id, $event)"
+                            [attr.aria-label]="'Chọn việc con ' + sub.title"
+                          />
                         </div>
-                        <div class="subtask-type-badge">
-                          <span class="material-symbols-outlined" aria-hidden="true">subdirectory_arrow_right</span>
-                          <span class="subtask-code">{{ taskCode }}-{{ sIdx + 1 }}</span>
+
+                        <!-- Subtask Code & Icon -->
+                        <div class="cell-code is-subtask-code">
+                          <span class="type-icon-badge type-subtask">
+                            <span class="material-symbols-outlined" aria-hidden="true">subdirectory_arrow_right</span>
+                          </span>
+                          <strong class="subtask-code-text">{{ subtaskCode }}</strong>
                         </div>
-                        <div class="subtask-content-cell">
-                          <span class="subtask-title">{{ sub.title }}</span>
-                          <div class="subtask-badges">
-                            <span class="subtask-role-badge">{{ sub.role || 'Tech' }}</span>
-                            <span class="subtask-hours-pill">{{ sub.estimatedHours }}h</span>
+
+                        <!-- Subtask Title + Inline Edit -->
+                        <div class="cell-work is-subtask-work">
+                          @if (inlineEditingTitleId() === sub.id) {
+                            <input
+                              type="text"
+                              class="inline-title-input"
+                              [(ngModel)]="sub.title"
+                              (click)="$event.stopPropagation()"
+                              (blur)="inlineEditingTitleId.set(null); persistProposalEdits()"
+                              (keyup.enter)="inlineEditingTitleId.set(null); persistProposalEdits()"
+                            />
+                          } @else {
+                            <span class="task-title-text subtask-title-text">{{ sub.title }}</span>
+                            <button
+                              type="button"
+                              class="inline-edit-icon"
+                              title="Sửa nhanh tên việc con"
+                              (click)="$event.stopPropagation(); inlineEditingTitleId.set(sub.id)"
+                            >
+                              <span class="material-symbols-outlined" aria-hidden="true">edit</span>
+                            </button>
+                          }
+                          <div class="task-metadata-pills">
+                            <span class="subtask-role-badge">{{ sub.role || 'Kỹ thuật' }}</span>
+                            <span class="subtask-hours-pill">{{ sub.estimatedHours || 4 }}h</span>
                           </div>
                         </div>
-                        <div class="subtask-assignee-cell">
-                          <span class="subtask-assignee">{{ sub.assigneeName || task.assigneeName || 'Chưa gán' }}</span>
+
+                        <!-- Epic / Parent Task Tag -->
+                        <div class="cell-epic" (click)="$event.stopPropagation()">
+                          <span class="subtask-epic-badge" title="{{ task.epicTitle || 'Gán Epic' }}">
+                            {{ task.epicTitle || taskCode }}
+                          </span>
+                        </div>
+
+                        <!-- Subtask Priority Pill -->
+                        <div class="cell-priority" (click)="cycleSubtaskPriority(sub, $event)">
+                          <span
+                            class="priority-badge"
+                            [class.prio-high]="sub.priority === 'High' || sub.priority === 'Highest'"
+                            [class.prio-low]="sub.priority === 'Low'"
+                            title="Nhấn để đổi độ ưu tiên việc con"
+                          >
+                            {{ sub.priority || 'Medium' }}
+                          </span>
+                        </div>
+
+                        <!-- Subtask Story Points -->
+                        <div class="cell-sp" (click)="$event.stopPropagation()">
+                          <input
+                            type="number"
+                            min="0"
+                            max="10"
+                            class="sp-number-box"
+                            data-testid="ai-subtask-sp-input"
+                            [(ngModel)]="sub.storyPoints"
+                            (ngModelChange)="onTaskFieldChanged()"
+                            (blur)="persistProposalEdits()"
+                            aria-label="Story Points việc con"
+                          />
+                          <span class="material-symbols-outlined sp-card-icon" aria-hidden="true">style</span>
+                        </div>
+
+                        <!-- Subtask Status Pill -->
+                        <div class="cell-status" (click)="$event.stopPropagation()">
+                          <select
+                            class="status-select-pill"
+                            [(ngModel)]="sub.status"
+                            (ngModelChange)="onTaskFieldChanged()"
+                            aria-label="Trạng thái việc con"
+                          >
+                            <option value="To Do">To Do</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Done">Done</option>
+                          </select>
+                        </div>
+
+                        <!-- Subtask Assignee -->
+                        <div class="cell-assignee" (click)="$event.stopPropagation()">
+                          <div class="assignee-select-wrap">
+                            <span class="assignee-avatar-sm" aria-hidden="true">
+                              {{ (sub.assigneeName || 'U')[0] }}
+                            </span>
+                            <select
+                              class="assignee-select-pill"
+                              [ngModel]="sub.assigneeName || ''"
+                              (ngModelChange)="onSubtaskAssigneeChange(sub, $event)"
+                              aria-label="Người xử lý việc con"
+                            >
+                              <option value="">Chưa gán</option>
+                              @for (m of members; track m.id) {
+                                <option [value]="m.displayName">{{ m.displayName }}</option>
+                              }
+                            </select>
+                          </div>
+                        </div>
+
+                        <!-- Subtask Actions -->
+                        <div class="cell-more" (click)="$event.stopPropagation()">
+                          <button
+                            type="button"
+                            class="row-action-btn"
+                            title="Xem chi tiết việc con"
+                            (click)="openSubtaskDrawer(task, sub, $event)"
+                          >
+                            <span class="material-symbols-outlined" aria-hidden="true">more_vert</span>
+                          </button>
                         </div>
                       </div>
                     }
@@ -704,6 +823,30 @@
               placeholder="Tên công việc..."
             />
           </div>
+
+          <!-- Document Citations in Task Detail (Matching Image 2) -->
+          @if (detailTask.documentCitations && detailTask.documentCitations.length > 0) {
+            <div class="drawer-citations-card" data-testid="drawer-citations-top">
+              <div class="drawer-citations-label">
+                <span class="material-symbols-outlined text-[15px] text-primary" aria-hidden="true">description</span>
+                <strong>Tài liệu căn cứ &amp; Trích dẫn đặc tả:</strong>
+              </div>
+              <div class="drawer-citations-pills">
+                @for (cite of detailTask.documentCitations; track $index) {
+                  <button
+                    type="button"
+                    class="drawer-citation-pill"
+                    (click)="openSpecDoc(cite, detailTask.documentId); $event.stopPropagation()"
+                    title="Nhấn để xem trước tài liệu này trong Spec Hub"
+                  >
+                    <span class="material-symbols-outlined" aria-hidden="true">description</span>
+                    <span class="cite-text">{{ cite }}</span>
+                    <span class="material-symbols-outlined link-icon" aria-hidden="true">open_in_new</span>
+                  </button>
+                }
+              </div>
+            </div>
+          }
 
           <!-- 6-Field Metadata Box (Matching Reference Image 5) -->
           <div class="drawer-meta-grid">
@@ -926,6 +1069,8 @@
       </aside>
     }
 
+
+
     <!-- Inline Spec Document Preview Drawer (Direct Document Jump without losing chat) -->
     @if (activeSpecDocPreview(); as docPreview) {
       <div class="doc-preview-backdrop" (click)="closeSpecDocPreview()"></div>
@@ -985,6 +1130,169 @@
               <pre class="preview-content-text">{{ docPreview.content }}</pre>
             </div>
           }
+        </div>
+      </aside>
+    }
+
+
+
+    <!-- Subtask Detail Drawer (Fully functional like a task) -->
+    @if (activeDrawerSubtask(); as subDetail) {
+      <div class="drawer-backdrop" (click)="closeSubtaskDrawer()"></div>
+      <aside
+        class="ai-task-drawer is-subtask-drawer"
+        data-testid="ai-subtask-detail-drawer"
+        aria-label="Chi tiết việc con đề xuất"
+        (click)="$event.stopPropagation()"
+      >
+        <header class="drawer-top-bar">
+          <div class="drawer-key-group">
+            <span class="type-icon-badge type-subtask">
+              <span class="material-symbols-outlined" aria-hidden="true">subdirectory_arrow_right</span>
+            </span>
+            <strong class="drawer-code">Việc con phụ trợ</strong>
+            <span class="drawer-parent-badge">Thuộc: {{ subDetail.parentTask.title }}</span>
+          </div>
+
+          <div class="drawer-top-actions">
+            <button
+              type="button"
+              class="drawer-icon-btn"
+              title="Xóa việc con khỏi đề xuất"
+              (click)="deleteProposedSubtask(subDetail.parentTask, subDetail.subtask.id, $event)"
+            >
+              <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+            </button>
+            <button
+              type="button"
+              class="drawer-icon-btn"
+              data-testid="btn-close-subtask-drawer"
+              title="Đóng chi tiết việc con"
+              (click)="closeSubtaskDrawer()"
+            >
+              <span class="material-symbols-outlined" aria-hidden="true">close</span>
+            </button>
+          </div>
+        </header>
+
+        <div class="drawer-scroll-content">
+          <!-- Subtask Title -->
+          <div class="drawer-title-block">
+            <input
+              type="text"
+              class="drawer-title-input"
+              data-testid="drawer-subtask-title"
+              [(ngModel)]="subDetail.subtask.title"
+              (ngModelChange)="onTaskFieldChanged()"
+              placeholder="Tên công việc con..."
+            />
+          </div>
+
+          <!-- Document Citations Inherited from Parent (Image 2) -->
+          @if (subDetail.parentTask.documentCitations && subDetail.parentTask.documentCitations.length > 0) {
+            <div class="drawer-citations-card" data-testid="drawer-subtask-citations">
+              <div class="drawer-citations-label">
+                <span class="material-symbols-outlined text-[15px] text-primary" aria-hidden="true">description</span>
+                <strong>Tài liệu căn cứ (Thừa hưởng từ task cha):</strong>
+              </div>
+              <div class="drawer-citations-pills">
+                @for (cite of subDetail.parentTask.documentCitations; track $index) {
+                  <button
+                    type="button"
+                    class="drawer-citation-pill"
+                    (click)="openSpecDoc(cite, subDetail.parentTask.documentId); $event.stopPropagation()"
+                    title="Nhấn để xem trước tài liệu này trong Spec Hub"
+                  >
+                    <span class="material-symbols-outlined" aria-hidden="true">description</span>
+                    <span class="cite-text">{{ cite }}</span>
+                    <span class="material-symbols-outlined link-icon" aria-hidden="true">open_in_new</span>
+                  </button>
+                }
+              </div>
+            </div>
+          }
+
+          <!-- Metadata Box for Subtask -->
+          <div class="drawer-meta-grid">
+            <label class="meta-field">
+              <span>TRẠNG THÁI</span>
+              <select [(ngModel)]="subDetail.subtask.status" (ngModelChange)="onTaskFieldChanged()">
+                <option value="To Do">Chưa làm (To Do)</option>
+                <option value="In Progress">Đang làm (In Progress)</option>
+                <option value="Done">Hoàn thành (Done)</option>
+              </select>
+            </label>
+
+            <label class="meta-field">
+              <span>ĐỘ ƯU TIÊN</span>
+              <select [(ngModel)]="subDetail.subtask.priority" (ngModelChange)="onTaskFieldChanged()">
+                <option value="Highest">Highest</option>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
+              </select>
+            </label>
+
+            <label class="meta-field">
+              <span>NGƯỜI THỰC HIỆN</span>
+              <select
+                [ngModel]="subDetail.subtask.assigneeName || ''"
+                (ngModelChange)="onSubtaskAssigneeChange(subDetail.subtask, $event)"
+              >
+                <option value="">Chưa gán</option>
+                @for (m of members; track m.id) {
+                  <option [value]="m.displayName">{{ m.displayName }}</option>
+                }
+              </select>
+            </label>
+
+            <label class="meta-field">
+              <span>VAI TRÒ KỸ THUẬT</span>
+              <select [(ngModel)]="subDetail.subtask.role" (ngModelChange)="onTaskFieldChanged()">
+                <option value="Backend">Backend</option>
+                <option value="Frontend">Frontend</option>
+                <option value="QA">QA / Kiểm thử</option>
+                <option value="DevOps">DevOps</option>
+              </select>
+            </label>
+
+            <label class="meta-field">
+              <span>STORY POINTS</span>
+              <input
+                type="number"
+                min="0"
+                max="10"
+                [(ngModel)]="subDetail.subtask.storyPoints"
+                (ngModelChange)="onTaskFieldChanged()"
+              />
+            </label>
+
+            <label class="meta-field">
+              <span>GIỜ ƯỚC TÍNH (H)</span>
+              <input
+                type="number"
+                min="0.5"
+                max="100"
+                step="0.5"
+                [(ngModel)]="subDetail.subtask.estimatedHours"
+                (ngModelChange)="onTaskFieldChanged()"
+              />
+            </label>
+          </div>
+
+          <!-- Subtask Description -->
+          <div class="drawer-section">
+            <div class="section-label">
+              <strong>Mô tả phạm vi việc con</strong>
+            </div>
+            <textarea
+              rows="4"
+              class="drawer-textarea"
+              [(ngModel)]="subDetail.subtask.description"
+              (ngModelChange)="onTaskFieldChanged()"
+              placeholder="Mô tả kỹ thuật cho việc con phụ trợ này..."
+            ></textarea>
+          </div>
         </div>
       </aside>
     }

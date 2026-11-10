@@ -51,6 +51,7 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
     private readonly BacklogTools _backlogTools;
     private readonly SprintTools _sprintTools;
     private readonly TeamTools _teamTools;
+    private readonly IPromptTemplateService _promptTemplates;
     private readonly ILogger<AiSprintDecompositionService> _logger;
 
     public AiSprintDecompositionService(
@@ -62,6 +63,7 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
         BacklogTools backlogTools,
         SprintTools sprintTools,
         TeamTools teamTools,
+        IPromptTemplateService promptTemplates,
         ILogger<AiSprintDecompositionService> logger)
     {
         _aiClient = aiClient;
@@ -72,6 +74,7 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
         _backlogTools = backlogTools;
         _sprintTools = sprintTools;
         _teamTools = teamTools;
+        _promptTemplates = promptTemplates;
         _logger = logger;
     }
 
@@ -175,72 +178,36 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
         // =========================================================================
         await onStepProgress(4, "DECOMPOSE_SPRINT", "Phân rã Sprint Goal, Epics & Tasks", 75, "Mô hình AI đang suy luận cấu trúc Sprint, chia nhỏ Epic và Task...");
 
-        var systemPrompt = @"Bạn là Chuyên gia Scrum Master và Quản lý Dự án giàu kinh nghiệm thực chiến.
-Nhiệm vụ của bạn là phân tích tài liệu đặc tả (SRS/BRD), Spec Hub, biên bản cuộc họp, ngữ cảnh Backlog và năng lực nhóm để lập kế hoạch Sprint hoàn chỉnh, chuyên nghiệp bằng tiếng Việt.
+        // Load dynamic prompts from external Markdown templates (hot-reloadable without recompilation)
+        var systemPrompt = await _promptTemplates.GetTemplateAsync("SprintDecompositionSystemPrompt", cancellationToken);
+        if (string.IsNullOrWhiteSpace(systemPrompt))
+        {
+            systemPrompt = "Bạn là Chuyên gia Scrum Master giàu kinh nghiệm. Hãy phân tích tài liệu và năng lực nhóm để lập kế hoạch Sprint. Định cỡ Story Points đa dạng (1, 2, 3, 5, 8). Phân chia đều việc cho các thành viên theo chuyên môn (Frontend, Backend, QA). Trả về đúng JSON SprintProposal.";
+        }
 
-BỘ KỸ NĂNG BẮT BUỘC (SCRUM MASTER AGENT SKILLS):
-1. [Kỹ năng Bóc tách & Định cỡ Công việc Thực tế (Pragmatic Scrum Decomposition)]:
-   - Phân rã thành 3 đến 6 Task/Story dựa trên nội dung tài liệu và ghi chú cuộc họp thực tế.
-   - Định cỡ Story Points theo dãy Fibonacci thực tế: 1, 2, 3, 5, 8.
-   - QUY TẮC PHÂN CẤP CÔNG VIỆC CHUẨN THỰC CHIẾN:
-     * Khi người dùng cung cấp biên bản cuộc họp hoặc trao đổi giữa các thành viên: Tách thành các công việc độc lập, cụ thể cho từng thành viên tham gia hoặc theo chuyên môn.
-     * Đa số công việc (1, 2, 3 SP) là các Task/Story độc lập, hoàn chỉnh, do một người xử lý từ đầu đến cuối -> TUYỆT ĐỐI KHÔNG ép buộc sinh subtask giả tạo (để mảng `subtasks: []` rỗng).
-     * Chỉ chia Subtask khi công việc thực sự lớn hoặc phức tạp (StoryPoints >= 5) cần các bước phụ trợ kỹ thuật cụ thể (Frontend, Backend, QA, DevOps). Subtask chỉ đóng vai trò phụ trợ cho task lớn.
-2. [Kỹ năng Trích dẫn Nguồn gốc & Bám sát Ngữ cảnh]:
-   - Mỗi Task phải có `documentCitations` ghi rõ tên tài liệu và phần/mục trích xuất từ Spec Hub hoặc Ghi chú cuộc họp (ví dụ: [""Biên bản cuộc họp - Mục 2"", ""Cam-nang-ky-thuat.md - Chương 3""]).
-   - Không lạm dụng hashtag tràn lan: Chỉ đưa 1-2 tag chuyên môn thực sự cần thiết trong mảng `tags` của Task.
-3. [Kỹ năng Phân bổ Năng lực Nhóm]:
-   - `assigneeName`: Chọn từ danh sách thành viên thực tế của nhóm phù hợp với chuyên môn (Frontend gán cho dev frontend, Backend gán cho dev backend, QA gán cho tester/QA).
-4. [Kỹ năng Nghiệm thu (DoD) & Lập luận]:
-   - Mỗi Task phải có `aiRationale` giải thích ngắn gọn lý do phân rã và căn cứ phân công.
-   - Mỗi Task phải có 2-3 `acceptanceCriteria` (Tiêu chí nghiệm thu) rõ ràng, thực tế, kiểm thử được.
+        var userVariables = new Dictionary<string, string>
+        {
+            ["DOC_CONTENT"] = sanitizedDoc,
+            ["SPEC_HUB_DOCS"] = relevantDocs,
+            ["SPEC_HUB_EXCERPTS"] = specHubExcerpts.ToString(),
+            ["PM_DIRECTION"] = sanitizedPrompt ?? "Lập kế hoạch Sprint tiếp theo tối ưu năng lực nhóm và bám sát tài liệu đặc tả.",
+            ["SPRINT_HISTORY"] = sprintHistory,
+            ["TEAM_CAPACITIES"] = teamCapacities,
+            ["BACKLOG_STORIES"] = backlogStories
+        };
 
-Đầu ra BẮT BUỘC là định dạng JSON hợp lệ (không bọc text giải thích ngoài JSON) tuân thủ schema:
-{
-  ""sprintGoal"": ""string"",
-  ""rationale"": ""string"",
-  ""tags"": [""#SprintPlan""],
-  ""tasks"": [
-    {
-      ""id"": ""task_01"",
-      ""epicTitle"": ""string"",
-      ""title"": ""string"",
-      ""description"": ""string"",
-      ""type"": ""Story"",
-      ""priority"": ""High"",
-      ""storyPoints"": 3,
-      ""estimatedHours"": 8,
-      ""assigneeName"": ""string"",
-      ""tags"": [""Backend""],
-      ""acceptanceCriteria"": [""tiêu chí 1"", ""tiêu chí 2""],
-      ""documentCitations"": [""Tên tài liệu - Mục trích dẫn""],
-      ""aiRationale"": ""Căn cứ phân công và mục tiêu kỹ thuật"",
-      ""subtasks"": []
-    }
-  ]
-}";
-
-        var userPromptContent = $@"Dữ liệu đầu vào:
-### 1. Tài liệu / Ghi chú cuộc họp:
-{sanitizedDoc}
-
-### 2. Tài liệu Đặc tả trong Spec Hub của Dự án:
-{relevantDocs}
-{specHubExcerpts}
-
-### 3. Yêu cầu định hướng từ PM:
-{sanitizedPrompt ?? "Lập kế hoạch Sprint tiếp theo tối ưu năng lực nhóm và bám sát tài liệu đặc tả."}
-
-### 4. Vận tốc và Lịch sử Sprint trước:
-{sprintHistory}
-
-### 5. Năng lực và kỹ năng thành viên nhóm:
-{teamCapacities}
-
-### 6. Backlog hiện tại:
-{backlogStories}
-
+        var userPromptContent = await _promptTemplates.RenderTemplateAsync("SprintDecompositionUserPrompt", userVariables, cancellationToken);
+        if (string.IsNullOrWhiteSpace(userPromptContent))
+        {
+            userPromptContent = $@"Dữ liệu đầu vào:
+### 1. Tài liệu: {sanitizedDoc}
+### 2. Spec Hub: {relevantDocs} {specHubExcerpts}
+### 3. Yêu cầu: {sanitizedPrompt}
+### 4. Vận tốc: {sprintHistory}
+### 5. Năng lực nhóm: {teamCapacities}
+### 6. Backlog: {backlogStories}
 Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
+        }
 
         var prompt = new AiPrompt
         {
@@ -299,20 +266,26 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         var currentTasksJson = JsonSerializer.Serialize(proposal.Tasks);
         var teamCapacities = await _teamTools.GetDevCapacitiesAsync(scope, cancellationToken);
 
+        var fullVariables = new Dictionary<string, string>
+        {
+            ["SPRINT_GOAL"] = proposal.SprintGoal,
+            ["CURRENT_TASKS_JSON"] = currentTasksJson,
+            ["TEAM_CAPACITIES"] = teamCapacities,
+            ["USER_FEEDBACK"] = sanitizedFeedback
+        };
+
+        var userPromptContent = await _promptTemplates.RenderTemplateAsync("FullProposalRegenerationPrompt", fullVariables, cancellationToken);
+        if (string.IsNullOrWhiteSpace(userPromptContent))
+        {
+            userPromptContent = $"Đề xuất Sprint: {proposal.SprintGoal}\nTasks: {currentTasksJson}\nNăng lực: {teamCapacities}\nYêu cầu làm lại: {sanitizedFeedback}";
+        }
+
         var prompt = new AiPrompt
         {
             SystemInstruction = "Bạn là Chuyên gia Scrum Master. Hãy làm lại toàn bộ đề xuất Sprint (Sprint Goal và danh sách Tasks/Subtasks) dựa trên yêu cầu điều chỉnh mới của người dùng. Trả về đúng JSON hợp lệ theo schema SprintProposal.",
             Messages = new List<AiMessage>
             {
-                AiMessage.CreateUser($@"Đề xuất Sprint hiện tại:
-- Sprint Goal: {proposal.SprintGoal}
-- Danh sách Tasks hiện tại: {currentTasksJson}
-- Năng lực đội ngũ: {teamCapacities}
-
-Yêu cầu làm lại / điều chỉnh từ người dùng:
-""{sanitizedFeedback}""
-
-Hãy tái cấu trúc Sprint Goal và danh sách Tasks/Subtasks theo đúng yêu cầu. Trả về JSON.")
+                AiMessage.CreateUser(userPromptContent)
             },
             Temperature = 0.3
         };
@@ -353,23 +326,32 @@ Hãy tái cấu trúc Sprint Goal và danh sách Tasks/Subtasks theo đúng yêu
             throw new InvalidOperationException($"Không tìm thấy Task với Id '{taskId}' trong đề xuất hiện tại.");
         }
 
+        var teamCapacities = await _teamTools.GetDevCapacitiesAsync(scope, cancellationToken);
+        var singleVariables = new Dictionary<string, string>
+        {
+            ["SPRINT_GOAL"] = proposal.SprintGoal,
+            ["TASK_TITLE"] = existingTask.Title,
+            ["TASK_DESCRIPTION"] = existingTask.Description,
+            ["TASK_AC"] = string.Join("; ", existingTask.AcceptanceCriteria),
+            ["TASK_SP"] = existingTask.StoryPoints.ToString(),
+            ["TASK_HOURS"] = existingTask.EstimatedHours.ToString(),
+            ["TASK_ASSIGNEE"] = existingTask.AssigneeName ?? "Chưa gán",
+            ["TEAM_CAPACITIES"] = teamCapacities,
+            ["USER_FEEDBACK"] = userFeedback ?? string.Empty
+        };
+
+        var userPromptContent = await _promptTemplates.RenderTemplateAsync("SingleTaskRegenerationPrompt", singleVariables, cancellationToken);
+        if (string.IsNullOrWhiteSpace(userPromptContent))
+        {
+            userPromptContent = $"Sprint Goal: {proposal.SprintGoal}\nTask: {existingTask.Title}\nFeedback: {userFeedback}";
+        }
+
         var prompt = new AiPrompt
         {
             SystemInstruction = "Bạn là trợ lý Scrum Master. Tinh chỉnh lại một Task cụ thể theo phản hồi của người dùng. Trả về đúng JSON của một đối tượng Task.",
             Messages = new List<AiMessage>
             {
-                AiMessage.CreateUser($@"Sprint Goal hiện tại: {proposal.SprintGoal}
-Task hiện tại:
-- Title: {existingTask.Title}
-- Description: {existingTask.Description}
-- Acceptance Criteria: {string.Join("; ", existingTask.AcceptanceCriteria)}
-- StoryPoints: {existingTask.StoryPoints}
-- EstimatedHours: {existingTask.EstimatedHours}
-
-Phản hồi điều chỉnh từ người dùng:
-""{userFeedback}""
-
-Hãy cập nhật Task này (Title, Description, AcceptanceCriteria, StoryPoints, EstimatedHours, Subtasks). Trả về đúng JSON đối tượng Task.")
+                AiMessage.CreateUser(userPromptContent)
             },
             Temperature = 0.2
         };
@@ -567,6 +549,16 @@ Hãy cập nhật Task này (Title, Description, AcceptanceCriteria, StoryPoints
         return cleaned;
     }
 
+    private sealed class TeamMemberProfile
+    {
+        public Guid UserId { get; set; }
+        public string DisplayName { get; set; } = string.Empty;
+        public string JobTitle { get; set; } = string.Empty;
+        public List<string> Roles { get; set; } = new();
+        public List<string> Skills { get; set; } = new();
+        public decimal RemainingHours { get; set; } = 40.0m;
+    }
+
     private static void EnrichProposalWithTeamMembers(AiSprintProposalDto proposal, string teamCapacitiesJson)
     {
         try
@@ -577,7 +569,7 @@ Hãy cập nhật Task này (Title, Description, AcceptanceCriteria, StoryPoints
                 return;
             }
 
-            var members = new List<(Guid UserId, string DisplayName)>();
+            var members = new List<TeamMemberProfile>();
             foreach (var item in capArray.EnumerateArray())
             {
                 if (item.TryGetProperty("UserId", out var idProp) &&
@@ -587,51 +579,106 @@ Hãy cập nhật Task này (Title, Description, AcceptanceCriteria, StoryPoints
                     var name = nameProp.GetString();
                     if (!string.IsNullOrWhiteSpace(name))
                     {
-                        members.Add((userId, name));
+                        var profile = new TeamMemberProfile
+                        {
+                            UserId = userId,
+                            DisplayName = name,
+                            JobTitle = item.TryGetProperty("JobTitle", out var jt) ? jt.GetString() ?? string.Empty : string.Empty,
+                            RemainingHours = item.TryGetProperty("RemainingAvailableHours", out var rh) && rh.TryGetDecimal(out var d) ? d : 40.0m
+                        };
+
+                        if (item.TryGetProperty("Roles", out var rProp) && rProp.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var r in rProp.EnumerateArray())
+                            {
+                                if (r.GetString() is { } rStr) profile.Roles.Add(rStr);
+                            }
+                        }
+
+                        if (item.TryGetProperty("Skills", out var sProp) && sProp.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var s in sProp.EnumerateArray())
+                            {
+                                if (s.GetString() is { } sStr) profile.Skills.Add(sStr);
+                            }
+                        }
+
+                        members.Add(profile);
                     }
                 }
             }
 
             if (members.Count == 0) return;
 
+            // 1. Diversify Story Points across Fibonacci (1, 2, 3, 5, 8) if model returned all identical SP
+            var distinctSp = proposal.Tasks.Select(t => t.StoryPoints).Distinct().ToList();
+            if (distinctSp.Count == 1 && proposal.Tasks.Count > 1)
+            {
+                int[] fibRotation = [3, 5, 2, 8, 3, 5];
+                for (var i = 0; i < proposal.Tasks.Count; i++)
+                {
+                    var t = proposal.Tasks[i];
+                    var text = (t.Title + " " + t.Description).ToLowerInvariant();
+                    if (text.Contains("kiến trúc") || text.Contains("hạ tầng") || text.Contains("realtime") || text.Contains("toàn diện"))
+                    {
+                        t.StoryPoints = 5;
+                        t.EstimatedHours = 16;
+                    }
+                    else if (text.Contains("kiểm thử") || text.Contains("test") || text.Contains("cấu hình") || text.Contains("nhỏ"))
+                    {
+                        t.StoryPoints = 2;
+                        t.EstimatedHours = 6;
+                    }
+                    else if (text.Contains("giao diện") || text.Contains("bảng") || text.Contains("biểu đồ") || text.Contains("modal"))
+                    {
+                        t.StoryPoints = 3;
+                        t.EstimatedHours = 8;
+                    }
+                    else
+                    {
+                        t.StoryPoints = fibRotation[i % fibRotation.Length];
+                        t.EstimatedHours = t.StoryPoints * 3;
+                    }
+                    t.RemainingHours = t.EstimatedHours;
+                }
+                proposal.TotalStoryPoints = proposal.Tasks.Sum(t => t.StoryPoints);
+                proposal.TotalEstimatedHours = proposal.Tasks.Sum(t => t.EstimatedHours);
+            }
+
+            // 2. Intelligent Assignee Matching by Skills, Role & Workload Balance
+            var assignedSet = new HashSet<Guid>();
+
             for (var i = 0; i < proposal.Tasks.Count; i++)
             {
                 var task = proposal.Tasks[i];
-                if (!string.IsNullOrWhiteSpace(task.AssigneeName))
-                {
-                    var matched = members.FirstOrDefault(m =>
-                        m.DisplayName.Contains(task.AssigneeName, StringComparison.OrdinalIgnoreCase) ||
-                        task.AssigneeName.Contains(m.DisplayName, StringComparison.OrdinalIgnoreCase));
-                    if (matched.UserId != Guid.Empty)
-                    {
-                        task.AssigneeUserId = matched.UserId;
-                        task.AssigneeName = matched.DisplayName;
-                    }
-                }
-
-                if (!task.AssigneeUserId.HasValue || string.IsNullOrWhiteSpace(task.AssigneeName))
-                {
-                    var assigned = members[i % members.Count];
-                    task.AssigneeUserId = assigned.UserId;
-                    task.AssigneeName = assigned.DisplayName;
-                }
+                var matched = MatchBestMemberForTask(task, members, assignedSet);
+                task.AssigneeUserId = matched.UserId;
+                task.AssigneeName = matched.DisplayName;
+                assignedSet.Add(matched.UserId);
 
                 if (task.RemainingHours <= 0)
                 {
                     task.RemainingHours = task.EstimatedHours;
                 }
 
-                if (task.Subtasks != null)
+                // If all members were assigned once, reset set to re-balance
+                if (assignedSet.Count >= members.Count)
+                {
+                    assignedSet.Clear();
+                }
+
+                // Subtasks matching
+                if (task.Subtasks != null && task.Subtasks.Count > 0)
                 {
                     for (var j = 0; j < task.Subtasks.Count; j++)
                     {
                         var sub = task.Subtasks[j];
-                        if (!sub.AssigneeUserId.HasValue || string.IsNullOrWhiteSpace(sub.AssigneeName))
-                        {
-                            var subMember = members[(i + j) % members.Count];
-                            sub.AssigneeUserId = subMember.UserId;
-                            sub.AssigneeName = subMember.DisplayName;
-                        }
+                        var subRole = string.IsNullOrWhiteSpace(sub.Role) ? (j % 2 == 0 ? "Backend" : "Frontend") : sub.Role;
+                        sub.Role = subRole;
+                        var subMember = MatchMemberByRole(subRole, members, task.AssigneeUserId);
+                        sub.AssigneeUserId = subMember.UserId;
+                        sub.AssigneeName = subMember.DisplayName;
+                        if (sub.EstimatedHours <= 0) sub.EstimatedHours = 6;
                     }
                 }
             }
@@ -640,6 +687,104 @@ Hãy cập nhật Task này (Title, Description, AcceptanceCriteria, StoryPoints
         {
             // Ignore enrichment parse errors
         }
+    }
+
+    private static TeamMemberProfile MatchBestMemberForTask(
+        ProposedTaskDto task,
+        List<TeamMemberProfile> memberList,
+        HashSet<Guid> recentlyAssigned)
+    {
+        var text = (task.Title + " " + task.Description + " " + string.Join(" ", task.Tags ?? [])).ToLowerInvariant();
+
+        // 1. Direct name match if AI already suggested a valid member
+        if (!string.IsNullOrWhiteSpace(task.AssigneeName))
+        {
+            var direct = memberList.FirstOrDefault(m =>
+                m.DisplayName.Contains(task.AssigneeName, StringComparison.OrdinalIgnoreCase) ||
+                task.AssigneeName.Contains(m.DisplayName, StringComparison.OrdinalIgnoreCase));
+            if (direct != null) return direct;
+        }
+
+        // 2. Skill & Domain matching
+        bool isFrontend = text.Contains("giao diện") || text.Contains("ui") || text.Contains("ux") ||
+                          text.Contains("angular") || text.Contains("component") || text.Contains("bảng") ||
+                          text.Contains("modal") || text.Contains("drawer") || text.Contains("css") || text.Contains("tailwind");
+
+        bool isBackend = text.Contains("api") || text.Contains("backend") || text.Contains("c#") ||
+                         text.Contains(".net") || text.Contains("mysql") || text.Contains("redis") ||
+                         text.Contains("database") || text.Contains("sse") || text.Contains("signalr") ||
+                         text.Contains("controller") || text.Contains("mcp") || text.Contains("dbcontext");
+
+        bool isQA = text.Contains("kiểm thử") || text.Contains("test") || text.Contains("qa") ||
+                    text.Contains("playwright") || text.Contains("e2e") || text.Contains("nghiệm thu") ||
+                    text.Contains("ac") || text.Contains("regression");
+
+        bool isLead = text.Contains("kiến trúc") || text.Contains("bảo mật") || text.Contains("quy trình") ||
+                      text.Contains("kế hoạch") || text.Contains("sprint");
+
+        List<TeamMemberProfile> candidates = memberList;
+
+        if (isFrontend)
+        {
+            var fe = memberList.Where(m =>
+                m.JobTitle.Contains("Frontend", StringComparison.OrdinalIgnoreCase) ||
+                m.Skills.Any(s => s.Contains("Angular", StringComparison.OrdinalIgnoreCase) || s.Contains("Tailwind", StringComparison.OrdinalIgnoreCase))).ToList();
+            if (fe.Count > 0) candidates = fe;
+        }
+        else if (isBackend)
+        {
+            var be = memberList.Where(m =>
+                m.JobTitle.Contains("Backend", StringComparison.OrdinalIgnoreCase) ||
+                m.Skills.Any(s => s.Contains("C#", StringComparison.OrdinalIgnoreCase) || s.Contains(".NET", StringComparison.OrdinalIgnoreCase) || s.Contains("MySQL", StringComparison.OrdinalIgnoreCase))).ToList();
+            if (be.Count > 0) candidates = be;
+        }
+        else if (isQA)
+        {
+            var qa = memberList.Where(m =>
+                m.JobTitle.Contains("QA", StringComparison.OrdinalIgnoreCase) ||
+                m.JobTitle.Contains("Tester", StringComparison.OrdinalIgnoreCase) ||
+                m.Skills.Any(s => s.Contains("Playwright", StringComparison.OrdinalIgnoreCase) || s.Contains("QA", StringComparison.OrdinalIgnoreCase))).ToList();
+            if (qa.Count > 0) candidates = qa;
+        }
+        else if (isLead)
+        {
+            var ld = memberList.Where(m =>
+                m.JobTitle.Contains("Lead", StringComparison.OrdinalIgnoreCase) ||
+                m.JobTitle.Contains("Admin", StringComparison.OrdinalIgnoreCase) ||
+                m.Roles.Any(r => r.Contains("ProjectManager", StringComparison.OrdinalIgnoreCase) || r.Contains("Director", StringComparison.OrdinalIgnoreCase))).ToList();
+            if (ld.Count > 0) candidates = ld;
+        }
+
+        // Avoid assigning same person repeatedly: check unassigned first
+        var unassigned = candidates.Where(c => !recentlyAssigned.Contains(c.UserId)).ToList();
+        return (unassigned.Count > 0 ? unassigned : candidates)
+            .OrderByDescending(c => c.RemainingHours)
+            .FirstOrDefault() ?? memberList[0];
+    }
+
+    private static TeamMemberProfile MatchMemberByRole(string role, List<TeamMemberProfile> memberList, Guid? avoidUserId = null)
+    {
+        var roleLower = role.ToLowerInvariant();
+        var pool = memberList.Where(m => avoidUserId == null || m.UserId != avoidUserId.Value).ToList();
+        if (pool.Count == 0) pool = memberList;
+
+        if (roleLower.Contains("front") || roleLower.Contains("ui"))
+        {
+            var fe = pool.FirstOrDefault(m => m.JobTitle.Contains("Frontend", StringComparison.OrdinalIgnoreCase) || m.Skills.Any(s => s.Contains("Angular", StringComparison.OrdinalIgnoreCase)));
+            if (fe != null) return fe;
+        }
+        else if (roleLower.Contains("back") || roleLower.Contains("api"))
+        {
+            var be = pool.FirstOrDefault(m => m.JobTitle.Contains("Backend", StringComparison.OrdinalIgnoreCase) || m.Skills.Any(s => s.Contains("C#", StringComparison.OrdinalIgnoreCase) || s.Contains(".NET", StringComparison.OrdinalIgnoreCase)));
+            if (be != null) return be;
+        }
+        else if (roleLower.Contains("qa") || roleLower.Contains("test"))
+        {
+            var qa = pool.FirstOrDefault(m => m.JobTitle.Contains("QA", StringComparison.OrdinalIgnoreCase) || m.JobTitle.Contains("Tester", StringComparison.OrdinalIgnoreCase) || m.Skills.Any(s => s.Contains("Playwright", StringComparison.OrdinalIgnoreCase)));
+            if (qa != null) return qa;
+        }
+
+        return pool[0];
     }
 
     private static ProposedTaskDto ParseSingleTask(string rawJson, ProposedTaskDto existing)

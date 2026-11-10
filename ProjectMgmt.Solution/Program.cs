@@ -386,6 +386,7 @@ builder.Services.AddScoped<PlanningTools>();
 builder.Services.AddScoped<IMcpToolRegistry, McpToolRegistry>();
 
 // --- Document Text Extractor & Sprint Decomposition Pipeline (Milestone M2 & M3) ---
+builder.Services.AddSingleton<IPromptTemplateService, PromptTemplateService>();
 builder.Services.AddScoped<IAiDocumentTextExtractor, AiDocumentTextExtractor>();
 builder.Services.AddScoped<IAiSprintDecompositionService, AiSprintDecompositionService>();
 builder.Services.AddScoped<IAiSprintCommitCoordinator, AiSprintCommitCoordinator>();

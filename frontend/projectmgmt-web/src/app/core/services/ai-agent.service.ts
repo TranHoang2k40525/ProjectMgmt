@@ -11,6 +11,10 @@ export interface ProposedSubTaskDto {
   title: string;
   role: string;
   estimatedHours: number;
+  storyPoints?: number;
+  priority?: string;
+  status?: string;
+  description?: string;
   assigneeUserId?: string | null;
   assigneeName?: string | null;
 }

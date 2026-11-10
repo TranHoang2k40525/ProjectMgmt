@@ -1112,126 +1112,190 @@
 .subtasks-expanded-list {
   background: #f8fafc;
   border-top: 1px dashed #e2e8f0;
-  padding: 6px 14px 8px 48px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
 }
 
-.subtask-row-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 10px;
-  border-radius: 8px;
-  font-size: 12.5px;
-  color: #334155;
-  cursor: pointer;
-  background: #ffffff;
-  border: 1px solid #f1f5f9;
-  transition: all 0.12s ease;
+.proposal-task-row.is-subtask-row {
+  background: #fbfcfd;
+  border-bottom: 1px solid #f1f5f9;
 
   &:hover {
     background: #f0fdf4;
-    border-color: #bbf7d0;
   }
 
-  .subtask-tree-wire {
-    width: 14px;
-    height: 18px;
-    position: relative;
-    flex-shrink: 0;
-
-    .wire-stem {
-      position: absolute;
-      left: 2px;
-      top: -8px;
-      bottom: 6px;
-      width: 2px;
-      background: #cbd5e1;
-    }
-
-    .wire-curve {
-      position: absolute;
-      left: 2px;
-      top: 6px;
-      width: 10px;
-      height: 8px;
-      border-left: 2px solid #cbd5e1;
-      border-bottom: 2px solid #cbd5e1;
-      border-bottom-left-radius: 6px;
-    }
-
-    &.is-last .wire-stem {
-      bottom: 2px;
-    }
-  }
-
-  .subtask-type-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    color: #64748b;
-    font-size: 11px;
-    font-weight: 600;
-
-    .material-symbols-outlined {
-      font-size: 14px;
-      color: #94a3b8;
-    }
-
-    .subtask-code {
-      font-family: ui-monospace, SFMono-Regular, monospace;
-      color: #64748b;
-    }
-  }
-
-  .subtask-content-cell {
-    flex: 1;
+  .cell-select.is-subtask-select {
     display: flex;
     align-items: center;
-    gap: 8px;
-    min-width: 0;
+    gap: 6px;
+    padding-left: 6px;
 
-    .subtask-title {
-      font-weight: 500;
-      color: #1e293b;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+    .subtask-tree-wire {
+      width: 18px;
+      height: 28px;
+      position: relative;
+      flex-shrink: 0;
+
+      .wire-stem {
+        position: absolute;
+        left: 4px;
+        top: -16px;
+        bottom: 8px;
+        width: 2px;
+        background: #94a3b8;
+      }
+
+      .wire-curve {
+        position: absolute;
+        left: 4px;
+        top: 8px;
+        width: 12px;
+        height: 10px;
+        border-left: 2px solid #94a3b8;
+        border-bottom: 2px solid #94a3b8;
+        border-bottom-left-radius: 6px;
+      }
+
+      &.is-last .wire-stem {
+        bottom: 8px;
+      }
+    }
+  }
+
+  .cell-code.is-subtask-code {
+    .type-icon-badge.type-subtask {
+      background: #eff6ff;
+      color: #2563eb;
+      border: 1px solid #dbeafe;
     }
 
-    .subtask-badges {
+    .subtask-code-text {
+      font-size: 11.5px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      color: #475569;
+    }
+  }
+
+  .cell-work.is-subtask-work {
+    .subtask-title-text {
+      font-size: 13px;
+      font-weight: 500;
+      color: #334155;
+    }
+
+    .subtask-role-badge {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
-      flex-shrink: 0;
+      padding: 1px 6px;
+      background: #e0f2fe;
+      color: #0369a1;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .subtask-hours-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 1px 6px;
+      background: #f1f5f9;
+      color: #475569;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
     }
   }
 
-  .subtask-role-badge {
-    padding: 2px 7px;
-    border-radius: 4px;
-    background: #e0f2fe;
-    color: #0369a1;
-    font-size: 11px;
-    font-weight: 700;
-  }
-
-  .subtask-hours-pill {
-    padding: 2px 6px;
-    border-radius: 4px;
+  .subtask-epic-badge {
+    display: inline-block;
+    padding: 2px 8px;
     background: #f1f5f9;
     color: #475569;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
     font-size: 11px;
+    font-weight: 500;
+    max-width: 130px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+/* Citations inside Task Detail Drawer (Matching Reference Image 2) */
+.drawer-citations-card {
+  margin: 6px 0 14px 0;
+  padding: 10px 14px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  .drawer-citations-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
     font-weight: 600;
+    color: #166534;
   }
 
-  .subtask-assignee-cell {
-    flex-shrink: 0;
-    font-size: 11.5px;
-    color: #64748b;
+  .drawer-citations-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+
+    .drawer-citation-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      background: #ffffff;
+      border: 1px solid #86efac;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      color: #14532d;
+      cursor: pointer;
+      transition: all 0.12s ease;
+      text-align: left;
+
+      &:hover {
+        background: #dcfce7;
+        border-color: #4ade80;
+      }
+
+      .cite-text {
+        max-width: 340px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .link-icon {
+        font-size: 13px;
+        color: #15803d;
+      }
+    }
   }
+}
+
+.drawer-parent-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  max-width: 240px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Bottom Input Bar (Reference Image 3 Style) */

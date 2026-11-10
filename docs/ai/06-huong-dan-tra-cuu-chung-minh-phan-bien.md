@@ -38,12 +38,28 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
   Hệ thống tuân thủ Clean Architecture kết hợp Modular Monolith, phân tách rõ ràng:
   - **Tầng Điều Khiển API**: [`AiAgentController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/AiAgentController.cs#L25-L160)
   - **Tầng Dịch Vụ AI Core Pipeline**: [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs#L45-L250)
+  - **Động cơ Quản lý Prompt Động**: [`PromptTemplateService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/PromptTemplateService.cs) & [`Prompts/`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Prompts/)
   - **Tầng Router Đa Mô Hình (Multi-Provider)**: [`MultiProviderAiModelClient.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/MultiProviderAiModelClient.cs#L25-L120)
   - **Bộ Trích Xuất Tài Liệu Vạn Năng**: [`AiDocumentTextExtractor.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiDocumentTextExtractor.cs#L10-L120)
   - **Tầng Trí Nhớ Đệm Phân Tán (Redis Staging)**: [`StackExchangeRedisStagingProvider.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/Adapters/StackExchangeRedisStagingProvider.cs#L8-L115) & [`ResilientStateStagingService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Core/Staging/ResilientStateStagingService.cs#L15-L110)
   - **Hệ Thống MCP Tools Nội Bộ**: [`SpecHubTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SpecHubTools.cs), [`BacklogTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/BacklogTools.cs), [`SprintTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SprintTools.cs), [`TeamTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/TeamTools.cs)
   - **Máy Chủ Stdio MCP Server Độc Lập**: [`Program.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.McpServer/Program.cs#L20-L150)
   - **Giao Diện Angular Client**: [`ai-agent.service.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/core/services/ai-agent.service.ts), [`ai-decompose-modal.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.ts), [`ai-decompose-modal.html`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.html)
+
+### Câu hỏi 1.4: Prompt của AI có bị hardcode trong code C# không? Quản lý và thay đổi như thế nào?
+- **Trả lời**:
+  **Tuyệt đối không hardcode prompt trong mã C#**. Toàn bộ prompt được tách thành các tệp Markdown độc lập trong [`ProjectMgmt.Solution/Prompts/`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Prompts/):
+  - `SprintDecompositionSystemPrompt.md`: Thiết lập vai trò Scrum Master, luật phân rã, thang điểm Fibonacci và gán chuyên môn.
+  - `SprintDecompositionUserPrompt.md`: Mẫu prompt động với các tham số `{{DOC_CONTENT}}`, `{{SPEC_HUB_DOCS}}`, `{{TEAM_CAPACITY_SUMMARY}}`.
+  - `SingleTaskRegenerationPrompt.md`: Prompt làm lại 1 task riêng biệt.
+  - `FullProposalRegenerationPrompt.md`: Prompt làm lại toàn bộ đề xuất.
+  Dịch vụ [`PromptTemplateService`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/PromptTemplateService.cs) tự động kiểm tra `File.GetLastWriteTimeUtc(fullPath)` để **Hot-Reload ngay lập tức** khi có bất kỳ chỉnh sửa nào trên tệp Markdown mà **không cần biên dịch lại mã nguồn hay khởi động lại ứng dụng**.
+
+### Câu hỏi 1.5: Cấu trúc việc con (Subtasks) và việc tính điểm Fibonacci, gán người làm hoạt động như thế nào?
+- **Trả lời**:
+  1. **Cấu trúc Việc con (Subtasks) đầy đủ**: Việc con được thiết kế như một task hoàn chỉnh (checkbox, mã phụ `QLDA-AI1.1`, tiêu đề, vai trò kỹ thuật, độ ưu tiên, SP, trạng thái, người làm, và ngăn kéo chi tiết riêng).
+  2. **Dây nối Cây phân nhánh (Tree Wire Connector)**: Dưới cụm 6 chấm kéo thả (`drag_indicator`), hệ thống vẽ nhánh cây góc vuông (`└──`) dẫn xuống từng subtask giúp người dùng nhận diện thứ bậc trực quan.
+  3. **Phân bổ Năng lực & Fibonacci**: Hệ thống không gán cứng 5 SP hay chỉ 1 người duy nhất; mà tự động phân tích từ khóa kỹ thuật (Frontend $\rightarrow$ Kỹ sư Frontend, Backend $\rightarrow$ Kỹ sư Backend, QA $\rightarrow$ Kỹ sư QA) và trải đều điểm Fibonacci (1, 2, 3, 5, 8) theo độ phức tạp công việc.
 
 ---
 
@@ -180,6 +196,8 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
 | :--- | :--- | :--- |
 | **API Endpoints & SSE** | `AiAgentController` | [`AiAgentController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/AiAgentController.cs) |
 | **Agent Pipeline 5 Bước** | `AiSprintDecompositionService` | [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs) |
+| **Quản Lý Prompt Động** | `PromptTemplateService` | [`PromptTemplateService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/PromptTemplateService.cs) |
+| **Thư Mục Prompt Markdown** | `Prompts/*.md` | [`Prompts/`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Prompts/) |
 | **Router Đa Mô Hình AI** | `MultiProviderAiModelClient` | [`MultiProviderAiModelClient.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/MultiProviderAiModelClient.cs) |
 | **Bộ Trích Xuất Tài Liệu** | `AiDocumentTextExtractor` | [`AiDocumentTextExtractor.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiDocumentTextExtractor.cs) |
 | **Trí Nhớ Staging Redis** | `StackExchangeRedisStagingProvider` | [`StackExchangeRedisStagingProvider.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/Adapters/StackExchangeRedisStagingProvider.cs) |
@@ -195,3 +213,4 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
 | **Angular Modal Component** | `AiDecomposeModalComponent` | [`ai-decompose-modal.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.ts) |
 | **Angular Modal Template** | `AiDecomposeModal Template` | [`ai-decompose-modal.html`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.html) |
 | **Deep Link Spec Hub** | `SpecHubPageComponent` | [`spec-hub-page.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/spec-hub/spec-hub-page.ts) |
+

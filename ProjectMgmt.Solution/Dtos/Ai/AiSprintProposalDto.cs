@@ -48,6 +48,10 @@ public sealed class ProposedSubTaskDto
     public string Title { get; set; } = string.Empty;
     public string Role { get; set; } = "Backend"; // Backend, Frontend, QA, DevOps
     public decimal EstimatedHours { get; set; } = 4;
+    public int StoryPoints { get; set; } = 1;
+    public string Priority { get; set; } = "Medium";
+    public string Status { get; set; } = "To Do";
+    public string Description { get; set; } = string.Empty;
     public Guid? AssigneeUserId { get; set; }
     public string? AssigneeName { get; set; }
 }

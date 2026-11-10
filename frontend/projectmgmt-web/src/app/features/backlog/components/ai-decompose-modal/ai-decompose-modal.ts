@@ -111,7 +111,7 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
   readonly selectedModel = signal<string>('Gemini 3.6 Flash');
 
   // Modern Thinking Accordion State (Image 7)
-  readonly isThinkingExpanded = signal<boolean>(false);
+  readonly isThinkingExpanded = signal<boolean>(true);
   readonly isThinkingVisible = computed(() => this.isStreaming() || this.toolCallsLog().length > 0 || !!this.streamedThoughts());
   readonly totalToolDurationMs = computed(() => this.toolCallsLog().reduce((acc, t) => acc + (t.durationMs || 0), 0));
 
@@ -122,8 +122,9 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
   readonly inlineEditingTitleId = signal<string | null>(null);
   readonly inlineEditingSpId = signal<string | null>(null);
 
-  // Detail Drawer state (Reference Image 5)
+  // Detail Drawer state (Reference Image 5 & Subtask Details)
   readonly activeDrawerTaskId = signal<string | null>(null);
+  readonly activeDrawerSubtask = signal<{ parentTask: ProposedTaskDto; subtask: ProposedSubTaskDto } | null>(null);
   readonly drawerRegenerateFeedback = signal<string>('');
   readonly isRegeneratingSingle = signal<boolean>(false);
   readonly isRegeneratingBatch = signal<boolean>(false);
@@ -638,6 +639,16 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
             this.normalizeProposal(prop);
             this.proposal.set(prop);
             this.activeSessionId.set(prop.sessionId);
+
+            // Auto-expand all subtasks so tree wire connectors are immediately visible
+            const autoExpand: Record<string, boolean> = {};
+            for (const t of prop.tasks) {
+              if (t.subtasks && t.subtasks.length > 0) {
+                autoExpand[t.id] = true;
+              }
+            }
+            this.expandedSubtasks.set(autoExpand);
+
             const doneTime = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
             this.chatHistory.update((list) => [
               ...list,
@@ -652,7 +663,7 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
           },
           onCompleted: () => {
             this.isStreaming.set(false);
-            this.isThinkingExpanded.set(false);
+            this.isThinkingExpanded.set(true); // Always keep workflow trace open so user can inspect anytime
             this.saveSession();
           },
           onError: (err) => {
@@ -680,6 +691,18 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
       if (!t.acceptanceCriteria) t.acceptanceCriteria = [];
       if (!t.documentCitations) t.documentCitations = [];
       if (!t.subtasks) t.subtasks = [];
+
+      // Normalize each subtask as a full task entity
+      t.subtasks.forEach((sub, sIdx) => {
+        if (!sub.id) sub.id = `${t.id}_sub_${sIdx + 1}`;
+        if (!sub.priority) sub.priority = t.priority || 'Medium';
+        if (!sub.status) sub.status = 'To Do';
+        if (!sub.storyPoints || sub.storyPoints <= 0) sub.storyPoints = 1;
+        if (!sub.estimatedHours || sub.estimatedHours <= 0) sub.estimatedHours = 4;
+        if (!sub.role) sub.role = 'Kỹ thuật';
+        if (!sub.assigneeName) sub.assigneeName = t.assigneeName;
+        if (!sub.assigneeUserId) sub.assigneeUserId = t.assigneeUserId;
+      });
     });
   }
 
@@ -719,12 +742,52 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
 
   openTaskDrawer(task: ProposedTaskDto, event?: Event): void {
     event?.stopPropagation();
+    this.activeDrawerSubtask.set(null);
     this.activeDrawerTaskId.set(task.id);
     this.drawerRegenerateFeedback.set('');
   }
 
   closeTaskDrawer(): void {
     this.activeDrawerTaskId.set(null);
+    this.persistProposalEdits();
+  }
+
+  openSubtaskDrawer(parentTask: ProposedTaskDto, subtask: ProposedSubTaskDto, event?: Event): void {
+    event?.stopPropagation();
+    this.activeDrawerTaskId.set(null);
+    this.activeDrawerSubtask.set({ parentTask, subtask });
+  }
+
+  closeSubtaskDrawer(): void {
+    this.activeDrawerSubtask.set(null);
+    this.onTaskFieldChanged();
+    this.persistProposalEdits();
+  }
+
+  onSubtaskAssigneeChange(subtask: ProposedSubTaskDto, memberDisplayName: string): void {
+    const matched = this.members.find((m) => m.displayName === memberDisplayName);
+    subtask.assigneeName = matched ? matched.displayName : memberDisplayName || null;
+    subtask.assigneeUserId = matched?.userId ?? null;
+    this.onTaskFieldChanged();
+    this.persistProposalEdits();
+  }
+
+  cycleSubtaskPriority(subtask: ProposedSubTaskDto, event: Event): void {
+    event.stopPropagation();
+    const scale = ['Low', 'Medium', 'High', 'Highest'];
+    const curIdx = scale.indexOf(subtask.priority || 'Medium');
+    subtask.priority = scale[(curIdx + 1) % scale.length];
+    this.onTaskFieldChanged();
+    this.persistProposalEdits();
+  }
+
+  deleteProposedSubtask(parentTask: ProposedTaskDto, subtaskId: string, event?: Event): void {
+    event?.stopPropagation();
+    parentTask.subtasks = (parentTask.subtasks || []).filter((s) => s.id !== subtaskId);
+    if (this.activeDrawerSubtask()?.subtask?.id === subtaskId) {
+      this.activeDrawerSubtask.set(null);
+    }
+    this.onTaskFieldChanged();
     this.persistProposalEdits();
   }
 
