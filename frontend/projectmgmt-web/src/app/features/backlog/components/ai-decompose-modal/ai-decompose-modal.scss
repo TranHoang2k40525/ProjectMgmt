@@ -428,8 +428,13 @@
 }
 
 @keyframes spinClockwise {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .ai-error-banner {
@@ -1778,6 +1783,7 @@
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }
@@ -2134,6 +2140,7 @@
   from {
     transform: translateX(100%);
   }
+
   to {
     transform: translateX(0);
   }
@@ -2143,8 +2150,8 @@
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
 }
-
