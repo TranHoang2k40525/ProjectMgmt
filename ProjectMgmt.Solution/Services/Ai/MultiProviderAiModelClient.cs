@@ -136,7 +136,15 @@ public sealed class MultiProviderAiModelClient : IAiModelClient
         if (m.StartsWith("models/")) m = m["models/".Length..];
         if (string.IsNullOrEmpty(m) || m.Contains("2.5") || m.Contains("2.0") || m.Contains("1.5"))
         {
-            return "gemini-3-flash-preview";
+            return "gemini-3.6-flash";
+        }
+        if (m.Contains("cao") || m.Contains("high") || m.Contains("pro") || m.Contains("3.6"))
+        {
+            return "gemini-3.6-flash";
+        }
+        if (m.Contains("3.5"))
+        {
+            return "gemini-3.5-flash";
         }
         return m;
     }
@@ -149,7 +157,7 @@ public sealed class MultiProviderAiModelClient : IAiModelClient
     {
         var client = _httpClientFactory.CreateClient("AiClient");
         var primaryModel = NormalizeGeminiModel(prompt.Model ?? settings.ModelName);
-        var candidateModels = new List<string> { primaryModel, "gemini-3-flash-preview", "gemini-3.8-flash", "gemini-3.5-flash" }.Distinct().ToList();
+        var candidateModels = new List<string> { primaryModel, "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3-flash-preview" }.Distinct().ToList();
 
         Exception? lastException = null;
         var streamCompleted = false;

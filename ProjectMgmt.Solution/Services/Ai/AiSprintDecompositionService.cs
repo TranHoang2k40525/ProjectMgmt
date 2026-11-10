@@ -24,6 +24,7 @@ public interface IAiSprintDecompositionService
         Func<string, object?, string, long?, Task> onToolCall,
         Func<string, Task> onThoughtDelta,
         Func<AiSprintProposalDto, Task> onProposalReady,
+        string? model = null,
         CancellationToken cancellationToken = default);
 
     Task<ProposedTaskDto> RegenerateSingleTaskAsync(
@@ -84,6 +85,7 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
         Func<string, object?, string, long?, Task> onToolCall,
         Func<string, Task> onThoughtDelta,
         Func<AiSprintProposalDto, Task> onProposalReady,
+        string? model = null,
         CancellationToken cancellationToken = default)
     {
         await _traceService.StartTraceAsync(
@@ -173,30 +175,32 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
         // =========================================================================
         await onStepProgress(4, "DECOMPOSE_SPRINT", "Phân rã Sprint Goal, Epics & Tasks", 75, "Mô hình AI đang suy luận cấu trúc Sprint, chia nhỏ Epic và Task...");
 
-        var systemPrompt = @"Bạn là Chuyên gia Scrum Master và Kiến trúc sư phần mềm cấp cao.
-Nhiệm vụ của bạn là phân tích tài liệu đặc tả (SRS/BRD), ghi chú cuộc họp, ngữ cảnh Backlog và năng lực nhóm để lập kế hoạch Sprint hoàn chỉnh bằng tiếng Việt chuẩn doanh nghiệp.
-Quy tắc bắt buộc:
-1. Xác định 1 Sprint Goal rõ ràng, tập trung và đo lường được kết quả từ tài liệu được cung cấp.
-2. Cung cấp danh sách các hashtag tổng quan cho Sprint (ví dụ: [""#Backend"", ""#Frontend"", ""#API"", ""#Security"", ""#Database""]).
-3. Phân rã thành 3 đến 6 Task/Story cụ thể dựa trên tài liệu thực tế. Mỗi Task phải có:
-   - EpicTitle
-   - Title súc tích, chuyên nghiệp
-   - Description chi tiết phạm vi nghiệp vụ
-   - Type (Story, Task, Bug)
-   - Priority (Highest, High, Medium, Low)
-   - StoryPoints (1, 2, 3, 5, 8)
-   - EstimatedHours
-   - AssigneeName (chọn từ danh sách thành viên đội ngũ phù hợp kỹ năng)
-   - Tags (mảng các hashtag kỹ thuật cụ thể cho task: ví dụ [""#Backend"", ""#API""])
-   - AcceptanceCriteria (ít nhất 3 tiêu chí nghiệm thu rõ ràng)
-   - DocumentCitations (mảng trích dẫn cụ thể tên tài liệu và chương/mục đặc tả, ví dụ: [""Tài liệu Đặc tả Kỹ thuật - Mục 3.2.1""])
-   - AiRationale (lập luận kỹ thuật và cân bằng tải tại sao gán task/SP này)
-   - Subtasks kỹ thuật (Backend, Frontend, QA, DevOps) kèm số giờ ước lượng.
-4. Đầu ra BẮT BUỘC là định dạng JSON hợp lệ (không bọc text giải thích ngoài JSON) tuân thủ schema:
+        var systemPrompt = @"Bạn là Chuyên gia Scrum Master và Kiến trúc sư Hệ thống cấp cao.
+Nhiệm vụ của bạn là phân tích tài liệu đặc tả (SRS/BRD), Spec Hub, ngữ cảnh Backlog và năng lực nhóm để lập kế hoạch Sprint hoàn chỉnh, chuyên nghiệp bằng tiếng Việt.
+
+BỘ KỸ NĂNG BẮT BUỘC (SCRUM MASTER AGENT SKILLS):
+1. [Kỹ năng Bóc tách & Định cỡ Scrum]:
+   - Phân rã thành 3 đến 6 Task/Story hoàn toàn dựa trên nội dung tài liệu thực tế được cung cấp.
+   - Định cỡ Story Points theo dãy Fibonacci: 1, 2, 3, 5, 8.
+   - QUY TẮC PHÂN CẤP CÔNG VIỆC:
+     * Đối với các Task đơn giản có độ phức tạp thấp (StoryPoints <= 2, ví dụ 1 hoặc 2 SP): TUYỆT ĐỐI KHÔNG sinh subtasks (để mảng subtasks: [] rỗng), task đứng độc lập hoàn chỉnh.
+     * Đối với các Task có độ phức tạp từ trung bình trở lên (StoryPoints >= 3, ví dụ 3, 5, 8 SP): BẮT BUỘC chia thành các Subtasks kỹ thuật cụ thể (Backend, Frontend, QA, DevOps) với số giờ ước lượng phù hợp.
+     * Subtask cũng có cấu trúc tương tự Task: tiêu đề rõ ràng, vai trò chuyên môn, số giờ ước lượng.
+2. [Kỹ năng Gắn thẻ & Trích dẫn Nguồn gốc]:
+   - Mỗi Task phải có mảng `tags` chứa các hashtag kỹ thuật cụ thể (ví dụ: [""#Backend"", ""#API"", ""#Security""]).
+   - Mỗi Task BẮT BUỘC phải có `documentCitations` ghi rõ tên tài liệu và chương/mục trích xuất từ Spec Hub (ví dụ: [""Tài liệu Đặc tả Kỹ thuật - Mục 3.2""]).
+   - Toàn bộ đề xuất phải có mảng `tags` tổng quan cho Sprint (ví dụ: [""#SprintPlan"", ""#Scrum"", ""#SpecHub""]).
+3. [Kỹ năng Cân bằng Năng lực Nhóm]:
+   - `assigneeName`: Phải chọn từ danh sách thành viên thực tế của nhóm phù hợp với chuyên môn kỹ thuật, không gán người ngoài danh sách.
+4. [Kỹ năng Lập luận Kỹ thuật & Nghiệm thu (DoD)]:
+   - Mỗi Task phải có `aiRationale` giải thích ngắn gọn tại sao phân bổ công việc này và tính phụ thuộc kỹ thuật.
+   - Mỗi Task phải có ít nhất 3 `acceptanceCriteria` (Tiêu chí nghiệm thu) rõ ràng, có thể kiểm chứng được.
+
+Đầu ra BẮT BUỘC là định dạng JSON hợp lệ (không bọc text giải thích ngoài JSON) tuân thủ schema:
 {
   ""sprintGoal"": ""string"",
   ""rationale"": ""string"",
-  ""tags"": [""#Hashtag1"", ""#Hashtag2""],
+  ""tags"": [""#SprintPlan"", ""#Scrum""],
   ""tasks"": [
     {
       ""id"": ""task_01"",
@@ -243,6 +247,7 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
 
         var prompt = new AiPrompt
         {
+            Model = model,
             SystemInstruction = systemPrompt,
             Messages = new List<AiMessage> { AiMessage.CreateUser(userPromptContent) },
             Temperature = 0.2,

@@ -7,6 +7,7 @@ import {
   inject,
   signal,
   computed,
+  OnInit,
   OnDestroy,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -50,7 +51,7 @@ export interface ChatTurn {
   styleUrl: './ai-decompose-modal.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class AiDecomposeModalComponent implements OnDestroy {
+export class AiDecomposeModalComponent implements OnInit, OnDestroy {
   private readonly aiService = inject(AiAgentService);
   private readonly toastService = inject(ToastService);
   private readonly router = inject(Router);
@@ -85,7 +86,12 @@ export class AiDecomposeModalComponent implements OnDestroy {
   readonly expandedToolIndices = signal<Record<number, boolean>>({});
   readonly streamedThoughts = signal<string>('');
   readonly errorMessage = signal<string | null>(null);
-  readonly selectedModel = signal<string>('Gemini 3.5 Flash');
+  readonly selectedModel = signal<string>('Gemini 3.6 Flash');
+
+  // Modern Thinking Accordion State (Image 7)
+  readonly isThinkingExpanded = signal<boolean>(false);
+  readonly isThinkingVisible = computed(() => this.isStreaming() || this.toolCallsLog().length > 0 || !!this.streamedThoughts());
+  readonly totalToolDurationMs = computed(() => this.toolCallsLog().reduce((acc, t) => acc + (t.durationMs || 0), 0));
 
   // Proposal & Selection state
   readonly proposal = signal<AiSprintProposalDto | null>(null);
@@ -175,16 +181,101 @@ export class AiDecomposeModalComponent implements OnDestroy {
     return Array.from(citeSet);
   });
 
+  ngOnInit(): void {
+    this.restoreSession();
+  }
+
   toggleToolLog(idx: number): void {
     this.expandedToolIndices.update((prev) => ({ ...prev, [idx]: !prev[idx] }));
   }
 
+  toggleThinkingAccordion(): void {
+    this.isThinkingExpanded.update((v) => !v);
+  }
+
+  onModelChange(modelName: string): void {
+    this.selectedModel.set(modelName);
+    this.saveSession();
+  }
+
   openSpecDoc(citationText?: string, documentId?: string | null): void {
-    if (documentId) {
-      this.router.navigate(['/projects', this.projectId, 'documents'], { queryParams: { docId: documentId } });
-    } else {
-      this.router.navigate(['/projects', this.projectId, 'documents']);
+    const urlTree = documentId
+      ? this.router.createUrlTree(['/projects', this.projectId, 'documents'], { queryParams: { docId: documentId } })
+      : this.router.createUrlTree(['/projects', this.projectId, 'documents']);
+    const url = this.router.serializeUrl(urlTree);
+    window.open(url, '_blank');
+  }
+
+  private getStorageKey(): string {
+    return `projectmgmt.ai-agent-session.${this.projectId || 'default'}`;
+  }
+
+  saveSession(): void {
+    if (typeof localStorage === 'undefined' || !this.projectId) return;
+    try {
+      const data = {
+        chatHistory: this.chatHistory(),
+        proposal: this.proposal(),
+        toolCallsLog: this.toolCallsLog(),
+        streamedThoughts: this.streamedThoughts(),
+        activeSessionId: this.activeSessionId(),
+        selectedModel: this.selectedModel(),
+      };
+      localStorage.setItem(this.getStorageKey(), JSON.stringify(data));
+    } catch {
+      // Ignore storage quota limits
     }
+  }
+
+  private restoreSession(): void {
+    if (typeof localStorage === 'undefined' || !this.projectId) return;
+    try {
+      const serialized = localStorage.getItem(this.getStorageKey());
+      if (!serialized) return;
+      const data = JSON.parse(serialized);
+      if (data) {
+        if (Array.isArray(data.chatHistory) && data.chatHistory.length > 0) {
+          this.chatHistory.set(data.chatHistory);
+        }
+        if (data.proposal) {
+          this.proposal.set(data.proposal);
+        }
+        if (Array.isArray(data.toolCallsLog) && data.toolCallsLog.length > 0) {
+          this.toolCallsLog.set(data.toolCallsLog);
+        }
+        if (data.streamedThoughts) {
+          this.streamedThoughts.set(data.streamedThoughts);
+        }
+        if (data.activeSessionId) {
+          this.activeSessionId.set(data.activeSessionId);
+        }
+        if (data.selectedModel) {
+          this.selectedModel.set(data.selectedModel);
+        }
+      }
+    } catch {
+      // Ignore malformed storage
+    }
+  }
+
+  startNewSession(): void {
+    this.cancelStream();
+    this.chatHistory.set([]);
+    this.proposal.set(null);
+    this.toolCallsLog.set([]);
+    this.streamedThoughts.set('');
+    this.activeSessionId.set('');
+    this.errorMessage.set(null);
+    this.promptInput.set('');
+    this.pastedDocumentText.set('');
+    this.attachedFile.set(null);
+    this.selectedTaskIds.set({});
+    this.expandedSubtasks.set({});
+    this.isThinkingExpanded.set(false);
+    if (typeof localStorage !== 'undefined' && this.projectId) {
+      localStorage.removeItem(this.getStorageKey());
+    }
+    this.toastService?.success('Đã khởi tạo phiên làm việc AI mới.');
   }
 
   ngOnDestroy(): void {
@@ -192,6 +283,7 @@ export class AiDecomposeModalComponent implements OnDestroy {
   }
 
   closeModal(): void {
+    this.saveSession();
     this.cancelStream();
     this.closed.emit();
   }
@@ -327,6 +419,7 @@ export class AiDecomposeModalComponent implements OnDestroy {
     this.stepsLog.set([]);
     this.toolCallsLog.set([]);
     this.streamedThoughts.set('');
+    this.isThinkingExpanded.set(true);
 
     this.abortController = new AbortController();
 
@@ -337,6 +430,7 @@ export class AiDecomposeModalComponent implements OnDestroy {
           text: combinedText || 'Phân tích tài liệu dự án và lập kế hoạch Sprint tiếp theo.',
           prompt: promptText || 'Tạo Sprint Goal, Tasks và Subtasks chuẩn Scrum.',
           file,
+          model: this.selectedModel(),
         },
         {
           onSessionInit: (init) => {
@@ -372,9 +466,12 @@ export class AiDecomposeModalComponent implements OnDestroy {
                 timestamp: doneTime,
               },
             ]);
+            this.saveSession();
           },
           onCompleted: () => {
             this.isStreaming.set(false);
+            this.isThinkingExpanded.set(false);
+            this.saveSession();
           },
           onError: (err) => {
             this.errorMessage.set(err.message || 'Đã xảy ra lỗi khi phân tách công việc.');

@@ -110,6 +110,7 @@ public class AiAgentControllerAdversarialTests
             Func<string, object?, string, long?, Task> onToolCall,
             Func<string, Task> onThoughtDelta,
             Func<AiSprintProposalDto, Task> onProposalReady,
+            string? model = null,
             CancellationToken cancellationToken = default)
         {
             if (ShouldThrow)

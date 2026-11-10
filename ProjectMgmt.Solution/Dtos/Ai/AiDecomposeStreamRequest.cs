@@ -35,4 +35,10 @@ public sealed class AiDecomposeStreamRequest
     /// Optional uploaded document file (.docx, .pdf, .txt, .md, .xlsx). Max 30MB.
     /// </summary>
     public IFormFile? File { get; set; }
+
+    /// <summary>
+    /// Optional preferred AI model (e.g. "Gemini 3.6 Flash", "Gemini 3.5 Flash").
+    /// </summary>
+    [MaxLength(100)]
+    public string? Model { get; set; }
 }

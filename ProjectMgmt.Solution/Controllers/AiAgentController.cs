@@ -200,6 +200,7 @@ public class AiAgentController : ControllerBase
                     await _stagingService.SaveProposalAsync(sessionId, proposal, TimeSpan.FromHours(2), ct);
                     await EmitEventAsync(AiSseEventTypes.ProposalReady, proposal);
                 },
+                model: request.Model,
                 cancellationToken: ct);
 
             stopwatch.Stop();

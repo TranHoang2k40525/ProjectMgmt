@@ -20,6 +20,18 @@
       </div>
 
       <div class="header-actions">
+        @if (chatHistory().length > 0 || proposal()) {
+          <button
+            type="button"
+            class="btn-new-session"
+            data-testid="btn-ai-new-session"
+            (click)="startNewSession()"
+            title="Bắt đầu phiên làm việc AI mới"
+          >
+            <span class="material-symbols-outlined" aria-hidden="true">add</span>
+            <span>Phiên mới</span>
+          </button>
+        }
         @if (!proposal() && !isStreaming()) {
           <button
             type="button"
@@ -92,68 +104,90 @@
           </div>
         }
 
-        <!-- Realtime Agent Interactive Execution Stream (Claude Code / Gemini CLI Style - Image 2 & 3) -->
-        @if (isStreaming() || toolCallsLog().length > 0) {
-          <div class="agent-live-stream-zone" data-testid="ai-progress-panel">
-            <!-- Tool Actions Stream (Collapsible Action Banners matching Image 2) -->
-            @for (tool of toolCallsLog(); track $index; let tIdx = $index) {
-              <div
-                class="agent-action-banner"
-                [class.is-expanded]="expandedToolIndices()[tIdx]"
-                (click)="toggleToolLog(tIdx)"
-                [attr.data-testid]="'ai-action-banner-' + tIdx"
-              >
-                <div class="action-banner-row">
-                  <span class="material-symbols-outlined action-status-icon" aria-hidden="true">check_circle</span>
-                  <span class="action-title-text">Running {{ tool.summaryVi || tool.toolName }} &gt;</span>
-                  @if (tool.durationMs !== undefined && tool.durationMs !== null) {
-                    <span class="action-duration-pill">{{ tool.durationMs }}ms</span>
-                  }
-                  <span class="material-symbols-outlined action-chevron-icon" aria-hidden="true">
-                    {{ expandedToolIndices()[tIdx] ? 'expand_less' : 'chevron_right' }}
-                  </span>
-                </div>
-                @if (expandedToolIndices()[tIdx]) {
-                  <div class="action-banner-body">
-                    <div class="action-detail-item">
-                      <span class="detail-label">Công cụ MCP:</span>
-                      <code>{{ tool.toolName }}</code>
+        <!-- Modern Collapsible Thinking & Execution Process (Image 7 Style) -->
+        @if (isThinkingVisible()) {
+          <div class="agent-thinking-accordion" [class.is-expanded]="isThinkingExpanded()" data-testid="ai-progress-panel">
+            <button
+              type="button"
+              class="thinking-accordion-header"
+              (click)="toggleThinkingAccordion()"
+              [attr.aria-expanded]="isThinkingExpanded()"
+              data-testid="btn-toggle-thinking"
+            >
+              <div class="header-left">
+                @if (isStreaming()) {
+                  <div class="constellation-symbol" aria-hidden="true">
+                    <span class="c-dot c-dot-top"></span>
+                    <div class="c-dot-bottom-row">
+                      <span class="c-dot c-dot-bl"></span>
+                      <span class="c-dot c-dot-br"></span>
                     </div>
-                    @if (tool.toolArguments) {
-                      <div class="action-detail-item">
-                        <span class="detail-label">Tham số đầu vào:</span>
-                        <pre>{{ tool.toolArguments | json }}</pre>
+                  </div>
+                  <span class="thinking-header-text">
+                    {{ currentStepDetail() || 'Mô hình AI đang phân tích dữ liệu & suy luận cấu trúc Sprint...' }}
+                  </span>
+                } @else {
+                  <span class="material-symbols-outlined thinking-done-icon" aria-hidden="true">check_circle</span>
+                  <span class="thinking-header-text">
+                    Đã hoàn thành suy nghĩ &amp; tra cứu {{ toolCallsLog().length }} công cụ MCP
+                    @if (totalToolDurationMs() > 0) {
+                      ({{ totalToolDurationMs() }}ms)
+                    }
+                  </span>
+                }
+              </div>
+              <div class="header-right">
+                <span class="toggle-hint-text">{{ isThinkingExpanded() ? 'Thu gọn' : 'Xem chi tiết quá trình' }}</span>
+                <span class="material-symbols-outlined accordion-arrow-icon" aria-hidden="true">
+                  {{ isThinkingExpanded() ? 'expand_less' : 'expand_more' }}
+                </span>
+              </div>
+            </button>
+
+            @if (isThinkingExpanded()) {
+              <div class="thinking-accordion-body">
+                <!-- Tool Execution Timeline -->
+                @if (toolCallsLog().length > 0) {
+                  <div class="thinking-tools-timeline">
+                    @for (tool of toolCallsLog(); track $index; let tIdx = $index) {
+                      <div class="timeline-tool-item">
+                        <div class="tool-bullet">
+                          <span class="material-symbols-outlined" aria-hidden="true">check</span>
+                        </div>
+                        <div class="tool-content">
+                          <div class="tool-summary-row" (click)="toggleToolLog(tIdx)">
+                            <span class="tool-action-name">Running {{ tool.summaryVi || tool.toolName }} &gt;</span>
+                            @if (tool.durationMs !== undefined && tool.durationMs !== null) {
+                              <span class="tool-duration-pill">{{ tool.durationMs }}ms</span>
+                            }
+                            <span class="material-symbols-outlined tool-chevron" aria-hidden="true">
+                              {{ expandedToolIndices()[tIdx] ? 'expand_less' : 'chevron_right' }}
+                            </span>
+                          </div>
+                          @if (expandedToolIndices()[tIdx]) {
+                            <div class="tool-args-box">
+                              <span class="args-label">Công cụ MCP: <code>{{ tool.toolName }}</code></span>
+                              @if (tool.toolArguments) {
+                                <pre>{{ tool.toolArguments | json }}</pre>
+                              }
+                            </div>
+                          }
+                        </div>
                       </div>
                     }
                   </div>
                 }
-              </div>
-            }
 
-            <!-- Animated Thinking Constellation Indicator (Matching Image 3) -->
-            @if (isStreaming()) {
-              <div class="agent-thinking-row" data-testid="ai-thinking-indicator">
-                <div class="constellation-symbol" aria-hidden="true">
-                  <span class="c-dot c-dot-top"></span>
-                  <div class="c-dot-bottom-row">
-                    <span class="c-dot c-dot-bl"></span>
-                    <span class="c-dot c-dot-br"></span>
+                <!-- Realtime SSE Stream Output Log -->
+                @if (streamedThoughts()) {
+                  <div class="streamed-thought-terminal">
+                    <div class="terminal-bar">
+                      <span class="material-symbols-outlined" aria-hidden="true">terminal</span>
+                      <span>Luồng suy luận &amp; sinh dữ liệu thời gian thực:</span>
+                    </div>
+                    <pre class="terminal-content">{{ streamedThoughts() }}</pre>
                   </div>
-                </div>
-                <span class="thinking-label">{{ currentStepDetail() || 'Analyzing integration steps...' }}</span>
-              </div>
-            }
-
-            <!-- Realtime Live Stream SSE Output -->
-            @if (isStreaming() && streamedThoughts()) {
-              <div class="agent-live-stream-box" data-testid="ai-thought-stream">
-                <div class="stream-box-header">
-                  <span class="material-symbols-outlined" aria-hidden="true">terminal</span>
-                  <span>Luồng suy luận &amp; sinh dữ liệu thời gian thực (SSE Stream):</span>
-                </div>
-                <div class="stream-box-body">
-                  <pre>{{ streamedThoughts() }}</pre>
-                </div>
+                }
               </div>
             }
           </div>
@@ -529,16 +563,29 @@
                   </div>
                 </div>
 
-                <!-- Expanded Subtasks List -->
+                <!-- Expanded Subtasks List (Tree Wire Branch Connector) -->
                 @if (expandedSubtasks()[task.id] && task.subtasks && task.subtasks.length > 0) {
                   <div class="subtasks-expanded-list">
-                    @for (sub of task.subtasks; track sub.id) {
+                    @for (sub of task.subtasks; track sub.id; let sIdx = $index; let isLast = $last) {
                       <div class="subtask-row-item" (click)="openTaskDrawer(task, $event)">
-                        <span class="subtask-branch-icon material-symbols-outlined" aria-hidden="true">subdirectory_arrow_right</span>
-                        <span class="subtask-role-badge">{{ sub.role || 'Tech' }}</span>
-                        <span class="subtask-title">{{ sub.title }}</span>
-                        <span class="subtask-hours">{{ sub.estimatedHours }}h</span>
-                        <span class="subtask-assignee">{{ sub.assigneeName || task.assigneeName || 'Chưa gán' }}</span>
+                        <div class="subtask-tree-wire" [class.is-last]="isLast" aria-hidden="true">
+                          <span class="wire-stem"></span>
+                          <span class="wire-curve"></span>
+                        </div>
+                        <div class="subtask-type-badge">
+                          <span class="material-symbols-outlined" aria-hidden="true">subdirectory_arrow_right</span>
+                          <span class="subtask-code">{{ taskCode }}-{{ sIdx + 1 }}</span>
+                        </div>
+                        <div class="subtask-content-cell">
+                          <span class="subtask-title">{{ sub.title }}</span>
+                          <div class="subtask-badges">
+                            <span class="subtask-role-badge">{{ sub.role || 'Tech' }}</span>
+                            <span class="subtask-hours-pill">{{ sub.estimatedHours }}h</span>
+                          </div>
+                        </div>
+                        <div class="subtask-assignee-cell">
+                          <span class="subtask-assignee">{{ sub.assigneeName || task.assigneeName || 'Chưa gán' }}</span>
+                        </div>
                       </div>
                     }
                   </div>
@@ -605,10 +652,20 @@
         />
 
         <div class="bar-right-controls">
-          <span class="agent-mode-pill" title="Mô hình AI đang kết nối">
-            <span>{{ selectedModel() }}</span>
-            <span class="material-symbols-outlined" aria-hidden="true">expand_more</span>
-          </span>
+          <div class="agent-mode-selector" title="Chọn mô hình AI">
+            <select
+              class="model-select-input"
+              data-testid="ai-model-selector"
+              [ngModel]="selectedModel()"
+              (ngModelChange)="onModelChange($event)"
+              aria-label="Chọn mô hình AI"
+            >
+              <option value="Gemini 3.6 Flash">Flash Cao</option>
+              <option value="Gemini 3.5 Flash">Gemini 3.5 Flash</option>
+              <option value="Gemini 3 Flash Preview">Gemini 3 Flash</option>
+            </select>
+            <span class="material-symbols-outlined select-chevron" aria-hidden="true">expand_more</span>
+          </div>
 
           <button
             type="button"

@@ -1,8 +1,10 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { Observable, firstValueFrom } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { IdentityService } from './identity.service';
+import { TOKEN_STORE, AuthSession } from '../auth/token-store';
+import { AccountApi } from '../api/account.api';
 
 export interface ProposedSubTaskDto {
   id: string;
@@ -93,7 +95,46 @@ export interface AiStreamCallbacks {
 export class AiAgentService {
   private readonly http = inject(HttpClient);
   private readonly identity = inject(IdentityService);
+  private readonly tokenStore = inject(TOKEN_STORE);
+  private readonly accountApi = inject(AccountApi);
   private readonly baseUrl = `${environment.apiBaseUrl}/ai/agent`;
+
+  private async getValidAccessToken(forceRefresh = false): Promise<string | null> {
+    let token = this.tokenStore.getAccessToken() ?? this.identity.authState().token;
+    if (!forceRefresh && token) {
+      return token;
+    }
+    const refreshToken = this.tokenStore.getRefreshToken();
+    if (refreshToken) {
+      try {
+        const result = await firstValueFrom(this.accountApi.refreshToken(refreshToken));
+        if (result?.accessToken) {
+          const current = this.tokenStore.getSession();
+          const nextSession: AuthSession = {
+            accessToken: result.accessToken,
+            refreshToken: result.refreshToken ?? current?.refreshToken ?? refreshToken,
+            accessTokenExpiresAt: result.accessTokenExpiresAt ?? null,
+            refreshTokenExpiresAt: result.refreshTokenExpiresAt ?? null,
+            userId: result.userId ?? current?.userId ?? '',
+            email: result.email ?? current?.email ?? '',
+            fullName: result.fullName ?? current?.fullName ?? '',
+            avatarUrl: result.avatarUrl ?? current?.avatarUrl ?? null,
+            roles: result.roles ?? current?.roles ?? []
+          };
+          this.tokenStore.setSession(nextSession);
+          this.identity.authState.update(state => ({
+            ...state,
+            token: result.accessToken ?? null,
+            isAuthenticated: true
+          }));
+          return result.accessToken;
+        }
+      } catch {
+        // Refresh token failed or expired
+      }
+    }
+    return token;
+  }
 
   async streamDecomposeSprint(
     params: {
@@ -102,6 +143,7 @@ export class AiAgentService {
       prompt?: string;
       file?: File | null;
       targetSprintId?: string | null;
+      model?: string;
     },
     callbacks: AiStreamCallbacks,
     abortSignal?: AbortSignal
@@ -120,8 +162,11 @@ export class AiAgentService {
     if (params.file) {
       formData.append('file', params.file, params.file.name);
     }
+    if (params.model) {
+      formData.append('model', params.model);
+    }
 
-    const token = this.identity.authState().token;
+    let token = await this.getValidAccessToken();
     const headers: Record<string, string> = {
       Accept: 'text/event-stream',
     };
@@ -129,17 +174,32 @@ export class AiAgentService {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${this.baseUrl}/decompose/stream`, {
+    let response = await fetch(`${this.baseUrl}/decompose/stream`, {
       method: 'POST',
       headers,
       body: formData,
       signal: abortSignal,
     });
 
+    if (response.status === 401) {
+      const refreshedToken = await this.getValidAccessToken(true);
+      if (refreshedToken && refreshedToken !== token) {
+        headers['Authorization'] = `Bearer ${refreshedToken}`;
+        response = await fetch(`${this.baseUrl}/decompose/stream`, {
+          method: 'POST',
+          headers,
+          body: formData,
+          signal: abortSignal,
+        });
+      }
+    }
+
     if (!response.ok) {
       callbacks.onError?.({
         code: `HTTP_${response.status}`,
-        message: `Không thể kết nối luồng AI Agent (HTTP ${response.status}).`,
+        message: response.status === 401
+          ? 'Phiên làm việc đã hết hạn hoặc không có quyền truy cập (HTTP 401). Vui lòng đăng nhập lại.'
+          : `Không thể kết nối luồng AI Agent (HTTP ${response.status}).`,
       });
       return;
     }
