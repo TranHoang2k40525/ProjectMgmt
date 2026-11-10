@@ -740,7 +740,16 @@ export class WorkflowSettingsPage implements OnInit {
   });
 
   @Input() embedded = false;
-  @Input() projectIdInput = '';
+  private _projectIdInput = '';
+  @Input()
+  get projectIdInput(): string { return this._projectIdInput; }
+  set projectIdInput(val: string) {
+    this._projectIdInput = val;
+    if (val && val !== this.projectId) {
+      this.projectId = val;
+      this.initForProject();
+    }
+  }
 
   projectId = '';
   readonly project = signal<Project | null>(null);
@@ -766,9 +775,11 @@ export class WorkflowSettingsPage implements OnInit {
     this.selectedTemplate = id;
     if (typeof localStorage !== 'undefined' && this.projectId) {
       localStorage.setItem(`projectmgmt.workflow-template.${this.projectId}`, id);
+      localStorage.setItem(`projectmgmt.workflow-template.${this.projectId.toLowerCase()}`, id);
     }
     if (typeof sessionStorage !== 'undefined' && this.projectId) {
       sessionStorage.setItem(`projectmgmt.workflow-template.${this.projectId}`, id);
+      sessionStorage.setItem(`projectmgmt.workflow-template.${this.projectId.toLowerCase()}`, id);
     }
   }
 
@@ -776,10 +787,13 @@ export class WorkflowSettingsPage implements OnInit {
     const list = templates || this.availableWorkflowTemplates();
     if (!list || list.length === 0) return;
 
-    // 1. Kiểm tra localStorage / sessionStorage nếu người dùng vừa chọn/áp dụng mẫu cho dự án này
+    // 1. Kiểm tra template ID đã lưu hoặc từ project
+    const currentProj = this.projectService.currentProject();
     const storageKey = `projectmgmt.workflow-template.${this.projectId}`;
-    const savedTid = (typeof localStorage !== 'undefined' ? localStorage.getItem(storageKey) : null)
-      || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(storageKey) : null);
+    const savedTid = (currentProj as any)?.workflowTemplateId
+      || (typeof localStorage !== 'undefined' && this.projectId ? (localStorage.getItem(storageKey) || localStorage.getItem(`projectmgmt.workflow-template.${this.projectId.toLowerCase()}`)) : null)
+      || (typeof sessionStorage !== 'undefined' && this.projectId ? (sessionStorage.getItem(storageKey) || sessionStorage.getItem(`projectmgmt.workflow-template.${this.projectId.toLowerCase()}`)) : null);
+
     if (savedTid) {
       const found = list.find(t => t.id === savedTid || t.id.replace('preset-', '') === savedTid.replace('preset-', ''));
       if (found) {
@@ -797,7 +811,19 @@ export class WorkflowSettingsPage implements OnInit {
       }
     }
 
-    // 2. Nhận diện chính xác theo danh sách trạng thái thực tế của dự án
+    // 2. Nhận diện theo tên boardName hoặc workflowName của dự án
+    const currentWName = ((currentProj as any)?.workflowName || (currentProj as any)?.boardTabTitle || (currentProj as any)?.boardName || '')
+      .replace(/^Bảng\s+/i, '').trim().toLowerCase();
+    if (currentWName) {
+      const foundByName = list.find(t => (t.name || '').replace(/^Bảng\s+/i, '').trim().toLowerCase() === currentWName);
+      if (foundByName) {
+        this.selectedTemplateId.set(foundByName.id);
+        this.selectedTemplate = foundByName.id;
+        return;
+      }
+    }
+
+    // 3. Nhận diện chính xác theo danh sách trạng thái thực tế của dự án
     const currentStatuses = this.statuses();
     if (currentStatuses && currentStatuses.length > 0) {
       const currentNames = currentStatuses.map(s => (s.name || '').trim().toLowerCase());
@@ -829,11 +855,9 @@ export class WorkflowSettingsPage implements OnInit {
           const tabTitle = matchedName.replace(/^Bảng\s+/i, '').trim();
           if (typeof localStorage !== 'undefined' && this.projectId) {
             localStorage.setItem(`projectmgmt.workflow-template.${this.projectId}`, bestMatch.id);
+            localStorage.setItem(`projectmgmt.workflow-template.${this.projectId.toLowerCase()}`, bestMatch.id);
             localStorage.setItem(`projectmgmt.workflow-name.${this.projectId}`, tabTitle);
-          }
-          if (typeof sessionStorage !== 'undefined' && this.projectId) {
-            sessionStorage.setItem(`projectmgmt.workflow-template.${this.projectId}`, bestMatch.id);
-            sessionStorage.setItem(`projectmgmt.workflow-name.${this.projectId}`, tabTitle);
+            localStorage.setItem(`projectmgmt.workflow-name.${this.projectId.toLowerCase()}`, tabTitle);
           }
           this.projectService.currentProject.update(p => ({
             ...p,
@@ -847,7 +871,7 @@ export class WorkflowSettingsPage implements OnInit {
       }
     }
 
-    // 3. Nhận diện theo ManagementType / BoardType của dự án
+    // 4. Nhận diện theo ManagementType / BoardType của dự án
     const proj = this.projectService.currentProject();
     const mType = (proj as any)?.managementType || (proj as any)?.type;
     if (mType) {
@@ -859,7 +883,7 @@ export class WorkflowSettingsPage implements OnInit {
       }
     }
 
-    // 4. Fallback mặc định an toàn
+    // 5. Fallback mặc định an toàn
     if (!list.some(t => t.id === this.selectedTemplateId())) {
       const defaultTpl = list.find(t => t.isDefault) || list[0];
       this.selectedTemplateId.set(defaultTpl.id);
@@ -889,27 +913,35 @@ export class WorkflowSettingsPage implements OnInit {
   };
 
   ngOnInit(): void {
-    this.projectId = this.projectIdInput || this.route?.snapshot?.paramMap?.get('id') || this.projectService.currentProject()?.id || '';
-    if (this.projectId) {
-      const savedTid = (typeof localStorage !== 'undefined' ? localStorage.getItem(`projectmgmt.workflow-template.${this.projectId}`) : null)
-        || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(`projectmgmt.workflow-template.${this.projectId}`) : null);
-      if (savedTid) {
-        this.selectedTemplateId.set(savedTid);
-        this.selectedTemplate = savedTid;
-      }
+    if (!this.projectId) {
+      this.projectId = this.projectIdInput || this.route?.snapshot?.paramMap?.get('id') || this.projectService.currentProject()?.id || '';
+    }
+    this.initForProject();
+  }
+
+  private initForProject(): void {
+    if (!this.projectId) return;
+    const storageKey = `projectmgmt.workflow-template.${this.projectId}`;
+    const savedTid = (typeof localStorage !== 'undefined' ? (localStorage.getItem(storageKey) || localStorage.getItem(`projectmgmt.workflow-template.${this.projectId.toLowerCase()}`)) : null)
+      || (typeof sessionStorage !== 'undefined' ? (sessionStorage.getItem(storageKey) || sessionStorage.getItem(`projectmgmt.workflow-template.${this.projectId.toLowerCase()}`)) : null);
+    if (savedTid) {
+      this.selectedTemplateId.set(savedTid);
+      this.selectedTemplate = savedTid;
     }
     const cachedProj = this.projectService.currentProject?.();
     if (cachedProj && cachedProj.id === this.projectId) {
       this.project.set(cachedProj);
+      if ((cachedProj as any)?.workflowTemplateId) {
+        this.selectedTemplateId.set((cachedProj as any).workflowTemplateId);
+        this.selectedTemplate = (cachedProj as any).workflowTemplateId;
+      }
       const cachedStatuses = this.projectService.projectStatuses?.() ?? [];
       if (cachedStatuses.length > 0) {
         this.statuses.set(cachedStatuses);
       }
     }
-    if (this.projectId) {
-      this.loadProject();
-      this.loadWorkflowData();
-    }
+    this.loadProject();
+    this.loadWorkflowData();
   }
 
   loadProject(): void {
@@ -983,11 +1015,15 @@ export class WorkflowSettingsPage implements OnInit {
         // Lưu lựa chọn và tên workflow vào localStorage và sessionStorage để bảo lưu trạng thái người dùng chọn
         if (typeof localStorage !== 'undefined') {
           localStorage.setItem(`projectmgmt.workflow-template.${this.projectId}`, templateToApply);
+          localStorage.setItem(`projectmgmt.workflow-template.${this.projectId.toLowerCase()}`, templateToApply);
           localStorage.setItem(`projectmgmt.workflow-name.${this.projectId}`, tabTitle);
+          localStorage.setItem(`projectmgmt.workflow-name.${this.projectId.toLowerCase()}`, tabTitle);
         }
         if (typeof sessionStorage !== 'undefined') {
           sessionStorage.setItem(`projectmgmt.workflow-template.${this.projectId}`, templateToApply);
+          sessionStorage.setItem(`projectmgmt.workflow-template.${this.projectId.toLowerCase()}`, templateToApply);
           sessionStorage.setItem(`projectmgmt.workflow-name.${this.projectId}`, tabTitle);
+          sessionStorage.setItem(`projectmgmt.workflow-name.${this.projectId.toLowerCase()}`, tabTitle);
         }
         this.selectedTemplateId.set(templateToApply);
         this.selectedTemplate = templateToApply;

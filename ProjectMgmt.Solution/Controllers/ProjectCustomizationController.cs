@@ -402,6 +402,8 @@ public sealed class ProjectCustomizationController(PlanningDbContext db, Deliver
             var primaryBoard = boards.FirstOrDefault(b => b.IsDefault) ?? boards[0];
             primaryBoard.Type = isKanban ? "Kanban" : "Scrum";
             primaryBoard.Name = targetBoardName;
+            db.Entry(primaryBoard).State = EntityState.Modified;
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE Board SET Name = {targetBoardName}, Type = {(isKanban ? "Kanban" : "Scrum")} WHERE Id = {primaryBoard.Id}");
 
             foreach (var board in boards)
             {
@@ -462,7 +464,9 @@ public sealed class ProjectCustomizationController(PlanningDbContext db, Deliver
             await transaction.CommitAsync();
 
             var tabName = resolvedWorkflowName.Replace("Bảng ", "").Trim();
+            Response.Headers["Access-Control-Expose-Headers"] = "X-Workflow-Name, X-Workflow-Template-Id, X-Board-Name, X-Management-Type";
             Response.Headers["X-Workflow-Name"] = Uri.EscapeDataString(tabName);
+            Response.Headers["X-Workflow-Template-Id"] = Uri.EscapeDataString(input.TemplateId ?? "");
             Response.Headers["X-Board-Name"] = Uri.EscapeDataString(targetBoardName);
             Response.Headers["X-Management-Type"] = isKanban ? "Kanban" : "Scrum";
 

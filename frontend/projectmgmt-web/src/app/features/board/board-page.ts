@@ -64,15 +64,18 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
       return w.startsWith('Bảng ') ? w : `Bảng ${w}`;
     }
     if (typeof localStorage !== 'undefined' && p?.id) {
-      const saved = localStorage.getItem(`projectmgmt.workflow-name.${p.id}`);
+      const saved = localStorage.getItem(`projectmgmt.workflow-name.${p.id}`)
+        || localStorage.getItem(`projectmgmt.workflow-name.${p.id.toLowerCase()}`);
       if (saved) return saved.startsWith('Bảng ') ? saved : `Bảng ${saved}`;
     }
     if (typeof sessionStorage !== 'undefined' && p?.id) {
-      const saved = sessionStorage.getItem(`projectmgmt.workflow-name.${p.id}`);
+      const saved = sessionStorage.getItem(`projectmgmt.workflow-name.${p.id}`)
+        || sessionStorage.getItem(`projectmgmt.workflow-name.${p.id.toLowerCase()}`);
       if (saved) return saved.startsWith('Bảng ') ? saved : `Bảng ${saved}`;
     }
     if ((p as any)?.boardName) return (p as any).boardName;
     if ((p as any)?.managementType === 'Kanban' || p?.type === 'Kanban') return 'Bảng Kanban';
+    if ((p as any)?.managementType) return `Bảng ${(p as any).managementType}`;
     return 'Bảng Scrum';
   });
 
@@ -80,8 +83,11 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
     const p = this.projectService.currentProject();
     const title = this.boardTitle().toLowerCase();
     const wName = ((p as any)?.workflowName || '').toLowerCase();
-    return (p as any)?.managementType === 'Kanban' || p?.type === 'Kanban' || title.includes('kanban') || wName.includes('kanban');
+    const tId = ((p as any)?.workflowTemplateId || '').toLowerCase();
+    return (p as any)?.managementType === 'Kanban' || p?.type === 'Kanban' || title.includes('kanban') || wName.includes('kanban') || tId.includes('kanban');
   });
+
+  readonly currentWorkflowName = computed(() => this.boardTitle().replace(/^Bảng\s+/i, '').trim());
 
   readonly filteredItems = computed(() => {
     let list = this.items();

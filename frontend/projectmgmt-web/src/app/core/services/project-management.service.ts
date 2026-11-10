@@ -646,10 +646,10 @@ export class ProjectManagementService {
         const bType = defaultBoard?.type || (this.currentProject() as any)?.managementType || 'Scrum';
 
         // Lấy tên workflow đã lưu từ localStorage / sessionStorage (nếu có)
-        const savedWorkflowName = (typeof localStorage !== 'undefined' ? localStorage.getItem(`projectmgmt.workflow-name.${projectId}`) : null)
-          || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(`projectmgmt.workflow-name.${projectId}`) : null);
-        const savedWorkflowTemplate = (typeof localStorage !== 'undefined' ? localStorage.getItem(`projectmgmt.workflow-template.${projectId}`) : null)
-          || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(`projectmgmt.workflow-template.${projectId}`) : null);
+        const savedWorkflowName = (typeof localStorage !== 'undefined' ? (localStorage.getItem(`projectmgmt.workflow-name.${projectId}`) || localStorage.getItem(`projectmgmt.workflow-name.${projectId.toLowerCase()}`)) : null)
+          || (typeof sessionStorage !== 'undefined' ? (sessionStorage.getItem(`projectmgmt.workflow-name.${projectId}`) || sessionStorage.getItem(`projectmgmt.workflow-name.${projectId.toLowerCase()}`)) : null);
+        const savedWorkflowTemplate = (typeof localStorage !== 'undefined' ? (localStorage.getItem(`projectmgmt.workflow-template.${projectId}`) || localStorage.getItem(`projectmgmt.workflow-template.${projectId.toLowerCase()}`)) : null)
+          || (typeof sessionStorage !== 'undefined' ? (sessionStorage.getItem(`projectmgmt.workflow-template.${projectId}`) || sessionStorage.getItem(`projectmgmt.workflow-template.${projectId.toLowerCase()}`)) : null);
 
         const finalTabTitle = savedWorkflowName || tabTitle;
         const finalBoardName = savedWorkflowName
@@ -1452,11 +1452,15 @@ export class ProjectManagementService {
 
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(`projectmgmt.workflow-template.${projectId}`, templateId);
+      localStorage.setItem(`projectmgmt.workflow-template.${projectId.toLowerCase()}`, templateId);
       localStorage.setItem(`projectmgmt.workflow-name.${projectId}`, tabTitle);
+      localStorage.setItem(`projectmgmt.workflow-name.${projectId.toLowerCase()}`, tabTitle);
     }
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.setItem(`projectmgmt.workflow-template.${projectId}`, templateId);
+      sessionStorage.setItem(`projectmgmt.workflow-template.${projectId.toLowerCase()}`, templateId);
       sessionStorage.setItem(`projectmgmt.workflow-name.${projectId}`, tabTitle);
+      sessionStorage.setItem(`projectmgmt.workflow-name.${projectId.toLowerCase()}`, tabTitle);
     }
 
     return this.http.post<ProjectStatus[]>(`${this.baseUrl}/projects/${projectId}/workflow/template`, { templateId, templateName: resolvedTitle }).pipe(
@@ -1470,6 +1474,16 @@ export class ProjectManagementService {
           workflowName: tabTitle,
           workflowTemplateId: templateId
         }));
+
+        this.allProjectsList.update(list => list.map(item => item.id === projectId ? {
+          ...item,
+          type: mType,
+          managementType: mType,
+          boardName: bName,
+          boardTabTitle: tabTitle,
+          workflowName: tabTitle,
+          workflowTemplateId: templateId
+        } : item));
 
         if (this.currentProject().id === projectId) {
           this.projectStatuses.set(statuses);

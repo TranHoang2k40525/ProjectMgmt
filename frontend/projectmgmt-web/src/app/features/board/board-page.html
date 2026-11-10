@@ -31,7 +31,7 @@
         </span>
       } @else if (isKanbanBoard()) {
         <span class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400 text-xs font-medium border border-blue-200 dark:border-blue-800">
-          Luồng công việc liên tục (Kanban)
+          Luồng công việc liên tục ({{ currentWorkflowName() }})
         </span>
       } @else {
         <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 text-xs font-medium border border-slate-200 dark:border-slate-700">

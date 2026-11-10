@@ -190,16 +190,18 @@ export class AppShellComponent {
     }
     // 3. Kiểm tra lưu vết trong localStorage hoặc sessionStorage theo dự án
     if (typeof localStorage !== 'undefined' && p?.id) {
-      const saved = localStorage.getItem(`projectmgmt.workflow-name.${p.id}`);
+      const saved = localStorage.getItem(`projectmgmt.workflow-name.${p.id}`)
+        || localStorage.getItem(`projectmgmt.workflow-name.${p.id.toLowerCase()}`);
       if (saved) return saved.replace(/^Bảng\s+/i, '').trim();
     }
     if (typeof sessionStorage !== 'undefined' && p?.id) {
-      const saved = sessionStorage.getItem(`projectmgmt.workflow-name.${p.id}`);
+      const saved = sessionStorage.getItem(`projectmgmt.workflow-name.${p.id}`)
+        || sessionStorage.getItem(`projectmgmt.workflow-name.${p.id.toLowerCase()}`);
       if (saved) return saved.replace(/^Bảng\s+/i, '').trim();
     }
     // 4. Fallback theo loại quy trình quản lý
     if ((p as any)?.managementType === 'Kanban' || p?.type === 'Kanban') return 'Kanban';
-    if ((p as any)?.managementType === 'Scrum' || p?.type === 'Scrum') return 'Scrum';
+    if ((p as any)?.managementType) return (p as any).managementType;
     return 'Scrum';
   });
 
