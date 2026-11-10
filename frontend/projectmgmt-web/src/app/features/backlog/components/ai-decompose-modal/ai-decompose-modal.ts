@@ -1,9 +1,11 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   EventEmitter,
   Input,
   Output,
+  ViewChild,
   inject,
   signal,
   computed,
@@ -22,7 +24,9 @@ import {
   ProposedSubTaskDto,
 } from '../../../../core/services/ai-agent.service';
 import {
+  ProjectManagementService,
   ProjectMember,
+  SpecTreeNode,
   Sprint,
 } from '../../../../core/services/project-management.service';
 import { ToastService } from '../../../../core/services/toast.service';
@@ -43,6 +47,14 @@ export interface ChatTurn {
   timestamp: string;
 }
 
+export interface SpecDocPreview {
+  docId?: string | null;
+  title: string;
+  section?: string | null;
+  content?: string;
+  isLoading: boolean;
+}
+
 @Component({
   selector: 'app-ai-decompose-modal',
   standalone: true,
@@ -55,6 +67,9 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
   private readonly aiService = inject(AiAgentService);
   private readonly toastService = inject(ToastService);
   private readonly router = inject(Router);
+  private readonly projectManagementService = inject(ProjectManagementService);
+
+  @ViewChild('promptTextarea') promptTextarea?: ElementRef<HTMLTextAreaElement>;
 
   @Input({ required: true }) projectId = '';
   @Input() projectName = 'Dự án';
@@ -73,6 +88,13 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
   readonly attachedFile = signal<File | null>(null);
   readonly isDragOver = signal<boolean>(false);
   readonly chatHistory = signal<ChatTurn[]>([]);
+
+  // Inline Spec Document Preview state
+  readonly activeSpecDocPreview = signal<SpecDocPreview | null>(null);
+
+  // Pasted Document / Meeting Notes Review modal state
+  readonly isReviewingPastedDoc = signal<boolean>(false);
+  readonly editablePastedText = signal<string>('');
 
   // Streaming & Agent progress state
   readonly isStreaming = signal<boolean>(false);
@@ -199,11 +221,170 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
   }
 
   openSpecDoc(citationText?: string, documentId?: string | null): void {
+    const title = citationText || 'Tài liệu Đặc tả Spec Hub';
+    const section = this.extractSection(citationText);
+
+    // Mở Drawer xem tài liệu ngay bên trong modal - KHÔNG làm mất đoạn chat và phiên làm việc
+    this.activeSpecDocPreview.set({
+      docId: documentId,
+      title,
+      section,
+      content: '',
+      isLoading: true,
+    });
+
+    if (documentId) {
+      this.projectManagementService.getFileContent(documentId).subscribe({
+        next: (res) => {
+          this.activeSpecDocPreview.update((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  content: res.content || 'Tài liệu không có nội dung văn bản hoặc ở định dạng nhị phân.',
+                  isLoading: false,
+                }
+              : null
+          );
+        },
+        error: () => {
+          this.activeSpecDocPreview.update((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  content: 'Không thể nạp nội dung tài liệu này từ máy chủ.',
+                  isLoading: false,
+                }
+              : null
+          );
+        },
+      });
+    } else if (this.projectId) {
+      this.projectManagementService.getSpecTree(this.projectId).subscribe({
+        next: (nodes) => {
+          const found = this.searchNodeInTree(nodes, title);
+          if (found && !found.isDirectory) {
+            this.projectManagementService.getFileContent(found.id).subscribe({
+              next: (res) => {
+                this.activeSpecDocPreview.update((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        docId: found.id,
+                        title: found.name,
+                        content: res.content || 'Tài liệu không có nội dung văn bản.',
+                        isLoading: false,
+                      }
+                    : null
+                );
+              },
+              error: () => {
+                this.activeSpecDocPreview.update((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        isLoading: false,
+                        content: `Tài liệu: ${title}\n(Trích dẫn từ Spec Hub trong quá trình lập kế hoạch Sprint)`,
+                      }
+                    : null
+                );
+              },
+            });
+          } else {
+            this.activeSpecDocPreview.update((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    isLoading: false,
+                    content: `Tài liệu: ${title}\nTrích dẫn trực tiếp từ phiên làm việc và ngữ cảnh dự án.`,
+                  }
+                : null
+            );
+          }
+        },
+        error: () => {
+          this.activeSpecDocPreview.update((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  isLoading: false,
+                  content: `Tài liệu: ${title}`,
+                }
+              : null
+          );
+        },
+      });
+    }
+  }
+
+  closeSpecDocPreview(): void {
+    this.activeSpecDocPreview.set(null);
+  }
+
+  openSpecDocInNewTab(citationText?: string, documentId?: string | null): void {
     const urlTree = documentId
       ? this.router.createUrlTree(['/projects', this.projectId, 'documents'], { queryParams: { docId: documentId } })
       : this.router.createUrlTree(['/projects', this.projectId, 'documents']);
     const url = this.router.serializeUrl(urlTree);
     window.open(url, '_blank');
+  }
+
+  private extractSection(citation?: string): string | null {
+    if (!citation) return null;
+    const parts = citation.split('-');
+    return parts.length > 1 ? parts.slice(1).join('-').trim() : null;
+  }
+
+  private searchNodeInTree(nodes: SpecTreeNode[], searchStr: string): SpecTreeNode | null {
+    const lower = searchStr.toLowerCase();
+    for (const node of nodes) {
+      if (lower.includes(node.name.toLowerCase()) || node.name.toLowerCase().includes(lower)) {
+        return node;
+      }
+      if (node.children?.length) {
+        const found = this.searchNodeInTree(node.children, searchStr);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  openReviewPastedDoc(): void {
+    this.editablePastedText.set(this.pastedDocumentText() || this.promptInput());
+    this.isReviewingPastedDoc.set(true);
+  }
+
+  saveReviewedPastedDoc(): void {
+    const text = this.editablePastedText().trim();
+    this.pastedDocumentText.set(text);
+    this.isReviewingPastedDoc.set(false);
+    this.saveSession();
+    this.toastService.success('Tài liệu', 'Đã lưu nội dung văn bản cuộc họp.');
+  }
+
+  closeReviewPastedDoc(): void {
+    this.isReviewingPastedDoc.set(false);
+  }
+
+  onPromptChange(val: string): void {
+    this.promptInput.set(val);
+    this.adjustTextareaHeight();
+  }
+
+  onPromptKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      this.submitDecompose();
+    }
+  }
+
+  adjustTextareaHeight(): void {
+    setTimeout(() => {
+      const el = this.promptTextarea?.nativeElement;
+      if (!el) return;
+      el.style.height = 'auto';
+      const nextHeight = Math.min(Math.max(el.scrollHeight, 44), 180);
+      el.style.height = `${nextHeight}px`;
+    });
   }
 
   private getStorageKey(): string {
@@ -343,9 +524,10 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
     }
 
     const pastedText = event.clipboardData?.getData('text/plain');
-    if (pastedText && pastedText.length > 240 && !this.pastedDocumentText()) {
+    if (pastedText && pastedText.length > 80 && !this.pastedDocumentText()) {
       event.preventDefault();
       this.pastedDocumentText.set(pastedText.trim());
+      this.toastService.info('Dán nội dung', 'Đã tiếp nhận văn bản từ clipboard. Bạn có thể bấm "Xem & Sửa" để kiểm tra.');
     }
   }
 

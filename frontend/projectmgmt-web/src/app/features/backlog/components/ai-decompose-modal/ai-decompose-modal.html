@@ -104,90 +104,51 @@
           </div>
         }
 
-        <!-- Modern Collapsible Thinking & Execution Process (Image 7 Style) -->
+        <!-- Clean Enterprise Agent Activity Banner (Anti-AI Slop, Light & Calm) -->
         @if (isThinkingVisible()) {
-          <div class="agent-thinking-accordion" [class.is-expanded]="isThinkingExpanded()" data-testid="ai-progress-panel">
-            <button
-              type="button"
-              class="thinking-accordion-header"
-              (click)="toggleThinkingAccordion()"
-              [attr.aria-expanded]="isThinkingExpanded()"
-              data-testid="btn-toggle-thinking"
-            >
-              <div class="header-left">
+          <div class="agent-activity-card" data-testid="ai-progress-panel">
+            <div class="activity-status-row">
+              <div class="activity-left">
                 @if (isStreaming()) {
-                  <div class="constellation-symbol" aria-hidden="true">
-                    <span class="c-dot c-dot-top"></span>
-                    <div class="c-dot-bottom-row">
-                      <span class="c-dot c-dot-bl"></span>
-                      <span class="c-dot c-dot-br"></span>
-                    </div>
-                  </div>
-                  <span class="thinking-header-text">
-                    {{ currentStepDetail() || 'Mô hình AI đang phân tích dữ liệu & suy luận cấu trúc Sprint...' }}
+                  <span class="material-symbols-outlined spinning-icon" aria-hidden="true">sync</span>
+                  <span class="activity-text">
+                    {{ currentStepDetail() || 'Mô hình AI đang đối chiếu tài liệu đặc tả và lập kế hoạch Sprint...' }}
                   </span>
                 } @else {
-                  <span class="material-symbols-outlined thinking-done-icon" aria-hidden="true">check_circle</span>
-                  <span class="thinking-header-text">
-                    Đã hoàn thành suy nghĩ &amp; tra cứu {{ toolCallsLog().length }} công cụ MCP
-                    @if (totalToolDurationMs() > 0) {
-                      ({{ totalToolDurationMs() }}ms)
-                    }
+                  <span class="material-symbols-outlined done-icon" aria-hidden="true">check_circle</span>
+                  <span class="activity-text">
+                    Đã hoàn thành phân tích từ tài liệu đặc tả và năng lực nhóm
                   </span>
                 }
               </div>
-              <div class="header-right">
-                <span class="toggle-hint-text">{{ isThinkingExpanded() ? 'Thu gọn' : 'Xem chi tiết quá trình' }}</span>
-                <span class="material-symbols-outlined accordion-arrow-icon" aria-hidden="true">
-                  {{ isThinkingExpanded() ? 'expand_less' : 'expand_more' }}
-                </span>
-              </div>
-            </button>
-
-            @if (isThinkingExpanded()) {
-              <div class="thinking-accordion-body">
-                <!-- Tool Execution Timeline -->
+              <div class="activity-right">
                 @if (toolCallsLog().length > 0) {
-                  <div class="thinking-tools-timeline">
-                    @for (tool of toolCallsLog(); track $index; let tIdx = $index) {
-                      <div class="timeline-tool-item">
-                        <div class="tool-bullet">
-                          <span class="material-symbols-outlined" aria-hidden="true">check</span>
-                        </div>
-                        <div class="tool-content">
-                          <div class="tool-summary-row" (click)="toggleToolLog(tIdx)">
-                            <span class="tool-action-name">Running {{ tool.summaryVi || tool.toolName }} &gt;</span>
-                            @if (tool.durationMs !== undefined && tool.durationMs !== null) {
-                              <span class="tool-duration-pill">{{ tool.durationMs }}ms</span>
-                            }
-                            <span class="material-symbols-outlined tool-chevron" aria-hidden="true">
-                              {{ expandedToolIndices()[tIdx] ? 'expand_less' : 'chevron_right' }}
-                            </span>
-                          </div>
-                          @if (expandedToolIndices()[tIdx]) {
-                            <div class="tool-args-box">
-                              <span class="args-label">Công cụ MCP: <code>{{ tool.toolName }}</code></span>
-                              @if (tool.toolArguments) {
-                                <pre>{{ tool.toolArguments | json }}</pre>
-                              }
-                            </div>
-                          }
-                        </div>
-                      </div>
-                    }
-                  </div>
+                  <button
+                    type="button"
+                    class="activity-toggle-btn"
+                    (click)="toggleThinkingAccordion()"
+                    [attr.aria-expanded]="isThinkingExpanded()"
+                    data-testid="btn-toggle-thinking"
+                  >
+                    <span>{{ isThinkingExpanded() ? 'Thu gọn' : 'Căn cứ phân tích (' + toolCallsLog().length + ')' }}</span>
+                    <span class="material-symbols-outlined" aria-hidden="true">
+                      {{ isThinkingExpanded() ? 'expand_less' : 'expand_more' }}
+                    </span>
+                  </button>
                 }
+              </div>
+            </div>
 
-                <!-- Realtime SSE Stream Output Log -->
-                @if (streamedThoughts()) {
-                  <div class="streamed-thought-terminal">
-                    <div class="terminal-bar">
-                      <span class="material-symbols-outlined" aria-hidden="true">terminal</span>
-                      <span>Luồng suy luận &amp; sinh dữ liệu thời gian thực:</span>
-                    </div>
-                    <pre class="terminal-content">{{ streamedThoughts() }}</pre>
-                  </div>
-                }
+            @if (isThinkingExpanded() && toolCallsLog().length > 0) {
+              <div class="activity-details-panel">
+                <ul class="activity-items-list">
+                  @for (tool of toolCallsLog(); track $index) {
+                    <li class="activity-item">
+                      <span class="material-symbols-outlined bullet-icon" aria-hidden="true">done</span>
+                      <span class="activity-item-title">{{ tool.summaryVi || tool.toolName }}</span>
+                    </li>
+                  }
+                </ul>
               </div>
             }
           </div>
@@ -441,21 +402,16 @@
                     }
 
                     <div class="task-metadata-pills">
-                      <span class="ready-badge">
-                        <span class="material-symbols-outlined" aria-hidden="true">check_circle</span>
-                        <span>Ready</span>
-                      </span>
-
                       @if (task.subtasks && task.subtasks.length > 0) {
-                        <span class="subtask-count-pill" (click)="toggleSubtaskExpand(task.id, $event)">
-                          {{ task.subtasks.length }} việc con
-                        </span>
-                      }
-
-                      @if (task.tags && task.tags.length > 0) {
-                        @for (tTag of task.tags; track tTag) {
-                          <span class="task-mini-tag">{{ tTag }}</span>
-                        }
+                        <button
+                          type="button"
+                          class="subtask-count-pill"
+                          (click)="toggleSubtaskExpand(task.id, $event)"
+                          title="Nhấn để mở các việc con phụ trợ"
+                        >
+                          <span class="material-symbols-outlined" aria-hidden="true">subdirectory_arrow_right</span>
+                          <span>{{ task.subtasks.length }} việc con</span>
+                        </button>
                       }
 
                       @if (task.documentCitations && task.documentCitations.length > 0) {
@@ -464,7 +420,7 @@
                             type="button"
                             class="task-cite-pill"
                             (click)="openSpecDoc(cite, task.documentId); $event.stopPropagation()"
-                            title="Mở trích dẫn trong Spec Hub"
+                            title="Xem trích dẫn tài liệu trong Spec Hub"
                           >
                             <span class="material-symbols-outlined" aria-hidden="true">description</span>
                             <span>{{ cite }}</span>
@@ -615,8 +571,18 @@
           @if (pastedDocumentText(); as pText) {
             <div class="attachment-chip" data-testid="ai-pasted-doc-chip">
               <span class="material-symbols-outlined" aria-hidden="true">content_paste</span>
-              <strong>Tài liệu đã dán từ Clipboard</strong>
+              <strong>Ghi chú / Tài liệu đã dán</strong>
               <span>({{ pText.length }} ký tự)</span>
+              <button
+                type="button"
+                class="btn-edit-pasted-chip"
+                data-testid="btn-open-review-pasted"
+                (click)="openReviewPastedDoc()"
+                title="Mở ra xem và chỉnh sửa nội dung đã dán"
+              >
+                <span class="material-symbols-outlined" aria-hidden="true">edit_note</span>
+                <span>Xem &amp; Sửa</span>
+              </button>
               <button type="button" aria-label="Xóa văn bản đã dán" (click)="clearPastedDocument()">
                 <span class="material-symbols-outlined" aria-hidden="true">close</span>
               </button>
@@ -637,19 +603,20 @@
           <span class="material-symbols-outlined" aria-hidden="true">add</span>
         </label>
 
-        <input
-          type="text"
+        <textarea
+          #promptTextarea
           class="prompt-text-input"
           data-testid="ai-prompt-input"
           [ngModel]="promptInput()"
-          (ngModelChange)="promptInput.set($event)"
-          (keyup.enter)="submitDecompose()"
+          (ngModelChange)="onPromptChange($event)"
+          (keydown)="onPromptKeydown($event)"
+          rows="1"
           [placeholder]="
             selectedTasksCount() > 0
               ? 'Nhập mô tả để AI làm lại ' + selectedTasksCount() + ' công việc đã chọn (các việc khác giữ nguyên)...'
               : 'Nhập yêu cầu phân tách Sprint, dán nội dung cuộc họp (Ctrl+V) hoặc đính kèm tài liệu...'
           "
-        />
+        ></textarea>
 
         <div class="bar-right-controls">
           <div class="agent-mode-selector" title="Chọn mô hình AI">
@@ -957,6 +924,112 @@
           </div>
         </div>
       </aside>
+    }
+
+    <!-- Inline Spec Document Preview Drawer (Direct Document Jump without losing chat) -->
+    @if (activeSpecDocPreview(); as docPreview) {
+      <div class="doc-preview-backdrop" (click)="closeSpecDocPreview()"></div>
+      <aside class="doc-preview-drawer" data-testid="ai-doc-preview-drawer" (click)="$event.stopPropagation()">
+        <header class="doc-preview-header">
+          <div class="preview-header-left">
+            <button
+              type="button"
+              class="btn-back-chat"
+              data-testid="btn-back-to-chat"
+              (click)="closeSpecDocPreview()"
+              title="Quay lại đoạn chat với AI sinh task"
+            >
+              <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+              <span>Quay lại đoạn chat</span>
+            </button>
+            <div class="preview-title-box">
+              <span class="material-symbols-outlined" aria-hidden="true">description</span>
+              <h3 class="preview-doc-title">{{ docPreview.title }}</h3>
+            </div>
+          </div>
+          <div class="preview-header-right">
+            <button
+              type="button"
+              class="btn-open-tab"
+              (click)="openSpecDocInNewTab(docPreview.title, docPreview.docId)"
+              title="Mở toàn bộ tài liệu trong trang Spec Hub ở tab mới"
+            >
+              <span class="material-symbols-outlined" aria-hidden="true">open_in_new</span>
+              <span>Mở trang Spec Hub</span>
+            </button>
+            <button
+              type="button"
+              class="icon-close-btn"
+              aria-label="Đóng xem tài liệu"
+              (click)="closeSpecDocPreview()"
+            >
+              <span class="material-symbols-outlined" aria-hidden="true">close</span>
+            </button>
+          </div>
+        </header>
+
+        <div class="doc-preview-body">
+          @if (docPreview.isLoading) {
+            <div class="preview-loading-state">
+              <span class="material-symbols-outlined spinning-icon" aria-hidden="true">sync</span>
+              <p>Đang tải tài liệu đặc tả từ Spec Hub...</p>
+            </div>
+          } @else {
+            @if (docPreview.section) {
+              <div class="preview-section-highlight-banner">
+                <span class="material-symbols-outlined" aria-hidden="true">my_location</span>
+                <span>Vị trí trích dẫn: <strong>{{ docPreview.section }}</strong></span>
+              </div>
+            }
+            <div class="preview-content-box">
+              <pre class="preview-content-text">{{ docPreview.content }}</pre>
+            </div>
+          }
+        </div>
+      </aside>
+    }
+
+    <!-- Pasted Document / Meeting Notes Review & Edit Modal -->
+    @if (isReviewingPastedDoc()) {
+      <div class="review-doc-backdrop" (click)="closeReviewPastedDoc()">
+        <div class="review-doc-modal" (click)="$event.stopPropagation()">
+          <header class="review-doc-header">
+            <div class="header-left">
+              <span class="material-symbols-outlined" aria-hidden="true">edit_note</span>
+              <h3>Xem &amp; Chỉnh sửa Ghi chú Cuộc họp / Tài liệu đã dán</h3>
+            </div>
+            <button type="button" class="icon-close-btn" aria-label="Đóng" (click)="closeReviewPastedDoc()">
+              <span class="material-symbols-outlined" aria-hidden="true">close</span>
+            </button>
+          </header>
+
+          <div class="review-doc-body">
+            <p class="review-doc-guide">
+              Bạn có thể rà soát, cắt bớt thông tin thừa, chỉnh sửa tên thành viên hoặc bổ sung yêu cầu cụ thể trước khi gửi cho AI phân tích.
+            </p>
+            <textarea
+              class="review-doc-textarea"
+              data-testid="ai-pasted-review-textarea"
+              [ngModel]="editablePastedText()"
+              (ngModelChange)="editablePastedText.set($event)"
+              rows="14"
+              placeholder="Nhập hoặc dán nội dung cuộc họp..."
+            ></textarea>
+            <div class="review-doc-stats">
+              <span>{{ editablePastedText().length }} ký tự</span>
+              <span>{{ editablePastedText().split('\n').length }} dòng</span>
+            </div>
+          </div>
+
+          <footer class="review-doc-footer">
+            <button type="button" class="btn-cancel" (click)="closeReviewPastedDoc()">Hủy bỏ</button>
+            <button type="button" class="btn-save" data-testid="btn-save-reviewed-doc" (click)="saveReviewedPastedDoc()">
+              <span class="material-symbols-outlined" aria-hidden="true">check</span>
+              <span>Lưu nội dung</span>
+            </button>
+          </footer>
+        </div>
+      </div>
     }
   </div>
 </div>

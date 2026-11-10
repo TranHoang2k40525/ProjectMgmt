@@ -121,8 +121,9 @@ export class SpecHubPageComponent implements OnInit {
   readonly dragOverFolderId = signal<string | null>(null);
 
   ngOnInit(): void {
-    this.route.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(params => {
-      const docId = params.get('docId');
+    // Lắng nghe cả paramMap và queryParamMap để mở đúng tài liệu khi click từ AI Agent hoặc liên kết
+    this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(qParams => {
+      const docId = qParams.get('docId') || this.route.snapshot.paramMap.get('docId');
       this.loadTree(docId);
     });
   }
@@ -164,11 +165,14 @@ export class SpecHubPageComponent implements OnInit {
     });
   }
 
-  private findNodeInTree(nodes: SpecTreeNode[], id: string): SpecTreeNode | null {
+  private findNodeInTree(nodes: SpecTreeNode[], identifier: string): SpecTreeNode | null {
+    const cleanId = identifier.trim().toLowerCase();
     for (const node of nodes) {
-      if (node.id === id) return node;
+      if (node.id === identifier || node.name.toLowerCase() === cleanId || cleanId.includes(node.name.toLowerCase())) {
+        return node;
+      }
       if (node.children?.length) {
-        const found = this.findNodeInTree(node.children, id);
+        const found = this.findNodeInTree(node.children, identifier);
         if (found) return found;
       }
     }

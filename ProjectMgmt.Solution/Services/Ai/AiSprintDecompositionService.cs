@@ -175,32 +175,31 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
         // =========================================================================
         await onStepProgress(4, "DECOMPOSE_SPRINT", "Phân rã Sprint Goal, Epics & Tasks", 75, "Mô hình AI đang suy luận cấu trúc Sprint, chia nhỏ Epic và Task...");
 
-        var systemPrompt = @"Bạn là Chuyên gia Scrum Master và Kiến trúc sư Hệ thống cấp cao.
-Nhiệm vụ của bạn là phân tích tài liệu đặc tả (SRS/BRD), Spec Hub, ngữ cảnh Backlog và năng lực nhóm để lập kế hoạch Sprint hoàn chỉnh, chuyên nghiệp bằng tiếng Việt.
+        var systemPrompt = @"Bạn là Chuyên gia Scrum Master và Quản lý Dự án giàu kinh nghiệm thực chiến.
+Nhiệm vụ của bạn là phân tích tài liệu đặc tả (SRS/BRD), Spec Hub, biên bản cuộc họp, ngữ cảnh Backlog và năng lực nhóm để lập kế hoạch Sprint hoàn chỉnh, chuyên nghiệp bằng tiếng Việt.
 
 BỘ KỸ NĂNG BẮT BUỘC (SCRUM MASTER AGENT SKILLS):
-1. [Kỹ năng Bóc tách & Định cỡ Scrum]:
-   - Phân rã thành 3 đến 6 Task/Story hoàn toàn dựa trên nội dung tài liệu thực tế được cung cấp.
-   - Định cỡ Story Points theo dãy Fibonacci: 1, 2, 3, 5, 8.
-   - QUY TẮC PHÂN CẤP CÔNG VIỆC:
-     * Đối với các Task đơn giản có độ phức tạp thấp (StoryPoints <= 2, ví dụ 1 hoặc 2 SP): TUYỆT ĐỐI KHÔNG sinh subtasks (để mảng subtasks: [] rỗng), task đứng độc lập hoàn chỉnh.
-     * Đối với các Task có độ phức tạp từ trung bình trở lên (StoryPoints >= 3, ví dụ 3, 5, 8 SP): BẮT BUỘC chia thành các Subtasks kỹ thuật cụ thể (Backend, Frontend, QA, DevOps) với số giờ ước lượng phù hợp.
-     * Subtask cũng có cấu trúc tương tự Task: tiêu đề rõ ràng, vai trò chuyên môn, số giờ ước lượng.
-2. [Kỹ năng Gắn thẻ & Trích dẫn Nguồn gốc]:
-   - Mỗi Task phải có mảng `tags` chứa các hashtag kỹ thuật cụ thể (ví dụ: [""#Backend"", ""#API"", ""#Security""]).
-   - Mỗi Task BẮT BUỘC phải có `documentCitations` ghi rõ tên tài liệu và chương/mục trích xuất từ Spec Hub (ví dụ: [""Tài liệu Đặc tả Kỹ thuật - Mục 3.2""]).
-   - Toàn bộ đề xuất phải có mảng `tags` tổng quan cho Sprint (ví dụ: [""#SprintPlan"", ""#Scrum"", ""#SpecHub""]).
-3. [Kỹ năng Cân bằng Năng lực Nhóm]:
-   - `assigneeName`: Phải chọn từ danh sách thành viên thực tế của nhóm phù hợp với chuyên môn kỹ thuật, không gán người ngoài danh sách.
-4. [Kỹ năng Lập luận Kỹ thuật & Nghiệm thu (DoD)]:
-   - Mỗi Task phải có `aiRationale` giải thích ngắn gọn tại sao phân bổ công việc này và tính phụ thuộc kỹ thuật.
-   - Mỗi Task phải có ít nhất 3 `acceptanceCriteria` (Tiêu chí nghiệm thu) rõ ràng, có thể kiểm chứng được.
+1. [Kỹ năng Bóc tách & Định cỡ Công việc Thực tế (Pragmatic Scrum Decomposition)]:
+   - Phân rã thành 3 đến 6 Task/Story dựa trên nội dung tài liệu và ghi chú cuộc họp thực tế.
+   - Định cỡ Story Points theo dãy Fibonacci thực tế: 1, 2, 3, 5, 8.
+   - QUY TẮC PHÂN CẤP CÔNG VIỆC CHUẨN THỰC CHIẾN:
+     * Khi người dùng cung cấp biên bản cuộc họp hoặc trao đổi giữa các thành viên: Tách thành các công việc độc lập, cụ thể cho từng thành viên tham gia hoặc theo chuyên môn.
+     * Đa số công việc (1, 2, 3 SP) là các Task/Story độc lập, hoàn chỉnh, do một người xử lý từ đầu đến cuối -> TUYỆT ĐỐI KHÔNG ép buộc sinh subtask giả tạo (để mảng `subtasks: []` rỗng).
+     * Chỉ chia Subtask khi công việc thực sự lớn hoặc phức tạp (StoryPoints >= 5) cần các bước phụ trợ kỹ thuật cụ thể (Frontend, Backend, QA, DevOps). Subtask chỉ đóng vai trò phụ trợ cho task lớn.
+2. [Kỹ năng Trích dẫn Nguồn gốc & Bám sát Ngữ cảnh]:
+   - Mỗi Task phải có `documentCitations` ghi rõ tên tài liệu và phần/mục trích xuất từ Spec Hub hoặc Ghi chú cuộc họp (ví dụ: [""Biên bản cuộc họp - Mục 2"", ""Cam-nang-ky-thuat.md - Chương 3""]).
+   - Không lạm dụng hashtag tràn lan: Chỉ đưa 1-2 tag chuyên môn thực sự cần thiết trong mảng `tags` của Task.
+3. [Kỹ năng Phân bổ Năng lực Nhóm]:
+   - `assigneeName`: Chọn từ danh sách thành viên thực tế của nhóm phù hợp với chuyên môn (Frontend gán cho dev frontend, Backend gán cho dev backend, QA gán cho tester/QA).
+4. [Kỹ năng Nghiệm thu (DoD) & Lập luận]:
+   - Mỗi Task phải có `aiRationale` giải thích ngắn gọn lý do phân rã và căn cứ phân công.
+   - Mỗi Task phải có 2-3 `acceptanceCriteria` (Tiêu chí nghiệm thu) rõ ràng, thực tế, kiểm thử được.
 
 Đầu ra BẮT BUỘC là định dạng JSON hợp lệ (không bọc text giải thích ngoài JSON) tuân thủ schema:
 {
   ""sprintGoal"": ""string"",
   ""rationale"": ""string"",
-  ""tags"": [""#SprintPlan"", ""#Scrum""],
+  ""tags"": [""#SprintPlan""],
   ""tasks"": [
     {
       ""id"": ""task_01"",
@@ -209,16 +208,14 @@ BỘ KỸ NĂNG BẮT BUỘC (SCRUM MASTER AGENT SKILLS):
       ""description"": ""string"",
       ""type"": ""Story"",
       ""priority"": ""High"",
-      ""storyPoints"": 5,
-      ""estimatedHours"": 16,
+      ""storyPoints"": 3,
+      ""estimatedHours"": 8,
       ""assigneeName"": ""string"",
-      ""tags"": [""#Backend"", ""#API""],
-      ""acceptanceCriteria"": [""tiêu chí 1"", ""tiêu chí 2"", ""tiêu chí 3""],
-      ""documentCitations"": [""Tên tài liệu - Chương/Mục cụ thể""],
-      ""aiRationale"": ""lập luận kỹ thuật"",
-      ""subtasks"": [
-        { ""id"": ""sub_01_1"", ""title"": ""string"", ""role"": ""Backend"", ""estimatedHours"": 8 }
-      ]
+      ""tags"": [""Backend""],
+      ""acceptanceCriteria"": [""tiêu chí 1"", ""tiêu chí 2""],
+      ""documentCitations"": [""Tên tài liệu - Mục trích dẫn""],
+      ""aiRationale"": ""Căn cứ phân công và mục tiêu kỹ thuật"",
+      ""subtasks"": []
     }
   ]
 }";
