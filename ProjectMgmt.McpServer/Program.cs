@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Xml.Linq;
 using DeliveryIntelligence.Infrastructure;
+using DeliveryIntelligence.Infrastructure.Services.Rag;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Planning.Infrastructure;
@@ -16,6 +17,8 @@ public static class Program
     private static IConfiguration? _configuration;
     private static string? _connectionString;
     private static string? _specHubRoot;
+    private static RagOptions _rag = new();
+    private static readonly HttpClient RagHttp = new() { Timeout = Timeout.InfiniteTimeSpan };
 
     public static async Task Main(string[] args)
     {
@@ -32,9 +35,24 @@ public static class Program
             .AddEnvironmentVariables();
 
         _configuration = builder.Build();
-        _connectionString = _configuration.GetConnectionString("ProjectMgmt")
-            ?? Environment.GetEnvironmentVariable("ConnectionStrings__ProjectMgmt")
-            ?? "Server=127.0.0.1;Port=3306;Database=projectmgmt;User=root;Password=;SslMode=None;AllowPublicKeyRetrieval=True;";
+        // Chuỗi kết nối chỉ lấy từ cấu hình (appsettings*.json hoặc biến môi trường ConnectionStrings__ProjectMgmt).
+        _connectionString = _configuration.GetConnectionString("ProjectMgmt");
+        if (string.IsNullOrWhiteSpace(_connectionString))
+        {
+            await Console.Error.WriteLineAsync("Thiếu ConnectionStrings:ProjectMgmt trong appsettings hoặc biến môi trường ConnectionStrings__ProjectMgmt.");
+            Environment.ExitCode = 1;
+            return;
+        }
+
+        _rag = new RagOptions();
+        _configuration.GetSection(RagOptions.SectionName).Bind(_rag);
+        // Giống backend: chưa đặt Rag:Embedding:ApiKey mà dùng OpenAI thì lấy Ai:OpenAi:ApiKey.
+        var openAiKey = _configuration["Ai:OpenAi:ApiKey"];
+        if (string.IsNullOrWhiteSpace(_rag.Embedding.ApiKey) && string.Equals(_rag.Embedding.Provider, "OpenAi", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(openAiKey) && !openAiKey.StartsWith("YOUR_", StringComparison.OrdinalIgnoreCase))
+        {
+            _rag.Embedding.ApiKey = openAiKey;
+        }
 
         // JSON-RPC 2.0 Stdio loop
         using var reader = new StreamReader(Console.OpenStandardInput(), Encoding.UTF8);
@@ -208,14 +226,16 @@ public static class Program
             new JsonObject
             {
                 ["name"] = "spec_hub_search",
-                ["description"] = "Tìm kiếm từ khóa, thuật ngữ kỹ thuật hoặc quy tắc nghiệp vụ xuyên suốt tất cả các tài liệu đặc tả trong Spec Hub của dự án.",
+                ["description"] = "Tìm theo ngữ nghĩa (RAG) các đoạn liên quan nhất trong tài liệu Spec Hub của dự án (văn bản, Word, Excel, PDF, ảnh), " +
+                    "kèm trích dẫn tài liệu, đề mục, số trang, điểm tương đồng. Chưa bật RAG thì tìm theo từ khóa.",
                 ["inputSchema"] = new JsonObject
                 {
                     ["type"] = "object",
                     ["properties"] = new JsonObject
                     {
                         ["projectId"] = new JsonObject { ["type"] = "string", ["description"] = "GUID của dự án" },
-                        ["keyword"] = new JsonObject { ["type"] = "string", ["description"] = "Từ khóa cần tra cứu" }
+                        ["keyword"] = new JsonObject { ["type"] = "string", ["description"] = "Câu hỏi hoặc từ khóa cần tra cứu (viết tự nhiên được)" },
+                        ["topK"] = new JsonObject { ["type"] = "integer", ["description"] = "Số đoạn trả về (1-20, mặc định 5)" }
                     },
                     ["required"] = new JsonArray { "projectId", "keyword" }
                 }
@@ -394,6 +414,38 @@ public static class Program
                 var keyword = args["keyword"]?.GetValue<string>() ?? "";
                 if (!Guid.TryParse(projectIdStr, out var projectId)) return "Lỗi: projectId không hợp lệ.";
                 if (string.IsNullOrWhiteSpace(keyword)) return "Vui lòng nhập từ khóa tìm kiếm.";
+
+                if (_rag.IsSearchReady)
+                {
+                    var topK = Math.Clamp(int.TryParse(args["topK"]?.ToString(), out var k) ? k : _rag.TopK, 1, 20);
+                    try
+                    {
+                        await using var chunks = CreateDeliveryDbContext();
+                        var search = new RagSearchService(new OpenAiCompatibleEmbeddingClient(RagHttp, _rag.Embedding), new DocumentChunkStore(chunks), _rag);
+                        var hits = await search.SearchAsync(projectId, keyword, topK);
+                        if (hits.Count > 0)
+                        {
+                            return JsonSerializer.Serialize(new
+                            {
+                                mode = "semantic",
+                                query = keyword.Trim(),
+                                results = hits.Select(hit => new
+                                {
+                                    documentId = hit.DocumentId,
+                                    documentName = hit.DocumentName,
+                                    heading = hit.Heading,
+                                    page = hit.PageNumber,
+                                    score = hit.Score,
+                                    content = hit.Content
+                                })
+                            }, new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+                        }
+                    }
+                    catch (RagProviderException ex)
+                    {
+                        await Console.Error.WriteLineAsync($"[RAG] {ex.Message} — chuyển sang tìm theo từ khóa.");
+                    }
+                }
 
                 await using var planning = CreatePlanningDbContext();
                 var docs = await planning.ProjectDocuments.AsNoTracking()
