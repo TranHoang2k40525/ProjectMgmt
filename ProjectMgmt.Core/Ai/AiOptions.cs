@@ -43,7 +43,7 @@ public sealed class AiOptions
 public sealed class GeminiProviderOptions
 {
     public string ApiKey { get; set; } = string.Empty;
-    public string Endpoint { get; set; } = "https://generativelanguage.googleapis.com";
+    public string Endpoint { get; set; } = string.Empty; // lấy từ Ai:Gemini:Endpoint
     public string ModelName { get; set; } = "gemini-2.5-flash";
     public int? MaxTokens { get; set; }
     public double? Temperature { get; set; }
@@ -52,7 +52,7 @@ public sealed class GeminiProviderOptions
 public sealed class ClaudeProviderOptions
 {
     public string ApiKey { get; set; } = string.Empty;
-    public string Endpoint { get; set; } = "https://api.anthropic.com";
+    public string Endpoint { get; set; } = string.Empty; // lấy từ Ai:Claude:Endpoint
     public string ModelName { get; set; } = "claude-3-7-sonnet-20250219";
     public int? MaxTokens { get; set; }
     public double? Temperature { get; set; }
@@ -61,7 +61,7 @@ public sealed class ClaudeProviderOptions
 public sealed class OpenAiProviderOptions
 {
     public string ApiKey { get; set; } = string.Empty;
-    public string Endpoint { get; set; } = "https://api.openai.com";
+    public string Endpoint { get; set; } = string.Empty; // lấy từ Ai:OpenAi:Endpoint
     public string ModelName { get; set; } = "gpt-4o";
     public string? OrganizationId { get; set; }
     public int? MaxTokens { get; set; }
@@ -71,7 +71,7 @@ public sealed class OpenAiProviderOptions
 public sealed class LocalModelProviderOptions
 {
     public string? ApiKey { get; set; }
-    public string Endpoint { get; set; } = "http://localhost:11434";
+    public string Endpoint { get; set; } = string.Empty; // lấy từ Ai:Local:Endpoint
     public string ModelName { get; set; } = "qwen2.5:32b";
     public int? MaxTokens { get; set; }
     public double? Temperature { get; set; }
