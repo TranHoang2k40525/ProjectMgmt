@@ -70,6 +70,40 @@
                 <span>Sử dụng tài liệu có sẵn trong dự án {{ projectName }}</span>
               </button>
             </div>
+
+            <!-- Architecture Workflow Roadmap Preview (Giao thức 5 Tầng) -->
+            <div class="architecture-roadmap-preview">
+              <div class="roadmap-header">
+                <span class="material-symbols-outlined text-[15px] text-teal-600" aria-hidden="true">account_tree</span>
+                <span>Kiến trúc Quy trình AI Sprint Planner (Agentic Workflow 5 Tầng):</span>
+              </div>
+              <div class="roadmap-steps-flex">
+                <div class="roadmap-step">
+                  <span class="step-num">1</span>
+                  <span>Tiếp nhận &amp; Guardrail</span>
+                </div>
+                <span class="material-symbols-outlined arrow-icon" aria-hidden="true">arrow_forward</span>
+                <div class="roadmap-step">
+                  <span class="step-num">2</span>
+                  <span>Cầu nối .NET MCP</span>
+                </div>
+                <span class="material-symbols-outlined arrow-icon" aria-hidden="true">arrow_forward</span>
+                <div class="roadmap-step">
+                  <span class="step-num">3</span>
+                  <span>Đánh giá Năng lực</span>
+                </div>
+                <span class="material-symbols-outlined arrow-icon" aria-hidden="true">arrow_forward</span>
+                <div class="roadmap-step">
+                  <span class="step-num">4</span>
+                  <span>AI Suy luận Sprint</span>
+                </div>
+                <span class="material-symbols-outlined arrow-icon" aria-hidden="true">arrow_forward</span>
+                <div class="roadmap-step">
+                  <span class="step-num">5</span>
+                  <span>Lưu Staging &amp; Duyệt</span>
+                </div>
+              </div>
+            </div>
           </div>
         }
 
@@ -104,53 +138,135 @@
           </div>
         }
 
-        <!-- Clean Enterprise Agent Activity Banner (Anti-AI Slop, Light & Calm) -->
+        <!-- Live Architecture Workflow Execution Center (Matching Image 1) -->
         @if (isThinkingVisible()) {
-          <div class="agent-activity-card" data-testid="ai-progress-panel">
-            <div class="activity-status-row">
-              <div class="activity-left">
-                @if (isStreaming()) {
-                  <span class="material-symbols-outlined spinning-icon" aria-hidden="true">sync</span>
-                  <span class="activity-text">
-                    {{ currentStepDetail() || 'Mô hình AI đang đối chiếu tài liệu đặc tả và lập kế hoạch Sprint...' }}
-                  </span>
-                } @else {
-                  <span class="material-symbols-outlined done-icon" aria-hidden="true">check_circle</span>
-                  <span class="activity-text">
-                    Đã hoàn thành phân tích từ tài liệu đặc tả và năng lực nhóm
-                  </span>
-                }
-              </div>
-              <div class="activity-right">
-                @if (toolCallsLog().length > 0) {
+          <div class="workflow-execution-wrapper" data-testid="ai-progress-panel">
+            <!-- 5 Steps Architecture Cards Grid (Matching Image 1) -->
+            <div class="pipeline-steps-grid" data-testid="pipeline-steps-grid">
+              @for (stepDef of pipelineStepDefinitions; track stepDef.index) {
+                @let state = getStepStatus(stepDef.index);
+                <div
+                  class="pipeline-step-item"
+                  [class.step-done]="state === 'done'"
+                  [class.step-active]="state === 'active'"
+                  [class.step-pending]="state === 'pending'"
+                  [attr.data-testid]="'ai-step-' + stepDef.index"
+                >
+                  <div class="step-icon-wrap">
+                    @if (state === 'done') {
+                      <span class="material-symbols-outlined step-status-icon done-icon" aria-hidden="true">check_circle</span>
+                    } @else if (state === 'active') {
+                      <span class="material-symbols-outlined step-status-icon active-icon spinning-icon" aria-hidden="true">sync</span>
+                    } @else {
+                      <span class="material-symbols-outlined step-status-icon pending-icon" aria-hidden="true">radio_button_unchecked</span>
+                    }
+                  </div>
+                  <div class="step-label-wrap">
+                    <span class="step-num">{{ stepDef.index }}.</span>
+                    <span class="step-name">{{ stepDef.label }}</span>
+                  </div>
+                </div>
+              }
+            </div>
+
+            <!-- Agent Activity & MCP Tool Execution Console -->
+            <div class="agent-activity-card">
+              <div class="activity-status-row">
+                <div class="activity-left">
+                  @if (isStreaming()) {
+                    <span class="material-symbols-outlined spinning-icon" aria-hidden="true">sync</span>
+                    <span class="activity-text">
+                      <strong>{{ currentStepLabel() || 'Đang thực thi Workflow' }}</strong>: {{ currentStepDetail() || 'Mô hình AI đang đối chiếu tài liệu và phân tích kế hoạch...' }}
+                    </span>
+                  } @else {
+                    <span class="material-symbols-outlined done-icon" aria-hidden="true">verified</span>
+                    <span class="activity-text">
+                      <strong>Quy trình AI 5 tầng hoàn tất</strong>: Đã thực thi thành công {{ toolCallsLog().length }} hành động MCP &amp; tối ưu kế hoạch Sprint
+                    </span>
+                  }
+                </div>
+
+                <div class="activity-right">
                   <button
                     type="button"
                     class="activity-toggle-btn"
                     (click)="toggleThinkingAccordion()"
                     [attr.aria-expanded]="isThinkingExpanded()"
                     data-testid="btn-toggle-thinking"
+                    title="Bấm để ẩn/hiện chi tiết các hành động AI"
                   >
-                    <span>{{ isThinkingExpanded() ? 'Thu gọn' : 'Căn cứ phân tích (' + toolCallsLog().length + ')' }}</span>
+                    <span>{{ isThinkingExpanded() ? 'Thu gọn quy trình' : 'Xem chi tiết quy trình (' + toolCallsLog().length + ')' }}</span>
                     <span class="material-symbols-outlined" aria-hidden="true">
                       {{ isThinkingExpanded() ? 'expand_less' : 'expand_more' }}
                     </span>
                   </button>
-                }
+                </div>
               </div>
-            </div>
 
-            @if (isThinkingExpanded() && toolCallsLog().length > 0) {
-              <div class="activity-details-panel">
-                <ul class="activity-items-list">
-                  @for (tool of toolCallsLog(); track $index) {
-                    <li class="activity-item">
-                      <span class="material-symbols-outlined bullet-icon" aria-hidden="true">done</span>
-                      <span class="activity-item-title">{{ tool.summaryVi || tool.toolName }}</span>
-                    </li>
+              <!-- Collapsible Tool Actions & Reasoning Body -->
+              @if (isThinkingExpanded()) {
+                <div class="activity-details-panel">
+                  <!-- Live Tool Execution Timeline (Dark Terminal Cards matching Image 1) -->
+                  @if (toolCallsLog().length > 0) {
+                    <div class="thinking-tools-timeline">
+                      @for (tool of toolCallsLog(); track $index; let tIdx = $index) {
+                        <div
+                          class="timeline-tool-item"
+                          [class.is-expanded]="expandedToolIndices()[tIdx]"
+                          (click)="toggleToolLog(tIdx)"
+                          [attr.data-testid]="'ai-tool-item-' + tIdx"
+                        >
+                          <div class="tool-bullet">
+                            <span class="material-symbols-outlined" aria-hidden="true">check_circle</span>
+                          </div>
+                          <div class="tool-content">
+                            <div class="tool-summary-row">
+                              <span class="tool-action-name">Running {{ tool.summaryVi || tool.toolName }} &gt;</span>
+                              @if (tool.durationMs !== undefined && tool.durationMs !== null) {
+                                <span class="tool-duration-pill">{{ tool.durationMs }}ms</span>
+                              }
+                              <span class="material-symbols-outlined tool-chevron" aria-hidden="true">
+                                {{ expandedToolIndices()[tIdx] ? 'expand_less' : 'chevron_right' }}
+                              </span>
+                            </div>
+                            @if (expandedToolIndices()[tIdx]) {
+                              <div class="tool-args-box" (click)="$event.stopPropagation()">
+                                <div class="args-header">
+                                  <span class="material-symbols-outlined text-[13px]" aria-hidden="true">terminal</span>
+                                  <span>Công cụ MCP: <code>{{ tool.toolName }}</code></span>
+                                </div>
+                                @if (tool.toolArguments) {
+                                  <pre class="args-code">{{ tool.toolArguments | json }}</pre>
+                                }
+                              </div>
+                            }
+                          </div>
+                        </div>
+                      }
+                    </div>
                   }
-                </ul>
-              </div>
-            }
+
+                  <!-- Active Reasoning Indicator during Phase 4 (Image 1 style) -->
+                  @if (isStreaming() && currentStepIndex() >= 4) {
+                    <div class="active-reasoning-pill" data-testid="ai-active-reasoning">
+                      <span class="material-symbols-outlined spinning-icon" aria-hidden="true">sync</span>
+                      <span class="reasoning-text">Mô hình AI đang suy luận cấu trúc Sprint, chia nhỏ Epic và Task...</span>
+                    </div>
+                  }
+
+                  <!-- Realtime SSE Stream Thought Output (CoT) -->
+                  @if (streamedThoughts()) {
+                    <div class="streamed-thought-terminal">
+                      <div class="terminal-header">
+                        <span class="material-symbols-outlined" aria-hidden="true">terminal</span>
+                        <span>Luồng suy luận thời gian thực (Agent Chain-of-Thought)</span>
+                      </div>
+                      <pre class="terminal-body">{{ streamedThoughts() }}</pre>
+                    </div>
+                  }
+                </div>
+              }
+            </div>
           </div>
         }
 

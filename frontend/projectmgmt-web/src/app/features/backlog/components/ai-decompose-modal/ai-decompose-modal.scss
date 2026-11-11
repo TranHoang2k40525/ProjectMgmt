@@ -230,6 +230,64 @@
       color: #1b4332;
     }
   }
+
+  /* Architecture Roadmap Preview */
+  .architecture-roadmap-preview {
+    margin-top: 14px;
+    padding: 12px 14px;
+    background: #f8fafc;
+    border: 1px dashed #cbd5e1;
+    border-radius: 10px;
+    text-align: left;
+
+    .roadmap-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #0f766e;
+    }
+
+    .roadmap-steps-flex {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+
+    .roadmap-step {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: #1e293b;
+
+      .step-num {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: #0f766e;
+        color: #ffffff;
+        font-size: 10px;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+    }
+
+    .arrow-icon {
+      font-size: 14px;
+      color: #94a3b8;
+    }
+  }
 }
 
 .chat-turns-list {
@@ -316,9 +374,106 @@
   }
 }
 
-/* Modern Collapsible Thinking Accordion (Image 7 Style) */
+/* Architecture Workflow Execution Center (Matching Image 1) */
+.workflow-execution-wrapper {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 5 Pipeline Steps Grid (Matching Image 1) */
+.pipeline-steps-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+
+  @media (max-width: 992px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (max-width: 600px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pipeline-step-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1.5px solid;
+  transition: all 0.2s ease;
+  user-select: none;
+
+  .step-icon-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    .step-status-icon {
+      font-size: 18px;
+    }
+  }
+
+  .step-label-wrap {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+
+    .step-num {
+      display: none; // Already prefixing label
+    }
+
+    .step-name {
+      font-size: 11.5px;
+      font-weight: 600;
+      line-height: 1.35;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+
+  /* Step States */
+  &.step-done {
+    background: #ecfdf5;
+    border-color: #a7f3d0;
+    color: #065f46;
+
+    .done-icon {
+      color: #059669;
+    }
+  }
+
+  &.step-active {
+    background: #f0fdfa;
+    border-color: #0d9488;
+    color: #0f766e;
+    box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.15);
+
+    .active-icon {
+      color: #0d9488;
+    }
+  }
+
+  &.step-pending {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+    color: #94a3b8;
+
+    .pending-icon {
+      color: #cbd5e1;
+    }
+  }
+}
+
+/* Agent Activity & Tool Console */
 .agent-activity-card {
-  margin-top: 10px;
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
@@ -343,7 +498,7 @@
 
       .spinning-icon {
         font-size: 18px;
-        color: #0284c7;
+        color: #0d9488;
         animation: spinClockwise 1.2s infinite linear;
         flex-shrink: 0;
       }
@@ -355,12 +510,16 @@
       }
 
       .activity-text {
-        font-size: 13px;
-        font-weight: 500;
+        font-size: 12.5px;
         color: #334155;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+
+        strong {
+          color: #0f172a;
+          font-weight: 600;
+        }
       }
     }
 
@@ -370,20 +529,21 @@
       .activity-toggle-btn {
         display: inline-flex;
         align-items: center;
-        gap: 4px;
-        padding: 4px 10px;
+        gap: 5px;
+        padding: 5px 12px;
         border-radius: 6px;
-        border: 1px solid #e2e8f0;
+        border: 1px solid #cbd5e1;
         background: #ffffff;
-        color: #64748b;
+        color: #475569;
         font-size: 12px;
-        font-weight: 500;
+        font-weight: 600;
         cursor: pointer;
         transition: all 0.15s ease;
 
         &:hover {
           background: #f1f5f9;
-          color: #1e293b;
+          color: #0f172a;
+          border-color: #94a3b8;
         }
 
         .material-symbols-outlined {
@@ -394,34 +554,184 @@
   }
 
   .activity-details-panel {
-    padding: 10px 14px;
+    padding: 12px 14px;
     border-top: 1px solid #f1f5f9;
-    background: #ffffff;
+    background: #fafafa;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
 
-    .activity-items-list {
-      margin: 0;
-      padding: 0;
-      list-style: none;
+    /* Live Tool Execution Timeline (Dark Terminal Style matching Image 1) */
+    .thinking-tools-timeline {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 8px;
 
-      .activity-item {
+      .timeline-tool-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 9px 14px;
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+
+        &:hover {
+          background: #0f172a;
+          border-color: #475569;
+        }
+
+        &.is-expanded {
+          border-color: #38bdf8;
+          box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.15);
+        }
+
+        .tool-bullet {
+          color: #10b981;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          margin-top: 1px;
+
+          .material-symbols-outlined {
+            font-size: 16px;
+          }
+        }
+
+        .tool-content {
+          flex: 1;
+          min-width: 0;
+
+          .tool-summary-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            width: 100%;
+
+            .tool-action-name {
+              font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+              font-size: 12.5px;
+              color: #f1f5f9;
+              font-weight: 500;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            }
+
+            .tool-duration-pill {
+              background: rgba(255, 255, 255, 0.1);
+              color: #94a3b8;
+              font-size: 11px;
+              padding: 2px 7px;
+              border-radius: 4px;
+              font-family: ui-monospace, monospace;
+              flex-shrink: 0;
+            }
+
+            .tool-chevron {
+              color: #64748b;
+              font-size: 16px;
+              flex-shrink: 0;
+            }
+          }
+
+          .tool-args-box {
+            margin-top: 8px;
+            padding: 8px 12px;
+            background: #0f172a;
+            border-radius: 6px;
+            border: 1px solid #334155;
+
+            .args-header {
+              display: flex;
+              align-items: center;
+              gap: 6px;
+              color: #94a3b8;
+              font-size: 11.5px;
+              margin-bottom: 4px;
+
+              code {
+                color: #38bdf8;
+                font-family: ui-monospace, monospace;
+              }
+            }
+
+            .args-code {
+              margin: 0;
+              font-family: ui-monospace, monospace;
+              font-size: 11px;
+              color: #cbd5e1;
+              white-space: pre-wrap;
+              word-break: break-word;
+              max-height: 140px;
+              overflow-y: auto;
+            }
+          }
+        }
+      }
+    }
+
+    /* Active Reasoning Floating Pill (Matching Image 1) */
+    .active-reasoning-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 14px;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 999px;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+      margin-top: 4px;
+      align-self: flex-start;
+
+      .spinning-icon {
+        font-size: 16px;
+        color: #0d9488;
+        animation: spinClockwise 1.2s infinite linear;
+      }
+
+      .reasoning-text {
+        font-size: 12.5px;
+        font-weight: 500;
+        color: #334155;
+      }
+    }
+
+    /* Realtime Thought Terminal */
+    .streamed-thought-terminal {
+      margin-top: 4px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      overflow: hidden;
+
+      .terminal-header {
         display: flex;
         align-items: center;
-        gap: 8px;
-        font-size: 12.5px;
-        color: #475569;
+        gap: 6px;
+        padding: 6px 12px;
+        background: #1e293b;
+        color: #94a3b8;
+        font-size: 11px;
+        font-family: ui-monospace, monospace;
+        border-bottom: 1px solid #334155;
+      }
 
-        .bullet-icon {
-          font-size: 14px;
-          color: #10b981;
-          flex-shrink: 0;
-        }
-
-        .activity-item-title {
-          font-weight: 400;
-        }
+      .terminal-body {
+        margin: 0;
+        padding: 10px 14px;
+        font-family: ui-monospace, monospace;
+        font-size: 11.5px;
+        line-height: 1.5;
+        color: #e2e8f0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        max-height: 180px;
+        overflow-y: auto;
       }
     }
   }

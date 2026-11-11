@@ -19,3 +19,4 @@ Dữ liệu đầu vào:
 {{BACKLOG_STORIES}}
 
 Hãy phân tích kỹ lưỡng các thông tin trên và trả về đúng cấu trúc JSON SprintProposal theo đúng các quy tắc đã chỉ đạo.
+

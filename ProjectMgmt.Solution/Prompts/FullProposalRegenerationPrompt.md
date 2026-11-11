@@ -15,3 +15,4 @@ Lưu ý quy tắc phân rã:
 - Phân công đúng người theo chuyên môn kỹ năng (Frontend, Backend, QA) và cân bằng tải công việc.
 - Chỉ chia Subtask khi StoryPoints >= 5.
 - Trả về đúng duy nhất đối tượng JSON SprintProposal.
+

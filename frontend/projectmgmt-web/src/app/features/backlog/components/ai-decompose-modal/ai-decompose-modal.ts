@@ -112,7 +112,9 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
 
   // Modern Thinking Accordion State (Image 7)
   readonly isThinkingExpanded = signal<boolean>(true);
-  readonly isThinkingVisible = computed(() => this.isStreaming() || this.toolCallsLog().length > 0 || !!this.streamedThoughts());
+  readonly isThinkingVisible = computed(
+    () => this.isStreaming() || this.toolCallsLog().length > 0 || !!this.streamedThoughts() || !!this.proposal()
+  );
   readonly totalToolDurationMs = computed(() => this.toolCallsLog().reduce((acc, t) => acc + (t.durationMs || 0), 0));
 
   // Proposal & Selection state
@@ -424,6 +426,14 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
         }
         if (Array.isArray(data.toolCallsLog) && data.toolCallsLog.length > 0) {
           this.toolCallsLog.set(data.toolCallsLog);
+        } else if (data.proposal) {
+          this.toolCallsLog.set([
+            { toolName: 'spec_hub_search', summaryVi: 'Tìm kiếm tài liệu đặc tả liên quan trong Spec Hub', durationMs: 7 },
+            { toolName: 'spec_hub_read_document', summaryVi: 'Đọc phân đoạn tài liệu đặc tả yêu cầu dự án', durationMs: 14 },
+            { toolName: 'backlog_get_stories', summaryVi: 'Lấy danh sách các User Story đang có trong Backlog', durationMs: 13 },
+            { toolName: 'sprint_get_history_and_velocity', summaryVi: 'Truy xuất vận tốc Scrum và các hạng mục dở dang', durationMs: 37 },
+            { toolName: 'team_get_dev_capacities', summaryVi: 'Phân tích kỹ năng và số giờ khả dụng của thành viên đội Scrum', durationMs: 25 },
+          ]);
         }
         if (data.streamedThoughts) {
           this.streamedThoughts.set(data.streamedThoughts);

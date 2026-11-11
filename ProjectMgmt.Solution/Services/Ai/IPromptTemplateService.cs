@@ -12,3 +12,4 @@ public interface IPromptTemplateService
     /// </summary>
     Task<string> RenderTemplateAsync(string templateName, IDictionary<string, string> variables, CancellationToken ct = default);
 }
+
