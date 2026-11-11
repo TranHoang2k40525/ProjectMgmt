@@ -918,6 +918,20 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
         if (!sub.role) sub.role = 'Kỹ thuật';
         if (!sub.assigneeName) sub.assigneeName = t.assigneeName;
         if (!sub.assigneeUserId) sub.assigneeUserId = t.assigneeUserId;
+        if (!sub.description) {
+          sub.description = `Triển khai phân hệ kỹ thuật chuyên biệt cho "${sub.title}" theo đúng tiêu chuẩn kiến trúc và tài liệu đặc tả của dự án.`;
+        }
+        if (!sub.acceptanceCriteria || sub.acceptanceCriteria.length === 0) {
+          sub.acceptanceCriteria = [
+            `Hoàn tất các bước mã nguồn/kịch bản cho '${sub.title}' đúng yêu cầu kỹ thuật`,
+            `Thực hiện kiểm thử đơn vị hoặc kiểm thử hồi quy đạt 100% không phát sinh lỗi`
+          ];
+        }
+        if (!sub.documentCitations || sub.documentCitations.length === 0) {
+          sub.documentCitations = t.documentCitations && t.documentCitations.length > 0
+            ? [...t.documentCitations]
+            : ['Tài liệu kiến trúc & đặc tả kỹ thuật dự án'];
+        }
       });
     });
   }
@@ -971,6 +985,20 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
   openSubtaskDrawer(parentTask: ProposedTaskDto, subtask: ProposedSubTaskDto, event?: Event): void {
     event?.stopPropagation();
     this.activeDrawerTaskId.set(null);
+    if (!subtask.description) {
+      subtask.description = `Triển khai phân hệ kỹ thuật chuyên biệt cho "${subtask.title}" theo đúng tiêu chuẩn kiến trúc và tài liệu đặc tả của dự án.`;
+    }
+    if (!subtask.acceptanceCriteria || subtask.acceptanceCriteria.length === 0) {
+      subtask.acceptanceCriteria = [
+        `Hoàn tất các bước mã nguồn/kịch bản cho '${subtask.title}' đúng yêu cầu kỹ thuật`,
+        `Thực hiện kiểm thử đơn vị hoặc kiểm thử hồi quy đạt 100% không phát sinh lỗi`
+      ];
+    }
+    if (!subtask.documentCitations || subtask.documentCitations.length === 0) {
+      subtask.documentCitations = parentTask.documentCitations && parentTask.documentCitations.length > 0
+        ? [...parentTask.documentCitations]
+        : ['Tài liệu kiến trúc & đặc tả kỹ thuật dự án'];
+    }
     this.activeDrawerSubtask.set({ parentTask, subtask });
   }
 
@@ -1112,6 +1140,14 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
         title: 'Công việc kỹ thuật mới',
         role: 'Backend',
         estimatedHours: 4,
+        storyPoints: 1,
+        priority: 'Medium',
+        status: 'To Do',
+        description: `Triển khai các yêu cầu kỹ thuật chi tiết cho ${task.title}.`,
+        acceptanceCriteria: ['Hoàn tất triển khai mã nguồn', 'Kiểm thử đạt 100% không phát sinh lỗi'],
+        documentCitations: task.documentCitations && task.documentCitations.length > 0
+          ? [...task.documentCitations]
+          : ['Tài liệu kiến trúc & đặc tả kỹ thuật dự án'],
         assigneeUserId: task.assigneeUserId,
         assigneeName: task.assigneeName,
       },

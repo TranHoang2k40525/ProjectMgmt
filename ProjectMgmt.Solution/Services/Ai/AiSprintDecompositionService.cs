@@ -452,6 +452,14 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                         {
                             foreach (var s in t.Subtasks)
                             {
+                                if (s.DocumentCitations == null || s.DocumentCitations.Count == 0)
+                                {
+                                    s.DocumentCitations = t.DocumentCitations.ToList();
+                                }
+                                if (string.IsNullOrWhiteSpace(s.Description))
+                                {
+                                    s.Description = $"Triển khai phân hệ kỹ thuật cho '{s.Title}' theo chuẩn kiến trúc hệ thống và tài liệu đặc tả ({string.Join(", ", s.DocumentCitations)}).";
+                                }
                                 if (s.AcceptanceCriteria == null || s.AcceptanceCriteria.Count == 0)
                                 {
                                     s.AcceptanceCriteria = new List<string>
@@ -459,10 +467,6 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                                         $"Hoàn tất công việc '{s.Title}' đúng đặc tả",
                                         "Đảm bảo kiểm thử và không phát sinh lỗi hồi quy"
                                     };
-                                }
-                                if (s.DocumentCitations == null || s.DocumentCitations.Count == 0)
-                                {
-                                    s.DocumentCitations = t.DocumentCitations.ToList();
                                 }
                             }
                         }
@@ -527,8 +531,40 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                     AiRationale = "Cần thiết lập trước để các task giao diện frontend tích hợp.",
                     Subtasks = new List<ProposedSubTaskDto>
                     {
-                        new() { Id = "sub_01_1", Title = "Backend API & DbContext", Role = "Backend", EstimatedHours = 8 },
-                        new() { Id = "sub_01_2", Title = "Unit Tests & Integration", Role = "QA", EstimatedHours = 8 }
+                        new()
+                        {
+                            Id = "sub_01_1",
+                            Title = "Backend API & DbContext",
+                            Role = "Backend",
+                            EstimatedHours = 8,
+                            StoryPoints = 1,
+                            Priority = "High",
+                            Status = "To Do",
+                            Description = "Thiết kế các API Endpoints và cấu hình Entity Framework Core DbContext mapping theo tài liệu kiến trúc.",
+                            AcceptanceCriteria = new List<string>
+                            {
+                                "Định nghĩa đầy đủ DbContext và Migration không lỗi",
+                                "API trả về chuẩn DTO và mã phản hồi HTTP chính xác"
+                            },
+                            DocumentCitations = new List<string> { "Tài liệu đặc tả Spec Hub dự án" }
+                        },
+                        new()
+                        {
+                            Id = "sub_01_2",
+                            Title = "Unit Tests & Integration",
+                            Role = "QA",
+                            EstimatedHours = 8,
+                            StoryPoints = 1,
+                            Priority = "Medium",
+                            Status = "To Do",
+                            Description = "Viết kịch bản kiểm thử đơn vị xUnit và kiểm thử tích hợp cho luồng xử lý Backend.",
+                            AcceptanceCriteria = new List<string>
+                            {
+                                "Độ bao phủ kiểm thử đạt trên 80% mã nguồn mới",
+                                "Toàn bộ bài test kiểm thử tích hợp vượt qua thành công"
+                            },
+                            DocumentCitations = new List<string> { "Tài liệu đặc tả Spec Hub dự án" }
+                        }
                     }
                 },
                 new()
@@ -552,8 +588,40 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                     AiRationale = "Mang lại trải nghiệm người dùng chuẩn doanh nghiệp.",
                     Subtasks = new List<ProposedSubTaskDto>
                     {
-                        new() { Id = "sub_02_1", Title = "Angular Component & Signal state", Role = "Frontend", EstimatedHours = 10 },
-                        new() { Id = "sub_02_2", Title = "E2E Playwright validation", Role = "QA", EstimatedHours = 6 }
+                        new()
+                        {
+                            Id = "sub_02_1",
+                            Title = "Angular Component & Signal state",
+                            Role = "Frontend",
+                            EstimatedHours = 10,
+                            StoryPoints = 1,
+                            Priority = "High",
+                            Status = "To Do",
+                            Description = "Triển khai Angular standalone component và quản lý trạng thái bằng Signal state phản ứng linh hoạt.",
+                            AcceptanceCriteria = new List<string>
+                            {
+                                "Không phát sinh re-render thừa khi thay đổi tín hiệu Signal",
+                                "Tuân thủ tiêu chuẩn giao diện Material Symbols Outlined"
+                            },
+                            DocumentCitations = new List<string> { "Quy chuẩn UI/UX dự án" }
+                        },
+                        new()
+                        {
+                            Id = "sub_02_2",
+                            Title = "E2E Playwright validation",
+                            Role = "QA",
+                            EstimatedHours = 6,
+                            StoryPoints = 1,
+                            Priority = "Medium",
+                            Status = "To Do",
+                            Description = "Viết kịch bản kiểm thử đầu cuối E2E với Playwright kiểm tra luồng người dùng và độ phản hồi.",
+                            AcceptanceCriteria = new List<string>
+                            {
+                                "Kịch bản tự động hóa chạy ổn định trong chế độ headless",
+                                "Bắt trọn vẹn các case ngoại lệ và kiểm tra giao diện chia đôi màn hình"
+                            },
+                            DocumentCitations = new List<string> { "Quy chuẩn UI/UX dự án" }
+                        }
                     }
                 },
                 new()
@@ -576,8 +644,40 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                     AiRationale = "Đảm bảo tuân thủ tiêu chuẩn an toàn thông tin tối cao của tổ chức.",
                     Subtasks = new List<ProposedSubTaskDto>
                     {
-                        new() { Id = "sub_03_1", Title = "Security static scan", Role = "DevOps", EstimatedHours = 4 },
-                        new() { Id = "sub_03_2", Title = "Regression tests", Role = "QA", EstimatedHours = 4 }
+                        new()
+                        {
+                            Id = "sub_03_1",
+                            Title = "Security static scan",
+                            Role = "DevOps",
+                            EstimatedHours = 4,
+                            StoryPoints = 1,
+                            Priority = "High",
+                            Status = "To Do",
+                            Description = "Quét tự động toàn bộ source code kiểm tra leak secret và kiểm tra cấu hình an toàn.",
+                            AcceptanceCriteria = new List<string>
+                            {
+                                "Không tìm thấy token/key/mật khẩu trong code",
+                                "Tệp appsettings.Local.json và .env nằm trong .gitignore"
+                            },
+                            DocumentCitations = new List<string> { "GEMINI.md" }
+                        },
+                        new()
+                        {
+                            Id = "sub_03_2",
+                            Title = "Regression tests",
+                            Role = "QA",
+                            EstimatedHours = 4,
+                            StoryPoints = 1,
+                            Priority = "Medium",
+                            Status = "To Do",
+                            Description = "Chạy kiểm thử hồi quy toàn diện các tính năng đã phát hành của Sprint.",
+                            AcceptanceCriteria = new List<string>
+                            {
+                                "100% test case hồi quy đạt pass",
+                                "Thời gian chạy bộ kiểm thử dưới 5 phút"
+                            },
+                            DocumentCitations = new List<string> { "GEMINI.md" }
+                        }
                     }
                 }
             }

@@ -343,7 +343,15 @@ Dịch vụ [`PromptTemplateService`](file:///c:/Users/hoang/Downloads/ProjectMg
 - **Tự động kiểm tra thời gian ghi tệp**: Mỗi khi có yêu cầu, hệ thống đối chiếu `File.GetLastWriteTimeUtc(fullPath)` với timestamp cache. Nếu tệp `.md` trên đĩa vừa được sửa, hệ thống tự động đọc lại phiên bản mới nhất **ngay lập tức mà không cần biên dịch lại mã nguồn hay khởi động lại ứng dụng**.
 
 ### 6.3. Cây Phân Nhánh Việc Con & Thang Điểm Fibonacci
-- **Cấu trúc Việc con (Subtasks) đầy đủ**: Mỗi việc con đều mang đầy đủ các trường nghiệp vụ như một công việc chính (checkbox, mã phụ `QLDA-AI1.1`, tiêu đề, vai trò kỹ thuật, độ ưu tiên, SP, trạng thái, người xử lý, ước lượng giờ, mô tả kỹ thuật, và ngăn kéo chi tiết Drawer độc lập).
+- **Cấu trúc Việc con (Subtasks) toàn diện chuẩn Enterprise**: Mỗi việc con đều được mô hình hóa thành một thực thể công việc hoàn chỉnh độc lập:
+  - Định danh phụ trợ trực quan: `QLDA-AI1.1`, `QLDA-AI1.2`...
+  - Vai trò kỹ thuật chuyên biệt (`Frontend`, `Backend`, `QA`, `DevOps`) kèm số giờ ước lượng chuẩn xác (từ 2 đến 8 giờ).
+  - Điểm Story Points Fibonacci tương thích (1 hoặc 2 SP).
+  - **Mô tả kỹ thuật chuyên sâu (Description)**: Làm rõ phạm vi kỹ thuật chi tiết của việc con, không để trống hay mô tả chung chung.
+  - **Tiêu chí nghiệm thu độc lập (Acceptance Criteria)**: Tối thiểu 1-2 tiêu chí đo lường được để lập trình viên và kiểm thử biết chính xác điều kiện hoàn tất.
+  - **Trích dẫn đặc tả liên kết (Document Citations)**: Trích dẫn phân đoạn tài liệu kỹ thuật gốc hoặc thừa hưởng từ công việc cha, có thể nhấp vào để mở xem tài liệu trong Spec Hub ngay lập tức.
+  - **Giao diện Avatar & Danh sách Người thực hiện**: Hiển thị avatar tròn chuẩn doanh nghiệp (ảnh chân dung hoặc huy hiệu chữ cái đầu trên nền màu chủ đạo) nằm thẳng hàng với dropdown chọn người làm, không bị ngắt dòng hay vỡ giao diện.
+  - **Ngăn kéo chi tiết Drawer độc lập**: Cho phép người dùng chỉnh sửa tiêu đề, mô tả, thêm/xóa tiêu chí nghiệm thu và điều chỉnh người làm cho từng việc con một cách độc lập.
 - **Dây nối Cây trực quan (Tree Wire Connector)**: Dưới cụm chấm kéo thả 6 chấm (`drag_indicator`), nhánh nối cây dạng góc vuông (`└──`) dẫn xuống từng dòng việc con, giúp giao diện trực quan và phân biệt rõ thứ bậc công việc.
 - **Phân bổ năng lực thông minh (Skill & Capacity Matching)**: Thay vì gán một người duy nhất hoặc cho tất cả các task cùng 5 điểm, hệ thống tự động phân tích từ khóa công việc:
   - Frontend / UI / Giao diện / SCSS $\rightarrow$ Kỹ sư Frontend (Vũ Hoàng Nam).
@@ -351,6 +359,14 @@ Dịch vụ [`PromptTemplateService`](file:///c:/Users/hoang/Downloads/ProjectMg
   - QA / Kiểm thử / Test / Playwright $\rightarrow$ Chuyên viên QA (Đặng Phương Thảo).
   - Sprint / Kiến trúc / Quản lý $\rightarrow$ Giám đốc dự án / Lead (Trần Minh Hoàng / Hoàng Hải Hậu).
   - Story Points đa dạng theo dãy Fibonacci: việc nhỏ 1-2 SP, việc tiêu chuẩn 3 SP, việc phức tạp 5-8 SP.
+
+### 6.4. Bảng Tiến trình Hoạt động Tinh tế (Minimal Activity Feed)
+- **Loại bỏ hoàn toàn phong cách Terminal & Hộp đen thô ráp**: Giao diện được thiết kế theo quy chuẩn hiện đại của các trợ lý AI hàng đầu (Claude, ChatGPT, Gemini):
+  - Khung thẻ màu sáng trang nhã, viền mềm mại, bóng đổ nhẹ (`0 1px 3px rgba(15, 23, 42, 0.04)`).
+  - Thanh trạng thái phía trên hiển thị biểu tượng quay động tinh tế kèm thông điệp nghiệp vụ: *"Mô hình AI đang suy luận cấu trúc Sprint, chia nhỏ Epic và Task..."*.
+  - Nút thu gọn / mở rộng quy trình dạng văn bản kết hợp icon (`Thu gọn quy trình ^` / `Mở rộng quy trình v`) không tạo cảm giác nút bấm thô cứng.
+  - Danh sách hành động MCP được liệt kê thanh thoát với biểu tượng tích xanh `check` (Google Material Symbols), tên hành động bằng tiếng Việt tự nhiên và thời gian phản hồi miligiây (ví dụ: `14ms`).
+  - Không còn chứa thanh 5 hộp bước cồng kềnh hay các khối JSON thô sơ, mang lại trải nghiệm chuyên nghiệp, chân thực và thân thiện nhất với người dùng.
 
 ---
 

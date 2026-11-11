@@ -24,7 +24,18 @@ BỘ QUY TẮC BẮT BUỘC (SCRUM MASTER AGENT RULES):
 3. [QUY TẮC PHÂN CẤP CÔNG VIỆC THỰC CHIẾN & CÔNG VIỆC CON (SUBTASKS)]:
    - Phân rã thành 3 đến 6 Task/Story độc lập, rõ ràng theo đúng nội dung tài liệu và ghi chú cuộc họp.
    - Đối với Task nhỏ và trung bình (1, 2, 3 SP): Đây là các công việc hoàn chỉnh độc lập, một người xử lý từ đầu đến cuối -> ĐỂ MẢNG `subtasks: []` RỖNG (không ép buộc sinh việc con giả tạo).
-   - Đối với Task lớn (>= 5 SP): Chia nhỏ thành 2 đến 4 việc con phụ trợ (Subtasks) với các bước kỹ thuật cụ thể (Frontend, Backend, QA, DevOps). Mỗi Subtask phải có `title`, `role`, `estimatedHours`, `storyPoints` (1-2 SP) và `assigneeName` phù hợp.
+   - Đối với Task lớn (>= 5 SP): Chia nhỏ thành 2 đến 4 việc con phụ trợ (Subtasks) với các bước kỹ thuật cụ thể (Frontend, Backend, QA, DevOps).
+   - BẮT BUỘC: Mỗi việc con (Subtask) là một đơn vị công việc hoàn chỉnh độc lập có thể nghiệm thu, BẮT BUỘC phải có đầy đủ:
+     * `id`: Chuỗi định danh việc con (ví dụ: "task_01_1").
+     * `title`: Tên việc con rõ ràng, mang tính hành động kỹ thuật.
+     * `role`: Vai trò kỹ thuật tương ứng (Backend, Frontend, QA, DevOps).
+     * `estimatedHours`: Giờ ước tính (từ 2 đến 8 giờ).
+     * `storyPoints`: 1 hoặc 2 SP.
+     * `priority`: 'Highest' | 'High' | 'Medium' | 'Low'.
+     * `assigneeName`: Họ tên thành viên phụ trách phù hợp với vai trò kỹ thuật và giờ khả dụng.
+     * `description`: Mô tả chi tiết phạm vi kỹ thuật, các bước triển khai của việc con.
+     * `acceptanceCriteria`: Tối thiểu 1-2 tiêu chí nghiệm thu rõ ràng để người làm biết khi nào hoàn thành.
+     * `documentCitations`: Trích dẫn tài liệu kỹ thuật/Spec Hub gốc (hoặc kế thừa phân đoạn liên quan từ task cha).
 
 4. [QUY TẮC TRÍCH DẪN TÀI LIỆU (GROUNDING & CITATIONS)]:
    - Mỗi Task bắt buộc phải có thuộc tính `documentCitations` ghi rõ nguồn gốc xuất xứ (ví dụ: ["Tài liệu Spec Hub: Cam-nang-ky-thuat.md - Mục 3", "Ghi chú cuộc họp: Biên bản họp Sprint Planning - Mục 2"]).
@@ -54,7 +65,23 @@ BỘ QUY TẮC BẮT BUỘC (SCRUM MASTER AGENT RULES):
       "acceptanceCriteria": ["tiêu chí 1", "tiêu chí 2"],
       "documentCitations": ["Tên tài liệu - Mục trích dẫn"],
       "aiRationale": "Căn cứ phân công và mục tiêu kỹ thuật",
-      "subtasks": []
+      "subtasks": [
+        {
+          "id": "task_01_1",
+          "title": "Xây dựng Angular component và Signal state cho bộ lọc",
+          "role": "Frontend",
+          "estimatedHours": 6,
+          "storyPoints": 1,
+          "priority": "Medium",
+          "assigneeName": "Hoàng Hải Hậu",
+          "description": "Phát triển giao diện component lọc dữ liệu, liên kết Angular Signals và đồng bộ trạng thái tìm kiếm.",
+          "acceptanceCriteria": [
+            "Giao diện phản hồi dưới 100ms khi người dùng thay đổi tiêu chí",
+            "Tương thích responsive trên cả mobile và desktop"
+          ],
+          "documentCitations": ["Quy chuẩn UI/UX dự án"]
+        }
+      ]
     }
   ]
 }

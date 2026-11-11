@@ -276,50 +276,21 @@
           </div>
         }
 
-        <!-- Live Architecture Workflow Execution Center (Matching Image 1) -->
+        <!-- Live Architecture Workflow Execution Center (Matching Attachment 4) -->
         @if (isThinkingVisible()) {
           <div class="workflow-execution-wrapper" data-testid="ai-progress-panel">
-            <!-- 5 Steps Architecture Cards Grid (Matching Image 1) -->
-            <div class="pipeline-steps-grid" data-testid="pipeline-steps-grid">
-              @for (stepDef of pipelineStepDefinitions; track stepDef.index) {
-                @let state = getStepStatus(stepDef.index);
-                <div
-                  class="pipeline-step-item"
-                  [class.step-done]="state === 'done'"
-                  [class.step-active]="state === 'active'"
-                  [class.step-pending]="state === 'pending'"
-                  [attr.data-testid]="'ai-step-' + stepDef.index"
-                >
-                  <div class="step-icon-wrap">
-                    @if (state === 'done') {
-                      <span class="material-symbols-outlined step-status-icon done-icon" aria-hidden="true">check_circle</span>
-                    } @else if (state === 'active') {
-                      <span class="material-symbols-outlined step-status-icon active-icon spinning-icon" aria-hidden="true">sync</span>
-                    } @else {
-                      <span class="material-symbols-outlined step-status-icon pending-icon" aria-hidden="true">radio_button_unchecked</span>
-                    }
-                  </div>
-                  <div class="step-label-wrap">
-                    <span class="step-num">{{ stepDef.index }}.</span>
-                    <span class="step-name">{{ stepDef.label }}</span>
-                  </div>
-                </div>
-              }
-            </div>
-
-            <!-- Agent Activity & MCP Tool Execution Console -->
             <div class="agent-activity-card">
               <div class="activity-status-row">
                 <div class="activity-left">
                   @if (isStreaming()) {
                     <span class="material-symbols-outlined spinning-icon" aria-hidden="true">sync</span>
                     <span class="activity-text">
-                      <strong>{{ currentStepLabel() || 'Đang thực thi Workflow' }}</strong>: {{ currentStepDetail() || 'Mô hình AI đang đối chiếu tài liệu và phân tích kế hoạch...' }}
+                      <strong>{{ currentStepLabel() || 'Mô hình AI đang suy luận cấu trúc Sprint, chia nhỏ Epic và Task...' }}</strong>
                     </span>
                   } @else {
-                    <span class="material-symbols-outlined done-icon" aria-hidden="true">verified</span>
+                    <span class="material-symbols-outlined done-icon" aria-hidden="true">check_circle</span>
                     <span class="activity-text">
-                      <strong>Quy trình AI 5 tầng hoàn tất</strong>: Đã thực thi thành công {{ toolCallsLog().length }} hành động MCP &amp; tối ưu kế hoạch Sprint
+                      <strong>Quy trình phân tích &amp; điều phối công việc hoàn tất</strong> ({{ toolCallsLog().length }} hành động)
                     </span>
                   }
                 </div>
@@ -332,9 +303,9 @@
                     data-testid="btn-toggle-thinking"
                     role="button"
                     tabindex="0"
-                    title="Bấm để ẩn hoặc mở rộng quy trình"
+                    title="Bấm để thu gọn hoặc mở rộng quy trình"
                   >
-                    <span>{{ isThinkingExpanded() ? 'Thu gọn' : 'Mở rộng quy trình (' + toolCallsLog().length + ')' }}</span>
+                    <span>{{ isThinkingExpanded() ? 'Thu gọn' : 'Thu gọn quy trình' }}</span>
                     <span class="material-symbols-outlined text-[16px]" aria-hidden="true">
                       {{ isThinkingExpanded() ? 'expand_less' : 'expand_more' }}
                     </span>
@@ -342,65 +313,20 @@
                 </div>
               </div>
 
-              <!-- Collapsible Tool Actions & Reasoning Body -->
+              <!-- Collapsible Tool Actions Timeline (Clean list matching Attachment 4) -->
               @if (isThinkingExpanded()) {
                 <div class="activity-details-panel">
-                  <!-- Live Tool Execution Timeline -->
                   @if (toolCallsLog().length > 0) {
                     <div class="thinking-tools-timeline">
                       @for (tool of toolCallsLog(); track $index; let tIdx = $index) {
-                        <div
-                          class="timeline-tool-item"
-                          [class.is-expanded]="expandedToolIndices()[tIdx]"
-                          (click)="toggleToolLog(tIdx)"
-                          [attr.data-testid]="'ai-tool-item-' + tIdx"
-                        >
-                          <div class="tool-bullet">
-                            <span class="material-symbols-outlined" aria-hidden="true">check_circle</span>
-                          </div>
-                          <div class="tool-content">
-                            <div class="tool-summary-row">
-                              <span class="tool-action-name">{{ (isStreaming() && tIdx === toolCallsLog().length - 1) ? 'Đang thực thi: ' : '' }}{{ tool.summaryVi || tool.toolName }}</span>
-                              @if (tool.durationMs !== undefined && tool.durationMs !== null) {
-                                <span class="tool-duration-pill">{{ tool.durationMs }}ms</span>
-                              }
-                              <span class="material-symbols-outlined tool-chevron" aria-hidden="true">
-                                {{ expandedToolIndices()[tIdx] ? 'expand_less' : 'chevron_right' }}
-                              </span>
-                            </div>
-                            @if (expandedToolIndices()[tIdx]) {
-                              <div class="tool-args-box" (click)="$event.stopPropagation()">
-                                <div class="args-header">
-                                  <span class="material-symbols-outlined text-[13px]" aria-hidden="true">terminal</span>
-                                  <span>Công cụ MCP: <code>{{ tool.toolName }}</code></span>
-                                </div>
-                                @if (tool.toolArguments) {
-                                  <pre class="args-code">{{ tool.toolArguments | json }}</pre>
-                                }
-                              </div>
-                            }
-                          </div>
+                        <div class="timeline-tool-item" [attr.data-testid]="'ai-tool-item-' + tIdx">
+                          <span class="material-symbols-outlined tool-check-icon" aria-hidden="true">check</span>
+                          <span class="tool-action-name">{{ tool.summaryVi || tool.toolName }}</span>
+                          @if (tool.durationMs !== undefined && tool.durationMs !== null) {
+                            <span class="tool-duration-pill">{{ tool.durationMs }}ms</span>
+                          }
                         </div>
                       }
-                    </div>
-                  }
-
-                  <!-- Active Reasoning Indicator during Phase 4 (Image 1 style) -->
-                  @if (isStreaming() && currentStepIndex() >= 4) {
-                    <div class="active-reasoning-pill" data-testid="ai-active-reasoning">
-                      <span class="material-symbols-outlined spinning-icon" aria-hidden="true">sync</span>
-                      <span class="reasoning-text">Mô hình AI đang suy luận cấu trúc Sprint, chia nhỏ Epic và Task...</span>
-                    </div>
-                  }
-
-                  <!-- Realtime SSE Stream Thought Output (CoT) -->
-                  @if (cleanStreamedThoughts()) {
-                    <div class="streamed-thought-terminal">
-                      <div class="terminal-header">
-                        <span class="material-symbols-outlined" aria-hidden="true">terminal</span>
-                        <span>Luồng suy luận thời gian thực (Agent Chain-of-Thought)</span>
-                      </div>
-                      <pre class="terminal-body">{{ cleanStreamedThoughts() }}</pre>
                     </div>
                   }
                 </div>
@@ -837,6 +763,20 @@
                           <div class="task-metadata-pills">
                             <span class="subtask-role-badge">{{ sub.role || 'Kỹ thuật' }}</span>
                             <span class="subtask-hours-pill">{{ sub.estimatedHours || 4 }}h</span>
+                            @let subRowCites = (sub.documentCitations && sub.documentCitations.length > 0) ? sub.documentCitations : (task.documentCitations || []);
+                            @if (subRowCites.length > 0) {
+                              @for (cite of subRowCites; track $index) {
+                                <button
+                                  type="button"
+                                  class="task-cite-pill"
+                                  (click)="openSpecDoc(cite, task.documentId); $event.stopPropagation()"
+                                  title="Xem trích dẫn tài liệu trong Spec Hub"
+                                >
+                                  <span class="material-symbols-outlined" aria-hidden="true">description</span>
+                                  <span>{{ cite }}</span>
+                                </button>
+                              }
+                            }
                           </div>
                         </div>
 
@@ -889,14 +829,16 @@
                           </select>
                         </div>
 
-                        <!-- Subtask Assignee -->
+                        <!-- Subtask Assignee (Matching Parent Task Avatar & Dropdown Layout) -->
                         <div class="cell-assignee" (click)="$event.stopPropagation()">
-                          <div class="assignee-select-wrap">
-                            <span class="assignee-avatar-sm" aria-hidden="true">
-                              {{ (sub.assigneeName || 'U')[0] }}
-                            </span>
+                          <div class="assignee-box">
+                            @if (getMemberAvatar(sub.assigneeName); as avatarUrl) {
+                              <img [src]="avatarUrl" [alt]="sub.assigneeName || ''" class="member-avatar-img" />
+                            } @else {
+                              <span class="member-avatar-fallback">{{ getMemberInitials(sub.assigneeName) }}</span>
+                            }
                             <select
-                              class="assignee-select-pill"
+                              class="assignee-select"
                               [ngModel]="sub.assigneeName || ''"
                               (ngModelChange)="onSubtaskAssigneeChange(sub, $event)"
                               aria-label="Người xử lý việc con"
@@ -1447,15 +1389,16 @@
             />
           </div>
 
-          <!-- Document Citations Inherited from Parent (Image 2) -->
-          @if (subDetail.parentTask.documentCitations && subDetail.parentTask.documentCitations.length > 0) {
+          <!-- Document Citations for Subtask -->
+          @let subCites = (subDetail.subtask.documentCitations && subDetail.subtask.documentCitations.length > 0) ? subDetail.subtask.documentCitations : (subDetail.parentTask.documentCitations || []);
+          @if (subCites.length > 0) {
             <div class="drawer-citations-card" data-testid="drawer-subtask-citations">
               <div class="drawer-citations-label">
                 <span class="material-symbols-outlined text-[15px] text-primary" aria-hidden="true">description</span>
-                <strong>Tài liệu căn cứ (Thừa hưởng từ task cha):</strong>
+                <strong>Tài liệu căn cứ &amp; Trích dẫn đặc tả:</strong>
               </div>
               <div class="drawer-citations-pills">
-                @for (cite of subDetail.parentTask.documentCitations; track $index) {
+                @for (cite of subCites; track $index) {
                   <button
                     type="button"
                     class="drawer-citation-pill"
