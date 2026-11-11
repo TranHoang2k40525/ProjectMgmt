@@ -15,6 +15,7 @@ import {
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import {
   AiAgentService,
   AiSprintProposalDto,
@@ -65,6 +66,7 @@ export interface SpecDocPreview {
   title: string;
   section?: string | null;
   content?: string;
+  highlightedHtml?: SafeHtml;
   isLoading: boolean;
 }
 
@@ -81,6 +83,7 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
   private readonly toastService = inject(ToastService);
   private readonly router = inject(Router);
   private readonly projectManagementService = inject(ProjectManagementService);
+  private readonly sanitizer = inject(DomSanitizer);
 
   @ViewChild('promptTextarea') promptTextarea?: ElementRef<HTMLTextAreaElement>;
 
@@ -272,14 +275,21 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
       isLoading: true,
     });
 
-    if (documentId) {
+    const isMeetingNoteCite = /cuộc họp|ghi chú|biên bản|meeting|notes|yêu cầu/i.test(docTitle);
+    const pastedText = this.pastedDocumentText() || this.promptInput();
+
+    // 1. Nếu có documentId hợp lệ (từ backend hoặc Spec Hub)
+    if (documentId && documentId !== 'meeting_notes') {
       this.projectManagementService.getFileContent(documentId).subscribe({
         next: (res) => {
+          const rawContent = res.content || 'Tài liệu không có nội dung văn bản hoặc ở định dạng nhị phân.';
           this.activeSpecDocPreview.update((prev) =>
             prev
               ? {
                   ...prev,
-                  content: res.content || 'Tài liệu không có nội dung văn bản hoặc ở định dạng nhị phân.',
+                  title: docTitle,
+                  content: rawContent,
+                  highlightedHtml: this.buildHighlightHtml(rawContent, section),
                   isLoading: false,
                 }
               : null
@@ -298,20 +308,45 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
           );
         },
       });
-    } else if (this.projectId) {
-      this.projectManagementService.getSpecTree(this.projectId).subscribe({
+      return;
+    }
+
+    // 2. Nếu là ghi chú cuộc họp / biên bản người dùng dán vào
+    if (isMeetingNoteCite && pastedText) {
+      this.activeSpecDocPreview.update((prev) =>
+        prev
+          ? {
+              ...prev,
+              docId: 'meeting_notes',
+              title: 'Ghi chú & Biên bản cuộc họp đã nạp',
+              content: pastedText,
+              highlightedHtml: this.buildHighlightHtml(pastedText, section),
+              isLoading: false,
+            }
+          : null
+      );
+      this.scrollPreviewToSection(section);
+      return;
+    }
+
+    // 3. Tra cứu trong cây thư mục Spec Hub của dự án
+    const projId = this.projectId || this.projectManagementService.currentProject()?.id || (typeof localStorage !== 'undefined' ? localStorage.getItem('pm_active_project_id') : null);
+    if (projId) {
+      this.projectManagementService.getSpecTree(projId).subscribe({
         next: (nodes) => {
           const found = this.searchNodeInTree(nodes, docTitle);
           if (found && !found.isDirectory) {
             this.projectManagementService.getFileContent(found.id).subscribe({
               next: (res) => {
+                const rawContent = res.content || 'Tài liệu không có nội dung văn bản.';
                 this.activeSpecDocPreview.update((prev) =>
                   prev
                     ? {
                         ...prev,
                         docId: found.id,
                         title: found.name,
-                        content: res.content || 'Tài liệu không có nội dung văn bản.',
+                        content: rawContent,
+                        highlightedHtml: this.buildHighlightHtml(rawContent, section),
                         isLoading: false,
                       }
                     : null
@@ -333,12 +368,8 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
               },
             });
           } else {
-            const firstFile = this.findFirstNonDirFile(nodes);
-            // Kiểm tra nếu trích dẫn từ ghi chú cuộc họp / biên bản đã nạp
-            const pastedText = this.pastedDocumentText() || this.promptInput();
-            const isMeetingNoteCite = /cuộc họp|ghi chú|biên bản|meeting|notes/i.test(docTitle);
-
-            if (isMeetingNoteCite && pastedText) {
+            // Nếu không tìm thấy tệp trong Spec Hub
+            if (pastedText && (isMeetingNoteCite || /biên bản|cuộc họp/i.test(docTitle))) {
               this.activeSpecDocPreview.update((prev) =>
                 prev
                   ? {
@@ -346,48 +377,35 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
                       docId: 'meeting_notes',
                       title: 'Ghi chú & Biên bản cuộc họp đã nạp',
                       content: pastedText,
+                      highlightedHtml: this.buildHighlightHtml(pastedText, section),
                       isLoading: false,
                     }
                   : null
               );
               this.scrollPreviewToSection(section);
-            } else if (firstFile) {
-              this.projectManagementService.getFileContent(firstFile.id).subscribe({
-                next: (res) => {
-                  this.activeSpecDocPreview.update((prev) =>
-                    prev
-                      ? {
-                          ...prev,
-                          docId: firstFile.id,
-                          title: firstFile.name,
-                          content: res.content || 'Tài liệu không có nội dung văn bản.',
-                          isLoading: false,
-                        }
-                      : null
-                  );
-                  this.scrollPreviewToSection(section);
-                },
-                error: () => {
-                  this.activeSpecDocPreview.update((prev) =>
-                    prev
-                      ? {
-                          ...prev,
-                          docId: firstFile.id,
-                          title: firstFile.name,
-                          isLoading: false,
-                          content: `Tài liệu: ${docTitle}\nTrích dẫn trực tiếp từ phiên làm việc và ngữ cảnh dự án.`,
-                        }
-                      : null
-                  );
-                },
-              });
+            } else if (docTitle === 'GEMINI.md') {
+              const geminiText = `# Tiêu chuẩn Quy tắc Dự án (GEMINI.md)\n\n1. BẢO MẬT TUYỆT ĐỐI & CHỐNG RÒ RỈ SECRET/KEY/URL/IP\n- Nghiêm cấm đưa bất kỳ thông tin nhạy cảm nào vào source code.\n- Secret lưu tại appsettings.Local.json hoặc .env.\n\n2. TỐI ƯU TỐC ĐỘ PHẢN HỒI & HIỆU SUẤT AGENT\n- Đi thẳng vào trọng tâm, giải phóng file lock IIS với app_offline.htm.\n\n3. QUY TẮC BẮT BUỘC VỀ ICON & EMOJI\n- Tuyệt đối không dùng emoji từ bàn phím.\n- Bắt buộc sử dụng icon Google Material Symbols Outlined.\n\n4. QUY TRÌNH PHÂN QUYỀN SCRUM TỪ TRÊN XUỐNG\n- Org Owner > Lead/Creator > Scrum Master > Dev/QA > Viewer.\n\n5. TIÊU CHUẨN GIAO DIỆN & TRẢI NGHIỆM NGƯỜI DÙNG\n- Responsive đa màn hình, không tràn lề.`;
+              this.activeSpecDocPreview.update((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      title: 'GEMINI.md (Quy chuẩn dự án)',
+                      content: geminiText,
+                      highlightedHtml: this.buildHighlightHtml(geminiText, section),
+                      isLoading: false,
+                    }
+                  : null
+              );
+              this.scrollPreviewToSection(section);
             } else {
+              const fallbackMsg = `Tài liệu: ${docTitle}\nPhân đoạn trích dẫn: ${section || 'Toàn văn'}\n\nTrích dẫn trực tiếp từ phiên làm việc và ngữ cảnh dự án.`;
               this.activeSpecDocPreview.update((prev) =>
                 prev
                   ? {
                       ...prev,
                       isLoading: false,
-                      content: pastedText || `Tài liệu: ${docTitle}\nTrích dẫn trực tiếp từ phiên làm việc và ngữ cảnh dự án.`,
+                      content: fallbackMsg,
+                      highlightedHtml: this.buildHighlightHtml(fallbackMsg, section),
                     }
                   : null
               );
@@ -421,12 +439,19 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
     const cleanName = this.extractDocTitle(title);
     const section = sectionParam || preview?.section || this.extractSection(citationText);
 
+    if (docId === 'meeting_notes' || /cuộc họp|ghi chú|biên bản/i.test(cleanName)) {
+      this.toastService.info('Spec Hub', 'Đây là ghi chú phiên làm việc của bạn, không thuộc tệp Spec Hub.');
+      return;
+    }
+
     const queryParams: Record<string, string> = {};
     if (docId) queryParams['docId'] = docId;
     if (cleanName) queryParams['docName'] = cleanName;
     if (section) queryParams['section'] = section;
 
-    const urlTree = this.router.createUrlTree(['/projects', this.projectId, 'documents'], { queryParams });
+    const projId = this.projectId || this.projectManagementService.currentProject()?.id || (typeof localStorage !== 'undefined' ? localStorage.getItem('pm_active_project_id') : null);
+
+    const urlTree = this.router.createUrlTree(['/projects', projId, 'documents'], { queryParams });
     const url = this.router.serializeUrl(urlTree);
     window.open(url, '_blank');
   }
@@ -434,25 +459,58 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
   private extractDocTitle(citation?: string): string {
     if (!citation) return 'Tài liệu đặc tả';
     let clean = citation.trim();
-    // Bỏ các tiền tố thường gặp
-    clean = clean.replace(/^(tài liệu spec hub|tài liệu|spec hub|ghi chú cuộc họp|ghi chú|biên bản)[\s:]+/i, '');
-    const dashIdx = clean.indexOf('-');
-    if (dashIdx > 0) {
-      clean = clean.substring(0, dashIdx).trim();
+
+    // 1. Nếu có phần mở rộng tệp (.md, .txt, .docx, .xlsx, .pdf, .doc, .json, .yml, .yaml, .csv)
+    const fileMatch = clean.match(/([\p{L}\w\.\-_ ]+\.(?:md|txt|docx|xlsx|pdf|doc|json|yml|yaml|csv))/iu);
+    if (fileMatch) {
+      return fileMatch[1].trim();
     }
+
+    // 2. Bỏ các tiền tố thường gặp ở đầu
+    clean = clean.replace(/^(tài liệu đặc tả|tài liệu spec hub|tài liệu|spec hub|ghi chú cuộc họp|ghi chú|biên bản|yêu cầu)[\s:]+/i, '');
+
+    // 3. Tách theo dấu phân cách có khoảng trắng bao quanh (\s+[-–—:]\s+)
+    const sepMatch = clean.match(/^(.+?)\s+[-–—:]\s+/);
+    if (sepMatch) {
+      return sepMatch[1].trim();
+    }
+
+    // 4. Nếu có dấu hai chấm
+    const colonIdx = clean.indexOf(':');
+    if (colonIdx > 0 && colonIdx < clean.length - 1) {
+      return clean.substring(0, colonIdx).trim();
+    }
+
     return clean;
   }
 
   private extractSection(citation?: string): string | null {
     if (!citation) return null;
-    const parts = citation.split('-');
+    let clean = citation.trim();
+
+    // 1. Nếu có tên file với đuôi, section là phần nằm sau tên file đó
+    const fileMatch = clean.match(/[\p{L}\w\.\-_ ]+\.(?:md|txt|docx|xlsx|pdf|doc|json|yml|yaml|csv)/iu);
+    if (fileMatch && fileMatch.index !== undefined) {
+      const afterFile = clean.substring(fileMatch.index + fileMatch[0].length).trim();
+      const stripped = afterFile.replace(/^[\s\-–—:]+/, '').trim();
+      if (stripped) return stripped;
+    }
+
+    // 2. Tách theo dấu phân cách có khoảng trắng: " - ", " – ", " — ", " : "
+    const parts = clean.split(/\s+[-–—:]\s+/);
     if (parts.length > 1) {
-      return parts.slice(1).join('-').trim();
+      return parts.slice(1).join(' - ').trim();
     }
-    const colonParts = citation.split(':');
-    if (colonParts.length > 1) {
-      return colonParts.slice(1).join(':').trim();
+
+    // 3. Tách theo dấu ":" nếu có
+    const colonIdx = clean.indexOf(':');
+    if (colonIdx > 0 && colonIdx < clean.length - 1) {
+      const prefix = clean.substring(0, colonIdx).toLowerCase();
+      if (!/^(tài liệu|spec hub|ghi chú|biên bản)/.test(prefix)) {
+        return clean.substring(colonIdx + 1).trim();
+      }
     }
+
     return null;
   }
 
@@ -462,97 +520,186 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
     const stripExt = (name: string) => name.replace(/\.[^/.]+$/, '').trim().toLowerCase();
     const targetBase = stripExt(lower);
 
-    // 1. Khớp chính xác hoặc khớp tên gốc bỏ đuôi
-    for (const node of nodes) {
-      if (node.isDirectory) {
-        if (node.children?.length) {
-          const found = this.searchNodeInTree(node.children, searchStr);
-          if (found) return found;
+    // BƯỚC 1: Tìm kiếm khớp chính xác (Exact Match) tên tệp hoặc tên gốc bỏ đuôi trên toàn bộ cây
+    const findExact = (list: SpecTreeNode[]): SpecTreeNode | null => {
+      for (const node of list) {
+        if (!node.isDirectory) {
+          const nodeLower = node.name.toLowerCase();
+          const nodeBase = stripExt(nodeLower);
+          if (nodeLower === lower || nodeBase === targetBase) {
+            return node;
+          }
+        } else if (node.children?.length) {
+          const childFound = findExact(node.children);
+          if (childFound) return childFound;
         }
-        continue;
       }
-      const nodeLower = node.name.toLowerCase();
-      const nodeBase = stripExt(nodeLower);
-      if (nodeLower === lower || nodeBase === targetBase) {
-        return node;
-      }
-    }
+      return null;
+    };
 
-    // 2. Khớp chuỗi con
-    for (const node of nodes) {
-      if (node.isDirectory) {
-        if (node.children?.length) {
-          const found = this.searchNodeInTree(node.children, searchStr);
-          if (found) return found;
+    const exactMatch = findExact(nodes);
+    if (exactMatch) return exactMatch;
+
+    // BƯỚC 2: Chỉ khi không có bất kỳ tệp nào khớp chính xác, mới tìm kiếm chuỗi con (Partial Match)
+    if (lower.length > 3) {
+      const findPartial = (list: SpecTreeNode[]): SpecTreeNode | null => {
+        for (const node of list) {
+          if (!node.isDirectory) {
+            const nodeLower = node.name.toLowerCase();
+            const nodeBase = stripExt(nodeLower);
+            if (nodeLower.includes(lower) || lower.includes(nodeLower) || nodeBase.includes(targetBase) || targetBase.includes(nodeBase)) {
+              return node;
+            }
+          } else if (node.children?.length) {
+            const childFound = findPartial(node.children);
+            if (childFound) return childFound;
+          }
         }
-        continue;
-      }
-      const nodeLower = node.name.toLowerCase();
-      const nodeBase = stripExt(nodeLower);
-      if (nodeLower.includes(lower) || lower.includes(nodeLower) || nodeBase.includes(targetBase) || targetBase.includes(nodeBase)) {
-        return node;
-      }
+        return null;
+      };
+      return findPartial(nodes);
     }
     return null;
   }
 
-  private findFirstNonDirFile(nodes: SpecTreeNode[]): SpecTreeNode | null {
-    for (const node of nodes) {
-      if (!node.isDirectory) return node;
-      if (node.children?.length) {
-        const found = this.findFirstNonDirFile(node.children);
-        if (found) return found;
+  private buildHighlightHtml(content: string, section?: string | null): SafeHtml | undefined {
+    if (!content) return undefined;
+    const escapeHtml = (str: string) =>
+      str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+
+    if (!section) {
+      return this.sanitizer.bypassSecurityTrustHtml(escapeHtml(content));
+    }
+
+    const cleanSection = section.trim();
+    const candidates: string[] = [cleanSection];
+
+    // Bỏ các tiền tố thường gặp "Mục", "Phần", "Chương", "Điều", "Epic"...
+    const strippedPrefix = cleanSection.replace(/^(mục|phần|chương|điều|epic|bước|step|section)\s*[:\.]?\s*/i, '').trim();
+    if (strippedPrefix && strippedPrefix.length >= 2 && !candidates.includes(strippedPrefix)) {
+      candidates.push(strippedPrefix);
+    }
+
+    // Các cụm từ chia theo dấu hai chấm hoặc gạch nối
+    const subParts = cleanSection.split(/[:\-–—]/).map((p) => p.trim()).filter((p) => p.length >= 3);
+    for (const part of subParts) {
+      if (!candidates.includes(part)) {
+        candidates.push(part);
       }
     }
-    return null;
+
+    const lowerContent = content.toLowerCase();
+    let bestStart = -1;
+    let matchLen = 0;
+
+    // Ưu tiên 1: Tìm dòng tiêu đề Markdown (bắt đầu dòng với #, ** hoặc phân đoạn rõ ràng)
+    const headingPatterns: RegExp[] = [];
+    for (const cand of candidates) {
+      const escaped = cand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      headingPatterns.push(new RegExp(`(?:^|\\n)\\s*(?:#{1,6}\\s*|\\*\\*\\s*)?(?:mục\\s*)?(${escaped}[^\\n]{0,60})`, 'i'));
+    }
+
+    for (const pattern of headingPatterns) {
+      const match = pattern.exec(content);
+      if (match && match.index !== undefined) {
+        // Khớp vị trí cụm từ chính
+        const fullMatch = match[0];
+        const captured = match[1] || fullMatch;
+        const offsetInMatch = fullMatch.indexOf(captured);
+        bestStart = match.index + (offsetInMatch >= 0 ? offsetInMatch : 0);
+        matchLen = captured.length;
+        break;
+      }
+    }
+
+    // Ưu tiên 2: Tìm kiếm chuỗi đầy đủ ở bất kỳ đâu trong tài liệu nếu chưa thấy tiêu đề
+    if (bestStart < 0) {
+      for (const cand of candidates) {
+        const lowerCand = cand.toLowerCase();
+        const idx = lowerContent.indexOf(lowerCand);
+        if (idx >= 0) {
+          bestStart = idx;
+          matchLen = cand.length;
+          break;
+        }
+      }
+    }
+
+    // Nếu chưa tìm thấy cụm từ, thử với các từ khóa có độ dài >= 4 hoặc số La Mã
+    if (bestStart < 0) {
+      const keywords = cleanSection.split(/[\s:,\-]+/).filter((w) => w.length >= 4 || /^[ivxlcdm]+$/i.test(w));
+      for (const kw of keywords) {
+        const idx = lowerContent.indexOf(kw.toLowerCase());
+        if (idx >= 0) {
+          bestStart = idx;
+          matchLen = kw.length;
+          break;
+        }
+      }
+    }
+
+    if (bestStart >= 0) {
+      const before = escapeHtml(content.substring(0, bestStart));
+      const matched = escapeHtml(content.substring(bestStart, bestStart + matchLen));
+      const after = escapeHtml(content.substring(bestStart + matchLen));
+      const html = `${before}<mark id="spec-target-highlight" class="spec-highlight-mark">${matched}</mark>${after}`;
+      return this.sanitizer.bypassSecurityTrustHtml(html);
+    }
+
+    return this.sanitizer.bypassSecurityTrustHtml(escapeHtml(content));
   }
 
   private scrollPreviewToSection(section?: string | null): void {
-    if (!section) return;
-    const clean = section.trim().toLowerCase();
-
     const tryScroll = (): boolean => {
       const container = document.querySelector('.doc-preview-body') as HTMLElement | null;
       if (!container) return false;
 
-      const preEl = container.querySelector('.preview-content-text') as HTMLElement | null;
-      if (!preEl) return false;
-
-      const text = (preEl.innerText || '').toLowerCase();
-      let targetIdx = text.indexOf(clean);
-
-      // Nếu không khớp toàn bộ, tìm theo các từ khóa dài (> 3 ký tự)
-      if (targetIdx < 0) {
-        const keywords = clean.split(/[\s:,\-]+/).filter((w) => w.length > 3);
-        for (const kw of keywords) {
-          const kIdx = text.indexOf(kw);
-          if (kIdx >= 0) {
-            targetIdx = kIdx;
-            break;
-          }
-        }
+      const highlightEl = container.querySelector('#spec-target-highlight') as HTMLElement | null;
+      if (highlightEl) {
+        highlightEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        highlightEl.classList.add('spec-highlight-pulse');
+        setTimeout(() => highlightEl?.classList.remove('spec-highlight-pulse'), 3500);
+        return true;
       }
 
-      if (targetIdx >= 0) {
-        const precedingText = text.substring(0, targetIdx);
-        const lineNum = precedingText.split('\n').length;
-        const totalLines = Math.max(1, text.split('\n').length);
-        const targetScrollTop = (lineNum / totalLines) * preEl.scrollHeight;
-        container.scrollTo({ top: Math.max(0, targetScrollTop - 80), behavior: 'smooth' });
-
-        // Tạo hiệu ứng sóng sáng amber nổi bật vị trí trích dẫn
-        preEl.classList.add('spec-highlight-pulse');
-        setTimeout(() => preEl.classList.remove('spec-highlight-pulse'), 3500);
-        return true;
+      // Fallback: nếu không có thẻ mark (ví dụ tài liệu thuần pre), thử cuộn ước tính
+      if (section) {
+        const preEl = container.querySelector('.preview-content-text') as HTMLElement | null;
+        if (!preEl) return false;
+        const text = (preEl.innerText || '').toLowerCase();
+        const clean = section.trim().toLowerCase();
+        let targetIdx = text.indexOf(clean);
+        if (targetIdx < 0) {
+          const kw = clean.split(/[\s:,\-]+/).find((w) => w.length > 3);
+          if (kw) targetIdx = text.indexOf(kw);
+        }
+        if (targetIdx >= 0) {
+          const lineNum = text.substring(0, targetIdx).split('\n').length;
+          const totalLines = Math.max(1, text.split('\n').length);
+          const targetScrollTop = (lineNum / totalLines) * preEl.scrollHeight;
+          container.scrollTo({ top: Math.max(0, targetScrollTop - 80), behavior: 'smooth' });
+          preEl.classList.add('spec-highlight-pulse');
+          setTimeout(() => preEl?.classList.remove('spec-highlight-pulse'), 3500);
+          return true;
+        }
       }
       return false;
     };
 
     setTimeout(() => {
       if (!tryScroll()) {
-        setTimeout(tryScroll, 350);
+        setTimeout(() => {
+          if (!tryScroll()) {
+            setTimeout(tryScroll, 600);
+          }
+        }, 250);
       }
-    }, 200);
+    }, 120);
   }
 
   openReviewPastedDoc(): void {

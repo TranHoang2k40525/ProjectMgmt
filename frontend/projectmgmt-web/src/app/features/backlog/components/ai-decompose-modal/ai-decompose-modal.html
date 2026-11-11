@@ -1294,15 +1294,17 @@
             </div>
           </div>
           <div class="preview-header-right">
-            <button
-              type="button"
-              class="btn-open-tab"
-              (click)="openSpecDocInNewTab(docPreview.title, docPreview.docId)"
-              title="Mở toàn bộ tài liệu trong trang Spec Hub ở tab mới"
-            >
-              <span class="material-symbols-outlined" aria-hidden="true">open_in_new</span>
-              <span>Mở trang Spec Hub</span>
-            </button>
+            @if (docPreview.docId !== 'meeting_notes') {
+              <button
+                type="button"
+                class="btn-open-tab"
+                (click)="openSpecDocInNewTab(docPreview.title, docPreview.docId, docPreview.section)"
+                title="Mở toàn bộ tài liệu trong trang Spec Hub ở tab mới"
+              >
+                <span class="material-symbols-outlined" aria-hidden="true">open_in_new</span>
+                <span>Mở trang Spec Hub</span>
+              </button>
+            }
             <button
               type="button"
               class="icon-close-btn"
@@ -1328,7 +1330,11 @@
               </div>
             }
             <div class="preview-content-box">
-              <pre class="preview-content-text">{{ docPreview.content }}</pre>
+              @if (docPreview.highlightedHtml) {
+                <pre class="preview-content-text" [innerHTML]="docPreview.highlightedHtml"></pre>
+              } @else {
+                <pre class="preview-content-text">{{ docPreview.content }}</pre>
+              }
             </div>
           }
         </div>

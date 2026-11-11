@@ -56,4 +56,5 @@ public sealed class ProposedSubTaskDto
     public string? AssigneeName { get; set; }
     public List<string> AcceptanceCriteria { get; set; } = [];
     public List<string> DocumentCitations { get; set; } = [];
+    public Guid? DocumentId { get; set; }
 }

@@ -138,10 +138,11 @@ export class SpecHubPageComponent implements OnInit {
 
   loadTree(autoOpenDocId?: string | null, docName?: string | null, section?: string | null): void {
     const projectId =
-      this.activeProject()?.id ||
       this.route.snapshot.paramMap.get('id') ||
+      this.activeProject()?.id ||
       this.route.parent?.snapshot.paramMap.get('id') ||
-      (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('projectmgmt.selected-project') : null);
+      (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('projectmgmt.selected-project') : null) ||
+      (typeof localStorage !== 'undefined' ? (localStorage.getItem('pm_active_project_id') || localStorage.getItem('projectmgmt.selected-project')) : null);
 
     if (!projectId) return;
 
@@ -166,15 +167,23 @@ export class SpecHubPageComponent implements OnInit {
         });
         this.expandedFolderIds.set(folderIds);
 
-        let targetNode: SpecTreeNode | null = null;
+        let targetResult: { node: SpecTreeNode; parentIds: string[] } | null = null;
         if (autoOpenDocId) {
-          targetNode = this.findNodeInTree(nodes, autoOpenDocId, docName || undefined);
-        } else if (docName) {
-          targetNode = this.findNodeInTree(nodes, docName, docName);
+          targetResult = this.findNodeAndCollectParents(nodes, autoOpenDocId, docName || undefined);
+        }
+        if (!targetResult && docName) {
+          targetResult = this.findNodeAndCollectParents(nodes, docName, docName);
         }
 
-        if (targetNode && !targetNode.isDirectory) {
-          this.openTabForNode(targetNode, section || this.pendingScrollSection);
+        if (targetResult && !targetResult.node.isDirectory) {
+          // Tự động mở rộng tất cả các thư mục cha chứa tệp này để người dùng thấy rõ trên cây thư mục
+          this.expandedFolderIds.update(set => {
+            const next = new Set(set);
+            targetResult!.parentIds.forEach(pid => next.add(pid));
+            return next;
+          });
+          this.selectedNodeId.set(targetResult.node.id);
+          this.openTabForNode(targetResult.node, section || this.pendingScrollSection);
         } else if (this.openTabs().length === 0) {
           // Mở tệp đầu tiên tìm thấy
           const firstFile = this.findFirstFile(nodes);
@@ -190,59 +199,72 @@ export class SpecHubPageComponent implements OnInit {
     });
   }
 
-  private findNodeInTree(nodes: SpecTreeNode[], identifier: string, nameFallback?: string): SpecTreeNode | null {
+  private findNodeAndCollectParents(
+    nodes: SpecTreeNode[],
+    identifier?: string | null,
+    nameFallback?: string | null
+  ): { node: SpecTreeNode; parentIds: string[] } | null {
     if (!identifier && !nameFallback) return null;
     const cleanId = (identifier || '').trim().toLowerCase();
     const cleanFallback = (nameFallback || '').trim().toLowerCase();
-
-    // 1. Khớp chính xác ID
-    for (const node of nodes) {
-      if (node.id === identifier) return node;
-      if (node.children?.length) {
-        const found = this.findNodeInTree(node.children, identifier, nameFallback);
-        if (found) return found;
-      }
-    }
-
-    // 2. Khớp theo tên tệp (có hoặc không có phần mở rộng .md, .txt, .docx, .xlsx, .pdf)
     const stripExt = (name: string) => name.replace(/\.[^/.]+$/, '').trim().toLowerCase();
     const targetBase = stripExt(cleanId);
     const fallbackBase = cleanFallback ? stripExt(cleanFallback) : '';
 
-    for (const node of nodes) {
-      if (node.isDirectory) {
-        if (node.children?.length) {
-          const found = this.findNodeInTree(node.children, identifier, nameFallback);
-          if (found) return found;
+    // BƯỚC 1: Tìm kiếm khớp chính xác (Exact Match) trên toàn bộ cây thư mục trước
+    const findExact = (
+      list: SpecTreeNode[],
+      parentPath: string[] = []
+    ): { node: SpecTreeNode; parentIds: string[] } | null => {
+      for (const node of list) {
+        if (node.id === identifier) {
+          return { node, parentIds: parentPath };
         }
-        continue;
+        if (!node.isDirectory) {
+          const nodeLower = node.name.toLowerCase();
+          const nodeBase = stripExt(nodeLower);
+          if (
+            nodeLower === cleanId ||
+            nodeBase === targetBase ||
+            (cleanFallback && (nodeLower === cleanFallback || nodeBase === fallbackBase))
+          ) {
+            return { node, parentIds: parentPath };
+          }
+        } else if (node.children?.length) {
+          const childFound = findExact(node.children, [...parentPath, node.id]);
+          if (childFound) return childFound;
+        }
       }
+      return null;
+    };
 
-      const nodeNameLower = node.name.toLowerCase();
-      const nodeBase = stripExt(nodeNameLower);
+    const exactMatch = findExact(nodes);
+    if (exactMatch) return exactMatch;
 
-      if (
-        nodeNameLower === cleanId ||
-        nodeBase === targetBase ||
-        (cleanFallback && (nodeNameLower === cleanFallback || nodeBase === fallbackBase))
-      ) {
-        return node;
-      }
-
-      // Khớp một phần từ khóa
-      if (
-        cleanId.length > 3 &&
-        (nodeNameLower.includes(cleanId) || cleanId.includes(nodeNameLower) || nodeBase.includes(targetBase) || targetBase.includes(nodeBase))
-      ) {
-        return node;
-      }
-
-      if (
-        cleanFallback.length > 3 &&
-        (nodeNameLower.includes(cleanFallback) || cleanFallback.includes(nodeNameLower) || nodeBase.includes(fallbackBase) || fallbackBase.includes(nodeBase))
-      ) {
-        return node;
-      }
+    // BƯỚC 2: Chỉ khi không có bất kỳ tệp nào khớp chính xác, mới tìm kiếm khớp một phần (Partial Match)
+    if (cleanId.length > 3 || cleanFallback.length > 3) {
+      const findPartial = (
+        list: SpecTreeNode[],
+        parentPath: string[] = []
+      ): { node: SpecTreeNode; parentIds: string[] } | null => {
+        for (const node of list) {
+          if (!node.isDirectory) {
+            const nodeLower = node.name.toLowerCase();
+            const nodeBase = stripExt(nodeLower);
+            if (
+              (cleanId.length > 3 && (nodeLower.includes(cleanId) || cleanId.includes(nodeLower) || nodeBase.includes(targetBase) || targetBase.includes(nodeBase))) ||
+              (cleanFallback.length > 3 && (nodeLower.includes(cleanFallback) || cleanFallback.includes(nodeLower) || nodeBase.includes(fallbackBase) || fallbackBase.includes(nodeBase)))
+            ) {
+              return { node, parentIds: parentPath };
+            }
+          } else if (node.children?.length) {
+            const childFound = findPartial(node.children, [...parentPath, node.id]);
+            if (childFound) return childFound;
+          }
+        }
+        return null;
+      };
+      return findPartial(nodes);
     }
 
     return null;
@@ -371,71 +393,129 @@ export class SpecHubPageComponent implements OnInit {
     if (!sectionText) return;
     const clean = sectionText.trim().toLowerCase();
 
-    // Thử cuộn sau khi template đã vẽ nội dung ra DOM
-    setTimeout(() => {
-      const activeContainers = document.querySelectorAll(
-        '.prose, .spec-hub-content-container, .spec-viewer-container, .spec-doc-canvas, textarea, table'
-      );
-      if (!activeContainers || activeContainers.length === 0) return;
+    // Tạo danh sách các biến thể tìm kiếm theo thứ tự ưu tiên
+    const searchTerms: string[] = [clean];
 
-      for (let c = 0; c < activeContainers.length; c++) {
-        const container = activeContainers[c] as HTMLElement;
+    // Bỏ các tiền tố thường gặp "Mục", "Phần", "Chương", "Điều", "Epic", "Bước"
+    const strippedPrefix = clean.replace(/^(mục|phần|chương|điều|epic|bước|step|section)\s*[:\.]?\s*/i, '').trim();
+    if (strippedPrefix && strippedPrefix.length >= 2 && !searchTerms.includes(strippedPrefix)) {
+      searchTerms.push(strippedPrefix);
+    }
 
-        // Nếu là textarea (.txt / .md ở chế độ edit)
-        if (container.tagName === 'TEXTAREA') {
-          const ta = container as HTMLTextAreaElement;
-          const val = (ta.value || '').toLowerCase();
-          const idx = val.indexOf(clean);
+    // Các cụm từ chia theo dấu hai chấm hoặc gạch nối
+    const subParts = clean.split(/[:\-–—]/).map(p => p.trim()).filter(p => p.length >= 3);
+    for (const part of subParts) {
+      if (!searchTerms.includes(part)) {
+        searchTerms.push(part);
+      }
+    }
+
+    // Từ khóa quan trọng (độ dài >= 3 hoặc số La Mã)
+    const keywords = clean.split(/[\s:,\-]+/).filter(w => w.length >= 3 || /^[ivxlcdm]+$/i.test(w));
+
+    const performScroll = (): boolean => {
+      // 1. Textarea (.txt / .md ở chế độ edit)
+      const textareas = document.querySelectorAll('textarea');
+      for (let i = 0; i < textareas.length; i++) {
+        const ta = textareas[i] as HTMLTextAreaElement;
+        if (!ta.offsetParent) continue;
+        const val = (ta.value || '').toLowerCase();
+        for (const term of searchTerms) {
+          const idx = val.indexOf(term);
           if (idx >= 0) {
             ta.focus();
-            ta.setSelectionRange(idx, idx + clean.length);
+            ta.setSelectionRange(idx, idx + term.length);
             const lineNum = val.substring(0, idx).split('\n').length;
             ta.scrollTop = Math.max(0, (lineNum - 3) * 22);
-            return;
+            return true;
           }
-          continue;
-        }
-
-        // Tìm kiếm các thẻ tiêu đề và phân đoạn văn bản
-        const candidates = container.querySelectorAll(
-          'h1, h2, h3, h4, h5, h6, p, li, strong, b, tr, td, th, span, div'
-        );
-        let matchedEl: HTMLElement | null = null;
-
-        for (let i = 0; i < candidates.length; i++) {
-          const el = candidates[i] as HTMLElement;
-          const text = (el.innerText || '').trim().toLowerCase();
-          if (text && (text === clean || text.includes(clean) || (clean.length > 5 && clean.includes(text)))) {
-            matchedEl = el;
-            break;
-          }
-        }
-
-        // Nếu chưa tìm thấy chính xác, tìm theo từ khóa nổi bật
-        if (!matchedEl) {
-          const keywords = clean.split(/[\s:,\-]+/).filter(w => w.length > 3);
-          if (keywords.length > 0) {
-            let maxCount = 0;
-            for (let i = 0; i < candidates.length; i++) {
-              const el = candidates[i] as HTMLElement;
-              const text = (el.innerText || '').toLowerCase();
-              const count = keywords.filter(k => text.includes(k)).length;
-              if (count > maxCount && count >= Math.min(2, keywords.length)) {
-                maxCount = count;
-                matchedEl = el;
-              }
-            }
-          }
-        }
-
-        if (matchedEl) {
-          matchedEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          matchedEl.classList.add('spec-highlight-pulse');
-          setTimeout(() => matchedEl?.classList.remove('spec-highlight-pulse'), 4500);
-          return;
         }
       }
-    }, 450);
+
+      // 2. Ưu tiên cao nhất: Headings (h1, h2, h3, h4, h5, h6)
+      const headings = document.querySelectorAll('.prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6, h1, h2, h3, h4, h5, h6');
+      for (let i = 0; i < headings.length; i++) {
+        const h = headings[i] as HTMLElement;
+        if (!h.offsetParent) continue;
+        const hText = (h.innerText || '').trim().toLowerCase();
+        for (const term of searchTerms) {
+          if (hText.includes(term) || (term.length > 5 && term.includes(hText))) {
+            h.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            h.classList.add('spec-highlight-pulse');
+            setTimeout(() => h.classList.remove('spec-highlight-pulse'), 4500);
+            return true;
+          }
+        }
+      }
+
+      // 3. Ưu tiên 2: Strong / Bold
+      const strongs = document.querySelectorAll('.prose strong, .prose b, strong, b');
+      for (let i = 0; i < strongs.length; i++) {
+        const s = strongs[i] as HTMLElement;
+        if (!s.offsetParent) continue;
+        const sText = (s.innerText || '').trim().toLowerCase();
+        for (const term of searchTerms) {
+          if (sText.includes(term)) {
+            s.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            s.classList.add('spec-highlight-pulse');
+            setTimeout(() => s.classList.remove('spec-highlight-pulse'), 4500);
+            return true;
+          }
+        }
+      }
+
+      // 4. Ưu tiên 3: Paragraphs / List items / Table rows
+      const paragraphs = document.querySelectorAll('.prose p, .prose li, .prose tr, table tr');
+      for (let i = 0; i < paragraphs.length; i++) {
+        const p = paragraphs[i] as HTMLElement;
+        if (!p.offsetParent) continue;
+        const pText = (p.innerText || '').toLowerCase();
+        for (const term of searchTerms) {
+          if (pText.includes(term)) {
+            p.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            p.classList.add('spec-highlight-pulse');
+            setTimeout(() => p.classList.remove('spec-highlight-pulse'), 4500);
+            return true;
+          }
+        }
+      }
+
+      // 5. Ưu tiên 4: Khớp tần suất từ khóa
+      if (keywords.length >= 2) {
+        let bestEl: HTMLElement | null = null;
+        let maxCount = 0;
+        const allCandidates = document.querySelectorAll('.prose p, .prose li, .prose h1, .prose h2, .prose h3');
+        for (let i = 0; i < allCandidates.length; i++) {
+          const el = allCandidates[i] as HTMLElement;
+          if (!el.offsetParent) continue;
+          const text = (el.innerText || '').toLowerCase();
+          const count = keywords.filter(k => text.includes(k)).length;
+          if (count > maxCount && count >= Math.ceil(keywords.length * 0.6)) {
+            maxCount = count;
+            bestEl = el;
+          }
+        }
+        if (bestEl) {
+          bestEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          bestEl.classList.add('spec-highlight-pulse');
+          setTimeout(() => bestEl?.classList.remove('spec-highlight-pulse'), 4500);
+          return true;
+        }
+      }
+
+      return false;
+    };
+
+    // Thử nhiều lần để đảm bảo bắt kịp DOM sau khi nạp và render
+    setTimeout(() => {
+      if (!performScroll()) {
+        setTimeout(() => {
+          if (!performScroll()) {
+            setTimeout(performScroll, 700);
+          }
+        }, 300);
+      }
+    }, 150);
   }
 
   selectTab(tabId: string): void {

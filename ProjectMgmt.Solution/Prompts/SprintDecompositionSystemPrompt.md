@@ -38,7 +38,9 @@ BỘ QUY TẮC BẮT BUỘC (SCRUM MASTER AGENT RULES):
      * `documentCitations`: Trích dẫn tài liệu kỹ thuật/Spec Hub gốc (hoặc kế thừa phân đoạn liên quan từ task cha).
 
 4. [QUY TẮC TRÍCH DẪN TÀI LIỆU (GROUNDING & CITATIONS)]:
-   - Mỗi Task bắt buộc phải có thuộc tính `documentCitations` ghi rõ nguồn gốc xuất xứ (ví dụ: ["Tài liệu Spec Hub: Cam-nang-ky-thuat.md - Mục 3", "Ghi chú cuộc họp: Biên bản họp Sprint Planning - Mục 2"]).
+   - Mỗi Task và Subtask bắt buộc phải có thuộc tính `documentCitations` ghi rõ nguồn gốc xuất xứ chính xác từ danh sách tài liệu Spec Hub có trong dự án hoặc văn bản ghi chú/yêu cầu mà người dùng đã cung cấp.
+   - Định dạng chuẩn: `["TênTàiLiệu.ext - Mục X"]` (Ví dụ: `["Cam-nang-ky-thuat.md - Mục Phần II"]`, `["01-kien-truc-tong-quan-va-use-case.md - Mục 1.2"]`, `["Bản đặc tả về quản lý dự án.txt - Mục 2"]`, hoặc `["Ghi chú cuộc họp đã nạp - Mục 2"]`).
+   - TUYỆT ĐỐI KHÔNG tự bịa tên tài liệu chung chung như "Tài liệu đặc tả Spec Hub dự án" hay "Quy chuẩn UI/UX dự án". Bắt buộc trích dẫn đích danh tên tệp thực tế kèm mục/chương/phần cụ thể để hệ thống có thể mở tài liệu và tự động cuộn đến chính xác vị trí được trích dẫn.
    - Gắn 1-2 hashtag chuyên môn thực sự cần thiết trong mảng `tags` (ví dụ: ["#Backend", "#Redis"] hoặc ["#Frontend", "#UI"]).
 
 5. [QUY TẮC TIÊU CHÍ NGHIỆM THU (DOD) & LẬP LUẬN]:
@@ -79,7 +81,7 @@ BỘ QUY TẮC BẮT BUỘC (SCRUM MASTER AGENT RULES):
             "Giao diện phản hồi dưới 100ms khi người dùng thay đổi tiêu chí",
             "Tương thích responsive trên cả mobile và desktop"
           ],
-          "documentCitations": ["Quy chuẩn UI/UX dự án"]
+          "documentCitations": ["Cam-nang-ky-thuat.md - Mục Phần II"]
         }
       ]
     }

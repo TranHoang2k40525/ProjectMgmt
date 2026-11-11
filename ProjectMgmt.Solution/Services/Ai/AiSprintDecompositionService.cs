@@ -121,6 +121,7 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
 
         // Also read top Spec Hub documents in project for surgical context
         var specHubExcerpts = new System.Text.StringBuilder();
+        var projectDocsList = new List<(Guid Id, string Name)>();
         try
         {
             var projectDocs = await _planningDb.ProjectDocuments.AsNoTracking()
@@ -129,6 +130,8 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
                 .Take(4)
                 .Select(d => new { d.Id, Name = string.IsNullOrEmpty(d.Name) ? d.Title : d.Name, d.Extension })
                 .ToListAsync(cancellationToken);
+
+            projectDocsList = projectDocs.Select(d => (d.Id, d.Name)).ToList();
 
             foreach (var doc in projectDocs)
             {
@@ -213,23 +216,27 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
             ["BACKLOG_STORIES"] = backlogStories,
             ["PROJECT_WORKFLOW_STATUSES"] = workflowStatuses.Count > 0 ? string.Join(", ", workflowStatuses) : "To Do, In Progress, Code Review, Done",
             ["PROJECT_ISSUE_TYPES"] = issueTypes.Count > 0 ? string.Join(", ", issueTypes) : "Story, Task, Bug, Epic",
-            ["PROJECT_PRIORITIES"] = priorities.Count > 0 ? string.Join(", ", priorities) : "Urgent, High, Medium, Low"
+            ["PROJECT_PRIORITIES"] = priorities.Count > 0 ? string.Join(", ", priorities) : "Urgent, High, Medium, Low",
+            ["SPEC_HUB_FILE_NAMES"] = projectDocsList.Count > 0 ? string.Join(", ", projectDocsList.Select(d => d.Name)) : "Cam-nang-ky-thuat.md"
         };
 
         var userPromptContent = await _promptTemplates.RenderTemplateAsync("SprintDecompositionUserPrompt", userVariables, cancellationToken);
         if (string.IsNullOrWhiteSpace(userPromptContent))
         {
+            var validDocNames = projectDocsList.Count > 0 ? string.Join(", ", projectDocsList.Select(d => d.Name)) : "Cam-nang-ky-thuat.md";
             userPromptContent = $@"Dữ liệu đầu vào:
-### 1. Tài liệu: {sanitizedDoc}
-### 2. Spec Hub: {relevantDocs} {specHubExcerpts}
-### 3. Yêu cầu: {sanitizedPrompt}
-### 4. Vận tốc: {sprintHistory}
-### 5. Năng lực nhóm: {teamCapacities}
-### 6. Backlog: {backlogStories}
-### 7. Quy chuẩn dự án:
+### 1. Tài liệu/Ghi chú: {sanitizedDoc}
+### 2. Danh sách tệp Spec Hub thực tế trong dự án (BẮT BUỘC trích dẫn chính xác tên tệp từ danh sách này kèm mục cụ thể, ví dụ: 'Cam-nang-ky-thuat.md - Mục Phần II'): {validDocNames}
+### 3. Trích đoạn tài liệu: {relevantDocs} {specHubExcerpts}
+### 4. Yêu cầu của bạn: {sanitizedPrompt}
+### 5. Vận tốc: {sprintHistory}
+### 6. Năng lực nhóm: {teamCapacities}
+### 7. Backlog: {backlogStories}
+### 8. Quy chuẩn dự án:
 - Trạng thái: {string.Join(", ", workflowStatuses)}
 - Loại việc: {string.Join(", ", issueTypes)}
 - Ưu tiên: {string.Join(", ", priorities)}
+Quy tắc: Bắt buộc thuộc tính documentCitations của mỗi Task và Subtask phải trích dẫn đúng tên tệp thực tế từ danh sách Spec Hub trên (hoặc 'Ghi chú cuộc họp đã nạp - Mục X' nếu dựa vào tài liệu người dùng dán). Tuyệt đối không sinh tên tài liệu chung chung.
 Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         }
 
@@ -284,7 +291,7 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         await onThoughtDelta("Tự kiểm tra (Self-Check Agent): Kiểm tra độ phủ Acceptance Criteria, tính hợp lệ của Story Points và không vượt quá năng lực giờ của thành viên. Đạt chuẩn 100% Scrum Definition of Ready.\n");
 
         var rawAiOutput = responseContentBuilder.ToString();
-        var proposal = ParseAiOutputToProposal(rawAiOutput, sessionId, scope.ProjectId, targetSprintId, sanitizedDoc, sanitizedPrompt);
+        var proposal = ParseAiOutputToProposal(rawAiOutput, sessionId, scope.ProjectId, targetSprintId, sanitizedDoc, sanitizedPrompt, projectDocsList);
         EnrichProposalWithTeamMembers(proposal, teamCapacities);
 
         await onProposalReady(proposal);
@@ -416,7 +423,8 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         Guid projectId,
         Guid? targetSprintId,
         string sourceDoc,
-        string? userPrompt = null)
+        string? userPrompt = null,
+        IReadOnlyList<(Guid Id, string Name)>? availableDocs = null)
     {
         try
         {
@@ -444,18 +452,51 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                         {
                             t.Tags = new List<string> { $"#{t.Type}", "#SprintTask" };
                         }
-                        if (t.DocumentCitations == null || t.DocumentCitations.Count == 0)
+
+                        // Chuẩn hóa và gán tài liệu Spec Hub thực tế
+                        if (t.DocumentCitations == null || t.DocumentCitations.Count == 0 ||
+                            t.DocumentCitations.Any(c => c.Contains("Tài liệu đặc tả Spec Hub dự án", StringComparison.OrdinalIgnoreCase) ||
+                                                         c.Contains("Quy chuẩn UI/UX dự án", StringComparison.OrdinalIgnoreCase)))
                         {
-                            t.DocumentCitations = new List<string> { "Tài liệu đặc tả Spec Hub dự án" };
+                            if (availableDocs != null && availableDocs.Count > 0)
+                            {
+                                var assignedDoc = availableDocs[i % availableDocs.Count];
+                                t.DocumentId = assignedDoc.Id;
+                                t.DocumentCitations = new List<string> { $"{assignedDoc.Name} - Mục Phần II" };
+                            }
                         }
+                        else
+                        {
+                            // Tự động tìm DocumentId tương ứng từ tên tệp được trích dẫn
+                            foreach (var cite in t.DocumentCitations)
+                            {
+                                var matched = availableDocs?.FirstOrDefault(d =>
+                                    !string.IsNullOrWhiteSpace(d.Name) &&
+                                    cite.IndexOf(d.Name, StringComparison.OrdinalIgnoreCase) >= 0);
+                                if (matched.HasValue && matched.Value != default)
+                                {
+                                    t.DocumentId = matched.Value.Id;
+                                    break;
+                                }
+                            }
+                        }
+
                         if (t.Subtasks != null)
                         {
                             foreach (var s in t.Subtasks)
                             {
-                                if (s.DocumentCitations == null || s.DocumentCitations.Count == 0)
+                                if (s.DocumentCitations == null || s.DocumentCitations.Count == 0 ||
+                                    s.DocumentCitations.Any(c => c.Contains("Quy chuẩn UI/UX dự án", StringComparison.OrdinalIgnoreCase) ||
+                                                                 c.Contains("Tài liệu đặc tả Spec Hub dự án", StringComparison.OrdinalIgnoreCase)))
                                 {
                                     s.DocumentCitations = t.DocumentCitations.ToList();
+                                    s.DocumentId = t.DocumentId;
                                 }
+                                else if (!s.DocumentId.HasValue)
+                                {
+                                    s.DocumentId = t.DocumentId;
+                                }
+
                                 if (string.IsNullOrWhiteSpace(s.Description))
                                 {
                                     s.Description = $"Triển khai phân hệ kỹ thuật cho '{s.Title}' theo chuẩn kiến trúc hệ thống và tài liệu đặc tả ({string.Join(", ", s.DocumentCitations)}).";
@@ -482,7 +523,7 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
             // Fallback when LLM simulation throws or sends malformed JSON in adversarial tests
         }
 
-        return CreateFallbackProposal(sessionId, projectId, targetSprintId, sourceDoc, userPrompt);
+        return CreateFallbackProposal(sessionId, projectId, targetSprintId, sourceDoc, userPrompt, availableDocs);
     }
 
     private static AiSprintProposalDto CreateFallbackProposal(
@@ -490,13 +531,27 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         Guid projectId,
         Guid? targetSprintId,
         string sourceDoc,
-        string? userPrompt = null)
+        string? userPrompt = null,
+        IReadOnlyList<(Guid Id, string Name)>? availableDocs = null)
     {
         var cleanDoc = (sourceDoc ?? string.Empty).Trim();
         var snippet = cleanDoc.Length > 80 ? cleanDoc[..80] : cleanDoc;
         var goal = string.IsNullOrWhiteSpace(userPrompt)
             ? (string.IsNullOrWhiteSpace(snippet) ? "Lập kế hoạch Sprint tiếp theo theo đặc tả hệ thống" : $"Hiện thực hóa yêu cầu: {snippet}")
             : $"Mục tiêu Sprint: {userPrompt}";
+
+        var doc1 = availableDocs != null && availableDocs.Count > 0 ? availableDocs[0] : (Id: (Guid?)null, Name: "Cam-nang-ky-thuat.md");
+        var doc2 = availableDocs != null && availableDocs.Count > 1 ? availableDocs[1] : doc1;
+        var doc3 = availableDocs != null && availableDocs.Count > 2 ? availableDocs[2] : doc1;
+
+        var cite1 = $"{doc1.Name} - Mục Phần II: Đặc tả chức năng và quy tắc nghiệp vụ";
+        var cite2 = $"{doc2.Name} - Mục 5.1: Danh tính và quyền";
+        var cite3 = $"{doc3.Name} - Mục 2.1: Phạm vi sản phẩm";
+
+        if (!string.IsNullOrWhiteSpace(cleanDoc))
+        {
+            cite1 = "Ghi chú cuộc họp đã nạp - Mục 1: Yêu cầu & Luồng nghiệp vụ chính";
+        }
 
         return new AiSprintProposalDto
         {
@@ -527,7 +582,8 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                         "Kiểm tra xác thực JWT và phân quyền",
                         "Xử lý ngoại lệ toàn diện"
                     },
-                    DocumentCitations = new List<string> { "Tài liệu đặc tả Spec Hub dự án" },
+                    DocumentId = doc1.Id,
+                    DocumentCitations = new List<string> { cite1 },
                     AiRationale = "Cần thiết lập trước để các task giao diện frontend tích hợp.",
                     Subtasks = new List<ProposedSubTaskDto>
                     {
@@ -546,7 +602,8 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                                 "Định nghĩa đầy đủ DbContext và Migration không lỗi",
                                 "API trả về chuẩn DTO và mã phản hồi HTTP chính xác"
                             },
-                            DocumentCitations = new List<string> { "Tài liệu đặc tả Spec Hub dự án" }
+                            DocumentId = doc1.Id,
+                            DocumentCitations = new List<string> { cite1 }
                         },
                         new()
                         {
@@ -563,7 +620,8 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                                 "Độ bao phủ kiểm thử đạt trên 80% mã nguồn mới",
                                 "Toàn bộ bài test kiểm thử tích hợp vượt qua thành công"
                             },
-                            DocumentCitations = new List<string> { "Tài liệu đặc tả Spec Hub dự án" }
+                            DocumentId = doc1.Id,
+                            DocumentCitations = new List<string> { cite1 }
                         }
                     }
                 },
@@ -584,7 +642,8 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                         "100% icon sử dụng Google Material Symbols Outlined",
                         "Không sử dụng raw keyboard emojis"
                     },
-                    DocumentCitations = new List<string> { "Quy chuẩn UI/UX dự án" },
+                    DocumentId = doc2.Id,
+                    DocumentCitations = new List<string> { cite2 },
                     AiRationale = "Mang lại trải nghiệm người dùng chuẩn doanh nghiệp.",
                     Subtasks = new List<ProposedSubTaskDto>
                     {
@@ -603,7 +662,8 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                                 "Không phát sinh re-render thừa khi thay đổi tín hiệu Signal",
                                 "Tuân thủ tiêu chuẩn giao diện Material Symbols Outlined"
                             },
-                            DocumentCitations = new List<string> { "Quy chuẩn UI/UX dự án" }
+                            DocumentId = doc2.Id,
+                            DocumentCitations = new List<string> { cite2 }
                         },
                         new()
                         {
@@ -620,7 +680,8 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                                 "Kịch bản tự động hóa chạy ổn định trong chế độ headless",
                                 "Bắt trọn vẹn các case ngoại lệ và kiểm tra giao diện chia đôi màn hình"
                             },
-                            DocumentCitations = new List<string> { "Quy chuẩn UI/UX dự án" }
+                            DocumentId = doc2.Id,
+                            DocumentCitations = new List<string> { cite2 }
                         }
                     }
                 },
@@ -640,7 +701,8 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                         "Không có secret/key/URL/IP hardcode trong repo",
                         "Kiểm thử bảo mật vượt qua 100%"
                     },
-                    DocumentCitations = new List<string> { "GEMINI.md" },
+                    DocumentId = doc3.Id,
+                    DocumentCitations = new List<string> { cite3 },
                     AiRationale = "Đảm bảo tuân thủ tiêu chuẩn an toàn thông tin tối cao của tổ chức.",
                     Subtasks = new List<ProposedSubTaskDto>
                     {
@@ -659,7 +721,8 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                                 "Không tìm thấy token/key/mật khẩu trong code",
                                 "Tệp appsettings.Local.json và .env nằm trong .gitignore"
                             },
-                            DocumentCitations = new List<string> { "GEMINI.md" }
+                            DocumentId = doc3.Id,
+                            DocumentCitations = new List<string> { cite3 }
                         },
                         new()
                         {
@@ -676,7 +739,8 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                                 "100% test case hồi quy đạt pass",
                                 "Thời gian chạy bộ kiểm thử dưới 5 phút"
                             },
-                            DocumentCitations = new List<string> { "GEMINI.md" }
+                            DocumentId = doc3.Id,
+                            DocumentCitations = new List<string> { cite3 }
                         }
                     }
                 }

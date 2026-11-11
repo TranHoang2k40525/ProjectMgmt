@@ -80,9 +80,10 @@ Kho tài liệu đặc tả **Spec Hub** là "kho lưu trữ tri thức" của d
 
 ## 4. Cơ chế Trích dẫn Nguồn gốc (Citation Grounding) & Trải nghiệm Người dùng
 
-Mỗi Task do AI sinh ra bắt buộc phải có thuộc tính `citations` chỉ rõ nguồn gốc xuất xứ:
-- Ví dụ: `Tài liệu Spec Hub: Cam-nang-ky-thuat.md - Phần II`
-- Ví dụ: `Ghi chú cuộc họp: Biên bản họp Sprint Planning - Mục 3`
+Mỗi Task và Subtask do AI sinh ra bắt buộc phải có thuộc tính `documentCitations` chỉ rõ nguồn gốc xuất xứ từ tài liệu thực tế của dự án:
+- Ví dụ: `Cam-nang-ky-thuat.md - Mục Phần II: Đặc tả chức năng và quy tắc nghiệp vụ`
+- Ví dụ: `Bản đặc tả về quản lý dự án.txt - Mục 2`
+- Ví dụ: `Ghi chú cuộc họp đã nạp - Mục 1: Yêu cầu chính`
 
 ```mermaid
 sequenceDiagram
@@ -93,7 +94,8 @@ sequenceDiagram
 
     User->>UI: Nhấp vào nguồn trích dẫn tài liệu kỹ thuật
     UI->>Drawer: Mở ngăn kéo nội tuyến từ cạnh phải màn hình
-    Drawer->>Drawer: Hiển thị nội dung chi tiết của phân đoạn tài liệu
+    Drawer->>Drawer: Tìm kiếm chính xác tệp tin và dòng đề mục được trích dẫn
+    Drawer->>Drawer: Tự động cuộn mượt và đánh dấu nổi bật phân đoạn trích dẫn
     Note over UI,Drawer: Cuộc hội thoại và kết quả phân rã ở bên trái vẫn giữ nguyên trạng thái
     
     alt Người dùng muốn tiếp tục rà soát kế hoạch
@@ -101,15 +103,24 @@ sequenceDiagram
         Drawer-->>UI: Đóng ngăn kéo, tiêu điểm trở về bảng phân rã
     else Người dùng muốn chuyển sang xem toàn văn tài liệu
         User->>Drawer: Xác nhận mở toàn văn tài liệu
-        Drawer->>Hub: Điều hướng trực tiếp đến vị trí phân đoạn trích dẫn
+        Drawer->>Hub: Điều hướng trực tiếp đến vị trí phân đoạn trích dẫn (mở thư mục cha và cuộn tâm)
     end
 ```
 
-### Lợi ích Trải nghiệm Vượt trội:
-1. **Không ngắt quãng luồng tư duy (Zero Context Loss)**: Người dùng vừa xem kết quả AI đề xuất, vừa đọc lại đoạn đặc tả gốc trong tài liệu để đối chiếu xem AI có hiểu đúng ý mình không.
-2. **Deep Linking & Tự động Cuộn Mượt (Smooth Auto-Scroll)**: Đường dẫn `?docId=...&docName=...&section=...` tự động mở tệp tin và kích hoạt cơ chế `scrollIntoView({ behavior: 'smooth', block: 'center' })` đưa người dùng đến đúng vị trí đề mục cần xem trong Spec Hub (áp dụng cho Markdown, Word .docx, Excel .xlsx và tệp văn bản .txt).
-3. **Hiệu ứng Thị giác Nhận diện Điểm đọc (.spec-highlight-pulse)**: Đề mục hoặc phân đoạn trích dẫn được nhấp nháy viền vàng hổ phách nổi bật trong 4.5 giây, giúp người dùng nhận diện ngay phân đoạn trọng tâm ngay cả trong các bộ tài liệu đặc tả dài hàng nghìn trang.
-4. **Bảo tồn Tuyệt đối Ngữ cảnh Hội thoại**: Nút "Quay lại đoạn chat" cho phép đóng Drawer tức thì, trả lại tiêu điểm bảng đề xuất công việc mà không làm mất phiên làm việc hay nội dung người dùng đã nạp.
+### Lợi ích Trải nghiệm Vượt trội & Thuật toán Xử lý Chính xác:
+1. **Thuật toán Tìm kiếm Hai Lớp (Two-Pass Exact-First Traversal)**:
+   - **Lớp 1 (Exact Match)**: Quét đệ quy toàn bộ cây thư mục để tìm tệp tin khớp chính xác tên tệp (có hoặc không có phần mở rộng như `.md`, `.txt`, `.docx`, `.xlsx`, `.pdf`). Thuật toán ngăn chặn triệt để hiện tượng tìm kiếm tham lam (greedy match) làm nhầm lẫn tệp tin gốc với các tệp tin chứa tên tương tự ở thư mục con.
+   - **Lớp 2 (Partial Fallback)**: Chỉ kích hoạt khi toàn bộ cây thư mục không có tệp nào khớp chính xác, hỗ trợ tìm kiếm từ khóa nổi bật.
+2. **Ưu tiên Khớp Dòng Tiêu đề (Deep Section Heading Prioritization)**:
+   - Khi tìm kiếm đề mục (ví dụ: `Mục Phần II`), hệ thống phân tích các dòng bắt đầu bằng ký tự tiêu đề Markdown (`#`, `##`, `###`) hoặc in đậm (`**`), tách biệt hoàn toàn với các từ xuất hiện ngẫu nhiên trong nội dung văn bản.
+   - Nhờ đó, đề mục `# Phần II. Đặc tả chức năng và quy tắc nghiệp vụ` luôn được ưu tiên chọn tuyệt đối, tránh cuộn nhầm lên các câu văn chứa từ tương tự ở đầu tài liệu.
+3. **Đánh dấu Trực quan & Cuộn Mượt Tọa độ Tâm (Smooth Centering & Mark Glow)**:
+   - Vị trí trích dẫn được bọc thẻ đánh dấu `<mark id="spec-target-highlight" class="spec-highlight-mark">` với viền sáng vàng hổ phách và hiệu ứng phát quang động.
+   - Hàm `scrollIntoView({ behavior: 'smooth', block: 'center' })` đưa phân đoạn trích dẫn vào chính giữa tầm mắt người dùng, loại bỏ hoàn toàn việc ước tính số dòng sai lệch.
+4. **Mở rộng Thư mục Cha Tự động (Ancestor Folder Auto-Expansion)**:
+   - Khi chuyển hướng sang trang Spec Hub toàn màn hình, hệ thống tự động thu thập danh sách toàn bộ thư mục cha và kích hoạt mở rộng trên cây thư mục, giúp người dùng nhận diện ngay phân cấp tài liệu.
+5. **Bảo tồn Ngữ cảnh Ghi chú Phiên làm việc**:
+   - Trường hợp trích dẫn bắt nguồn từ biên bản cuộc họp hoặc yêu cầu người dùng dán vào, ngăn kéo nội tuyến hiển thị văn bản ghi chú với đầy đủ tính năng tìm kiếm và cuộn mượt.
 
 ---
 
