@@ -45,8 +45,14 @@
 - **QUY TRÌNH BIÊN DỊCH KIỂM THỬ AN TOÀN**:
   - **Backend .NET**: Luôn tạo `ProjectMgmt.Solution/app_offline.htm` trước khi build (`dotnet build`) và xóa ngay sau khi hoàn tất để giải phóng file lock của IIS.
   - **Frontend Angular**: Chạy `npm run build` để kiểm tra compile TypeScript 0 lỗi trước khi bàn giao.
-- **TỰ ĐỘNG COMMIT VÀ PUSH ĐÚNG NHÁNH**:
-  - Mỗi khi hoàn thành yêu cầu, tự động commit theo chuẩn Conventional Commits (ví dụ: `fix: ...`, `feat: ...`, `docs: ...`) và push lên nhánh `hoangtv` với lệnh: `git push origin hoangtv`.
+- **TỰ ĐỘNG COMMIT VÀ PUSH ĐÚNG NHÁNH (TIÊU CHUẨN COMMIT TIẾNG VIỆT)**:
+  - Mỗi khi hoàn thành yêu cầu, tự động commit theo chuẩn Conventional Commits với **toàn bộ nội dung thông điệp bằng TIẾNG VIỆT 100%** (chỉ giữ lại các tiền tố loại commit ở đầu bằng tiếng Anh như `feat:`, `fix:`, `update:`, `docs:`, `refactor:`, `test:`, `chore:` hoặc kèm scope `feat(scope):`).
+  - Tuyệt đối không viết nội dung mô tả commit bằng tiếng Anh.
+  - Ví dụ chuẩn mực:
+    - `feat(ai-decompose): bổ sung trích dẫn đặc tả và ngăn kéo chi tiết cho việc con`
+    - `fix(backlog): loại bỏ thanh tiến trình 5 bước và chuẩn hóa avatar việc con thẳng hàng`
+    - `docs(ai): cập nhật cẩm nang toàn diện module AI và đồng bộ các sơ đồ kiến trúc`
+  - Tự động push lên nhánh `hoangtv` với lệnh: `git push origin hoangtv`.
 
 ---
 
