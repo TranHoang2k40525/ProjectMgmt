@@ -39,6 +39,7 @@ public class AiAgentController : ControllerBase
     private readonly IUserLookupService _userLookup;
     private readonly ILogger<AiAgentController> _logger;
     private readonly IAiSprintCommitCoordinator? _commitCoordinator;
+    private readonly IAiTokenUsageTracker? _tokenTracker;
 
     public AiAgentController(
         IAiSprintDecompositionService decompositionService,
@@ -49,7 +50,8 @@ public class AiAgentController : ControllerBase
         ICurrentUserContext currentUser,
         IUserLookupService userLookup,
         ILogger<AiAgentController> logger,
-        IAiSprintCommitCoordinator? commitCoordinator = null)
+        IAiSprintCommitCoordinator? commitCoordinator = null,
+        IAiTokenUsageTracker? tokenTracker = null)
     {
         _decompositionService = decompositionService;
         _textExtractor = textExtractor;
@@ -60,6 +62,7 @@ public class AiAgentController : ControllerBase
         _userLookup = userLookup;
         _logger = logger;
         _commitCoordinator = commitCoordinator;
+        _tokenTracker = tokenTracker;
     }
 
     /// <summary>
@@ -207,6 +210,38 @@ public class AiAgentController : ControllerBase
             var stagedProposal = await _stagingService.GetProposalAsync<AiSprintProposalDto>(sessionId, ct);
             var taskCount = stagedProposal?.Tasks.Count ?? 0;
             var storyPoints = stagedProposal?.TotalStoryPoints ?? 0;
+
+            if (_tokenTracker != null)
+            {
+                var inputLen = (extractedContent?.Length ?? 0) + (request.Prompt?.Length ?? 0);
+                var estPromptTokens = Math.Max(250, inputLen / 4);
+                var estCompletionTokens = Math.Max(400, taskCount * 140);
+                _tokenTracker.RecordUsage(new AiUsageRecord(
+                    SessionId: sessionId,
+                    UserId: userId.Value,
+                    ProjectId: request.ProjectId,
+                    Model: request.Model ?? "Gemini 2.5 Flash",
+                    PromptTokens: estPromptTokens,
+                    CompletionTokens: estCompletionTokens,
+                    DurationMs: stopwatch.ElapsedMilliseconds,
+                    Success: true,
+                    TimestampUtc: DateTime.UtcNow,
+                    OperationName: "DecomposeSprint"));
+
+                if (stagedProposal != null)
+                {
+                    _tokenTracker.RecordSession(new AiSessionSummary(
+                        SessionId: sessionId,
+                        ProjectId: request.ProjectId,
+                        CreatedByUserId: userId.Value,
+                        CreatedByName: actorName,
+                        SprintGoal: stagedProposal.SprintGoal,
+                        TaskCount: taskCount,
+                        TotalStoryPoints: storyPoints,
+                        Model: request.Model ?? "Gemini 2.5 Flash",
+                        CreatedAtUtc: DateTime.UtcNow));
+                }
+            }
 
             await EmitEventAsync(AiSseEventTypes.Completed, new AiCompletedPayload(
                 sessionId,
@@ -482,5 +517,49 @@ public class AiAgentController : ControllerBase
         }
 
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Retrieves token consumption statistics and KPIs for user / project.
+    /// </summary>
+    [HttpGet("token-usage")]
+    public IActionResult GetTokenUsage([FromQuery] Guid? projectId = null)
+    {
+        var userId = _currentUser.UserId;
+        if (!userId.HasValue || userId.Value == Guid.Empty)
+        {
+            return Unauthorized(new { code = "UNAUTHORIZED", message = "Yêu cầu đăng nhập." });
+        }
+
+        if (_tokenTracker == null)
+        {
+            return Ok(new AiTokenUsageSummary(0, 0, 0, 0, 0, 100.0, 0.0, new Dictionary<string, int>(), new List<AiUsageRecord>()));
+        }
+
+        var summary = projectId.HasValue
+            ? _tokenTracker.GetProjectUsageSummary(projectId.Value)
+            : _tokenTracker.GetUserUsageSummary(userId.Value);
+
+        return Ok(summary);
+    }
+
+    /// <summary>
+    /// Retrieves recent AI sprint decomposition session summaries for a project.
+    /// </summary>
+    [HttpGet("sessions")]
+    public async Task<IActionResult> GetProjectSessions([FromQuery] Guid projectId)
+    {
+        if (projectId == Guid.Empty)
+        {
+            return BadRequest(new { code = "INVALID_PROJECT_ID", message = "Mã dự án không hợp lệ." });
+        }
+
+        if (!await _projectAccess.AllowsAsync(projectId, "project.read"))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Không có quyền truy cập." });
+        }
+
+        var sessions = _tokenTracker?.GetProjectSessions(projectId, 15) ?? new List<AiSessionSummary>();
+        return Ok(sessions);
     }
 }

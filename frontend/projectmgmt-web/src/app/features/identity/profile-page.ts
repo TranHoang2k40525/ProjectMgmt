@@ -4,11 +4,12 @@ import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } 
 import { Router } from '@angular/router';
 import { IdentityService } from '../../core/services/identity.service';
 import { ProjectManagementService } from '../../core/services/project-management.service';
+import { AiAgentService, AiTokenUsageSummary } from '../../core/services/ai-agent.service';
 import { UserProfileModel, SkillModel, UserSkillModel, ActiveSessionModel } from '../../core/models/identity.models';
 import { AvatarModalComponent } from '../../shared/components/avatar-modal/avatar-modal.component';
 import { resolveAvatarUrl } from '../../core/utils/avatar.utils';
 
-export type ProfileTab = 'GENERAL' | 'SECURITY' | 'SKILLS' | 'SESSIONS';
+export type ProfileTab = 'GENERAL' | 'SECURITY' | 'SKILLS' | 'SESSIONS' | 'AI_USAGE';
 
 @Component({
   selector: 'app-profile-page',
@@ -20,6 +21,7 @@ export type ProfileTab = 'GENERAL' | 'SECURITY' | 'SKILLS' | 'SESSIONS';
 export class ProfilePageComponent implements OnInit {
   private static readonly strongPasswordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,128}$/;
   private identityService = inject(IdentityService);
+  private aiAgentService = inject(AiAgentService);
   readonly projectService = inject(ProjectManagementService);
   private fb = inject(FormBuilder);
   private router = inject(Router);
@@ -28,6 +30,9 @@ export class ProfilePageComponent implements OnInit {
   readonly loading = signal<boolean>(false);
   readonly successMsg = signal<string | null>(null);
   readonly errorMsg = signal<string | null>(null);
+
+  readonly aiUsage = signal<AiTokenUsageSummary | null>(null);
+  readonly aiUsageLoading = signal<boolean>(false);
 
   user = signal<UserProfileModel | null>(null);
   readonly isAvatarModalOpen = signal(false);
@@ -130,6 +135,23 @@ export class ProfilePageComponent implements OnInit {
     this.activeTab.set(tab);
     this.successMsg.set(null);
     this.errorMsg.set(null);
+    if (tab === 'AI_USAGE' && !this.aiUsage()) {
+      this.loadAiUsage();
+    }
+  }
+
+  loadAiUsage(): void {
+    this.aiUsageLoading.set(true);
+    const projId = this.projectService.hasActiveProject() ? this.projectService.currentProject().id : undefined;
+    this.aiAgentService.getTokenUsage(projId).subscribe({
+      next: (summary) => {
+        this.aiUsage.set(summary);
+        this.aiUsageLoading.set(false);
+      },
+      error: () => {
+        this.aiUsageLoading.set(false);
+      }
+    });
   }
 
   onUpdateProfile(): void {

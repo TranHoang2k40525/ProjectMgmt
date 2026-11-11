@@ -38,13 +38,26 @@ export interface EpicOption {
   name: string;
 }
 
+export interface ExecutiveSummaryMetrics {
+  sprintGoal: string;
+  totalStoryPoints: number;
+  totalEstimatedHours: number;
+  taskCount: number;
+  subtaskCount: number;
+  roleBreakdown: Record<string, number>;
+  specGrounding: string;
+}
+
 export interface ChatTurn {
   id: string;
   role: 'user' | 'agent';
   text: string;
+  fullContent?: string;
+  isContentExpanded?: boolean;
   fileName?: string;
   fileSizeLabel?: string;
   timestamp: string;
+  executiveSummary?: ExecutiveSummaryMetrics;
 }
 
 export interface SpecDocPreview {
@@ -123,6 +136,12 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
   readonly expandedSubtasks = signal<Record<string, boolean>>({});
   readonly inlineEditingTitleId = signal<string | null>(null);
   readonly inlineEditingSpId = signal<string | null>(null);
+  readonly isSprintGoalInfoExpanded = signal<boolean>(false);
+
+  // Session History State (Image & Summary requirement)
+  readonly isSessionHistoryOpen = signal<boolean>(false);
+  readonly projectSessions = signal<any[]>([]);
+  readonly sessionsLoading = signal<boolean>(false);
 
   // Detail Drawer state (Reference Image 5 & Subtask Details)
   readonly activeDrawerTaskId = signal<string | null>(null);
@@ -594,6 +613,8 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
         id: `user_${Date.now()}`,
         role: 'user',
         text: promptText || (docText ? `Đã dán nội dung tài liệu (${docText.length} ký tự)` : `Phân tích tệp đính kèm: ${file?.name}`),
+        fullContent: combinedText.length > 100 ? combinedText : undefined,
+        isContentExpanded: false,
         fileName: file?.name,
         fileSizeLabel: file ? this.formatFileSize(file.size) : undefined,
         timestamp: nowTime,
@@ -643,7 +664,12 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
             this.toolCallsLog.update((prev) => [...prev, tool]);
           },
           onThoughtDelta: (delta) => {
-            this.streamedThoughts.update((prev) => (prev + delta).slice(-1800));
+            if (!delta) return;
+            // Prevent raw JSON content from leaking into thought stream (Image 3 fix)
+            if (delta.includes('"storyPoints":') || delta.includes('"tasks":') || delta.includes('"epicTitle":') || delta.includes('"assigneeName":')) {
+              return;
+            }
+            this.streamedThoughts.update((prev) => (prev + delta).slice(-2500));
           },
           onProposalReady: (prop) => {
             this.normalizeProposal(prop);
@@ -660,13 +686,39 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
             this.expandedSubtasks.set(autoExpand);
 
             const doneTime = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+
+            // Calculate role breakdown & subtask metrics for Executive Summary
+            const roleBreakdown: Record<string, number> = {};
+            let subCount = 0;
+            for (const t of prop.tasks) {
+              if (t.subtasks && t.subtasks.length > 0) {
+                subCount += t.subtasks.length;
+                for (const s of t.subtasks) {
+                  const r = s.role || 'Kỹ thuật';
+                  roleBreakdown[r] = (roleBreakdown[r] || 0) + 1;
+                }
+              } else {
+                const r = t.type === 'Bug' ? 'QA' : (t.tags?.find((tag) => tag.includes('Front') || tag.includes('Back')) || 'Chung');
+                roleBreakdown[r] = (roleBreakdown[r] || 0) + 1;
+              }
+            }
+
             this.chatHistory.update((list) => [
               ...list,
               {
                 id: `agent_${Date.now()}`,
                 role: 'agent',
-                text: `Đã hoàn tất phân tách ${prop.tasks.length} công việc (${prop.totalStoryPoints} SP) với Sprint Goal: "${prop.sprintGoal}". Bạn có thể nhấn vào từng công việc để xem chi tiết, chỉnh sửa hoặc yêu cầu làm lại.`,
+                text: `Đã hoàn tất phân tách ${prop.tasks.length} công việc (${prop.totalStoryPoints} SP) với Sprint Goal: "${prop.sprintGoal}".`,
                 timestamp: doneTime,
+                executiveSummary: {
+                  sprintGoal: prop.sprintGoal,
+                  totalStoryPoints: prop.totalStoryPoints,
+                  totalEstimatedHours: prop.totalEstimatedHours,
+                  taskCount: prop.tasks.length,
+                  subtaskCount: subCount,
+                  roleBreakdown,
+                  specGrounding: prop.tasks[0]?.documentCitations?.[0] || 'Tài liệu Đặc tả Kiến trúc Spec Hub',
+                },
               },
             ]);
             this.saveSession();
@@ -799,6 +851,64 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
     }
     this.onTaskFieldChanged();
     this.persistProposalEdits();
+  }
+
+  addSubtaskAc(subtask: ProposedSubTaskDto): void {
+    if (!subtask.acceptanceCriteria) subtask.acceptanceCriteria = [];
+    subtask.acceptanceCriteria.push('Hoàn tất và vượt qua kiểm thử tính năng');
+    this.onTaskFieldChanged();
+    this.persistProposalEdits();
+  }
+
+  deleteSubtaskAc(subtask: ProposedSubTaskDto, index: number): void {
+    if (!subtask.acceptanceCriteria) return;
+    subtask.acceptanceCriteria.splice(index, 1);
+    this.onTaskFieldChanged();
+    this.persistProposalEdits();
+  }
+
+  toggleSessionHistoryDropdown(event: MouseEvent): void {
+    event.stopPropagation();
+    this.isSessionHistoryOpen.update((v) => !v);
+    if (this.isSessionHistoryOpen() && this.projectId) {
+      this.loadProjectSessions();
+    }
+  }
+
+  loadProjectSessions(): void {
+    if (!this.projectId) return;
+    this.sessionsLoading.set(true);
+    this.aiService.getProjectSessions(this.projectId).subscribe({
+      next: (sessions) => {
+        this.projectSessions.set(sessions);
+        this.sessionsLoading.set(false);
+      },
+      error: () => {
+        this.sessionsLoading.set(false);
+      },
+    });
+  }
+
+  restoreSessionFromHistory(session: any): void {
+    this.isSessionHistoryOpen.set(false);
+    this.toastService.info('Phiên làm việc', `Đang khôi phục phiên "${session.sprintGoal}"...`);
+    this.aiService.getStagedProposal(session.sessionId).subscribe({
+      next: (prop: AiSprintProposalDto) => {
+        this.normalizeProposal(prop);
+        this.proposal.set(prop);
+        this.activeSessionId.set(prop.sessionId);
+        const autoExpand: Record<string, boolean> = {};
+        for (const t of prop.tasks) {
+          if (t.subtasks && t.subtasks.length > 0) autoExpand[t.id] = true;
+        }
+        this.expandedSubtasks.set(autoExpand);
+        this.saveSession();
+        this.toastService.success('Khôi phục phiên', 'Đã nạp lại kế hoạch đề xuất thành công.');
+      },
+      error: () => {
+        this.toastService.error('Khôi phục', 'Phiên đề xuất này đã hết hạn lưu trữ trên máy chủ.');
+      },
+    });
   }
 
   onTaskFieldChanged(): void {

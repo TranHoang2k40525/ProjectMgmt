@@ -162,10 +162,7 @@
                     </div>
                     <div class="cell-key cursor-pointer" (click)="openTask(item, $event)"><span class="issue-type-badge" [style.backgroundColor]="getIssueTypeColor(item)" [title]="item.issueType"><span class="material-symbols-outlined" aria-hidden="true">{{ getIssueTypeIcon(item) }}</span></span><strong [style.color]="getIssueTypeColor(item)">{{ item.issueKey }}</strong></div>
                     <div class="cell-title flex items-center gap-1.5 flex-wrap">
-                      @if (editingTaskId() === item.id) { <input class="title-input" type="text" [ngModel]="editingTaskTitle()" (ngModelChange)="editingTaskTitle.set($event)" (click)="$event.stopPropagation()" (keyup.enter)="saveEditingTaskTitle(item.id)" (blur)="saveEditingTaskTitle(item.id)" /> } @else { <button type="button" class="task-title-button" (click)="openTask(item, $event)">{{ item.title }}</button><button type="button" class="edit-title-button" title="Sửa tên công việc" (click)="startEditingTaskTitle(item, $event)"><span class="material-symbols-outlined" aria-hidden="true">edit</span></button> }
-                      @if (isItemReady(item)) {
-                        <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200" title="Sẵn sàng thực hiện"><span class="material-symbols-outlined text-[12px] text-emerald-600">check_circle</span>Ready</span>
-                      }
+                      @if (editingTaskId() === item.id) { <input class="title-input" type="text" [ngModel]="editingTaskTitle()" (ngModelChange)="editingTaskTitle.set($event)" (click)="$event.stopPropagation()" (keyup.enter)="saveEditingTaskTitle(item.id)" (blur)="saveEditingTaskTitle(item.id)" /> } @else { <button type="button" class="task-title-button" [class.line-through]="item.statusName === 'Done'" [class.text-slate-400]="item.statusName === 'Done'" (click)="openTask(item, $event)">{{ item.title }}</button><button type="button" class="edit-title-button" title="Sửa tên công việc" (click)="startEditingTaskTitle(item, $event)"><span class="material-symbols-outlined" aria-hidden="true">edit</span></button> }
                       @if (item.isBlocked) {
                         <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200" [title]="item.blockReason"><span class="material-symbols-outlined text-[12px] text-rose-600">block</span>Blocked</span>
                       }
@@ -217,7 +214,18 @@
                   </div>
 
                   @if (activeSubtaskInputId() === item.id) { <div class="subtask-create"><span class="material-symbols-outlined" aria-hidden="true">subdirectory_arrow_right</span><input type="text" [(ngModel)]="subtaskTitleMap[item.id]" (keyup.enter)="createInlineSubtask(item.id)" placeholder="Tên Sub-task mới" /><button type="button" class="button button-primary" (click)="createInlineSubtask(item.id)">Thêm</button><button type="button" class="button button-secondary" (click)="activeSubtaskInputId.set(null)">Hủy</button></div> }
-                  @if (expandedSubtasks()[item.id]) { <div class="subtask-list">@for (subtask of subtasks; track subtask.id) { <button type="button" class="subtask-row" (click)="openTask(subtask, $event)"><span class="material-symbols-outlined" aria-hidden="true">subdirectory_arrow_right</span><strong>{{ subtask.issueKey }}</strong><span>{{ subtask.title }}</span><span class="status-pill" [class.status-todo]="subtask.statusName === 'To Do'" [class.status-progress]="subtask.statusName === 'In Progress'" [class.status-review]="subtask.statusName === 'Code Review'" [class.status-done]="subtask.statusName === 'Done'">{{ subtask.statusName }}</span></button> }</div> }
+                  @if (expandedSubtasks()[item.id]) {
+                    <div class="subtask-list">
+                      @for (subtask of subtasks; track subtask.id) {
+                        <button type="button" class="subtask-row" (click)="openTask(subtask, $event)">
+                          <span class="subtask-tree-wire font-mono text-slate-400 select-none text-[13px]" aria-hidden="true">└──</span>
+                          <strong class="text-xs font-semibold text-slate-700 dark:text-slate-200">{{ subtask.issueKey }}</strong>
+                          <span class="truncate" [class.line-through]="subtask.statusName === 'Done'" [class.text-slate-400]="subtask.statusName === 'Done'">{{ subtask.title }}</span>
+                          <span class="status-pill" [class.status-todo]="subtask.statusName === 'To Do'" [class.status-progress]="subtask.statusName === 'In Progress'" [class.status-review]="subtask.statusName === 'Code Review'" [class.status-done]="subtask.statusName === 'Done'">{{ subtask.statusName }}</span>
+                        </button>
+                      }
+                    </div>
+                  }
                 </div>
               }
             </div>
@@ -279,10 +287,7 @@
                   </div>
                   <div class="cell-key cursor-pointer" (click)="openTask(item, $event)"><span class="issue-type-badge" [style.backgroundColor]="getIssueTypeColor(item)" [title]="item.issueType"><span class="material-symbols-outlined" aria-hidden="true">{{ getIssueTypeIcon(item) }}</span></span><strong [style.color]="getIssueTypeColor(item)">{{ item.issueKey }}</strong></div>
                   <div class="cell-title flex items-center gap-1.5 flex-wrap">
-                    @if (editingTaskId() === item.id) { <input class="title-input" type="text" [ngModel]="editingTaskTitle()" (ngModelChange)="editingTaskTitle.set($event)" (click)="$event.stopPropagation()" (keyup.enter)="saveEditingTaskTitle(item.id)" (blur)="saveEditingTaskTitle(item.id)" /> } @else { <button type="button" class="task-title-button" (click)="openTask(item, $event)">{{ item.title }}</button><button type="button" class="edit-title-button" title="Sửa tên công việc" (click)="startEditingTaskTitle(item, $event)"><span class="material-symbols-outlined" aria-hidden="true">edit</span></button> }
-                    @if (isItemReady(item)) {
-                      <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200" title="Sẵn sàng thực hiện"><span class="material-symbols-outlined text-[12px] text-emerald-600">check_circle</span>Ready</span>
-                    }
+                    @if (editingTaskId() === item.id) { <input class="title-input" type="text" [ngModel]="editingTaskTitle()" (ngModelChange)="editingTaskTitle.set($event)" (click)="$event.stopPropagation()" (keyup.enter)="saveEditingTaskTitle(item.id)" (blur)="saveEditingTaskTitle(item.id)" /> } @else { <button type="button" class="task-title-button" [class.line-through]="item.statusName === 'Done'" [class.text-slate-400]="item.statusName === 'Done'" (click)="openTask(item, $event)">{{ item.title }}</button><button type="button" class="edit-title-button" title="Sửa tên công việc" (click)="startEditingTaskTitle(item, $event)"><span class="material-symbols-outlined" aria-hidden="true">edit</span></button> }
                     @if (item.isBlocked) {
                       <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200" [title]="item.blockReason"><span class="material-symbols-outlined text-[12px] text-rose-600">block</span>Blocked</span>
                     }
@@ -334,7 +339,18 @@
                 </div>
 
                 @if (activeSubtaskInputId() === item.id) { <div class="subtask-create"><span class="material-symbols-outlined" aria-hidden="true">subdirectory_arrow_right</span><input type="text" [(ngModel)]="subtaskTitleMap[item.id]" (keyup.enter)="createInlineSubtask(item.id)" placeholder="Tên Sub-task mới" /><button type="button" class="button button-primary" (click)="createInlineSubtask(item.id)">Thêm</button><button type="button" class="button button-secondary" (click)="activeSubtaskInputId.set(null)">Hủy</button></div> }
-                @if (expandedSubtasks()[item.id]) { <div class="subtask-list">@for (subtask of subtasks; track subtask.id) { <button type="button" class="subtask-row" (click)="openTask(subtask, $event)"><span class="material-symbols-outlined" aria-hidden="true">subdirectory_arrow_right</span><strong>{{ subtask.issueKey }}</strong><span>{{ subtask.title }}</span><span class="status-pill" [class.status-todo]="subtask.statusName === 'To Do'" [class.status-progress]="subtask.statusName === 'In Progress'" [class.status-review]="subtask.statusName === 'Code Review'" [class.status-done]="subtask.statusName === 'Done'">{{ subtask.statusName }}</span></button> }</div> }
+                @if (expandedSubtasks()[item.id]) {
+                  <div class="subtask-list">
+                    @for (subtask of subtasks; track subtask.id) {
+                      <button type="button" class="subtask-row" (click)="openTask(subtask, $event)">
+                        <span class="subtask-tree-wire font-mono text-slate-400 select-none text-[13px]" aria-hidden="true">└──</span>
+                        <strong class="text-xs font-semibold text-slate-700 dark:text-slate-200">{{ subtask.issueKey }}</strong>
+                        <span class="truncate" [class.line-through]="subtask.statusName === 'Done'" [class.text-slate-400]="subtask.statusName === 'Done'">{{ subtask.title }}</span>
+                        <span class="status-pill" [class.status-todo]="subtask.statusName === 'To Do'" [class.status-progress]="subtask.statusName === 'In Progress'" [class.status-review]="subtask.statusName === 'Code Review'" [class.status-done]="subtask.statusName === 'Done'">{{ subtask.statusName }}</span>
+                      </button>
+                    }
+                  </div>
+                }
               </div>
             }
           </div>

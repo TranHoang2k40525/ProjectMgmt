@@ -20,6 +20,62 @@
       </div>
 
       <div class="header-actions">
+        <!-- Session History Clock Popover (Image & Summary requirement) -->
+        <div class="session-history-container">
+          <button
+            type="button"
+            class="btn-session-history"
+            data-testid="btn-ai-session-history"
+            (click)="toggleSessionHistoryDropdown($event)"
+            title="Lịch sử các phiên phân tách AI gần đây của dự án"
+          >
+            <span class="material-symbols-outlined" aria-hidden="true">history</span>
+            <span>Lịch sử</span>
+          </button>
+
+          @if (isSessionHistoryOpen()) {
+            <div class="session-history-popover animate-scale-up" (click)="$event.stopPropagation()">
+              <div class="popover-header">
+                <div class="flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[16px] text-primary">history</span>
+                  <strong>Lịch sử Phiên AI Sprint</strong>
+                </div>
+                <button type="button" class="btn-close-popover" (click)="isSessionHistoryOpen.set(false)" title="Đóng">
+                  <span class="material-symbols-outlined text-[16px]">close</span>
+                </button>
+              </div>
+
+              @if (sessionsLoading()) {
+                <div class="p-4 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+                  <span class="material-symbols-outlined text-[16px] spinning-icon">sync</span>
+                  <span>Đang tải lịch sử phiên...</span>
+                </div>
+              } @else if (projectSessions().length > 0) {
+                <div class="sessions-list">
+                  @for (sess of projectSessions(); track sess.sessionId) {
+                    <button type="button" class="session-item-row" (click)="restoreSessionFromHistory(sess)">
+                      <div class="session-item-top">
+                        <span class="sess-model-pill">{{ sess.model }}</span>
+                        <span class="sess-time">{{ sess.createdAtUtc | date:'HH:mm dd/MM' }}</span>
+                      </div>
+                      <div class="sess-goal-title" [title]="sess.sprintGoal">{{ sess.sprintGoal }}</div>
+                      <div class="session-item-bottom">
+                        <span>{{ sess.taskCount }} việc ({{ sess.totalStoryPoints }} SP)</span>
+                        <span class="sess-creator">Bởi {{ sess.createdByName }}</span>
+                      </div>
+                    </button>
+                  }
+                </div>
+              } @else {
+                <div class="p-5 text-center text-xs text-slate-500">
+                  <span class="material-symbols-outlined text-[24px] text-slate-400 mb-1">history_toggle_off</span>
+                  <p>Chưa có phiên làm việc AI nào được lưu trữ trong dự án này.</p>
+                </div>
+              }
+            </div>
+          }
+        </div>
+
         @if (chatHistory().length > 0 || proposal()) {
           <button
             type="button"
@@ -131,7 +187,78 @@
                       }
                     </div>
                   }
-                  <p>{{ turn.text }}</p>
+                  <p class="turn-text-line">{{ turn.text }}</p>
+
+                  <!-- Expandable User Submitted Content Box (Image 2 Fix) -->
+                  @if (turn.fullContent) {
+                    <div class="user-content-expand-wrapper">
+                      <button
+                        type="button"
+                        class="btn-toggle-user-content"
+                        (click)="turn.isContentExpanded = !turn.isContentExpanded"
+                        title="Xem lại nội dung đầy đủ bạn đã dán hoặc gửi"
+                      >
+                        <span class="material-symbols-outlined text-[15px]" aria-hidden="true">
+                          {{ turn.isContentExpanded ? 'visibility_off' : 'visibility' }}
+                        </span>
+                        <span>{{ turn.isContentExpanded ? 'Thu gọn nội dung đã gửi' : 'Xem chi tiết nội dung đã nạp (' + turn.fullContent.length + ' ký tự)' }}</span>
+                        <span class="material-symbols-outlined text-[15px]" aria-hidden="true">
+                          {{ turn.isContentExpanded ? 'expand_less' : 'expand_more' }}
+                        </span>
+                      </button>
+
+                      @if (turn.isContentExpanded) {
+                        <div class="user-submitted-preview-box animate-fade-in">
+                          <pre>{{ turn.fullContent }}</pre>
+                        </div>
+                      }
+                    </div>
+                  }
+
+                  <!-- Agent Executive Summary Card (Image 2 & 7 Fix) -->
+                  @if (turn.executiveSummary; as summary) {
+                    <div class="agent-executive-card animate-fade-in">
+                      <div class="executive-sprint-goal">
+                        <span class="material-symbols-outlined text-primary text-[20px]" aria-hidden="true">flag</span>
+                        <div class="goal-text">
+                          <span class="goal-label">Mục tiêu Sprint (Sprint Goal):</span>
+                          <strong class="goal-value">"{{ summary.sprintGoal }}"</strong>
+                        </div>
+                      </div>
+
+                      <div class="executive-metrics-grid">
+                        <div class="metric-pill">
+                          <span class="metric-label">Tổng Story Points:</span>
+                          <strong class="metric-val text-primary">{{ summary.totalStoryPoints }} SP</strong>
+                        </div>
+                        <div class="metric-pill">
+                          <span class="metric-label">Tổng giờ ước tính:</span>
+                          <strong class="metric-val text-indigo-600">{{ summary.totalEstimatedHours }}h</strong>
+                        </div>
+                        <div class="metric-pill">
+                          <span class="metric-label">Cấu trúc công việc:</span>
+                          <strong class="metric-val text-slate-700 dark:text-slate-200">{{ summary.taskCount }} Task chính • {{ summary.subtaskCount }} Subtask</strong>
+                        </div>
+                        <div class="metric-pill">
+                          <span class="metric-label">Căn cứ đặc tả:</span>
+                          <strong class="metric-val text-emerald-700 truncate" [title]="summary.specGrounding">{{ summary.specGrounding }}</strong>
+                        </div>
+                      </div>
+
+                      @if (summary.roleBreakdown) {
+                        <div class="executive-roles-row">
+                          <span class="roles-label">Phân bổ chuyên môn:</span>
+                          <div class="roles-chips">
+                            @for (roleEntry of summary.roleBreakdown | keyvalue; track roleEntry.key) {
+                              <span class="role-chip">
+                                <strong>{{ roleEntry.key }}:</strong> {{ roleEntry.value }} việc
+                              </span>
+                            }
+                          </div>
+                        </div>
+                      }
+                    </div>
+                  }
                 </div>
               </div>
             }
@@ -302,6 +429,18 @@
                   <span class="material-symbols-outlined" aria-hidden="true">schedule</span>
                   <strong>{{ totalCalculatedHours() }}</strong> giờ
                 </span>
+
+                <button
+                  type="button"
+                  class="btn-toggle-goal-info"
+                  (click)="isSprintGoalInfoExpanded.update(v => !v)"
+                  title="Ẩn/Hiện thông tin chi tiết Sprint (Lập luận, Chủ đề, Trích dẫn)"
+                >
+                  <span>{{ isSprintGoalInfoExpanded() ? 'Thu gọn chi tiết' : 'Mở rộng chi tiết' }}</span>
+                  <span class="material-symbols-outlined text-[15px]" aria-hidden="true">
+                    {{ isSprintGoalInfoExpanded() ? 'expand_less' : 'expand_more' }}
+                  </span>
+                </button>
               </div>
             </div>
 
@@ -317,49 +456,53 @@
               />
             </div>
 
-            @if (prop.rationale) {
-              <div class="sprint-rationale-box">
-                <span class="material-symbols-outlined" aria-hidden="true">verified</span>
-                <p>{{ prop.rationale }}</p>
-              </div>
-            }
+            @if (isSprintGoalInfoExpanded()) {
+              <div class="goal-secondary-collapsible animate-fade-in">
+                @if (prop.rationale) {
+                  <div class="sprint-rationale-box">
+                    <span class="material-symbols-outlined" aria-hidden="true">verified</span>
+                    <p>{{ prop.rationale }}</p>
+                  </div>
+                }
 
-            <!-- Hashtags Strip (Directly Below Main Content) -->
-            @if (proposalTags().length > 0) {
-              <div class="proposal-hashtags-row" data-testid="ai-proposal-hashtags">
-                <span class="hashtags-label">
-                  <span class="material-symbols-outlined" aria-hidden="true">tag</span>
-                  <span>Chủ đề chính:</span>
-                </span>
-                <div class="hashtags-pills">
-                  @for (tag of proposalTags(); track tag) {
-                    <span class="hashtag-pill">{{ tag }}</span>
-                  }
-                </div>
-              </div>
-            }
+                <!-- Hashtags Strip (Directly Below Main Content) -->
+                @if (proposalTags().length > 0) {
+                  <div class="proposal-hashtags-row" data-testid="ai-proposal-hashtags">
+                    <span class="hashtags-label">
+                      <span class="material-symbols-outlined" aria-hidden="true">tag</span>
+                      <span>Chủ đề chính:</span>
+                    </span>
+                    <div class="hashtags-pills">
+                      @for (tag of proposalTags(); track tag) {
+                        <span class="hashtag-pill">{{ tag }}</span>
+                      }
+                    </div>
+                  </div>
+                }
 
-            <!-- Spec Hub Citations Strip (With Clickable Links into Spec Hub) -->
-            @if (allUniqueCitations().length > 0) {
-              <div class="proposal-citations-row" data-testid="ai-proposal-citations">
-                <span class="citations-label">
-                  <span class="material-symbols-outlined" aria-hidden="true">menu_book</span>
-                  <span>Tài liệu đặc tả liên quan (Spec Hub):</span>
-                </span>
-                <div class="citations-pills">
-                  @for (cite of allUniqueCitations(); track $index) {
-                    <button
-                      type="button"
-                      class="citation-doc-btn"
-                      (click)="openSpecDoc(cite)"
-                      title="Mở tài liệu này trong Spec Hub"
-                    >
-                      <span class="material-symbols-outlined" aria-hidden="true">description</span>
-                      <span>{{ cite }}</span>
-                      <span class="material-symbols-outlined link-icon" aria-hidden="true">open_in_new</span>
-                    </button>
-                  }
-                </div>
+                <!-- Spec Hub Citations Strip (With Clickable Links into Spec Hub) -->
+                @if (allUniqueCitations().length > 0) {
+                  <div class="proposal-citations-row" data-testid="ai-proposal-citations">
+                    <span class="citations-label">
+                      <span class="material-symbols-outlined" aria-hidden="true">menu_book</span>
+                      <span>Tài liệu đặc tả liên quan (Spec Hub):</span>
+                    </span>
+                    <div class="citations-pills">
+                      @for (cite of allUniqueCitations(); track $index) {
+                        <button
+                          type="button"
+                          class="citation-doc-btn"
+                          (click)="openSpecDoc(cite)"
+                          title="Mở tài liệu này trong Spec Hub"
+                        >
+                          <span class="material-symbols-outlined" aria-hidden="true">description</span>
+                          <span>{{ cite }}</span>
+                          <span class="material-symbols-outlined link-icon" aria-hidden="true">open_in_new</span>
+                        </button>
+                      }
+                    </div>
+                  </div>
+                }
               </div>
             }
 
@@ -506,7 +649,7 @@
                         (keyup.enter)="inlineEditingTitleId.set(null); persistProposalEdits()"
                       />
                     } @else {
-                      <span class="task-title-text">{{ task.title }}</span>
+                      <span class="task-title-text" [class.is-done-title]="task.status === 'Done'">{{ task.title }}</span>
                       <button
                         type="button"
                         class="inline-edit-icon"
@@ -518,18 +661,6 @@
                     }
 
                     <div class="task-metadata-pills">
-                      @if (task.subtasks && task.subtasks.length > 0) {
-                        <button
-                          type="button"
-                          class="subtask-count-pill"
-                          (click)="toggleSubtaskExpand(task.id, $event)"
-                          title="Nhấn để mở các việc con phụ trợ"
-                        >
-                          <span class="material-symbols-outlined" aria-hidden="true">subdirectory_arrow_right</span>
-                          <span>{{ task.subtasks.length }} việc con</span>
-                        </button>
-                      }
-
                       @if (task.documentCitations && task.documentCitations.length > 0) {
                         @for (cite of task.documentCitations; track $index) {
                           <button
@@ -681,7 +812,7 @@
                               (keyup.enter)="inlineEditingTitleId.set(null); persistProposalEdits()"
                             />
                           } @else {
-                            <span class="task-title-text subtask-title-text">{{ sub.title }}</span>
+                            <span class="task-title-text subtask-title-text" [class.is-done-title]="sub.status === 'Done'">{{ sub.title }}</span>
                             <button
                               type="button"
                               class="inline-edit-icon"
@@ -1408,6 +1539,48 @@
               (ngModelChange)="onTaskFieldChanged()"
               placeholder="Mô tả kỹ thuật cho việc con phụ trợ này..."
             ></textarea>
+          </div>
+
+          <!-- Subtask Acceptance Criteria (Full parity with parent task) -->
+          <div class="drawer-section" data-testid="drawer-subtask-ac-section">
+            <div class="section-label flex items-center justify-between">
+              <strong>Tiêu chí Nghiệm thu (Acceptance Criteria)</strong>
+              <button
+                type="button"
+                class="btn-add-ac-pill"
+                (click)="addSubtaskAc(subDetail.subtask)"
+                title="Thêm tiêu chí nghiệm thu cho việc con này"
+              >
+                <span class="material-symbols-outlined text-[14px]">add</span>
+                <span>Thêm tiêu chí</span>
+              </button>
+            </div>
+            <div class="drawer-ac-list">
+              @if (subDetail.subtask.acceptanceCriteria && subDetail.subtask.acceptanceCriteria.length > 0) {
+                @for (ac of subDetail.subtask.acceptanceCriteria; track trackByIndex($index); let acIdx = $index) {
+                  <div class="ac-item-row">
+                    <span class="material-symbols-outlined ac-check-icon text-emerald-600">check_circle</span>
+                    <input
+                      type="text"
+                      class="ac-item-input"
+                      [(ngModel)]="subDetail.subtask.acceptanceCriteria[acIdx]"
+                      (ngModelChange)="onTaskFieldChanged()"
+                      placeholder="Mô tả tiêu chí nghiệm thu hoàn thành..."
+                    />
+                    <button
+                      type="button"
+                      class="ac-remove-btn"
+                      (click)="deleteSubtaskAc(subDetail.subtask, acIdx)"
+                      title="Xóa tiêu chí này"
+                    >
+                      <span class="material-symbols-outlined text-[15px]">close</span>
+                    </button>
+                  </div>
+                }
+              } @else {
+                <p class="ac-empty-hint">Chưa có tiêu chí nghiệm thu riêng cho việc con này.</p>
+              }
+            </div>
           </div>
         </div>
       </aside>

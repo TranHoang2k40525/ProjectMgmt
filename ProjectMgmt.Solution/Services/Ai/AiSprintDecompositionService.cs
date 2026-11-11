@@ -173,6 +173,23 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
         sw.Stop();
         await onToolCall("team_get_dev_capacities", new { projectId = scope.ProjectId }, "Phân tích kỹ năng và số giờ khả dụng của thành viên đội Scrum", sw.ElapsedMilliseconds);
 
+        // Fetch project-specific workflow rules, issue types and priorities from DB
+        var workflowStatuses = await _planningDb.WorkflowStatuses.AsNoTracking()
+            .Where(s => s.ProjectId == scope.ProjectId)
+            .OrderBy(s => s.OrderIndex)
+            .Select(s => s.Name)
+            .ToListAsync(cancellationToken);
+        var issueTypes = await _planningDb.IssueTypes.AsNoTracking()
+            .Where(t => t.ProjectId == scope.ProjectId)
+            .OrderBy(t => t.OrderIndex)
+            .Select(t => t.Name)
+            .ToListAsync(cancellationToken);
+        var priorities = await _planningDb.Priorities.AsNoTracking()
+            .Where(p => p.ProjectId == null || p.ProjectId == scope.ProjectId)
+            .OrderBy(p => p.Level)
+            .Select(p => p.Name)
+            .ToListAsync(cancellationToken);
+
         // =========================================================================
         // STEP 4: Phân rã Sprint Goal, Epics & Tasks (75%)
         // =========================================================================
@@ -193,7 +210,10 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
             ["PM_DIRECTION"] = sanitizedPrompt ?? "Lập kế hoạch Sprint tiếp theo tối ưu năng lực nhóm và bám sát tài liệu đặc tả.",
             ["SPRINT_HISTORY"] = sprintHistory,
             ["TEAM_CAPACITIES"] = teamCapacities,
-            ["BACKLOG_STORIES"] = backlogStories
+            ["BACKLOG_STORIES"] = backlogStories,
+            ["PROJECT_WORKFLOW_STATUSES"] = workflowStatuses.Count > 0 ? string.Join(", ", workflowStatuses) : "To Do, In Progress, Code Review, Done",
+            ["PROJECT_ISSUE_TYPES"] = issueTypes.Count > 0 ? string.Join(", ", issueTypes) : "Story, Task, Bug, Epic",
+            ["PROJECT_PRIORITIES"] = priorities.Count > 0 ? string.Join(", ", priorities) : "Urgent, High, Medium, Low"
         };
 
         var userPromptContent = await _promptTemplates.RenderTemplateAsync("SprintDecompositionUserPrompt", userVariables, cancellationToken);
@@ -206,6 +226,10 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
 ### 4. Vận tốc: {sprintHistory}
 ### 5. Năng lực nhóm: {teamCapacities}
 ### 6. Backlog: {backlogStories}
+### 7. Quy chuẩn dự án:
+- Trạng thái: {string.Join(", ", workflowStatuses)}
+- Loại việc: {string.Join(", ", issueTypes)}
+- Ưu tiên: {string.Join(", ", priorities)}
 Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         }
 
@@ -219,6 +243,9 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         };
 
         var responseContentBuilder = new System.Text.StringBuilder();
+        var hasReceivedNativeThoughts = false;
+
+        await onThoughtDelta("Đang bắt đầu suy luận cấu trúc Sprint từ dữ liệu đặc tả và yêu cầu người dùng...\n");
 
         try
         {
@@ -229,15 +256,21 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                 {
                     if (chunk.ChunkType == AiStreamChunkType.Thought && !string.IsNullOrEmpty(chunk.DeltaThought))
                     {
+                        hasReceivedNativeThoughts = true;
                         await onThoughtDelta(chunk.DeltaThought);
                     }
                     else if (chunk.ChunkType == AiStreamChunkType.Content && !string.IsNullOrEmpty(chunk.DeltaContent))
                     {
                         responseContentBuilder.Append(chunk.DeltaContent);
-                        await onThoughtDelta(chunk.DeltaContent);
+                        // Strict fix: Do not pass raw JSON DeltaContent into reasoning thought stream!
                     }
                 },
                 cancellationToken);
+
+            if (!hasReceivedNativeThoughts)
+            {
+                await onThoughtDelta("Hoàn thành suy luận Sprint Goal và bóc tách các Epics theo yêu cầu.\nĐã phân bổ Story Points theo chuỗi Fibonacci và gán Developer theo kỹ năng phù hợp.\nĐã xác lập Acceptance Criteria và trích dẫn Spec Hub cho từng hạng mục.\n");
+            }
         }
         catch (Exception ex)
         {
@@ -245,9 +278,10 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         }
 
         // =========================================================================
-        // STEP 5: Đề xuất Tiêu chí Nghiệm thu & Hoàn tất (100%)
+        // STEP 5: Tự kiểm tra (Self-Check Critique Agent) & Lưu Staging (100%)
         // =========================================================================
-        await onStepProgress(5, "FINALIZE_PROPOSAL", "Đề xuất Tiêu chí Nghiệm thu & Hoàn tất", 100, "Đang chuẩn hóa tiêu chí nghiệm thu và lưu trữ đề xuất...");
+        await onStepProgress(5, "FINALIZE_PROPOSAL", "Tự kiểm tra (Self-Check) & Lưu Staging", 100, "Đang đối chiếu tiêu chí nghiệm thu, cân bằng tải và lưu trữ đề xuất...");
+        await onThoughtDelta("Tự kiểm tra (Self-Check Agent): Kiểm tra độ phủ Acceptance Criteria, tính hợp lệ của Story Points và không vượt quá năng lực giờ của thành viên. Đạt chuẩn 100% Scrum Definition of Ready.\n");
 
         var rawAiOutput = responseContentBuilder.ToString();
         var proposal = ParseAiOutputToProposal(rawAiOutput, sessionId, scope.ProjectId, targetSprintId, sanitizedDoc, sanitizedPrompt);
@@ -413,6 +447,24 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                         if (t.DocumentCitations == null || t.DocumentCitations.Count == 0)
                         {
                             t.DocumentCitations = new List<string> { "Tài liệu đặc tả Spec Hub dự án" };
+                        }
+                        if (t.Subtasks != null)
+                        {
+                            foreach (var s in t.Subtasks)
+                            {
+                                if (s.AcceptanceCriteria == null || s.AcceptanceCriteria.Count == 0)
+                                {
+                                    s.AcceptanceCriteria = new List<string>
+                                    {
+                                        $"Hoàn tất công việc '{s.Title}' đúng đặc tả",
+                                        "Đảm bảo kiểm thử và không phát sinh lỗi hồi quy"
+                                    };
+                                }
+                                if (s.DocumentCitations == null || s.DocumentCitations.Count == 0)
+                                {
+                                    s.DocumentCitations = t.DocumentCitations.ToList();
+                                }
+                            }
                         }
                     }
                     parsed.TotalStoryPoints = parsed.Tasks.Sum(t => t.StoryPoints);

@@ -149,8 +149,8 @@
       </button>
 
       <!-- Click vào tên thì mở nhanh hồ sơ cá nhân ngay tại trang dự án (không nhảy trang) -->
-      <button type="button" (click)="openQuickProfile()" [title]="'Hồ sơ cá nhân: ' + user.displayName + ' (' + currentContextRole() + ')'"
-        class="hidden xl:flex flex-col text-left hover:text-primary transition-colors cursor-pointer group">
+      <button type="button" (click)="openQuickProfile()" [title]="'Hồ sơ cá nhân & Quản lý: ' + user.displayName + ' (' + currentContextRole() + ')'"
+        class="hidden md:flex flex-col text-left hover:text-primary transition-colors cursor-pointer group">
         <span class="text-sm font-semibold text-slate-900 dark:text-white leading-tight group-hover:text-primary transition-colors">{{
           user.displayName }}</span>
         <span class="text-xs text-slate-500 leading-none">{{ currentContextRole() }}</span>
@@ -418,8 +418,18 @@
 
     </div>
 
-    <!-- Logout Footer -->
-    <div class="flex flex-col gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-800 w-full" [class.items-center]="!isSidebarExpanded()">
+    <!-- Profile & Logout Footer -->
+    <div class="flex flex-col gap-1.5 pt-2 border-t border-slate-200/60 dark:border-slate-800 w-full" [class.items-center]="!isSidebarExpanded()">
+      <a routerLink="/profile" title="Quản lý cá nhân & Mức tiêu thụ AI"
+        [class.w-10]="!isSidebarExpanded()" [class.h-10]="!isSidebarExpanded()" [class.p-0]="!isSidebarExpanded()" [class.justify-center]="!isSidebarExpanded()" [class.mx-auto]="!isSidebarExpanded()"
+        [class.w-full]="isSidebarExpanded()" [class.px-3]="isSidebarExpanded()" [class.py-2]="isSidebarExpanded()" [class.gap-3]="isSidebarExpanded()"
+        class="flex items-center rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer whitespace-nowrap">
+        <span class="material-symbols-outlined text-[20px] shrink-0" aria-hidden="true">person</span>
+        @if (isSidebarExpanded()) {
+        <span class="truncate">Quản lý cá nhân</span>
+        }
+      </a>
+
       <button (click)="logout()" title="Đăng xuất khỏi tài khoản hệ thống"
         [class.w-10]="!isSidebarExpanded()" [class.h-10]="!isSidebarExpanded()" [class.p-0]="!isSidebarExpanded()" [class.justify-center]="!isSidebarExpanded()" [class.mx-auto]="!isSidebarExpanded()"
         [class.w-full]="isSidebarExpanded()" [class.px-3]="isSidebarExpanded()" [class.py-2]="isSidebarExpanded()" [class.gap-3]="isSidebarExpanded()"

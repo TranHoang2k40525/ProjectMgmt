@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, firstValueFrom } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { IdentityService } from './identity.service';
@@ -17,6 +17,8 @@ export interface ProposedSubTaskDto {
   description?: string;
   assigneeUserId?: string | null;
   assigneeName?: string | null;
+  acceptanceCriteria?: string[];
+  documentCitations?: string[];
 }
 
 export interface ProposedTaskDto {
@@ -83,6 +85,39 @@ export interface AiApplySprintProposalResponse {
   createdTaskCount: number;
   createdSubtaskCount: number;
   totalStoryPoints: number;
+}
+
+export interface AiTokenUsageSummary {
+  totalTokens: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalCalls: number;
+  successfulCalls: number;
+  successRate: number;
+  estimatedCostUsd: number;
+  modelBreakdown: Record<string, number>;
+  recentHistory: Array<{
+    sessionId: string;
+    model: string;
+    promptTokens: number;
+    completionTokens: number;
+    durationMs: number;
+    success: boolean;
+    timestampUtc: string;
+    operationName?: string;
+  }>;
+}
+
+export interface AiSessionSummary {
+  sessionId: string;
+  projectId: string;
+  createdByUserId: string;
+  createdByName: string;
+  sprintGoal: string;
+  taskCount: number;
+  totalStoryPoints: number;
+  model: string;
+  createdAtUtc: string;
 }
 
 export interface AiStreamCallbacks {
@@ -308,6 +343,10 @@ export class AiAgentService {
     });
   }
 
+  getStagedProposal(sessionId: string): Observable<AiSprintProposalDto> {
+    return this.http.get<AiSprintProposalDto>(`${this.baseUrl}/proposal/${encodeURIComponent(sessionId)}`);
+  }
+
   applyProposal(payload: {
     sessionId: string;
     projectId: string;
@@ -316,5 +355,18 @@ export class AiAgentService {
     tasks: ProposedTaskDto[];
   }): Observable<AiApplySprintProposalResponse> {
     return this.http.post<AiApplySprintProposalResponse>(`${this.baseUrl}/apply`, payload);
+  }
+
+  getTokenUsage(projectId?: string): Observable<AiTokenUsageSummary> {
+    let params = new HttpParams();
+    if (projectId) {
+      params = params.set('projectId', projectId);
+    }
+    return this.http.get<AiTokenUsageSummary>(`${this.baseUrl}/token-usage`, { params });
+  }
+
+  getProjectSessions(projectId: string): Observable<AiSessionSummary[]> {
+    const params = new HttpParams().set('projectId', projectId);
+    return this.http.get<AiSessionSummary[]>(`${this.baseUrl}/sessions`, { params });
   }
 }
