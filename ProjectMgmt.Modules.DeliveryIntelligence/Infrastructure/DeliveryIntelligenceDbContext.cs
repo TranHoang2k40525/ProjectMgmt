@@ -32,6 +32,7 @@ public class DeliveryIntelligenceDbContext : DbContext
     public DbSet<AiDataQualityFlag> AiDataQualityFlags => Set<AiDataQualityFlag>();
     public DbSet<AiTrainingRun> AiTrainingRuns => Set<AiTrainingRun>();
     public DbSet<AiEvaluationResult> AiEvaluationResults => Set<AiEvaluationResult>();
+    public DbSet<AiDocumentChunk> AiDocumentChunks => Set<AiDocumentChunk>();
     public DbSet<UserActiveWorkload> UserActiveWorkloads => Set<UserActiveWorkload>();
     public DbSet<SprintVelocity> SprintVelocities => Set<SprintVelocity>();
     public DbSet<AiBreakdownQuality> AiBreakdownQualities => Set<AiBreakdownQuality>();
