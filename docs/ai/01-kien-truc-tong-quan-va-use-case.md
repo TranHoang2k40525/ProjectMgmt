@@ -28,13 +28,15 @@ Hệ thống tuân thủ nghiêm ngặt mô hình **Modular Monolith kết hợp
 ```mermaid
 flowchart TD
     subgraph UI["Tầng Giao Diện (Frontend Angular)"]
-        Modal["ai-decompose-modal\n(Giao diện Hội thoại, Drawer xem Spec, Textarea)"]
-        Service["ai-agent.service.ts\n(Kết nối SSE Stream, Token Refresh, Staging API)"]
+        Modal["ai-decompose-modal\n(Giao diện Hội thoại, Drawer xem Spec, History Dropdown)"]
+        Profile["profile-page\n(Tab Giám sát Tiêu thụ Token AI, KPI & Lịch sử)"]
+        Service["ai-agent.service.ts\n(Kết nối SSE Stream, Token Refresh, Staging & Usage API)"]
     end
 
     subgraph API["Tầng Điều Khiển (ProjectMgmt.Solution)"]
-        Ctrl["AiAgentController.cs\n(API Endpoints, SSE Stream, Regenerate, Apply)"]
-        DecompSvc["AiSprintDecompositionService.cs\n(Pipeline 5 bước, System Prompt Scrum Master)"]
+        Ctrl["AiAgentController.cs\n(API Endpoints, SSE Stream, Token Usage, Sessions)"]
+        DecompSvc["AiSprintDecompositionService.cs\n(Pipeline 5 bước, Self-Check Critique Agent)"]
+        TokenTracker["IAiTokenUsageTracker / AiTokenUsageTracker\n(Đo lường Token, Chi phí, Lưu vết Phiên Dự án)"]
     end
 
     subgraph CORE["Tầng Lõi Dùng Chung (ProjectMgmt.Core)"]
@@ -50,13 +52,15 @@ flowchart TD
 
     subgraph INFRA["Tầng Hạ Tầng & Dữ Liệu"]
         Redis[("Redis Cache 127.0.0.1:6379\n(Trí nhớ Ngữ cảnh & State Staging)")]
-        MySQL[("MySQL Database\n(Projects, Sprints, Backlog, Issues)")]
-        LLM[("Cloud / Local LLMs\n(Gemini 3.6 Flash, Claude 3.7, GPT-4o, Ollama)")]
+        MySQL[("MySQL Database\n(Projects, Sprints, Backlog, Issues, WorkflowRules)")]
+        LLM[("Cloud / Local LLMs\n(Gemini 2.5/3.6 Flash, Claude 3.7, GPT-4o, Ollama)")]
     end
 
     Modal --> Service
+    Profile --> Service
     Service -->|HTTP POST / SSE Stream| Ctrl
     Ctrl --> DecompSvc
+    Ctrl --> TokenTracker
     DecompSvc --> ScopeGuard
     DecompSvc --> ModelClient
     DecompSvc --> Staging
@@ -67,8 +71,9 @@ flowchart TD
 ```
 
 ### Các tệp mã nguồn tương ứng:
-- Controller tiếp nhận: [`AiAgentController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/AiAgentController.cs#L25-L120)
+- Controller tiếp nhận: [`AiAgentController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/AiAgentController.cs#L25-L160)
 - Dịch vụ phân rã nghiệp vụ: [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs#L50-L150)
+- Bộ theo dõi Token & Lịch sử phiên: [`AiTokenUsageTracker.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiTokenUsageTracker.cs)
 - Router đa mô hình AI: [`MultiProviderAiModelClient.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/MultiProviderAiModelClient.cs#L30-L130)
 - Trích xuất tài liệu đa định dạng: [`AiDocumentTextExtractor.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiDocumentTextExtractor.cs#L20-L80)
 - Rào chắn bảo mật dự án: [`ProjectScopeGuard.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Core/Security/ProjectScopeGuard.cs#L10-L60)
@@ -100,6 +105,8 @@ flowchart LR
         UC9["Chỉnh sửa nhanh tiêu đề, SP, người làm trực tiếp"]
         UC10["Áp dụng đề xuất vào Sprint tiếp theo"]
         UC11["Kết nối MCP Server qua Stdio để hỏi đáp dự án"]
+        UC12["Xem Thống kê Tiêu thụ Token AI & Chi phí (Profile)"]
+        UC13["Khôi phục Phiên Phân rã cũ từ Lịch sử (Session History)"]
     end
 
     SM --> UC1
@@ -112,14 +119,19 @@ flowchart LR
     SM --> UC8
     SM --> UC9
     SM --> UC10
+    SM --> UC12
+    SM --> UC13
 
     DEV --> UC7
     DEV --> UC11
+    DEV --> UC12
 
     UC2 --> AI
     UC4 --> AI
     UC8 --> AI
     UC10 --> AI
+    UC12 --> AI
+    UC13 --> AI
     AI --> EXT
     EXT_AGENT --> UC11
     UC11 --> AI
@@ -214,5 +226,55 @@ Dịch vụ [`PromptTemplateService`](file:///c:/Users/hoang/Downloads/ProjectMg
   - QA / Kiểm thử / Test / Playwright $\rightarrow$ Chuyên viên QA (Đặng Phương Thảo).
   - Sprint / Kiến trúc / Quản lý $\rightarrow$ Giám đốc dự án / Lead (Trần Minh Hoàng / Hoàng Hải Hậu).
   - Story Points đa dạng theo dãy Fibonacci: việc nhỏ 1-2 SP, việc tiêu chuẩn 3 SP, việc phức tạp 5-8 SP.
+
+---
+
+## 7. Tiêm Quy Chuẩn Quản Trị Dự Án Động (Dynamic Project Governance Grounding)
+
+Để đảm bảo AI không "ảo giác" hoặc gán bừa các trạng thái (Status), loại việc (IssueType) và độ ưu tiên (Priority) không tồn tại trong dự án, hệ thống áp dụng cơ chế **Truy vấn Động từ Cơ sở Dữ liệu MySQL** trước khi gửi prompt cho mô hình:
+
+- **Nạp trực tiếp từ `PlanningDbContext`**:
+  ```csharp
+  var workflowStatuses = await _planningDb.WorkflowStatuses
+      .AsNoTracking()
+      .Where(s => s.ProjectId == scope.ProjectId)
+      .OrderBy(s => s.OrderIndex)
+      .Select(s => s.Name)
+      .ToListAsync(cancellationToken);
+
+  var issueTypes = await _planningDb.IssueTypes
+      .AsNoTracking()
+      .Where(t => t.ProjectId == scope.ProjectId)
+      .Select(t => t.Name)
+      .ToListAsync(cancellationToken);
+
+  var priorities = await _planningDb.Priorities
+      .AsNoTracking()
+      .Where(p => p.ProjectId == scope.ProjectId)
+      .OrderBy(p => p.Level)
+      .Select(p => p.Name)
+      .ToListAsync(cancellationToken);
+  ```
+- **Ràng buộc vào System & User Prompt**: Danh sách này được đưa vào mục `### 7. Quy chuẩn dự án` trong prompt. Nhờ đó, AI luôn chỉ gán các trạng thái thực tế của dự án (`To Do`, `In Progress`, `Code Review`, `Done`), không sinh ra các trạng thái lạ như "Pending", "Testing".
+
+---
+
+## 8. Quản Trị Tiêu Thụ Token & Thẻ Tóm Tắt Điều Hành (Executive Summary)
+
+### 8.1. Thẻ Tóm Tắt Điều Hành (Executive Summary Card)
+Phản hồi của AI không chỉ là một danh sách phẳng các dòng công việc, mà được tổ chức thành **Thẻ Tóm tắt Điều hành (Executive Summary)** gồm:
+- **Sprint Goal chuẩn hóa**: Mục tiêu chiến lược ngắn gọn của chu kỳ Sprint.
+- **Phân bổ theo Vai trò Kỹ thuật**: Thống kê số lượng task, Story Points và giờ dự kiến riêng cho từng bộ phận (Frontend, Backend, QA/DevOps, Quản lý).
+- **Căn cứ Tài liệu Spec Hub**: Trích dẫn cụ thể các chương, bảng biểu, file đặc tả đã dùng làm cơ sở phân rã.
+
+### 8.2. Hệ Thống Đo Lường & Giám Sát Token AI (IAiTokenUsageTracker)
+- Toàn bộ các tương tác với LLM đều được đo lường chính xác và lưu trữ qua [`AiTokenUsageTracker.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiTokenUsageTracker.cs).
+- Người dùng có thể truy cập vào **Quản lý cá nhân (`/profile`) $\rightarrow$ Tab "Mức tiêu thụ Token AI"** để theo dõi:
+  1. Tổng số Token đầu vào (Prompt Tokens) và Token sinh ra (Completion Tokens).
+  2. Số lượng cuộc gọi API thành công và tỷ lệ thành công.
+  3. Chi phí vận hành AI ước tính (USD).
+  4. Biểu đồ phân bổ theo mô hình: Gemini 2.5 Flash, Gemini 2.5 Pro, Flash-Lite.
+  5. Bảng nhật ký 15 phiên thực thi gần nhất với thời gian xử lý (latency ms) và mã phiên tương ứng.
+
 
 

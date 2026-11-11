@@ -190,12 +190,46 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
 
 ---
 
-## 8. Bảng Tổng Hợp Tham Chiếu Mã Nguồn Toàn Bộ Module AI
+## 8. Nhóm Câu Hỏi 4: Quản Trị Chi Phí, Lịch Sử Phiên & Trải Nghiệm Giao Diện Mới
+
+### Câu hỏi 8.1: Làm thế nào để theo dõi và kiểm soát chi phí cũng như số lượng Token AI đã tiêu thụ?
+- **Trả lời & Thao tác chứng minh**:
+  1. Hệ thống tích hợp dịch vụ [`AiTokenUsageTracker.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiTokenUsageTracker.cs) đo lường chính xác lượng Token đầu vào (Prompt Tokens) và đầu ra (Completion Tokens) cho từng phiên làm việc.
+  2. Người dùng truy cập **Quản lý cá nhân (`/profile`) $\rightarrow$ Tab "Mức tiêu thụ Token AI"**.
+  3. Giao diện hiển thị:
+     - 4 thẻ KPI: Tổng Token, Cuộc gọi AI, Tỷ lệ thành công, Chi phí ước tính (USD).
+     - Thanh phân bổ theo mô hình: Tỷ lệ sử dụng `Gemini 2.5 Flash`, `Gemini 2.5 Pro`, `Gemini 2.5 Flash-Lite`.
+     - Bảng nhật ký 15 lần thực thi gần nhất với thời gian xử lý và mã phiên.
+  4. API cung cấp: `GET /api/ai/agent/token-usage?projectId=...` bảo mật theo người dùng và dự án.
+
+### Câu hỏi 8.2: Làm thế nào để xem lại lịch sử các phiên phân tách cũ và khôi phục khi cần?
+- **Trả lời & Thao tác chứng minh**:
+  1. Trên thanh tiêu đề của Modal AI có biểu tượng **Lịch sử phiên (đồng hồ `history`)**.
+  2. Nhấp vào để mở danh sách các phiên gần nhất trong dự án (lấy từ `GET /api/ai/agent/sessions`).
+  3. Nhấp vào phiên mong muốn, hệ thống sẽ khôi phục lại toàn bộ đề xuất đã lưu từ Staging (`GET /api/ai/agent/proposal/{sessionId}`) mà không cần tốn token chạy lại mô hình từ đầu.
+
+### Câu hỏi 8.3: Tại sao trước đây có hiện tượng xả code JSON thô vào ô tư duy (CoT) và hệ thống đã khắc phục thế nào?
+- **Trả lời**:
+  - **Nguyên nhân trước đây**: Ở phiên bản cũ, sự kiện stream gọi `await onThoughtDelta(chunk.DeltaContent)` cho mọi chunk nội dung, khiến các đoạn JSON cấu trúc bị đẩy trực tiếp vào luồng suy luận.
+  - **Khắc phục triệt để**: Trong [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs), hệ thống tách bạch hoàn toàn:
+    - `ChunkType == AiStreamChunkType.Thought`: Đẩy vào `onThoughtDelta` để người dùng thấy suy nghĩ tự nhiên.
+    - `ChunkType == AiStreamChunkType.Content`: Chỉ gom vào bộ đệm JSON nội bộ để phân tích cú pháp, không đẩy vào ô tư duy.
+    - Nếu mô hình không hỗ trợ luồng suy nghĩ độc lập, hệ thống phát luồng suy luận tổng hợp (Synthesized Thought Milestones) bằng tiếng Việt mạch lạc.
+
+### Câu hỏi 8.4: Làm thế nào để AI tuân thủ đúng quy chuẩn trạng thái, loại công việc và mức ưu tiên của từng dự án mà không bị gán bừa?
+- **Trả lời**:
+  Hệ thống áp dụng kỹ thuật **Dynamic Project Governance Grounding**: Trước khi gửi prompt cho AI, hệ thống đọc trực tiếp các bảng `WorkflowStatuses`, `IssueTypes`, `Priorities` từ MySQL theo đúng `ProjectId`. Sau đó tiêm trực tiếp vào prompt, ép buộc AI chỉ được phân bổ các trạng thái thực tế đang có trong dự án (`To Do`, `In Progress`, `Code Review`, `Done`).
+
+---
+
+## 9. Bảng Tổng Hợp Tham Chiếu Mã Nguồn Toàn Bộ Module AI
 
 | Nhóm Nghiệp Vụ | Tên Lớp / Tệp Mã Nguồn | Đường Dẫn Mã Nguồn Cụ Thể |
 | :--- | :--- | :--- |
 | **API Endpoints & SSE** | `AiAgentController` | [`AiAgentController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/AiAgentController.cs) |
 | **Agent Pipeline 5 Bước** | `AiSprintDecompositionService` | [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs) |
+| **Theo Dõi Token & Phiên** | `AiTokenUsageTracker` | [`AiTokenUsageTracker.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiTokenUsageTracker.cs) |
+| **Hợp Đồng Đo Lường Token** | `IAiTokenUsageTracker` | [`IAiTokenUsageTracker.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/IAiTokenUsageTracker.cs) |
 | **Quản Lý Prompt Động** | `PromptTemplateService` | [`PromptTemplateService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/PromptTemplateService.cs) |
 | **Thư Mục Prompt Markdown** | `Prompts/*.md` | [`Prompts/`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Prompts/) |
 | **Router Đa Mô Hình AI** | `MultiProviderAiModelClient` | [`MultiProviderAiModelClient.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/MultiProviderAiModelClient.cs) |
@@ -212,5 +246,6 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
 | **Angular SSE Client** | `AiAgentService` | [`ai-agent.service.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/core/services/ai-agent.service.ts) |
 | **Angular Modal Component** | `AiDecomposeModalComponent` | [`ai-decompose-modal.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.ts) |
 | **Angular Modal Template** | `AiDecomposeModal Template` | [`ai-decompose-modal.html`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.html) |
+| **Dashboard Token Profile** | `ProfilePageComponent` | [`profile-page.html`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/identity/profile-page.html) |
 | **Deep Link Spec Hub** | `SpecHubPageComponent` | [`spec-hub-page.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/spec-hub/spec-hub-page.ts) |
 

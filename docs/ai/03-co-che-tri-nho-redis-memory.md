@@ -5,7 +5,7 @@
 ## 1. Bản chất & Phân loại Trí nhớ AI trong Hệ thống
 Trong kỹ thuật phần mềm tích hợp AI, một Agent thông minh không thể chỉ tồn tại dưới dạng "Stateless" (không lưu trạng thái). Nếu không có cơ chế trí nhớ, Agent sẽ quên sạch ngữ cảnh ngay sau khi hoàn thành một lượt suy luận, không thể duy trì phiên hội thoại để người dùng chỉnh sửa, và có nguy cơ ghi dữ liệu rác trực tiếp vào cơ sở dữ liệu sản xuất.
 
-Dự án thiết kế một **Kiến trúc Trí nhớ 3 Tầng (Three-Tier AI Memory Architecture)**:
+Dự án thiết kế một **Kiến trúc Trí nhớ 4 Tầng Đa Cấp (Four-Tier AI Memory Architecture)**:
 
 ```mermaid
 flowchart TD
@@ -17,21 +17,31 @@ flowchart TD
 
     subgraph T2["TẦNG 2: TRÍ NHỚ PHIÊN PHÂN TÁN (STAGING SESSION MEMORY - REDIS)"]
         SM1["Lưu trữ trên Redis Cache (127.0.0.1:6379, Key: ProjectMgmt:Ai:staging:{id})"]
-        SM2["Chứa toàn bộ đề xuất Sprint Goal, Epics, Tasks, Subtasks, Citations, Warnings"]
+        SM2["Chứa toàn bộ đề xuất Sprint Goal, Epics, Tasks, Subtasks (đầy đủ AC & Citations)"]
         SM3["Thời gian tồn tại: TTL 24 giờ (Tự động giải phóng bộ nhớ khi hết hạn)"]
         SM4["Cho phép người dùng Review, Chỉnh sửa, Tái sinh (Regenerate) từng task độc lập"]
     end
 
-    subgraph T3["TẦNG 3: TRÍ NHỚ DÀI HẠN CỐ ĐỊNH (LONG-TERM GROUNDING MEMORY)"]
+    subgraph T3["TẦNG 3: BỘ NHỚ LỊCH SỬ PHIÊN & ĐIỀU HÀNH TOKEN (CROSS-SESSION PROJECT MEMORY)"]
+        PM1["Quản lý bởi IAiTokenUsageTracker (AiTokenUsageTracker.cs)"]
+        PM2["Lưu vết các phiên phân tách Sprint của từng dự án (AiSessionSummary)"]
+        PM3["Lưu vết lượng Token, Latency, Tỷ lệ thành công & Chi phí ước tính (AiUsageRecord)"]
+        PM4["Hỗ trợ khôi phục phiên làm việc cũ qua biểu tượng đồng hồ (History) trên Modal AI"]
+    end
+
+    subgraph T4["TẦNG 4: TRÍ NHỚ DÀI HẠN CỐ ĐỊNH (LONG-TERM GROUNDING MEMORY)"]
         LM1["Kho tài liệu đặc tả Spec Hub (Word, Excel, PDF, Markdown, Text)"]
         LM2["Lịch sử Sprint, Vận tốc (Velocity) trung bình, User Stories Backlog (MySQL)"]
-        LM3["Hồ sơ năng lực, vai trò và kỹ năng thành viên Scrum (MySQL)"]
-        LM4["Vector Embeddings lưu trữ trong Vector Database (Qdrant)"]
+        LM3["Quy chuẩn dự án: WorkflowStatus, IssueTypes, Priorities từ MySQL"]
+        LM4["Hồ sơ năng lực, vai trò và kỹ năng thành viên Scrum (MySQL)"]
+        LM5["Vector Embeddings lưu trữ trong Vector Database (Qdrant)"]
     end
 
     T1 -->|Khi suy luận hoàn tất, lưu Staging| T2
-    T2 -->|Khi người dùng bấm 'Áp dụng vào Sprint'| T3
-    T3 -.->|RAG Grounding & MCP Tools nạp ngữ cảnh vào| T1
+    T2 -->|Ghi nhận tóm tắt phiên & Token tiêu thụ| T3
+    T2 -->|Khi người dùng bấm 'Áp dụng vào Sprint'| T4
+    T3 -.->|Khôi phục lại phiên đề xuất cũ| T2
+    T4 -.->|RAG Grounding, MCP Tools & Quy chuẩn dự án nạp vào| T1
 ```
 
 ---
@@ -139,17 +149,50 @@ Toàn bộ đề xuất phân rã được tuần tự hóa (serialize) thành c
         {
           "id": "subtask-2-1",
           "title": "Cấu hình Controller phát event-stream trong .NET 8",
-          "estimatedHours": 6
+          "role": "Backend",
+          "estimatedHours": 6,
+          "storyPoints": 2,
+          "priority": "High",
+          "status": "To Do",
+          "acceptanceCriteria": [
+            "Controller trả về text/event-stream chuẩn SSE",
+            "Đóng kết nối an toàn khi Client disconnect"
+          ],
+          "documentCitations": [
+            "Tài liệu Spec Hub: Kien-truc-realtime.docx - Trang 12"
+          ]
         },
         {
           "id": "subtask-2-2",
           "title": "Xây dựng Angular Service bắt lỗi 401 và gọi Refresh Token",
-          "estimatedHours": 6
+          "role": "Frontend",
+          "estimatedHours": 6,
+          "storyPoints": 2,
+          "priority": "High",
+          "status": "To Do",
+          "acceptanceCriteria": [
+            "Interceptor bắt lỗi 401 và gọi Refresh Token tự động",
+            "Kết nối stream được mở lại không làm mất phiên"
+          ],
+          "documentCitations": [
+            "Tài liệu Spec Hub: Kien-truc-realtime.docx - Trang 12"
+          ]
         },
         {
           "id": "subtask-2-3",
           "title": "Viết kiểm thử tự động giả lập mất mạng đột ngột",
-          "estimatedHours": 4
+          "role": "QA",
+          "estimatedHours": 4,
+          "storyPoints": 1,
+          "priority": "Medium",
+          "status": "To Do",
+          "acceptanceCriteria": [
+            "Kịch bản kiểm thử giả lập ngắt mạng và tự kết nối lại",
+            "Không phát sinh ngoại lệ chưa được xử lý"
+          ],
+          "documentCitations": [
+            "Tài liệu Spec Hub: Kien-truc-realtime.docx - Trang 12"
+          ]
         }
       ]
     }
@@ -255,13 +298,36 @@ PONG
 
 ---
 
-## 6. Danh mục Tệp Mã Nguồn Tham Chiếu Chuyên Đề 3
+## 6. Bộ Nhớ Lịch Sử Phiên & Quản Trị Tiêu Thụ Token (Cross-Session Project Memory & Token Analytics)
+
+Bên cạnh bộ nhớ đề xuất tức thời (Staging Session), hệ thống được trang bị hệ thống quản trị phiên làm việc và đo lường tài nguyên AI độc lập thông qua giao diện [`IAiTokenUsageTracker`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/IAiTokenUsageTracker.cs) và lớp triển khai [`AiTokenUsageTracker`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiTokenUsageTracker.cs):
+
+### 6.1. Quản lý Lịch sử Phiên Phân rã Dự án (Project Session Memory)
+- **Cơ chế hoạt động**: Mỗi khi một lượt phân rã Sprint hoàn tất, hệ thống tự động ghi nhận bản tóm tắt phiên [`AiSessionSummary`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/IAiTokenUsageTracker.cs) gồm: `SessionId`, `ProjectId`, `SprintGoal`, `TaskCount`, `TotalStoryPoints`, `Model`, `CreatedByName`, `CreatedAtUtc`.
+- **Khôi phục phiên làm việc cũ (Session History Restore)**:
+  - Trên thanh tiêu đề của Modal AI có biểu tượng **Lịch sử phiên (đồng hồ)**.
+  - Khi nhấp vào, dropdown hiển thị danh sách các phiên phân tách gần nhất trong dự án từ API `GET /api/ai/agent/sessions?projectId=...`.
+  - Nhấp vào phiên bất kỳ để khôi phục toàn bộ bản kế hoạch đề xuất từ Staging Cache (`GET /api/ai/agent/proposal/{sessionId}`) mà không cần chạy lại mô hình LLM từ đầu.
+
+### 6.2. Đo lường & Giám sát Tiêu thụ Token (Token Consumption Management)
+- **Bộ ghi nhận mức tiêu thụ**: Ghi nhận `AiUsageRecord` theo từng phiên làm việc (Prompt Tokens, Completion Tokens, Latency mili-giây, Model, trạng thái Success/Failed).
+- **Dashboard Quản trị trên Trang Cá nhân (Profile - Tab "Mức tiêu thụ Token AI")**:
+  - **4 Thẻ Chỉ số (KPIs)**: Tổng Token tiêu thụ, Tổng cuộc gọi AI, Tỷ lệ hoàn tất thành công, Chi phí ước tính (USD).
+  - **Phân bổ theo Mô hình**: Tỷ lệ phần trăm và số lượng token giữa `Gemini 2.5 Flash`, `Gemini 2.5 Pro`, `Gemini 2.5 Flash-Lite`.
+  - **Bảng Nhật ký Thực thi**: Hiển thị chi tiết 15 lượt gọi gần nhất với thời gian thực thi, số token vào/ra và trạng thái.
+
+---
+
+## 7. Danh mục Tệp Mã Nguồn Tham Chiếu Chuyên Đề 3
 
 | Thành phần | Vai trò kỹ thuật | Liên kết mã nguồn |
 | :--- | :--- | :--- |
 | **StackExchangeRedisStagingProvider** | Adapter kết nối Redis, quản lý connection pool & key operations | [`StackExchangeRedisStagingProvider.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/Adapters/StackExchangeRedisStagingProvider.cs#L8-L115) |
 | **ResilientStateStagingService** | Wrapper chống sập, điều phối Redis và In-Memory fallback | [`ResilientStateStagingService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Core/Staging/ResilientStateStagingService.cs#L15-L110) |
 | **MemoryStateStagingService** | Bộ nhớ đệm Fallback lưu trên ConcurrentDictionary của RAM | [`MemoryStateStagingService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Core/Staging/MemoryStateStagingService.cs#L10-L60) |
+| **AiTokenUsageTracker** | Quản lý lịch sử phiên dự án và đo lường tiêu thụ token AI | [`AiTokenUsageTracker.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiTokenUsageTracker.cs) |
+| **IAiTokenUsageTracker** | Hợp đồng interface theo dõi token và lịch sử phiên | [`IAiTokenUsageTracker.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/IAiTokenUsageTracker.cs) |
 | **CircuitBreakerPolicy** | Thuật toán ngắt mạch bảo vệ hệ thống khi Redis gián đoạn | [`CircuitBreakerPolicy.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Core/Resilience/CircuitBreakerPolicy.cs#L10-L70) |
+| **ProfilePageComponent** | Dashboard giám sát Token AI trên giao diện người dùng | [`profile-page.html`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/identity/profile-page.html) |
 | **Cấu hình Redis** | Khai báo Host, Port, Database, InstanceName | [`appsettings.json`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/appsettings.json#L40-L55) |
 

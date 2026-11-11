@@ -29,6 +29,7 @@ sequenceDiagram
     participant Router as MultiProviderAiModelClient<br/>(Gemini / Claude / OpenAI)
     participant LLM as Mô hình AI Cung cấp<br/>(Google Gemini API)
     participant Redis as ResilientStateStagingService<br/>(Redis 127.0.0.1:6379)
+    participant Tracker as IAiTokenUsageTracker<br/>(AiTokenUsageTracker.cs)
     participant DB as MySQL Database<br/>(DbContext Transaction)
 
     %% Giai đoạn 1: Mở Modal & Tiếp nhận
@@ -86,16 +87,18 @@ sequenceDiagram
     LLM-->>Router: JSON Stream / Output (Sprint Goal, Epics, Tasks, SP, Hours, Citations)
     Router-->>Pipeline: Structured JSON String
 
-    %% Giai đoạn 6: Self-Check & Lưu Staging Redis
-    Note over Pipeline,Redis: GIAI ĐOẠN 5: TỰ KIỂM TRA (SELF-CHECK) & LƯU STAGING
+    %% Giai đoạn 6: Self-Check Critique & Lưu Staging Redis
+    Note over Pipeline,Redis: GIAI ĐOẠN 5: TỰ KIỂM TRA (SELF-CHECK CRITIQUE AGENT) & LƯU STAGING
     Pipeline-->>Ctrl: Emit Event: Step 5 ("Tự kiểm tra (Self-Check) & Lưu Staging")
     Ctrl-->>Svc: data: {"type":"step","step":5}
-    Pipeline->>Pipeline: ValidateCapacityAndStoryPoints(totalSp <= teamVelocity)
+    Pipeline->>Pipeline: Self-Check Agent: Đối chiếu Definition of Ready (DoR), độ phủ Acceptance Criteria và cân bằng tải
     Pipeline->>Redis: SaveStagedProposalAsync(stagingId, proposalJson, ttl=24h)
     Redis-->>Pipeline: OK (Key: ProjectMgmt:Ai:staging:{id})
     Pipeline-->>Ctrl: Emit Event: ProposalPayload (Full Sprint Proposal)
+    Ctrl->>Tracker: RecordUsage(tokens, latency, model) & RecordSession(summary)
+    Tracker-->>Ctrl: Đã lưu vết phiên làm việc & số liệu Token
     Ctrl-->>Svc: data: {"type":"proposal","payload":{...}}
-    Svc-->>FE: Hiển thị kết quả đề xuất (Sprint Goal, Epics, Tasks, Badges, Citations)
+    Svc-->>FE: Hiển thị kết quả đề xuất (Thẻ Tóm tắt Điều hành, Epics, Tasks, Subtasks, Citations)
 
     %% Giai đoạn 7: Người dùng chỉnh sửa & Áp dụng
     Note over SM,DB: GIAI ĐOẠN 6: PHÊ DUYỆT & GHI DỮ LIỆU CHÍNH THỨC
@@ -206,6 +209,14 @@ Khi phiên làm việc kéo dài, JWT Access Token có thể hết hạn ngay tr
 2. Tự động kích hoạt luồng gọi `AuthService.refreshToken()` bằng Refresh Token lưu an toàn.
 3. Nhận Access Token mới và tự động mở lại kết nối stream mà không ngắt quãng trải nghiệm của người dùng.
 
+### 4.4. Phân Tách Tuyệt Đối Luồng Tư Duy (Native Thoughts) và Dữ Liệu Nội Dung (Clean Content Streaming)
+Một vấn đề thường gặp ở các hệ thống AI phân rã công việc là luồng streaming trả về cấu trúc JSON bị "xả thô" (raw dump) các đoạn ngoặc nhọn `{ "storyPoints": 2, ... }` vào hộp hiển thị suy luận tư duy (Chain-of-Thought) của người dùng, gây rối mắt và làm giảm chất lượng trải nghiệm.
+
+Hệ thống giải quyết triệt để thông qua bộ phân tách loại chunk trong [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs):
+- **Chunk suy luận (`AiStreamChunkType.Thought`)**: Được chuyển tiếp trực tiếp vào `onThoughtDelta(chunk.DeltaThought)` để người dùng đọc được từng bước suy nghĩ tự nhiên của mô hình.
+- **Chunk nội dung (`AiStreamChunkType.Content`)**: Chỉ được nối vào bộ đệm nội bộ `responseContentBuilder.Append(chunk.DeltaContent)`, **tuyệt đối không gửi vào `onThoughtDelta`**.
+- Nếu mô hình không hỗ trợ Native Thinking, hệ thống tự động phát luồng suy luận tổng hợp (Synthesized Thought Milestones) bằng tiếng Việt mạch lạc, giúp người dùng nắm bắt tiến trình mà không thấy code thô.
+
 ---
 
 ## 5. Danh mục Tệp Mã Nguồn Tham Chiếu Chuyên Đề 2
@@ -214,6 +225,7 @@ Khi phiên làm việc kéo dài, JWT Access Token có thể hết hạn ngay tr
 | :--- | :--- | :--- |
 | **AiAgentController** | Tiếp nhận SSE, điều phối stream, tái tạo task và commit staging | [`AiAgentController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/AiAgentController.cs#L25-L160) |
 | **AiSprintDecompositionService** | Pipeline 5 bước thực thi Agentic Workflow, prompt engineering | [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs#L45-L250) |
+| **AiTokenUsageTracker** | Ghi nhận token, latency và lịch sử các phiên phân tách | [`AiTokenUsageTracker.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiTokenUsageTracker.cs) |
 | **MultiProviderAiModelClient** | Router gọi API mô hình ngoài (Gemini, Claude, OpenAI) | [`MultiProviderAiModelClient.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/MultiProviderAiModelClient.cs#L25-L120) |
 | **SpecHubTools** | Công cụ trích xuất đặc tả yêu cầu phục vụ Grounding | [`SpecHubTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SpecHubTools.cs#L15-L80) |
 | **ai-agent.service.ts** | Xử lý EventSource, đọc SSE stream theo từng chunk JSON | [`ai-agent.service.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/core/services/ai-agent.service.ts#L40-L150) |
