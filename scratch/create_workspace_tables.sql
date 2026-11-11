@@ -1,0 +1,60 @@
+USE projectmgmt;
+
+CREATE TABLE IF NOT EXISTS UserRecentVisit (
+  Id CHAR(36) NOT NULL PRIMARY KEY,
+  UserId CHAR(36) NOT NULL,
+  Kind VARCHAR(20) NOT NULL,
+  ItemId CHAR(36) NOT NULL,
+  Title VARCHAR(500) NOT NULL,
+  Subtitle VARCHAR(500) NOT NULL DEFAULT '',
+  OrgId CHAR(36) NOT NULL,
+  VisitedAt DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  KEY IX_UserRecentVisit_User (UserId, VisitedAt),
+  UNIQUE KEY UQ_UserRecentVisit (UserId, Kind, ItemId)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS OrganizationMember (
+  Id CHAR(36) NOT NULL PRIMARY KEY,
+  OrgId CHAR(36) NOT NULL,
+  UserId CHAR(36) NOT NULL,
+  Role VARCHAR(20) NOT NULL DEFAULT 'Member',
+  JoinedAt DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  KEY IX_OrganizationMember_Org (OrgId),
+  KEY IX_OrganizationMember_User (UserId),
+  UNIQUE KEY UQ_OrganizationMember (OrgId, UserId)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS OrganizationInvitation (
+  Id CHAR(36) NOT NULL PRIMARY KEY,
+  OrgId CHAR(36) NOT NULL,
+  Email VARCHAR(256) NOT NULL,
+  Role VARCHAR(20) NOT NULL DEFAULT 'Member',
+  InvitedByUserId CHAR(36) NOT NULL,
+  Status VARCHAR(20) NOT NULL DEFAULT 'Pending',
+  CreatedAt DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  RespondedAt DATETIME(6) NULL,
+  KEY IX_OrganizationInvitation_Org (OrgId, Status),
+  KEY IX_OrganizationInvitation_Email (Email, Status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS OrganizationInviteLink (
+  Token VARCHAR(64) NOT NULL PRIMARY KEY,
+  OrgId CHAR(36) NOT NULL,
+  Role VARCHAR(20) NOT NULL DEFAULT 'Member',
+  CreatedByUserId CHAR(36) NOT NULL,
+  CreatedAt DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  IsActive TINYINT(1) NOT NULL DEFAULT 1,
+  KEY IX_OrganizationInviteLink_Org (OrgId)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS OrganizationWorkflowTemplate (
+  Id CHAR(36) NOT NULL PRIMARY KEY,
+  OrgId CHAR(36) NOT NULL,
+  Name VARCHAR(100) NOT NULL,
+  ManagementType VARCHAR(20) NOT NULL DEFAULT 'Scrum',
+  StatusesJson TEXT NOT NULL,
+  IsDefault TINYINT(1) NOT NULL DEFAULT 0,
+  CreatedAt DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  UpdatedAt DATETIME(6) NULL ON UPDATE CURRENT_TIMESTAMP(6),
+  KEY IX_OrganizationWorkflowTemplate_Org (OrgId)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

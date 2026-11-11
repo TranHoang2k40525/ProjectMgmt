@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>13.0</LangVersion>
+    <NoWarn>$(NoWarn);MSB3277</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Pomelo chỉ kéo EF Relational 9.0.0; các module dùng EF 9.0.19 nên phải ghim cùng bản, nếu không lúc chạy báo thiếu assembly. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ProjectMgmt.Contracts\ProjectMgmt.Contracts.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Core\ProjectMgmt.Core.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Modules.DeliveryIntelligence\Infrastructure\DeliveryIntelligence.Infrastructure.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Modules.IdentityExperience\Infrastructure\IdentityExperience.Infrastructure.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.Modules.Planning\Infrastructure\Planning.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

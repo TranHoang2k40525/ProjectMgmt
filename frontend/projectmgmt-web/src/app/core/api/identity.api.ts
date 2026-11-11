@@ -8,7 +8,7 @@ import { AvatarResult, ForYouDto, ProfileDto, SkillDto } from './identity-api.mo
 @Injectable({ providedIn: 'root' })
 export class IdentityApi {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = `${environment.apiBaseUrl}/v1`;
+  private readonly baseUrl = `${environment.apiBaseUrl}`;
 
   getMyProfile(): Observable<ProfileDto> {
     return this.http.get<ProfileDto>(`${this.baseUrl}/users/me`);
@@ -22,6 +22,10 @@ export class IdentityApi {
     const form = new FormData();
     form.append('avatar', file, file.name);
     return this.http.post<AvatarResult>(`${this.baseUrl}/users/me/avatar`, form);
+  }
+
+  deleteAvatar(): Observable<AvatarResult> {
+    return this.http.delete<AvatarResult>(`${this.baseUrl}/users/me/avatar`);
   }
 
   changePassword(request: AccountDto): Observable<ApiResult> {
@@ -68,4 +72,9 @@ export class IdentityApi {
   getForYou(): Observable<ForYouDto> {
     return this.http.get<ForYouDto>(`${this.baseUrl}/users/for-you`);
   }
+
+  getUsers(): Observable<Array<{ userId: string; displayName: string; avatarUrl?: string }>> {
+    return this.http.get<Array<{ userId: string; displayName: string; avatarUrl?: string }>>(`${this.baseUrl}/users`);
+  }
 }
+

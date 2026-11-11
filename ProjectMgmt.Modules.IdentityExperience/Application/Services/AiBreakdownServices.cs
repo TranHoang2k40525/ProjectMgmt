@@ -145,7 +145,7 @@ public class AiBreakdownServices : IAiBreakdownServices
                 UserId = actorUserId,
                 Type = NotificationTypes.AiBreakdownCompleted,
                 Title = "AI đã hoàn tất phân rã công việc",
-                Content = $"Đã tạo {responseTasks.Count} gợi ý sub-task cho Issue {source.Title}.",
+                Content = $"Đã tạo {responseTasks.Count} gợi ý Subtask cho công việc \"{source.Title}\".",
                 EntityType = "AiGenerationLog",
                 EntityId = generationId,
                 ProjectId = source.ProjectId,

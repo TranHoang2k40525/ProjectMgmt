@@ -4,7 +4,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { IdentityService } from '../../core/services/identity.service';
-import { UserProfileModel, RoleModel, PermissionModel } from '../../core/mocks/identity-mock-db';
+import { UserProfileModel, RoleModel, PermissionModel } from '../../core/models/identity.models';
 
 @Component({
   selector: 'app-rbac-admin-page',
@@ -36,10 +36,12 @@ export class RbacAdminPageComponent implements OnInit {
 
   // Selected permissions for creating role
   newRolePermissions: Set<string> = new Set();
+  selectedAssignRoleByUser: Record<string, string> = {};
 
   ngOnInit(): void {
     this.roleForm = this.fb.group({
       name: ['', [Validators.required, Validators.pattern(/^[A-Za-z][A-Za-z0-9_-]{1,79}$/)]],
+      scope: ['Project', [Validators.required]],
       description: ['', [Validators.maxLength(255)]]
     });
 
@@ -98,7 +100,7 @@ export class RbacAdminPageComponent implements OnInit {
 
   // --- CREATE ROLE MODAL ---
   openRoleModal(): void {
-    this.roleForm.reset();
+    this.roleForm.reset({ name: '', scope: 'Project', description: '' });
     this.newRolePermissions.clear();
     this.showRoleModal = true;
   }
@@ -117,9 +119,9 @@ export class RbacAdminPageComponent implements OnInit {
 
   submitNewRole(): void {
     if (this.roleForm.invalid || this.loading()) return;
-    const { name, description } = this.roleForm.value;
+    const { name, scope, description } = this.roleForm.value;
     this.loading.set(true); this.errorMsg.set(null); this.successMsg.set(null);
-    this.identityService.createRole(name, description, Array.from(this.newRolePermissions))
+    this.identityService.createRole(name, description, Array.from(this.newRolePermissions), scope || 'Project')
       .pipe(finalize(() => this.loading.set(false))).subscribe({
         next: role => {
           this.roles.update(roles => [...roles, role]);
@@ -129,6 +131,20 @@ export class RbacAdminPageComponent implements OnInit {
         },
         error: err => this.errorMsg.set(apiErrorMessage(err, 'Không thể tạo vai trò.'))
       });
+  }
+
+  assignRoleToUser(user: UserProfileModel): void {
+    const roleId = this.selectedAssignRoleByUser[user.id] || this.roles()[0]?.id;
+    if (!roleId) return;
+    const role = this.roles().find(r => r.id === roleId);
+    const scopeType = role?.scope || 'System';
+    this.identityService.assignUserRole(user.id, roleId, scopeType).subscribe({
+      next: () => {
+        this.successMsg.set(`Đã gán vai trò ${role?.name ?? ''} cho ${user.displayName}.`);
+        this.loadAllData();
+      },
+      error: err => this.errorMsg.set(apiErrorMessage(err, 'Không thể gán vai trò cho người dùng.'))
+    });
   }
 
   // Filtered Users

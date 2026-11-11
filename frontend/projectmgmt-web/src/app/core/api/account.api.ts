@@ -7,7 +7,7 @@ import { AccountDto, ApiResult, LoginResult, OtpResult, RegisterResult } from '.
 @Injectable({ providedIn: 'root' })
 export class AccountApi {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = `${environment.apiBaseUrl}/v1/auth`;
+  private readonly baseUrl = `${environment.apiBaseUrl}/auth`;
 
   register(request: AccountDto): Observable<RegisterResult> {
     return this.http.post<RegisterResult>(`${this.baseUrl}/register`, request);

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { computeFocusActions } from './focus-recommendation.service';
 import { FocusContext } from './focus-recommendation.model';
 import { Project, WorkItem } from '../services/project-management.service';
-import { UserProfileModel } from '../mocks/identity-mock-db';
+import { UserProfileModel } from '../models/identity.models';
 
 const project: Project = {
   id: 'p1', orgId: 'o1', projectKey: 'PM', name: 'ProjectMgmt', leadUserId: 'u1',

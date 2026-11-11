@@ -10,8 +10,16 @@
 !.env.example
 !.env.test.example
 appsettings.Local.json
+**/appsettings.Local.json
+**/appsettings.*.Local.json
 **/appsettings.Staging.json
 **/appsettings.Production.json
+publish_output/
+**/publish_output/
+**/*.pfx
+**/*.key
+**/*.pem
+**/secrets.json
 *.user
 *.suo
 .audit-tmp/
@@ -21,11 +29,9 @@ TestResults/
 *.py[cod]
 .tmp/
 **/App_Data/
-**/plane (1).txt
 ~$*
 **/~$*
 .playwright-mcp
-**/scripts
 **/Logs/
 **/local.settings.json
 .playwright-cli
@@ -40,6 +46,17 @@ tests/screenshots/
 **/blob-report/
 **/.playwright/
 **/.tempmediaStorage/
+
+# Spec Hub & Attachments Hub physical storage
+**/Spec_Hub/
+**/Spec_Hub/**
+Spec_Hub/
+**/Attachments_Hub/
+**/Attachments_Hub/**
+Attachments_Hub/
+**/Storage_Hub/
+**/Storage_Hub/**
+Storage_Hub/
 tests/**/*.png
 tests/**/*.jpg
 tests/**/*.jpeg

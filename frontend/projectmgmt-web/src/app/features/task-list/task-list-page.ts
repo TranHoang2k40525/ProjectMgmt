@@ -4,12 +4,16 @@ import { FormsModule } from '@angular/forms';
 import { ProjectManagementService, WorkItem } from '../../core/services/project-management.service';
 import { IdentityService } from '../../core/services/identity.service';
 import { ExcelDataService } from '../../core/services/excel-data.service';
+import { NoProjectStateComponent } from '../../shared/components/no-project-state/no-project-state.component';
 
 @Component({
   selector: 'app-task-list-page',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, NoProjectStateComponent],
   template: `
+    @if (!projectService.hasActiveProject()) {
+      <app-no-project-state featureName="Danh Sách Công Việc"></app-no-project-state>
+    } @else {
     <div class="task-list-page flex flex-col gap-6 animate-fade-in font-body text-slate-900 dark:text-slate-100">
       
       <!-- Top Action Bar -->
@@ -23,133 +27,161 @@ import { ExcelDataService } from '../../core/services/excel-data.service';
         </div>
 
         <div class="flex items-center gap-3">
-          <button (click)="exportExcel()" class="px-4 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 font-semibold text-sm transition-colors flex items-center gap-2 shadow-2xs cursor-pointer">
-            <span class="material-symbols-outlined text-[20px]">download</span>
+          <button (click)="exportExcel()" class="px-3 py-1.5 rounded-md bg-slate-900 hover:bg-slate-800 text-white font-medium text-xs transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer">
+            <span class="material-symbols-outlined text-[16px]">download</span>
             Xuất Excel
           </button>
         </div>
       </div>
 
       <!-- Main Layout: Left Group Filter + Right Work Items Table -->
-      <div class="task-list-layout grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div class="task-list-layout grid grid-cols-1 lg:grid-cols-4 gap-5">
         
         <!-- Left Filter Panel -->
-        <div class="task-list-filters p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col gap-4 select-none">
-          <div class="flex flex-col gap-1.5">
-            <span class="text-xs font-bold uppercase tracking-wider text-slate-400 px-2">Phân loại công việc</span>
+        <div class="task-list-filters p-3.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-col gap-3 select-none">
+          <div class="flex flex-col gap-1">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-2">Phân loại công việc</span>
             <nav class="flex flex-col gap-1">
               <button
                 (click)="selectedGroup.set('all')"
-                [class.bg-primary/10]="selectedGroup() === 'all'"
-                [class.text-primary]="selectedGroup() === 'all'"
-                class="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors w-full text-left"
+                [class.bg-slate-100]="selectedGroup() === 'all'"
+                [class.dark:bg-slate-800]="selectedGroup() === 'all'"
+                [class.text-slate-900]="selectedGroup() === 'all'"
+                [class.dark:text-white]="selectedGroup() === 'all'"
+                class="flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors w-full text-left"
               >
-                <div class="flex items-center gap-2.5">
-                  <span class="material-symbols-outlined text-[20px]">history</span>
+                <div class="flex items-center gap-2">
+                  <span class="material-symbols-outlined text-[18px]">history</span>
                   <span>Tất cả công việc</span>
                 </div>
-                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
                   {{ allWorkItems().length }}
                 </span>
               </button>
 
               <button
                 (click)="selectedGroup.set('my')"
-                [class.bg-primary/10]="selectedGroup() === 'my'"
-                [class.text-primary]="selectedGroup() === 'my'"
-                class="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors w-full text-left"
+                [class.bg-slate-100]="selectedGroup() === 'my'"
+                [class.dark:bg-slate-800]="selectedGroup() === 'my'"
+                [class.text-slate-900]="selectedGroup() === 'my'"
+                [class.dark:text-white]="selectedGroup() === 'my'"
+                class="flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors w-full text-left"
               >
-                <div class="flex items-center gap-2.5">
-                  <span class="material-symbols-outlined text-[20px]">star</span>
+                <div class="flex items-center gap-2">
+                  <span class="material-symbols-outlined text-[18px]">star</span>
                   <span>Tôi xử lý</span>
                 </div>
               </button>
             </nav>
           </div>
 
-          <div class="flex flex-col gap-1.5 border-t border-slate-200/60 dark:border-slate-800 pt-3">
-            <span class="text-xs font-bold uppercase tracking-wider text-slate-400 px-2">Phân nhóm hệ thống</span>
+          <div class="flex flex-col gap-1 border-t border-slate-200/80 dark:border-slate-800 pt-3">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-2">Phân loại theo Epic</span>
             <nav class="flex flex-col gap-1">
-              <button class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                <span class="w-3 h-3 rounded-full bg-blue-500"></span>
-                <span>Scrum AI Engine</span>
-              </button>
-              <button class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                <span class="w-3 h-3 rounded-full bg-indigo-500"></span>
-                <span>Delivery Intelligence</span>
-              </button>
-              <button class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                <span class="w-3 h-3 rounded-full bg-purple-500"></span>
-                <span>Identity & RBAC</span>
-              </button>
+              @for (epic of epics(); track epic.id) {
+                <button
+                  type="button"
+                  (click)="toggleEpicFilter(epic.name)"
+                  [class.bg-primary/10]="selectedEpic() === epic.name"
+                  [class.dark:bg-primary/20]="selectedEpic() === epic.name"
+                  [class.text-primary]="selectedEpic() === epic.name"
+                  [class.dark:text-emerald-400]="selectedEpic() === epic.name"
+                  class="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <span class="w-2 h-2 rounded bg-primary shrink-0"></span>
+                  <span class="truncate">{{ epic.name }}</span>
+                </button>
+              } @empty {
+                <p class="text-[11px] text-slate-400 px-3 py-1">Chưa có Epic nào trong dự án</p>
+              }
             </nav>
           </div>
         </div>
 
         <!-- Right Main Work Items Table -->
-        <div class="task-list-panel lg:col-span-3 p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col gap-4">
+        <div class="task-list-panel lg:col-span-3 p-4 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-col gap-3">
           
           <!-- Search & Filter Controls -->
-          <div class="task-list-controls flex items-center justify-between gap-4">
+          <div class="task-list-controls flex items-center justify-between gap-3">
             <div class="relative flex-1">
-              <span class="material-symbols-outlined absolute left-3 top-2.5 text-[20px] text-slate-400 pointer-events-none">search</span>
+              <span class="material-symbols-outlined absolute left-2.5 top-2 text-[18px] text-slate-400 pointer-events-none">search</span>
               <input
                 type="text"
-                [(ngModel)]="searchTerm"
+                [ngModel]="searchTerm()"
+                (ngModelChange)="searchTerm.set($event)"
                 placeholder="Lọc công việc theo tên hoặc mã task..."
-                class="w-full h-10 pl-10 pr-4 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary border border-transparent"
+                class="w-full h-8 pl-8 pr-3 rounded-md bg-slate-50 dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-slate-900 border border-slate-200 dark:border-slate-700"
               />
             </div>
           </div>
 
           <!-- Table Container (Font size min 14px text-sm) -->
           <div class="task-table-wrap overflow-x-auto">
-            <table class="task-table w-full text-left text-sm border-collapse">
+            <table class="task-table w-full text-left text-xs border-collapse">
               <thead>
-                <tr class="border-b border-slate-200 dark:border-slate-800 text-xs uppercase font-bold text-slate-400 bg-slate-50/50 dark:bg-slate-950/50">
-                  <th class="py-3.5 px-4">STT</th>
-                  <th class="py-3.5 px-4">Mã Task</th>
-                  <th class="py-3.5 px-4">Tên công việc</th>
-                  <th class="py-3.5 px-4">Người xử lý</th>
-                  <th class="py-3.5 px-4">Trạng thái</th>
-                  <th class="py-3.5 px-4">Sprint</th>
+                <tr class="border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase font-bold text-slate-400 bg-slate-50/70 dark:bg-slate-950/70">
+                  <th class="py-2.5 px-3">STT</th>
+                  <th class="py-2.5 px-3">Mã Task</th>
+                  <th class="py-2.5 px-3">Tên công việc</th>
+                  <th class="py-2.5 px-3">Người xử lý</th>
+                  <th class="py-2.5 px-3">Trạng thái</th>
+                  <th class="py-2.5 px-3">Sprint</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 dark:divide-slate-800/60">
                 @for (item of filteredItems(); track item.id; let i = $index) {
                   <tr
                     (click)="openDrawer(item)"
-                    class="hover:bg-slate-50 dark:hover:bg-slate-800/40 cursor-pointer transition-colors group"
+                    class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 cursor-pointer transition-colors group"
                   >
-                    <td data-label="STT" class="py-3.5 px-4 font-mono text-slate-400 text-sm">{{ i + 1 }}</td>
-                    <td data-label="Mã Task" class="py-3.5 px-4 font-mono font-bold text-primary text-sm">{{ item.issueKey }}</td>
-                    <td data-label="Công việc" class="py-3.5 px-4 font-semibold text-slate-900 dark:text-white group-hover:text-primary transition-colors text-sm">
-                      {{ item.title }}
-                    </td>
-                    <td data-label="Người xử lý" class="py-3.5 px-4 text-sm">
-                      <div class="flex items-center gap-2 text-slate-700 dark:text-slate-300">
-                        <div class="w-6 h-6 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xs font-bold">
-                          {{ (item.assigneeName || 'U')[0] }}
-                        </div>
-                        <span>{{ item.assigneeName }}</span>
+                    <td data-label="STT" class="py-2.5 px-3 font-mono text-slate-400 text-xs">{{ i + 1 }}</td>
+                    <td data-label="Mã Task" class="py-2.5 px-3 font-mono font-semibold text-xs">
+                      <div class="inline-flex items-center gap-2">
+                        <span
+                          class="w-6 h-6 rounded-md inline-flex items-center justify-center text-white shrink-0 shadow-2xs"
+                          [style.backgroundColor]="getIssueTypeColor(item)"
+                          [title]="item.issueType"
+                        >
+                          <span class="material-symbols-outlined text-[15px]">{{ getIssueTypeIcon(item) }}</span>
+                        </span>
+                        <span [style.color]="getIssueTypeColor(item)" class="font-bold">{{ item.issueKey }}</span>
                       </div>
                     </td>
-                    <td data-label="Trạng thái" class="py-3.5 px-4">
+                    <td data-label="Công việc" class="py-2.5 px-3 font-medium text-slate-900 dark:text-white group-hover:text-primary transition-colors text-xs">
+                      {{ item.title }}
+                    </td>
+                    <td data-label="Người xử lý" class="py-2.5 px-3 text-xs">
+                      <div class="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
+                        @if (getAssigneeAvatar(item); as avatarUrl) {
+                          <img [src]="avatarUrl" [alt]="item.assigneeName || 'Chưa gán'" class="w-5 h-5 rounded-full object-cover shrink-0 ring-1 ring-slate-200 dark:ring-slate-700" />
+                        } @else {
+                          <div class="w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center text-[10px] font-bold shrink-0">
+                            {{ (item.assigneeName || 'U')[0] }}
+                          </div>
+                        }
+                        <span class="truncate max-w-[120px]">{{ item.assigneeName }}</span>
+                      </div>
+                    </td>
+                    <td data-label="Trạng thái" class="py-2.5 px-3">
                       <span
-                        [class.bg-amber-100]="item.statusName === 'To Do'"
-                        [class.text-amber-800]="item.statusName === 'To Do'"
-                        [class.bg-blue-100]="item.statusName === 'In Progress'"
-                        [class.text-blue-800]="item.statusName === 'In Progress'"
-                        [class.bg-purple-100]="item.statusName === 'Code Review'"
-                        [class.text-purple-800]="item.statusName === 'Code Review'"
-                        [class.bg-emerald-100]="item.statusName === 'Done'"
-                        [class.text-emerald-800]="item.statusName === 'Done'"
-                        class="px-3 py-1 rounded-lg text-xs font-bold"
+                        [class.bg-slate-100]="item.statusName === 'To Do'"
+                        [class.text-slate-700]="item.statusName === 'To Do'"
+                        [class.border-slate-300]="item.statusName === 'To Do'"
+                        [class.bg-blue-50]="item.statusName === 'In Progress'"
+                        [class.text-blue-700]="item.statusName === 'In Progress'"
+                        [class.border-blue-200]="item.statusName === 'In Progress'"
+                        [class.bg-teal-50]="item.statusName === 'Code Review'"
+                        [class.text-teal-700]="item.statusName === 'Code Review'"
+                        [class.border-teal-200]="item.statusName === 'Code Review'"
+                        [class.bg-emerald-50]="item.statusName === 'Done'"
+                        [class.text-emerald-700]="item.statusName === 'Done'"
+                        [class.border-emerald-200]="item.statusName === 'Done'"
+                        class="px-2 py-0.5 rounded text-[11px] font-medium border"
                       >
                         {{ item.statusName }}
                       </span>
                     </td>
-                    <td data-label="Sprint" class="py-3.5 px-4 text-slate-500 font-medium text-sm">
+                    <td data-label="Sprint" class="py-2.5 px-3 text-slate-500 font-medium text-xs">
                       {{ item.sprintName }}
                     </td>
                   </tr>
@@ -170,6 +202,7 @@ import { ExcelDataService } from '../../core/services/excel-data.service';
       </div>
 
     </div>
+    }
   `,
   styles: [`
     @media (max-width: 1279px) {
@@ -204,13 +237,15 @@ import { ExcelDataService } from '../../core/services/excel-data.service';
   `]
 })
 export class TaskListPageComponent {
-  private readonly projectService = inject(ProjectManagementService);
+  readonly projectService = inject(ProjectManagementService);
   private readonly identityService = inject(IdentityService);
   private readonly excelService = inject(ExcelDataService);
 
   readonly allWorkItems = this.projectService.workItems;
-  selectedGroup = signal<'all' | 'my'>('all');
-  searchTerm = '';
+  readonly epics = this.projectService.epics;
+  readonly selectedGroup = signal<'all' | 'my'>('all');
+  readonly selectedEpic = signal<string | null>(null);
+  readonly searchTerm = signal<string>('');
 
   filteredItems = computed(() => {
     let list = this.allWorkItems();
@@ -220,18 +255,83 @@ export class TaskListPageComponent {
         list = list.filter(i => i.assigneeName === myName);
       }
     }
-    if (this.searchTerm.trim()) {
-      const term = this.searchTerm.toLowerCase();
+    const epic = this.selectedEpic();
+    if (epic) {
+      list = list.filter(i => i.epicName === epic);
+    }
+    const q = this.searchTerm().trim();
+    if (q) {
+      const term = q.toLowerCase();
       list = list.filter(i => i.title.toLowerCase().includes(term) || i.issueKey.toLowerCase().includes(term));
     }
     return list;
   });
 
+  toggleEpicFilter(epicName: string): void {
+    if (this.selectedEpic() === epicName) {
+      this.selectedEpic.set(null);
+    } else {
+      this.selectedEpic.set(epicName);
+    }
+  }
+
   openDrawer(task: WorkItem): void {
     this.projectService.activeDrawerTask.set(task);
   }
 
+  getAssigneeAvatar(item: WorkItem): string | null {
+    return this.projectService.getMemberAvatar(item.assigneeName, item.assigneeAvatar);
+  }
+
+  getIssueTypeIcon(item: WorkItem): string {
+    const typeName = item.issueType || '';
+    const custom = this.projectService.customIssueTypes().find(t =>
+      (item.issueTypeId && t.id === item.issueTypeId) ||
+      t.name.toLowerCase() === typeName.toLowerCase() ||
+      ((typeName.toLowerCase() === 'sub-task' || typeName.toLowerCase() === 'subtask') && (t.isSubtask || t.name.toLowerCase() === 'subtask' || t.name.toLowerCase() === 'sub-task'))
+    );
+    if (custom?.icon && custom.icon !== 'task') return custom.icon;
+    if (item.issueTypeIcon && item.issueTypeIcon !== 'task') return item.issueTypeIcon;
+    const map: Record<string, string> = {
+      'story': 'bookmark',
+      'task': 'task_alt',
+      'bug': 'bug_report',
+      'epic': 'bolt',
+      'sub-task': 'subdirectory_arrow_right',
+      'subtask': 'subdirectory_arrow_right'
+    };
+    return map[typeName.toLowerCase()] || 'task_alt';
+  }
+
+  getIssueTypeColor(item: WorkItem): string {
+    const typeName = item.issueType || '';
+    const custom = this.projectService.customIssueTypes().find(t =>
+      (item.issueTypeId && t.id === item.issueTypeId) ||
+      t.name.toLowerCase() === typeName.toLowerCase() ||
+      ((typeName.toLowerCase() === 'sub-task' || typeName.toLowerCase() === 'subtask') && (t.isSubtask || t.name.toLowerCase() === 'subtask' || t.name.toLowerCase() === 'sub-task'))
+    );
+    if (custom?.color) return custom.color;
+    if (item.issueTypeColor) return item.issueTypeColor;
+    const map: Record<string, string> = {
+      'story': '#65BA43',
+      'task': '#4BADE8',
+      'bug': '#E5493A',
+      'epic': '#904EE2',
+      'sub-task': '#4BADE8',
+      'subtask': '#4BADE8'
+    };
+    return map[typeName.toLowerCase()] || '#4BADE8';
+  }
+
   exportExcel(): void {
-    this.excelService.exportToExcel(this.filteredItems(), 'HUCE_Task_List_Export.csv');
+    const proj = this.projectService.currentProject();
+    const projectKey = proj.projectKey || 'PROJECT';
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    this.excelService.exportToExcel(
+      this.filteredItems(),
+      `${projectKey}_Task_List_Export_${dateStr}.xlsx`,
+      this.projectService.sprints(),
+      proj.name || projectKey
+    );
   }
 }

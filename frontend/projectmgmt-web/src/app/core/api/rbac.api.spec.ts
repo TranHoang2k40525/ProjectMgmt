@@ -8,7 +8,7 @@ import { RbacApi } from './rbac.api';
 describe('RbacApi', () => {
   let api: RbacApi;
   let http: HttpTestingController;
-  const baseUrl = `${environment.apiBaseUrl}/v1`;
+  const baseUrl = `${environment.apiBaseUrl}`;
 
   beforeEach(() => {
     TestBed.configureTestingModule({

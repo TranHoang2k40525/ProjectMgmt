@@ -1,4 +1,4 @@
-import { DestroyRef, Injectable, effect, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, effect, inject, signal, untracked } from '@angular/core';
 import { NavigationEnd, Router } from '@angular/router';
 import { filter } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -14,6 +14,7 @@ export class RecentWorkService {
   private readonly destroyRef = inject(DestroyRef);
 
   readonly lastTaskId = signal<string | null>(this.read(TASK_KEY));
+  readonly recentTaskIds = signal<string[]>(this.readList('projectmgmt-recent-tasks'));
   readonly lastRoute = signal<string | null>(this.read(ROUTE_KEY));
 
   constructor() {
@@ -24,13 +25,40 @@ export class RecentWorkService {
 
     effect(() => {
       const task = this.project.activeDrawerTask();
-      if (task) this.rememberTask(task.id);
+      if (task) {
+        untracked(() => {
+          if (this.lastTaskId() !== task.id) {
+            this.rememberTask(task.id);
+          }
+        });
+      }
     });
   }
 
   rememberTask(taskId: string): void {
-    this.lastTaskId.set(taskId);
-    this.write(TASK_KEY, taskId);
+    if (!taskId) return;
+    untracked(() => {
+      if (this.lastTaskId() !== taskId) {
+        this.lastTaskId.set(taskId);
+        this.write(TASK_KEY, taskId);
+      }
+      const currentList = this.recentTaskIds();
+      if (currentList.length > 0 && currentList[0] === taskId) {
+        return;
+      }
+      const next = [taskId, ...currentList.filter(id => id !== taskId)].slice(0, 8);
+      this.recentTaskIds.set(next);
+      this.write('projectmgmt-recent-tasks', JSON.stringify(next));
+    });
+  }
+
+  private readList(key: string): string[] {
+    try {
+      const raw = this.read(key);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
   }
 
   private rememberRoute(route: string): void {

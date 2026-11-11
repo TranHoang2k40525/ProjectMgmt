@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sơ Đồ Giao Tiếp Giữa Các Module - ProjectMgmt</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 30px;
+      background: #f0f2f5;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .card {
+      background: #ffffff;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+      max-width: 1400px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .diagram-container {
+      width: 100%;
+      overflow-x: auto;
+      text-align: center;
+    }
+    svg {
+      max-width: 100%;
+      height: auto;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+    }
+    .footer-bar {
+      margin-top: 25px;
+      display: flex;
+      justify-content: space-between;
+      color: #666666;
+      font-size: 13px;
+      border-top: 1px solid #eeeeee;
+      padding-top: 15px;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="diagram-container">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1350 960" width="1350" height="960" style="background:#ffffff; font-family:'Segoe UI', Arial, sans-serif;">
+  <defs>
+    <!-- Arrow marker black -->
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#000000"/>
+    </marker>
+    <!-- Arrow marker dashed start/end -->
+    <marker id="arrow-start" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 9 1.5 L 0 5 L 9 8.5 z" fill="#000000"/>
+    </marker>
+  </defs>
+
+  <!-- ==================== TIÊU ĐỀ ==================== -->
+  <text x="675" y="38" text-anchor="middle" font-size="20" font-weight="bold" fill="#000000" letter-spacing="0.5">SƠ ĐỒ GIAO TIẾP VÀ TRAO ĐỔI THÔNG TIN GIỮA CÁC MODULE</text>
+  <text x="675" y="62" text-anchor="middle" font-size="12" font-style="italic" fill="#555555">(Kiến trúc phân ranh giới nghiệp vụ độc lập • Giao tiếp phi ghép nối qua Hợp đồng • Thiết kế đen trắng chuẩn mực)</text>
+
+  <!-- ==================== TẦNG 1: WEB CLIENT ==================== -->
+  <g transform="translate(375, 85)">
+    <rect width="600" height="65" rx="8" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+    <text x="300" y="26" text-anchor="middle" font-size="14" font-weight="bold" fill="#000000">ỨNG DỤNG KHÁCH (WEB CLIENT)</text>
+    <text x="300" y="48" text-anchor="middle" font-size="11.5" fill="#333333">Giao diện tương tác người dùng • Bảng Kanban &amp; Sprint • Danh sách Backlog • Trung tâm thông báo đẩy</text>
+  </g>
+
+  <!-- Mũi tên Client <-> Host -->
+  <path d="M 675 150 L 675 198" fill="none" stroke="#000000" stroke-width="2" marker-start="url(#arrow-start)" marker-end="url(#arrow)"/>
+  <rect x="525" y="162" width="300" height="22" fill="#ffffff" stroke="#000000" stroke-width="1" rx="4"/>
+  <text x="675" y="177" text-anchor="middle" font-size="10.5" font-weight="600" fill="#000000">Gửi lệnh thao tác &amp; Nhận sự kiện thời gian thực (2 chiều)</text>
+
+  <!-- ==================== TẦNG 2: WEB HOST / COORDINATOR ==================== -->
+  <g transform="translate(375, 205)">
+    <rect width="600" height="70" rx="8" fill="#f8f9fa" stroke="#000000" stroke-width="2"/>
+    <text x="300" y="28" text-anchor="middle" font-size="14" font-weight="bold" fill="#000000">BỘ ĐIỀU PHỐI HỆ THỐNG TRUNG TÂM (SYSTEM COORDINATOR)</text>
+    <text x="300" y="50" text-anchor="middle" font-size="11.5" fill="#333333">Tiếp nhận yêu cầu • Quản lý phiên bảo mật • Điều phối giao dịch đa module • Trạm phát tín hiệu tức thời</text>
+  </g>
+
+  <!-- ==================== ĐƯỜNG NỐI TỪ HOST XUỐNG 3 MODULE ==================== -->
+  <!-- Host -> Identity -->
+  <path d="M 465 275 L 465 305 L 220 305 L 220 338" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="235" y="293" width="215" height="20" fill="#ffffff" stroke="#333333" stroke-width="1" rx="3"/>
+  <text x="342" y="307" text-anchor="middle" font-size="10" fill="#000000">Xác thực phiên &amp; Kiểm tra quyền</text>
+
+  <!-- Host -> Planning -->
+  <path d="M 675 275 L 675 338" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="580" y="293" width="190" height="20" fill="#ffffff" stroke="#333333" stroke-width="1" rx="3"/>
+  <text x="675" y="307" text-anchor="middle" font-size="10" fill="#000000">Quản lý dự án, Sprint &amp; Cột bảng</text>
+
+  <!-- Host -> Delivery -->
+  <path d="M 885 275 L 885 305 L 1130 305 L 1130 338" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="910" y="293" width="205" height="20" fill="#ffffff" stroke="#333333" stroke-width="1" rx="3"/>
+  <text x="1012" y="307" text-anchor="middle" font-size="10" fill="#000000">Thao tác Kanban, cập nhật nhiệm vụ</text>
+
+  <!-- ==================== TẦNG 3: 3 MODULE NGHIỆP VỤ CHÍNH ==================== -->
+
+  <!-- MODULE 1: ĐỊNH DANH & BẢO MẬT -->
+  <g transform="translate(50, 345)">
+    <rect width="340" height="215" rx="8" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+    <rect width="340" height="30" rx="8" fill="#000000"/>
+    <rect y="22" width="340" height="8" fill="#000000"/>
+    <text x="170" y="20" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#ffffff">MODULE 1: ĐỊNH DANH &amp; BẢO MẬT</text>
+    
+    <text x="20" y="55" font-size="11.5" font-weight="600" fill="#000000">• Quản lý tài khoản, mật khẩu &amp; mã xác thực OTP</text>
+    <text x="20" y="80" font-size="11.5" font-weight="600" fill="#000000">• Kiểm soát ma trận phân quyền hệ thống &amp; dự án</text>
+    <text x="20" y="105" font-size="11.5" font-weight="600" fill="#000000">• Quản lý danh mục kỹ năng &amp; trình độ nhân sự</text>
+    <text x="20" y="130" font-size="11.5" font-weight="600" fill="#000000">• Hộp thư thông báo &amp; kết nối thời gian thực</text>
+    <text x="20" y="155" font-size="11.5" font-weight="600" fill="#000000">• Quản lý cấu hình &amp; phiên bản mô hình AI</text>
+    <line x1="15" y1="175" x2="325" y2="175" stroke="#dddddd" stroke-width="1"/>
+    <text x="170" y="198" text-anchor="middle" font-size="10.5" font-style="italic" fill="#555555">Ranh giới độc lập: Không truy cập trực tiếp việc/dự án</text>
+  </g>
+
+  <!-- MODULE 2: LẬP KẾ HOẠCH & QUẢN TRỊ SPRINT -->
+  <g transform="translate(505, 345)">
+    <rect width="340" height="215" rx="8" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+    <rect width="340" height="30" rx="8" fill="#000000"/>
+    <rect y="22" width="340" height="8" fill="#000000"/>
+    <text x="170" y="20" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#ffffff">MODULE 2: KẾ HOẠCH &amp; QUẢN TRỊ SPRINT</text>
+    
+    <text x="20" y="55" font-size="11.5" font-weight="600" fill="#000000">• Không gian làm việc Tổ chức &amp; Dự án</text>
+    <text x="20" y="80" font-size="11.5" font-weight="600" fill="#000000">• Quy trình làm việc &amp; luật chuyển trạng thái cột</text>
+    <text x="20" y="105" font-size="11.5" font-weight="600" fill="#000000">• Quản lý chu kỳ Sprint &amp; phòng trao đổi Sprint</text>
+    <text x="20" y="130" font-size="11.5" font-weight="600" fill="#000000">• Giám sát tải công việc &amp; đề xuất phân công AI</text>
+    <text x="20" y="155" font-size="11.5" font-weight="600" fill="#000000">• Cấp phát số thứ tự nhiệm vụ tuần tự nguyên tử</text>
+    <line x1="15" y1="175" x2="325" y2="175" stroke="#dddddd" stroke-width="1"/>
+    <text x="170" y="198" text-anchor="middle" font-size="10.5" font-style="italic" fill="#555555">Ranh giới độc lập: Sở hữu quy trình &amp; chu kỳ phát triển</text>
+  </g>
+
+  <!-- MODULE 3: THEO DÕI & THỰC THI NHIỆM VỤ -->
+  <g transform="translate(960, 345)">
+    <rect width="340" height="215" rx="8" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+    <rect width="340" height="30" rx="8" fill="#000000"/>
+    <rect y="22" width="340" height="8" fill="#000000"/>
+    <text x="170" y="20" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#ffffff">MODULE 3: THỰC THI NHIỆM VỤ &amp; KANBAN</text>
+    
+    <text x="20" y="55" font-size="11.5" font-weight="600" fill="#000000">• Cây phân cấp nhiệm vụ (Epic, Story, Task, Con)</text>
+    <text x="20" y="80" font-size="11.5" font-weight="600" fill="#000000">• Kiểm soát tiêu chí nghiệm thu &amp; tệp đính kèm</text>
+    <text x="20" y="105" font-size="11.5" font-weight="600" fill="#000000">• Bảng Kanban kéo thả &amp; nhật ký hoạt động chi tiết</text>
+    <text x="20" y="130" font-size="11.5" font-weight="600" fill="#000000">• Tương tác trao đổi bình luận &amp; liên kết phiên bản</text>
+    <text x="20" y="155" font-size="11.5" font-weight="600" fill="#000000">• Quản lý nhãn công việc &amp; quan hệ phụ thuộc</text>
+    <line x1="15" y1="175" x2="325" y2="175" stroke="#dddddd" stroke-width="1"/>
+    <text x="170" y="198" text-anchor="middle" font-size="10.5" font-style="italic" fill="#555555">Ranh giới độc lập: Quản lý chi tiết việc thực thi</text>
+  </g>
+
+  <!-- ==================== GIAO TIẾP NGANG GIỮA CÁC MODULE ==================== -->
+
+  <!-- Planning -> Identity (Skills) -->
+  <path d="M 505 405 L 398 405" fill="none" stroke="#000000" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <rect x="408" y="392" width="80" height="18" fill="#ffffff" stroke="#666666" stroke-width="1" rx="3"/>
+  <text x="448" y="405" text-anchor="middle" font-size="9.5" fill="#000000">Lấy kỹ năng</text>
+
+  <!-- Planning -> Identity (Roles) -->
+  <path d="M 505 470 L 398 470" fill="none" stroke="#000000" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <rect x="408" y="457" width="80" height="18" fill="#ffffff" stroke="#666666" stroke-width="1" rx="3"/>
+  <text x="448" y="470" text-anchor="middle" font-size="9.5" fill="#000000">Cấp quyền Lead</text>
+
+  <!-- Planning -> Delivery (Sprint Move) -->
+  <path d="M 845 405 L 952 405" fill="none" stroke="#000000" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <rect x="855" y="392" width="90" height="18" fill="#ffffff" stroke="#666666" stroke-width="1" rx="3"/>
+  <text x="900" y="405" text-anchor="middle" font-size="9.5" fill="#000000">Gán việc vào Sprint</text>
+
+  <!-- Delivery -> Planning (Workflow check) -->
+  <path d="M 960 450 L 853 450" fill="none" stroke="#000000" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <rect x="858" y="437" width="95" height="18" fill="#ffffff" stroke="#666666" stroke-width="1" rx="3"/>
+  <text x="905" y="450" text-anchor="middle" font-size="9.5" fill="#000000">Hỏi luật chuyển cột</text>
+
+  <!-- Delivery -> Planning (Progress metrics) -->
+  <path d="M 960 495 L 853 495" fill="none" stroke="#000000" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <rect x="858" y="482" width="95" height="18" fill="#ffffff" stroke="#666666" stroke-width="1" rx="3"/>
+  <text x="905" y="495" text-anchor="middle" font-size="9.5" fill="#000000">Cung cấp tiến độ</text>
+
+  <!-- Delivery -> Identity (Vòng lên phía trên) -->
+  <path d="M 1030 345 L 1030 325 L 320 325 L 320 345" fill="none" stroke="#000000" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <rect x="560" y="316" width="230" height="18" fill="#ffffff" stroke="#000000" stroke-width="1" rx="3"/>
+  <text x="675" y="329" text-anchor="middle" font-size="10" font-weight="600" fill="#000000">Tra cứu tên hiển thị &amp; Bắn thông báo người dùng</text>
+
+  <!-- ==================== TẦNG 4: AI VÀ CƠ SỞ DỮ LIỆU ==================== -->
+
+  <!-- BỘ PHẬN TRÍ TUỆ NHÂN TẠO (AI) -->
+  <g transform="translate(960, 615)">
+    <rect width="340" height="95" rx="8" fill="#f8f9fa" stroke="#000000" stroke-width="1.8" stroke-dasharray="4"/>
+    <text x="170" y="24" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#000000">PHÂN HỆ TRÍ TUỆ NHÂN TẠO (AI ENGINE)</text>
+    <text x="20" y="46" font-size="10.5" fill="#000000">• Tự động phân rã yêu cầu lớn thành nhiệm vụ con</text>
+    <text x="20" y="66" font-size="10.5" fill="#000000">• Gợi ý tiêu chuẩn nghiệm thu &amp; nhân sự phù hợp</text>
+    <text x="20" y="86" font-size="10.5" fill="#000000">• Thu thập phê duyệt của con người (Human-in-the-loop)</text>
+  </g>
+
+  <!-- Mũi tên Delivery <-> AI -->
+  <path d="M 1130 560 L 1130 607" fill="none" stroke="#000000" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <rect x="1005" y="574" width="250" height="20" fill="#ffffff" stroke="#333333" stroke-width="1" rx="3"/>
+  <text x="1130" y="588" text-anchor="middle" font-size="10" font-weight="600" fill="#000000">Chuyển đổi gợi ý AI thành nhiệm vụ chính thức</text>
+
+  <!-- KHO LƯU TRỮ CƠ SỞ DỮ LIỆU TẬP TRUNG -->
+  <g transform="translate(150, 615)">
+    <rect width="700" height="95" rx="8" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+    <line x1="0" y1="26" x2="700" y2="26" stroke="#000000" stroke-width="1.5"/>
+    <text x="350" y="19" text-anchor="middle" font-size="13" font-weight="bold" fill="#000000">KHO LƯU TRỮ CƠ SỞ DỮ LIỆU TẬP TRUNG (MYSQL DATABASE)</text>
+    <text x="20" y="48" font-size="11" font-weight="600" fill="#000000">• 3 Phân vùng bảng hoàn toàn độc lập: IdentityExperience, Planning, DeliveryIntelligence</text>
+    <text x="20" y="68" font-size="11" fill="#333333">• Cơ chế khóa dòng giao dịch đồng thời (Pessimistic Locking) bảo toàn tính tuần tự nguyên tử</text>
+    <text x="20" y="86" font-size="11" fill="#333333">• Quản lý tiến trình cập nhật cấu trúc bảng (Migrations) riêng biệt cho từng module</text>
+  </g>
+
+  <!-- Mũi tên từ 3 module xuống CSDL -->
+  <!-- Identity -> DB -->
+  <path d="M 220 560 L 220 607" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="160" y="573" width="120" height="18" fill="#ffffff" stroke="#666666" stroke-width="1" rx="3"/>
+  <text x="220" y="586" text-anchor="middle" font-size="9.5" fill="#000000">Lưu tài khoản &amp; quyền</text>
+
+  <!-- Planning -> DB -->
+  <path d="M 675 560 L 675 607" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="605" y="573" width="140" height="18" fill="#ffffff" stroke="#666666" stroke-width="1" rx="3"/>
+  <text x="675" y="586" text-anchor="middle" font-size="9.5" fill="#000000">Lưu dự án &amp; khóa số đếm</text>
+
+  <!-- Delivery -> DB -->
+  <path d="M 960 540 L 890 540 L 890 660 L 858 660" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="850" y="598" width="80" height="18" fill="#ffffff" stroke="#666666" stroke-width="1" rx="3"/>
+  <text x="890" y="611" text-anchor="middle" font-size="9.5" fill="#000000">Lưu nhiệm vụ</text>
+
+  <!-- ==================== CHÚ THÍCH (LEGEND) ==================== -->
+  <g transform="translate(150, 745)">
+    <rect width="700" height="75" rx="6" fill="#ffffff" stroke="#333333" stroke-width="1"/>
+    <text x="20" y="24" font-size="12" font-weight="bold" fill="#000000">CHÚ THÍCH CÁC KÊNH TRAO ĐỔI:</text>
+    
+    <line x1="20" y1="45" x2="65" y2="45" stroke="#000000" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="75" y="49" font-size="11" fill="#000000">Luồng giao tiếp đồng bộ (Yêu cầu / Trả lời dữ liệu qua Hợp đồng trung lập)</text>
+    
+    <line x1="20" y1="65" x2="65" y2="65" stroke="#000000" stroke-width="1.8" stroke-dasharray="4" marker-start="url(#arrow-start)" marker-end="url(#arrow)"/>
+    <text x="75" y="69" font-size="11" fill="#000000">Sự kiện phân tán tức thời qua WebSocket / Thông báo đẩy đa kênh</text>
+  </g>
+</svg>
+
+    </div>
+    <div class="footer-bar">
+      <div>Hệ thống Quản lý Dự án Scrum tích hợp AI — Sơ đồ giao tiếp liên module (Bản đen trắng)</div>
+      <div>Đồ án Tốt nghiệp Nhóm 7 • Tháng 10/2026</div>
+    </div>
+  </div>
+</body>
+</html>

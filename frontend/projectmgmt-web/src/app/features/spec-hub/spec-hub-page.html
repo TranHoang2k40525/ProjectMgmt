@@ -1,0 +1,993 @@
+<div class="spec-hub-root flex flex-col h-[calc(100vh-3.5rem)] bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 overflow-hidden font-body">
+
+  <!-- Spec Hub Top Command Bar -->
+  <header class="h-12 px-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0 z-20">
+    <div class="flex items-center gap-2.5 min-w-0">
+      <div class="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+        <span class="material-symbols-outlined text-[18px]">topic</span>
+      </div>
+      <div class="flex items-center gap-2 min-w-0">
+        <h1 class="text-sm font-bold text-slate-900 dark:text-white truncate">Spec Hub - Kho Đặc Tả Kỹ Thuật</h1>
+        <span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-primary/10 text-primary border border-primary/20 shrink-0">Phase 0 Spec-First</span>
+      </div>
+      <span class="text-xs text-slate-400 hidden sm:inline truncate">
+        / Spec_Hub / {{ activeProject() ? activeProject()!.name : 'Project' }}
+      </span>
+    </div>
+
+    <!-- Right Header Actions -->
+    <div class="flex items-center gap-1.5 shrink-0">
+      @if (isManager()) {
+        <button
+          type="button"
+          (click)="openCreateFolderModal(null)"
+          class="h-7 px-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-medium text-slate-700 dark:text-slate-200 flex items-center gap-1 cursor-pointer transition-colors"
+          title="Tạo thư mục mới ở gốc"
+        >
+          <span class="material-symbols-outlined text-[16px]">create_new_folder</span>
+          <span class="hidden md:inline">Thư mục</span>
+        </button>
+
+        <button
+          type="button"
+          (click)="openCreateTextFileModal(null)"
+          class="h-7 px-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-medium text-slate-700 dark:text-slate-200 flex items-center gap-1 cursor-pointer transition-colors"
+          title="Tạo tệp văn bản .txt mới ở gốc"
+        >
+          <span class="material-symbols-outlined text-[16px]">note_add</span>
+          <span class="hidden md:inline">Tệp .txt</span>
+        </button>
+
+        <button
+          type="button"
+          (click)="triggerFileUpload(null)"
+          class="h-7 px-2.5 rounded-lg bg-primary hover:bg-primary-container text-white text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-xs"
+          title="Tải tệp tin lên (.txt, .pdf, .docx, .xlsx, .md)"
+        >
+          <span class="material-symbols-outlined text-[16px]">upload_file</span>
+          <span class="hidden sm:inline">Tải tệp lên</span>
+        </button>
+      }
+    </div>
+  </header>
+
+  <!-- Spec Hub Main Body: Split View (Left Explorer + Right Multi-tab Workspace) -->
+  <div class="flex-1 flex min-h-0 overflow-hidden">
+
+    <!-- ========================================================= -->
+    <!-- LEFT COLUMN: VS CODE FILE EXPLORER TREE                   -->
+    <!-- ========================================================= -->
+    <aside class="w-64 sm:w-72 md:w-80 shrink-0 bg-slate-50 dark:bg-slate-900/90 border-r border-slate-200 dark:border-slate-800 flex flex-col h-full select-none">
+      
+      <!-- Explorer Header Toolbar -->
+      <div class="h-9 px-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+        <div class="flex items-center gap-1.5 truncate">
+          <span class="material-symbols-outlined text-[16px]">folder_special</span>
+          <span class="truncate">{{ activeProject() ? activeProject()!.name : 'SPEC_HUB' }}</span>
+        </div>
+
+        <div class="flex items-center gap-0.5">
+          @if (isManager()) {
+            <button
+              type="button"
+              (click)="openCreateFolderModal(null, $event)"
+              class="w-6 h-6 rounded hover:bg-slate-200 dark:hover:bg-slate-800 flex items-center justify-center text-slate-500 hover:text-slate-900 dark:hover:text-white"
+              title="Tạo thư mục mới"
+            >
+              <span class="material-symbols-outlined text-[16px]">create_new_folder</span>
+            </button>
+            <button
+              type="button"
+              (click)="openCreateTextFileModal(null, $event)"
+              class="w-6 h-6 rounded hover:bg-slate-200 dark:hover:bg-slate-800 flex items-center justify-center text-slate-500 hover:text-slate-900 dark:hover:text-white"
+              title="Tạo tệp văn bản .txt mới"
+            >
+              <span class="material-symbols-outlined text-[16px]">note_add</span>
+            </button>
+            <button
+              type="button"
+              (click)="triggerFileUpload(null, $event)"
+              class="w-6 h-6 rounded hover:bg-slate-200 dark:hover:bg-slate-800 flex items-center justify-center text-slate-500 hover:text-slate-900 dark:hover:text-white"
+              title="Tải tệp lên"
+            >
+              <span class="material-symbols-outlined text-[16px]">upload_file</span>
+            </button>
+          }
+          <button
+            type="button"
+            (click)="collapseAllFolders()"
+            class="w-6 h-6 rounded hover:bg-slate-200 dark:hover:bg-slate-800 flex items-center justify-center text-slate-500 hover:text-slate-900 dark:hover:text-white"
+            title="Thu gọn tất cả thư mục"
+          >
+            <span class="material-symbols-outlined text-[16px]">unfold_less</span>
+          </button>
+          <button
+            type="button"
+            (click)="loadTree()"
+            class="w-6 h-6 rounded hover:bg-slate-200 dark:hover:bg-slate-800 flex items-center justify-center text-slate-500 hover:text-slate-900 dark:hover:text-white"
+            title="Làm mới cây thư mục"
+          >
+            <span class="material-symbols-outlined text-[16px]">refresh</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Tree Nodes Scroll Area -->
+      <div
+        (dragover)="onFolderDragOver(null, $event)"
+        (dragleave)="onFolderDragLeave(null, $event)"
+        (drop)="onFolderDrop(null, $event)"
+        [class.bg-primary/10]="dragOverFolderId() === 'root'"
+        class="flex-1 overflow-y-auto overflow-x-hidden p-1.5 space-y-0.5 text-xs transition-colors"
+      >
+        @if (isLoadingTree() && treeNodes().length === 0) {
+          <div class="p-6 text-center text-slate-400 flex flex-col items-center gap-2">
+            <span class="material-symbols-outlined animate-spin text-[20px]">sync</span>
+            <span>Đang nạp cây thư mục...</span>
+          </div>
+        } @else if (treeNodes().length === 0) {
+          <div class="p-6 text-center text-slate-400 flex flex-col items-center gap-2">
+            <span class="material-symbols-outlined text-[32px] text-slate-300 dark:text-slate-700">folder_open</span>
+            <span class="font-bold">Kho tài liệu trống</span>
+            <p class="text-[11px] leading-relaxed">
+              @if (isManager()) {
+                Kéo thả file/thư mục từ máy tính vào đây hoặc nhấn "+" để thêm mới.
+              } @else {
+                Chưa có tài liệu nào trong dự án này.
+              }
+            </p>
+          </div>
+        } @else {
+          @for (node of treeNodes(); track node.id) {
+            <ng-container *ngTemplateOutlet="treeNodeTpl; context: { node: node, level: 0 }"></ng-container>
+          }
+        }
+      </div>
+
+      <!-- Tree Footer: Storage info -->
+      <div class="h-7 px-3 bg-slate-100 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-[10px] text-slate-500">
+        <span class="truncate">Đồng bộ đĩa cứng: Đang bật</span>
+        <span class="font-mono">v1.0</span>
+      </div>
+    </aside>
+
+    <!-- Recursive Tree Node Template -->
+    <ng-template #treeNodeTpl let-node="node" let-level="level">
+      <div class="tree-node-wrapper group/node">
+        <!-- Node Row -->
+        <div
+          [draggable]="isManager()"
+          (dragstart)="onNodeDragStart(node, $event)"
+          (dragend)="onNodeDragEnd()"
+          (dragover)="node.isDirectory ? onFolderDragOver(node, $event) : null"
+          (dragleave)="node.isDirectory ? onFolderDragLeave(node, $event) : null"
+          (drop)="node.isDirectory ? onFolderDrop(node, $event) : null"
+          (click)="onNodeClick(node)"
+          [class.bg-primary/20]="dragOverFolderId() === node.id"
+          [class.bg-primary/10]="selectedNodeId() === node.id || activeTabId() === node.id"
+          [class.text-primary]="selectedNodeId() === node.id || activeTabId() === node.id"
+          class="flex items-center justify-between h-7 px-1.5 rounded hover:bg-slate-200/70 dark:hover:bg-slate-800/60 cursor-pointer transition-colors relative"
+          [style.paddingLeft.px]="level * 14 + 6"
+        >
+          <div class="flex items-center gap-1.5 min-w-0 flex-1">
+            @if (node.isDirectory) {
+              <!-- Folder Chevron -->
+              <span
+                class="material-symbols-outlined text-[16px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-transform"
+                (click)="toggleFolder(node, $event)"
+              >
+                {{ isFolderExpanded(node.id) ? 'expand_more' : 'chevron_right' }}
+              </span>
+              <!-- Folder Icon -->
+              <span class="material-symbols-outlined text-[16px] text-amber-500 shrink-0">
+                {{ isFolderExpanded(node.id) ? 'folder_open' : 'folder' }}
+              </span>
+            } @else {
+              <!-- File Spacer + Icon -->
+              <span class="w-4 shrink-0"></span>
+              <span class="material-symbols-outlined text-[16px] shrink-0 {{ getFileIconColor(node.extension) }}">
+                {{ getFileIcon(node.extension) }}
+              </span>
+            }
+
+            <!-- Node Name -->
+            <span class="truncate text-xs font-medium text-slate-700 dark:text-slate-200 group-hover/node:text-slate-900 dark:group-hover/node:text-white">
+              {{ node.name }}
+            </span>
+
+            @if (!node.isDirectory && node.status === 'Approved') {
+              <span class="material-symbols-outlined text-[12px] text-emerald-500 shrink-0" title="Đã duyệt">verified</span>
+            }
+          </div>
+
+          <!-- Hover Context Actions -->
+          <div class="hidden group-hover/node:flex items-center gap-0.5 shrink-0 bg-slate-200/80 dark:bg-slate-800/80 rounded px-1">
+            @if (node.isDirectory && isManager()) {
+              <button
+                type="button"
+                (click)="openCreateFolderModal(node.id, $event)"
+                class="w-5 h-5 flex items-center justify-center hover:text-primary"
+                title="Tạo thư mục con"
+              >
+                <span class="material-symbols-outlined text-[13px]">create_new_folder</span>
+              </button>
+              <button
+                type="button"
+                (click)="openCreateTextFileModal(node.id, $event)"
+                class="w-5 h-5 flex items-center justify-center hover:text-primary"
+                title="Tạo tệp văn bản ở đây"
+              >
+                <span class="material-symbols-outlined text-[13px]">note_add</span>
+              </button>
+              <button
+                type="button"
+                (click)="triggerFileUpload(node.id, $event)"
+                class="w-5 h-5 flex items-center justify-center hover:text-primary"
+                title="Tải tệp vào thư mục này"
+              >
+                <span class="material-symbols-outlined text-[13px]">upload_file</span>
+              </button>
+            }
+
+            @if (!node.isDirectory) {
+              <button
+                type="button"
+                (click)="downloadFile(node.id)"
+                class="w-5 h-5 flex items-center justify-center hover:text-primary"
+                title="Tải xuống tệp gốc"
+              >
+                <span class="material-symbols-outlined text-[13px]">download</span>
+              </button>
+            }
+
+            @if (isManager()) {
+              <button
+                type="button"
+                (click)="openRenameModal(node, $event)"
+                class="w-5 h-5 flex items-center justify-center hover:text-primary"
+                title="Đổi tên"
+              >
+                <span class="material-symbols-outlined text-[13px]">edit</span>
+              </button>
+              <button
+                type="button"
+                (click)="deleteItem(node, $event)"
+                class="w-5 h-5 flex items-center justify-center hover:text-rose-500"
+                title="Xóa"
+              >
+                <span class="material-symbols-outlined text-[13px]">delete</span>
+              </button>
+            }
+          </div>
+        </div>
+
+        <!-- Render Children if Directory and Expanded -->
+        @if (node.isDirectory && isFolderExpanded(node.id)) {
+          <div class="tree-children">
+            @for (child of node.children; track child.id) {
+              <ng-container *ngTemplateOutlet="treeNodeTpl; context: { node: child, level: level + 1 }"></ng-container>
+            }
+          </div>
+        }
+      </div>
+    </ng-template>
+
+    <!-- ========================================================= -->
+    <!-- RIGHT COLUMN: MULTI-TAB WORKSPACE (VS CODE STYLE)         -->
+    <!-- ========================================================= -->
+    <main class="flex-1 flex flex-col h-full min-w-0 bg-white dark:bg-slate-950 overflow-hidden relative">
+
+      @if (openTabs().length === 0) {
+        <!-- Zero State: No Tabs Open -->
+        <div class="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400">
+          <div class="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-900 flex items-center justify-center mb-4 text-slate-400">
+            <span class="material-symbols-outlined text-[36px]">developer_mode</span>
+          </div>
+          <h2 class="text-base font-bold text-slate-700 dark:text-slate-300 mb-1">Không có tệp nào đang mở</h2>
+          <p class="text-xs text-slate-400 max-w-sm mb-6 leading-relaxed">
+            Chọn một tệp từ cây thư mục bên trái để mở xem và chỉnh sửa, hoặc tạo tệp đặc tả mới để bóc tách User Story sang Backlog.
+          </p>
+
+          @if (isManager()) {
+            <div class="flex items-center gap-3">
+              <button
+                type="button"
+                (click)="openCreateTextFileModal(null)"
+                class="h-8 px-3.5 rounded-lg bg-primary hover:bg-primary-container text-white text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <span class="material-symbols-outlined text-[16px]">note_add</span>
+                <span>Tạo tệp .txt</span>
+              </button>
+              <button
+                type="button"
+                (click)="triggerFileUpload(null)"
+                class="h-8 px-3.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <span class="material-symbols-outlined text-[16px]">upload_file</span>
+                <span>Tải tệp lên</span>
+              </button>
+            </div>
+          }
+        </div>
+      } @else {
+        <!-- Tabs Header Bar -->
+        <div class="h-9 bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center overflow-x-auto shrink-0 select-none">
+          @for (tab of openTabs(); track tab.id) {
+            <div
+              (click)="selectTab(tab.id)"
+              [class.bg-white]="activeTabId() === tab.id"
+              [class.dark:bg-slate-950]="activeTabId() === tab.id"
+              [class.border-b-2]="activeTabId() === tab.id"
+              [class.border-b-primary]="activeTabId() === tab.id"
+              [class.font-bold]="activeTabId() === tab.id"
+              class="h-full px-3 border-r border-slate-200 dark:border-slate-800 flex items-center gap-2 cursor-pointer text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white shrink-0 group/tab transition-colors"
+            >
+              <span class="material-symbols-outlined text-[15px] shrink-0 {{ getFileIconColor(tab.extension) }}">
+                {{ getFileIcon(tab.extension) }}
+              </span>
+
+              <span class="truncate max-w-[140px]">{{ tab.name }}</span>
+
+              @if (tab.isDirty) {
+                <span class="w-2 h-2 rounded-full bg-amber-500 shrink-0" title="Chưa lưu"></span>
+              }
+
+              <button
+                type="button"
+                (click)="closeTab(tab.id, $event)"
+                class="w-4 h-4 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                title="Đóng tab"
+              >
+                <span class="material-symbols-outlined text-[12px]">close</span>
+              </button>
+            </div>
+          }
+        </div>
+
+        <!-- Active Tab Sub-header & Action Controls -->
+        @if (currentTab(); as tab) {
+          <div class="h-10 px-4 bg-slate-50 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0 text-xs">
+            <!-- Left Info: Path & Status -->
+            <div class="flex items-center gap-2.5 min-w-0">
+              <span class="font-mono font-bold text-slate-700 dark:text-slate-200 truncate">
+                {{ tab.name }}
+              </span>
+              <span class="text-slate-400">v{{ tab.version }}</span>
+
+              <!-- Status Badge & Selector -->
+              @if (tab.status === 'Approved') {
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[12px]">verified</span>
+                  <span>Đã duyệt</span>
+                </span>
+              } @else if (tab.status === 'Review') {
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300 flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[12px]">rate_review</span>
+                  <span>Đang duyệt</span>
+                </span>
+              } @else {
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                  Bản nháp
+                </span>
+              }
+
+              @if (isManager()) {
+                <div class="flex items-center gap-1 ml-2">
+                  @if (tab.status !== 'Approved') {
+                    <button
+                      type="button"
+                      (click)="changeTabStatus('Approved')"
+                      class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500 hover:bg-emerald-600 text-white cursor-pointer"
+                      title="Phê duyệt tài liệu"
+                    >
+                      Duyệt
+                    </button>
+                  }
+                  @if (tab.status === 'Draft') {
+                    <button
+                      type="button"
+                      (click)="changeTabStatus('Review')"
+                      class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500 hover:bg-amber-600 text-white cursor-pointer"
+                      title="Chuyển sang trạng thái đang duyệt"
+                    >
+                      Gửi duyệt
+                    </button>
+                  }
+                </div>
+              }
+            </div>
+
+            <!-- Right Actions: Save, Extract Story, Download -->
+            <div class="flex items-center gap-1.5 shrink-0">
+              @if (tab.fileType === 'text' && isManager()) {
+                <button
+                  type="button"
+                  (click)="saveActiveTextFile()"
+                  [disabled]="!tab.isDirty || tab.isSaving"
+                  [class.opacity-50]="!tab.isDirty || tab.isSaving"
+                  class="h-7 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                  title="Lưu tệp văn bản"
+                >
+                  <span class="material-symbols-outlined text-[15px]">save</span>
+                  <span>{{ tab.isSaving ? 'Đang lưu...' : 'Lưu' }}</span>
+                </button>
+              }
+
+              <!-- Extract User Story Button -->
+              <button
+                type="button"
+                (click)="openExtractStoryModal()"
+                class="h-7 px-2.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                title="Bóc tách đoạn bôi đen thành User Story"
+              >
+                <span class="material-symbols-outlined text-[15px]">bolt</span>
+                <span class="hidden md:inline">Bóc tách Story</span>
+              </button>
+
+              <!-- Download Button -->
+              <button
+                type="button"
+                (click)="downloadFile(tab.id)"
+                class="h-7 px-2.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium flex items-center gap-1 cursor-pointer transition-colors"
+                title="Tải xuống tệp gốc về máy"
+              >
+                <span class="material-symbols-outlined text-[15px]">download</span>
+                <span class="hidden sm:inline">Tải về</span>
+              </button>
+
+              <!-- Toggle Side Panel (Comments & Stories) -->
+              <button
+                type="button"
+                (click)="isSidePanelOpen.set(!isSidePanelOpen())"
+                [class.bg-primary]="isSidePanelOpen()"
+                [class.text-white]="isSidePanelOpen()"
+                class="h-7 px-2 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center justify-center cursor-pointer"
+                title="Xem phản biện & Story liên kết"
+              >
+                <span class="material-symbols-outlined text-[16px]">forum</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Tab Content Display Area -->
+          <div class="flex-1 flex min-h-0 overflow-hidden relative">
+
+            <!-- MAIN CONTENT ENGINE -->
+            <div class="flex-1 flex flex-col min-h-0 overflow-y-auto" (mouseup)="onTextSelection()">
+
+              @if (tab.isLoading) {
+                <div class="flex-1 flex flex-col items-center justify-center p-12 text-slate-400 gap-2">
+                  <span class="material-symbols-outlined animate-spin text-[28px]">sync</span>
+                  <span class="text-sm">Đang tải nội dung tệp...</span>
+                </div>
+              } @else {
+                <!-- 1. TEXT EDITOR -->
+                @if (tab.fileType === 'text') {
+                  <div class="flex-1 flex flex-col h-full p-4 font-mono text-sm">
+                    <textarea
+                      [ngModel]="tab.content"
+                      (ngModelChange)="onTextChange($event)"
+                      [readonly]="!isManager()"
+                      placeholder="Nhập nội dung đặc tả kỹ thuật ở đây..."
+                      class="flex-1 w-full p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 font-mono text-sm leading-relaxed outline-none resize-none focus:border-primary transition-colors"
+                    ></textarea>
+                  </div>
+                }
+
+                <!-- 2. MARKDOWN VIEWER & EDITOR (GITHUB STYLE VIEW / EDIT TABS) -->
+                @if (tab.fileType === 'markdown') {
+                  <div class="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-950 overflow-hidden">
+                    <div class="h-9 px-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0 select-none">
+                      <div class="flex items-center gap-1">
+                        <button
+                          type="button"
+                          (click)="toggleMarkdownMode(tab, 'view')"
+                          [class.bg-slate-100]="tab.markdownMode !== 'edit'"
+                          [class.dark:bg-slate-800]="tab.markdownMode !== 'edit'"
+                          [class.text-primary]="tab.markdownMode !== 'edit'"
+                          [class.font-bold]="tab.markdownMode !== 'edit'"
+                          class="px-2.5 py-1 rounded text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <span class="material-symbols-outlined text-[15px]">visibility</span>
+                          <span>Xem trước (Preview)</span>
+                        </button>
+                        <button
+                          type="button"
+                          (click)="toggleMarkdownMode(tab, 'edit')"
+                          [class.bg-slate-100]="tab.markdownMode === 'edit'"
+                          [class.dark:bg-slate-800]="tab.markdownMode === 'edit'"
+                          [class.text-primary]="tab.markdownMode === 'edit'"
+                          [class.font-bold]="tab.markdownMode === 'edit'"
+                          class="px-2.5 py-1 rounded text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <span class="material-symbols-outlined text-[15px]">edit</span>
+                          <span>Chỉnh sửa (Edit)</span>
+                        </button>
+                      </div>
+                      <span class="text-[11px] text-slate-400 font-mono">Markdown Viewer v1.0</span>
+                    </div>
+
+                    @if (tab.markdownMode === 'edit') {
+                      <div class="flex-1 flex flex-col h-full p-4 font-mono text-xs">
+                        <textarea
+                          [ngModel]="tab.content"
+                          (ngModelChange)="onTextChange($event)"
+                          [readonly]="!isManager()"
+                          placeholder="Nhập nội dung markdown..."
+                          class="flex-1 w-full p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 font-mono text-xs leading-relaxed outline-none resize-none focus:border-primary transition-colors"
+                        ></textarea>
+                      </div>
+                    } @else {
+                      <div class="flex-1 overflow-y-auto p-6 sm:p-10 bg-white dark:bg-slate-900">
+                        <div [innerHTML]="renderMarkdown(tab.content)" class="prose dark:prose-invert max-w-4xl mx-auto leading-relaxed text-sm"></div>
+                      </div>
+                    }
+                  </div>
+                }
+
+                <!-- 3. IMAGE VIEWER -->
+                @if (tab.fileType === 'image') {
+                  <div class="flex-1 flex flex-col items-center justify-center p-6 bg-slate-100 dark:bg-slate-950 overflow-auto">
+                    <div class="relative max-w-full max-h-full flex items-center justify-center p-4 bg-white dark:bg-slate-900 rounded-2xl shadow-md border border-slate-200 dark:border-slate-800">
+                      <img [src]="tab.rawUrl" [alt]="tab.name" class="max-w-full max-h-[75vh] object-contain rounded-lg" />
+                    </div>
+                  </div>
+                }
+
+                <!-- 4. PDF VIEWER (IFRAME NATIVE WITH AUTH QUERY TOKEN) -->
+                @if (tab.fileType === 'pdf') {
+                  <div class="flex-1 flex flex-col h-full bg-slate-200 dark:bg-slate-900 p-2">
+                    <iframe
+                      [src]="tab.safePdfUrl"
+                      class="w-full h-full border-0 rounded-xl bg-white shadow-inner"
+                      title="PDF Document Viewer"
+                    ></iframe>
+                  </div>
+                }
+
+                <!-- 5. WORD VIEWER (.DOCX AUTHENTIC A4 CANVAS WITH FULL EMBEDDED IMAGES) -->
+                @if (tab.fileType === 'docx') {
+                  <div class="flex-1 overflow-y-auto p-4 sm:p-8 bg-slate-200 dark:bg-slate-950">
+                    <div class="max-w-[850px] min-h-[1100px] mx-auto bg-white text-slate-900 p-8 sm:p-14 shadow-2xl rounded border border-slate-300 font-serif leading-relaxed">
+                      <div class="flex items-center justify-between pb-4 mb-8 border-b border-slate-200 font-sans">
+                        <div class="flex items-center gap-2.5">
+                          <span class="material-symbols-outlined text-[26px] text-blue-600">article</span>
+                          <div>
+                            <h2 class="text-base font-bold text-slate-900">{{ tab.name }}</h2>
+                            <p class="text-[11px] text-slate-500">Định dạng Microsoft Word (.docx) • Chế độ xem trang in A4</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          (click)="downloadFile(tab.id)"
+                          class="px-3 py-1 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <span class="material-symbols-outlined text-[15px]">download</span>
+                          <span>Tải tệp gốc</span>
+                        </button>
+                      </div>
+
+                      @if (tab.previewData?.extractedHtml) {
+                        <div [innerHTML]="tab.previewData?.extractedHtml" class="docx-canvas text-sm"></div>
+                      } @else {
+                        <div class="text-center py-16 text-slate-400 font-sans">
+                          <span class="material-symbols-outlined text-[36px] mb-2">article</span>
+                          <p class="text-sm">Không có nội dung văn bản hiển thị.</p>
+                        </div>
+                      }
+                    </div>
+                  </div>
+                }
+
+                <!-- 6. EXCEL VIEWER (.XLSX GRID SPREADSHEET) -->
+                @if (tab.fileType === 'xlsx') {
+                  <div class="flex-1 flex flex-col h-full bg-slate-100 dark:bg-slate-950 overflow-hidden">
+                    <!-- Sheet Switcher Tabs -->
+                    @if (tab.previewData?.sheets?.length) {
+                      <div class="h-9 px-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center gap-1 overflow-x-auto shrink-0">
+                        @for (sheet of tab.previewData.sheets; track sheet.name; let i = $index) {
+                          <button
+                            type="button"
+                            (click)="selectExcelSheet(i)"
+                            [class.bg-emerald-500]="tab.activeSheetIndex === i"
+                            [class.text-white]="tab.activeSheetIndex === i"
+                            [class.bg-slate-100]="tab.activeSheetIndex !== i"
+                            [class.dark:bg-slate-800]="tab.activeSheetIndex !== i"
+                            class="h-6 px-3 rounded text-xs font-bold transition-colors cursor-pointer shrink-0"
+                          >
+                            {{ sheet.name }}
+                          </button>
+                        }
+                      </div>
+
+                      <!-- Grid Content -->
+                      <div class="flex-1 overflow-auto p-4">
+                        @if (tab.previewData.sheets[tab.activeSheetIndex ?? 0]; as activeSheet) {
+                          <div class="inline-block min-w-full align-middle bg-white dark:bg-slate-900 rounded-xl shadow-xs border border-slate-200 dark:border-slate-800 overflow-hidden">
+                            <table class="min-w-full divide-y divide-slate-200 dark:divide-slate-800 text-xs text-left">
+                              <tbody class="divide-y divide-slate-100 dark:divide-slate-800 font-mono">
+                                @for (row of activeSheet.rows; track $index; let rIdx = $index) {
+                                  <tr [class.bg-slate-50]="rIdx === 0" [class.dark:bg-slate-850]="rIdx === 0" class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                                    <td class="w-10 px-2 py-1.5 text-center text-slate-400 bg-slate-100 dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 font-sans">
+                                      {{ rIdx + 1 }}
+                                    </td>
+                                    @for (cell of row; track $index) {
+                                      <td class="px-3 py-1.5 border-r border-slate-200 dark:border-slate-800 truncate max-w-xs text-slate-700 dark:text-slate-200">
+                                        {{ cell }}
+                                      </td>
+                                    }
+                                  </tr>
+                                }
+                              </tbody>
+                            </table>
+                          </div>
+                        }
+                      </div>
+                    } @else {
+                      <div class="flex-1 flex items-center justify-center text-slate-400 text-sm">
+                        Bảng tính trống hoặc không thể trích xuất.
+                      </div>
+                    }
+                  </div>
+                }
+
+              }
+            </div>
+
+            <!-- COLLAPSIBLE SIDE PANEL (Comments & Linked Stories) -->
+            @if (isSidePanelOpen()) {
+              <aside class="w-80 shrink-0 bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 flex flex-col h-full">
+                <!-- Panel Header -->
+                <div class="h-10 px-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs font-bold">
+                  <div class="flex items-center gap-1">
+                    <button
+                      type="button"
+                      (click)="activeSideTab.set('comments')"
+                      [class.text-primary]="activeSideTab() === 'comments'"
+                      class="px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800"
+                    >
+                      Phản biện
+                    </button>
+                    <button
+                      type="button"
+                      (click)="activeSideTab.set('stories')"
+                      [class.text-primary]="activeSideTab() === 'stories'"
+                      class="px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800"
+                    >
+                      User Stories
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    (click)="isSidePanelOpen.set(false)"
+                    class="w-6 h-6 rounded hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-slate-700"
+                  >
+                    <span class="material-symbols-outlined text-[16px]">close</span>
+                  </button>
+                </div>
+
+                <!-- Panel Body -->
+                <div class="flex-1 overflow-y-auto p-3 text-xs">
+                  @if (activeSideTab() === 'comments') {
+                    <div class="flex flex-col justify-between h-full gap-3">
+                      <!-- Comment Stream / Empty State -->
+                      <div class="flex-1 overflow-y-auto">
+                        <div class="text-slate-400 text-center py-6 text-xs italic">
+                          Chưa có ý kiến phản biện nào cho tài liệu này.
+                        </div>
+                      </div>
+
+                      <!-- New Comment Form (Placed at Bottom) -->
+                      <div class="flex flex-col gap-1.5 p-2.5 rounded-md bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 shrink-0">
+                        <textarea
+                          [ngModel]="newCommentText()"
+                          (ngModelChange)="newCommentText.set($event)"
+                          rows="3"
+                          placeholder="Nhập ý kiến phản biện... (Ctrl + Enter để gửi)"
+                          class="w-full p-1.5 bg-transparent border-0 text-xs text-slate-800 dark:text-slate-100 outline-none resize-none leading-relaxed"
+                        ></textarea>
+                        <div class="flex justify-end pt-1 border-t border-slate-200/50 dark:border-slate-700/50">
+                          <button
+                            type="button"
+                            (click)="submitComment()"
+                            [disabled]="!newCommentText().trim()"
+                            class="px-3 py-1 rounded-md bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white font-medium text-xs transition-all cursor-pointer"
+                          >
+                            Gửi phản biện
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  } @else {
+                    <div class="text-slate-400 text-center py-6">
+                      <span class="material-symbols-outlined text-[28px] mb-1">bolt</span>
+                      <p>Chưa có Story nào được bóc tách từ tệp này.</p>
+                      <button
+                        type="button"
+                        (click)="openExtractStoryModal()"
+                        class="mt-3 px-3 py-1.5 rounded-lg bg-primary text-white font-bold text-xs cursor-pointer"
+                      >
+                        Bóc tách Story ngay
+                      </button>
+                    </div>
+                  }
+                </div>
+              </aside>
+            }
+
+          </div>
+        }
+      }
+
+    </main>
+
+  </div>
+
+  <!-- Hidden File Input for Upload -->
+  <input
+    type="file"
+    id="spec-file-input"
+    (change)="onFileSelected($event)"
+    accept=".txt,.md,.pdf,.docx,.xlsx,.json,.png,.jpg,.jpeg"
+    class="hidden"
+  />
+
+  <!-- ========================================================= -->
+  <!-- MODAL: TẠO THƯ MỤC MỚI                                    -->
+  <!-- ========================================================= -->
+  @if (isCreateFolderModalOpen()) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+      <div class="w-full max-w-sm rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 shadow-2xl flex flex-col gap-4">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center">
+            <span class="material-symbols-outlined text-[20px]">create_new_folder</span>
+          </div>
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white">Tạo thư mục mới</h3>
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-medium text-slate-600 dark:text-slate-300">Tên thư mục</label>
+          <input
+            type="text"
+            [ngModel]="newFolderName()"
+            (ngModelChange)="newFolderName.set($event)"
+            placeholder="Ví dụ: Kien_truc_he_thong"
+            (keydown.enter)="submitCreateFolder()"
+            class="h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white outline-none focus:border-primary"
+          />
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2">
+          <button
+            type="button"
+            (click)="isCreateFolderModalOpen.set(false)"
+            class="h-8 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-medium text-slate-600 dark:text-slate-300"
+          >
+            Hủy
+          </button>
+          <button
+            type="button"
+            (click)="submitCreateFolder()"
+            [disabled]="!newFolderName().trim()"
+            class="h-8 px-4 rounded-lg bg-primary hover:bg-primary-container text-xs font-bold text-white disabled:opacity-50"
+          >
+            Tạo thư mục
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- ========================================================= -->
+  <!-- MODAL: TẠO TỆP VĂN BẢN (.TXT)                            -->
+  <!-- ========================================================= -->
+  @if (isCreateTextFileModalOpen()) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+      <div class="w-full max-w-lg rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 shadow-2xl flex flex-col gap-4">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center">
+            <span class="material-symbols-outlined text-[20px]">note_add</span>
+          </div>
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white">Tạo tệp văn bản mới (.txt / .md)</h3>
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-medium text-slate-600 dark:text-slate-300">Tên tệp tin (kèm đuôi .txt hoặc .md)</label>
+          <input
+            type="text"
+            [ngModel]="newTextFileName()"
+            (ngModelChange)="newTextFileName.set($event)"
+            placeholder="Ví dụ: dac_ta_nghiep_vu.txt"
+            class="h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white outline-none focus:border-primary"
+          />
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-medium text-slate-600 dark:text-slate-300">Nội dung ban đầu</label>
+          <textarea
+            [ngModel]="newTextFileContent()"
+            (ngModelChange)="newTextFileContent.set($event)"
+            rows="6"
+            class="p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white font-mono leading-relaxed outline-none focus:border-primary resize-none"
+          ></textarea>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2">
+          <button
+            type="button"
+            (click)="isCreateTextFileModalOpen.set(false)"
+            class="h-8 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-medium text-slate-600 dark:text-slate-300"
+          >
+            Hủy
+          </button>
+          <button
+            type="button"
+            (click)="submitCreateTextFile()"
+            [disabled]="!newTextFileName().trim()"
+            class="h-8 px-4 rounded-lg bg-primary hover:bg-primary-container text-xs font-bold text-white disabled:opacity-50"
+          >
+            Tạo tệp
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- ========================================================= -->
+  <!-- MODAL: ĐỔI TÊN (RENAME)                                   -->
+  <!-- ========================================================= -->
+  @if (isRenameModalOpen()) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+      <div class="w-full max-w-sm rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 shadow-2xl flex flex-col gap-4">
+        <h3 class="text-sm font-bold text-slate-900 dark:text-white">Đổi tên đối tượng</h3>
+
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-medium text-slate-600 dark:text-slate-300">Tên mới</label>
+          <input
+            type="text"
+            [ngModel]="renameItemName()"
+            (ngModelChange)="renameItemName.set($event)"
+            (keydown.enter)="submitRename()"
+            class="h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white outline-none focus:border-primary"
+          />
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2">
+          <button
+            type="button"
+            (click)="isRenameModalOpen.set(false)"
+            class="h-8 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-xs font-medium"
+          >
+            Hủy
+          </button>
+          <button
+            type="button"
+            (click)="submitRename()"
+            [disabled]="!renameItemName().trim()"
+            class="h-8 px-4 rounded-lg bg-primary text-xs font-bold text-white disabled:opacity-50"
+          >
+            Lưu
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- ========================================================= -->
+  <!-- MODAL: BÓC TÁCH USER STORY (SPEC-TO-STORY LINK)           -->
+  <!-- ========================================================= -->
+  @if (isExtractModalOpen()) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+      <div class="w-full max-w-lg rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-2xl flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+            <span class="material-symbols-outlined text-[20px]">bolt</span>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-slate-900 dark:text-white">Bóc tách User Story từ đặc tả</h3>
+            <p class="text-[11px] text-slate-400">Tạo Story trong Product Backlog và duy trì liên kết 2 chiều với đoạn tài liệu gốc</p>
+          </div>
+        </div>
+
+        <!-- Đoạn trích dẫn -->
+        @if (extractExcerpt()) {
+          <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border-l-4 border-primary text-xs italic text-slate-600 dark:text-slate-300 max-h-24 overflow-y-auto">
+            "{{ extractExcerpt() }}"
+          </div>
+        }
+
+        <!-- Tiêu đề Story -->
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-bold text-slate-700 dark:text-slate-200">Tiêu đề User Story *</label>
+          <input
+            type="text"
+            [ngModel]="extractStoryTitle()"
+            (ngModelChange)="extractStoryTitle.set($event)"
+            placeholder="Là [vai trò], tôi muốn [hành động] để [giá trị]..."
+            class="h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white outline-none focus:border-primary"
+          />
+        </div>
+
+        <!-- Story Points -->
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-bold text-slate-700 dark:text-slate-200">Độ phức tạp (Story Points - Fibonacci)</label>
+          <div class="flex items-center gap-2">
+            @for (pts of [1, 2, 3, 5, 8, 13]; track pts) {
+              <button
+                type="button"
+                (click)="extractStoryPoints.set(pts)"
+                [class.bg-primary]="extractStoryPoints() === pts"
+                [class.text-white]="extractStoryPoints() === pts"
+                [class.bg-slate-100]="extractStoryPoints() !== pts"
+                [class.dark:bg-slate-800]="extractStoryPoints() !== pts"
+                class="w-8 h-8 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+              >
+                {{ pts }}
+              </button>
+            }
+          </div>
+        </div>
+
+        <!-- Acceptance Criteria -->
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-bold text-slate-700 dark:text-slate-200">Tiêu chí nghiệm thu (Acceptance Criteria)</label>
+            <button
+              type="button"
+              (click)="addCriterion()"
+              class="text-xs text-primary font-bold hover:underline flex items-center gap-1 cursor-pointer"
+            >
+              <span class="material-symbols-outlined text-[14px]">add</span>
+              <span>Thêm tiêu chí</span>
+            </button>
+          </div>
+
+          <div class="space-y-1.5 max-h-36 overflow-y-auto">
+            @for (c of extractCriteria(); track $index; let idx = $index) {
+              <div class="flex items-center gap-1.5">
+                <span class="text-[11px] text-slate-400 w-4">{{ idx + 1 }}.</span>
+                <input
+                  type="text"
+                  [ngModel]="c"
+                  (ngModelChange)="updateCriterion(idx, $event)"
+                  placeholder="Ví dụ: Khi nhấn thanh toán, hiện mã QR..."
+                  class="flex-1 h-8 px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white outline-none focus:border-primary"
+                />
+                @if (extractCriteria().length > 1) {
+                  <button
+                    type="button"
+                    (click)="removeCriterion(idx)"
+                    class="w-6 h-6 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-rose-500 flex items-center justify-center cursor-pointer"
+                  >
+                    <span class="material-symbols-outlined text-[14px]">close</span>
+                  </button>
+                }
+              </div>
+            }
+          </div>
+        </div>
+
+        <!-- Modal Actions -->
+        <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+          <button
+            type="button"
+            (click)="closeExtractStoryModal()"
+            class="h-8 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-xs font-medium text-slate-600 dark:text-slate-300 cursor-pointer"
+          >
+            Hủy
+          </button>
+          <button
+            type="button"
+            (click)="submitExtractStory()"
+            [disabled]="!extractStoryTitle().trim()"
+            class="h-8 px-4 rounded-lg bg-primary hover:bg-primary-container text-xs font-bold text-white disabled:opacity-50 cursor-pointer flex items-center gap-1"
+          >
+            <span class="material-symbols-outlined text-[15px]">add_task</span>
+            <span>Tạo Story &amp; Liên kết</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+</div>

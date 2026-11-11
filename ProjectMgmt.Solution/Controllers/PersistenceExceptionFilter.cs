@@ -13,18 +13,18 @@ public class PersistenceExceptionFilter : IExceptionFilter
         if (context.Exception is not DbUpdateException { InnerException: MySqlException mysql }) return;
         var (status, code, detail) = mysql.Number switch
         {
-            1062 => (409, "DATA_CONFLICT", "A record with these unique values already exists."),
-            1451 => (409, "DATA_IN_USE", "This record is still referenced by other data."),
-            1452 => (400, "REFERENCE_INVALID", "A referenced record does not exist."),
-            3819 or 4025 => (400, "CONSTRAINT_INVALID", "The supplied values violate a data constraint."),
-            1406 => (400, "VALUE_TOO_LONG", "A supplied value exceeds the allowed length."),
+            1062 => (409, "DATA_CONFLICT", "Dữ liệu với giá trị duy nhất này đã tồn tại trong hệ thống."),
+            1451 => (409, "DATA_IN_USE", "Dữ liệu này đang được tham chiếu và sử dụng bởi các mục khác."),
+            1452 => (400, "REFERENCE_INVALID", "Dữ liệu tham chiếu không tồn tại trong hệ thống."),
+            3819 or 4025 => (400, "CONSTRAINT_INVALID", "Dữ liệu cung cấp vi phạm ràng buộc dữ liệu của hệ thống."),
+            1406 => (400, "VALUE_TOO_LONG", "Độ dài của dữ liệu vượt quá giới hạn cho phép."),
             _ => (0, "", "")
         };
         if (status == 0) return;
         context.Result = new ObjectResult(new ProblemDetails
         {
             Status = status,
-            Title = status == 409 ? "Conflict" : "Validation Error",
+            Title = status == 409 ? "Xung đột dữ liệu" : "Dữ liệu không hợp lệ",
             Detail = detail,
             Extensions = { ["code"] = code }
         }) { StatusCode = status };

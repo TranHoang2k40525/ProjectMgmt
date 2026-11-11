@@ -11,7 +11,7 @@ class InterceptorTokenStore implements TokenStore {
     accessToken: 'access-old',
     refreshToken: 'refresh-old',
     userId: 'user-1',
-    email: 'member@huce.edu.vn',
+    email: 'member@example.com',
     fullName: 'Nguyễn Văn A',
     roles: ['Member']
   };
@@ -42,9 +42,9 @@ describe('authInterceptor', () => {
   });
 
   it('gắn access token cho API backend', () => {
-    httpClient.get(`${environment.apiBaseUrl}/v1/users/me`).subscribe();
+    httpClient.get(`${environment.apiBaseUrl}/users/me`).subscribe();
 
-    const request = http.expectOne(`${environment.apiBaseUrl}/v1/users/me`);
+    const request = http.expectOne(`${environment.apiBaseUrl}/users/me`);
     expect(request.request.headers.get('Authorization')).toBe('Bearer access-old');
     request.flush({ success: true });
     http.verify();
@@ -52,24 +52,24 @@ describe('authInterceptor', () => {
 
   it('xoay refresh token rồi thử lại request 401 đúng một lần', () => {
     let response: unknown;
-    httpClient.get(`${environment.apiBaseUrl}/v1/users/me`).subscribe(value => response = value);
+    httpClient.get(`${environment.apiBaseUrl}/users/me`).subscribe(value => response = value);
 
-    const first = http.expectOne(`${environment.apiBaseUrl}/v1/users/me`);
+    const first = http.expectOne(`${environment.apiBaseUrl}/users/me`);
     first.flush({ message: 'Hết hạn token' }, { status: 401, statusText: 'Unauthorized' });
 
-    const refresh = http.expectOne(`${environment.apiBaseUrl}/v1/auth/refresh-token`);
+    const refresh = http.expectOne(`${environment.apiBaseUrl}/auth/refresh-token`);
     expect(refresh.request.body).toEqual({ refreshToken: 'refresh-old' });
     refresh.flush({
       success: true,
       accessToken: 'access-new',
       refreshToken: 'refresh-new',
       userId: 'user-1',
-      email: 'member@huce.edu.vn',
+      email: 'member@example.com',
       fullName: 'Nguyễn Văn A',
       roles: ['Member']
     });
 
-    const retried = http.expectOne(`${environment.apiBaseUrl}/v1/users/me`);
+    const retried = http.expectOne(`${environment.apiBaseUrl}/users/me`);
     expect(retried.request.headers.get('Authorization')).toBe('Bearer access-new');
     retried.flush({ success: true });
 

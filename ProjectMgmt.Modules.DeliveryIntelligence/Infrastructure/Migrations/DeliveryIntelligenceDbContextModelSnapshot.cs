@@ -772,6 +772,102 @@ namespace DeliveryIntelligence.Infrastructure.Migrations
                     MySqlEntityTypeBuilderExtensions.UseCollation(b, "utf8mb4_0900_ai_ci");
                 });
 
+            modelBuilder.Entity("DeliveryIntelligence.Domain.Entities.AiDocumentChunk", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)")
+                        .HasColumnName("Id")
+                        .UseCollation("utf8mb4_0900_ai_ci");
+
+                    MySqlPropertyBuilderExtensions.HasCharSet(b.Property<Guid>("Id"), "utf8mb4");
+
+                    b.Property<int>("ChunkIndex")
+                        .HasColumnType("int")
+                        .HasColumnName("ChunkIndex");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("mediumtext")
+                        .HasColumnName("Content");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("CreatedAt")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
+
+                    b.Property<int>("Dimensions")
+                        .HasColumnType("int")
+                        .HasColumnName("Dimensions");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("DocumentId")
+                        .HasComment("XMOD -> ProjectDocument.Id")
+                        .UseCollation("utf8mb4_0900_ai_ci");
+
+                    MySqlPropertyBuilderExtensions.HasCharSet(b.Property<Guid>("DocumentId"), "utf8mb4");
+
+                    b.Property<string>("DocumentName")
+                        .IsRequired()
+                        .HasColumnType("varchar(500)")
+                        .HasColumnName("DocumentName");
+
+                    b.Property<byte[]>("Embedding")
+                        .IsRequired()
+                        .HasColumnType("longblob")
+                        .HasColumnName("Embedding")
+                        .HasComment("float32 little-endian, đã chuẩn hóa độ dài 1");
+
+                    b.Property<string>("EmbeddingModel")
+                        .IsRequired()
+                        .HasColumnType("varchar(120)")
+                        .HasColumnName("EmbeddingModel");
+
+                    b.Property<string>("Heading")
+                        .HasColumnType("varchar(500)")
+                        .HasColumnName("Heading");
+
+                    b.Property<int?>("PageNumber")
+                        .HasColumnType("int")
+                        .HasColumnName("PageNumber");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("ProjectId")
+                        .HasComment("XMOD -> Project.Id")
+                        .UseCollation("utf8mb4_0900_ai_ci");
+
+                    MySqlPropertyBuilderExtensions.HasCharSet(b.Property<Guid>("ProjectId"), "utf8mb4");
+
+                    b.Property<string>("SourceVersion")
+                        .IsRequired()
+                        .HasColumnType("char(64)")
+                        .HasColumnName("SourceVersion")
+                        .HasComment("SHA-256 của phiên bản tài liệu + model + tham số chia đoạn");
+
+                    b.HasKey("Id")
+                        .HasName("PRIMARY");
+
+                    b.HasIndex(new[] { "ProjectId", "EmbeddingModel" }, "IX_AiDocumentChunk_Project_Model");
+
+                    b.HasIndex(new[] { "DocumentId", "ChunkIndex" }, "UQ_AiDocumentChunk_Document_Chunk")
+                        .IsUnique();
+
+                    b.ToTable("AiDocumentChunk", null, t =>
+                        {
+                            t.HasComment("Đoạn tài liệu Spec Hub kèm vector embedding cho tìm kiếm ngữ nghĩa (RAG)");
+
+                            t.HasCheckConstraint("CK_AiDocumentChunk_ChunkIndex", "`ChunkIndex` >= 0");
+
+                            t.HasCheckConstraint("CK_AiDocumentChunk_Dimensions", "`Dimensions` > 0");
+                        });
+
+                    MySqlEntityTypeBuilderExtensions.HasCharSet(b, "utf8mb4");
+                    MySqlEntityTypeBuilderExtensions.UseCollation(b, "utf8mb4_0900_ai_ci");
+                });
+
             modelBuilder.Entity("DeliveryIntelligence.Domain.Entities.AiEvaluationResult", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1168,6 +1264,14 @@ namespace DeliveryIntelligence.Infrastructure.Migrations
 
                     MySqlPropertyBuilderExtensions.HasCharSet(b.Property<Guid?>("AssigneeId"), "utf8mb4");
 
+                    b.Property<string>("BlockReason")
+                        .HasColumnType("varchar(500)")
+                        .HasColumnName("BlockReason");
+
+                    b.Property<DateTime?>("BlockedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("BlockedAt");
+
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("datetime(6)")
@@ -1190,6 +1294,10 @@ namespace DeliveryIntelligence.Infrastructure.Migrations
 
                     MySqlPropertyBuilderExtensions.HasCharSet(b.Property<Guid?>("EpicId"), "utf8mb4");
 
+                    b.Property<decimal?>("EstimatedHours")
+                        .HasColumnType("decimal(5,2)")
+                        .HasColumnName("EstimatedHours");
+
                     b.Property<bool>("IsAiAssigned")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("tinyint(1)")
@@ -1203,6 +1311,12 @@ namespace DeliveryIntelligence.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("IsAiGenerated")
                         .HasComment("Sub-task do AI Breakdown sinh ra");
+
+                    b.Property<bool>("IsBlocked")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false)
+                        .HasColumnName("IsBlocked");
 
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()
@@ -1255,6 +1369,10 @@ namespace DeliveryIntelligence.Infrastructure.Migrations
                         .HasColumnType("decimal(30,15)")
                         .HasColumnName("RankOrder")
                         .HasComment("Chèn giữa = trung bình cộng 2 rank kề. Job rebalance khi khoảng cách < 1e-9");
+
+                    b.Property<decimal?>("RemainingHours")
+                        .HasColumnType("decimal(5,2)")
+                        .HasColumnName("RemainingHours");
 
                     b.Property<Guid>("ReporterId")
                         .HasColumnType("char(36)")

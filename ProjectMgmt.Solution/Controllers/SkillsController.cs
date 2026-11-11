@@ -9,7 +9,7 @@ namespace ProjectMgmt.Solution.Controllers;
 
 [ApiController]
 [Authorize]
-[Route("api/v1")]
+[Route("api")]
 public class SkillsController : ControllerBase
 {
     private static readonly Action<ILogger, string, Exception?> LogEndpointFailure =

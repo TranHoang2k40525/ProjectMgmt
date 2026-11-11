@@ -8,7 +8,7 @@ import { IdentityApi } from './identity.api';
 describe('IdentityApi', () => {
   let api: IdentityApi;
   let http: HttpTestingController;
-  const baseUrl = `${environment.apiBaseUrl}/v1`;
+  const baseUrl = `${environment.apiBaseUrl}`;
 
   beforeEach(() => {
     TestBed.configureTestingModule({

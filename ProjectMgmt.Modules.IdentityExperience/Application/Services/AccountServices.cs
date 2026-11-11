@@ -911,6 +911,7 @@ public class AccountServices : IAccountServices
             UserId = user.Id,
             Email = user.Email,
             FullName = profile?.DisplayName,
+            AvatarUrl = profile?.AvatarUrl,
             Roles = roles
         };
     }

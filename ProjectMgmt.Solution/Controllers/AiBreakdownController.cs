@@ -8,7 +8,7 @@ namespace ProjectMgmt.Solution.Controllers;
 
 [ApiController]
 [Authorize]
-[Route("api/v1/ai/breakdown")]
+[Route("api/ai/breakdown")]
 public class AiBreakdownController : ControllerBase
 {
     private static readonly Action<ILogger, string, Exception?> LogEndpointFailure =

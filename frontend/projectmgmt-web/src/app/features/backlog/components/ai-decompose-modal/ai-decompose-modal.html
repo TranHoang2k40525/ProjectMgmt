@@ -1,0 +1,1490 @@
+<div
+  class="ai-modal-backdrop"
+  data-testid="ai-decompose-modal"
+  (dragover)="onDragOver($event)"
+  (dragleave)="onDragLeave($event)"
+  (drop)="onDrop($event)"
+  (paste)="onClipboardPaste($event)"
+>
+  <div class="ai-modal-shell" [class.is-drag-over]="isDragOver()" (click)="$event.stopPropagation()">
+    <!-- Modal Header -->
+    <header class="ai-modal-header">
+      <div class="header-title-group">
+        <div class="header-icon-box">
+          <span class="material-symbols-outlined" aria-hidden="true">account_tree</span>
+        </div>
+        <div>
+          <h2>AI Phân tách Kế hoạch Sprint &amp; Công việc</h2>
+          <p>{{ projectName }} ({{ projectKey }}) · Phân tích tài liệu đặc tả, biên bản họp &amp; đề xuất Sprint tự động</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <!-- Session History Clock Popover (Image & Summary requirement) -->
+        <div class="session-history-container">
+          <button
+            type="button"
+            class="btn-session-history"
+            data-testid="btn-ai-session-history"
+            (click)="toggleSessionHistoryDropdown($event)"
+            title="Lịch sử các phiên phân tách AI gần đây của dự án"
+          >
+            <span class="material-symbols-outlined" aria-hidden="true">history</span>
+            <span>Lịch sử</span>
+          </button>
+
+          @if (isSessionHistoryOpen()) {
+            <div class="session-history-popover animate-scale-up" (click)="$event.stopPropagation()">
+              <div class="popover-header">
+                <div class="flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[16px] text-primary">history</span>
+                  <strong>Lịch sử Phiên AI Sprint</strong>
+                </div>
+                <button type="button" class="btn-close-popover" (click)="isSessionHistoryOpen.set(false)" title="Đóng">
+                  <span class="material-symbols-outlined text-[16px]">close</span>
+                </button>
+              </div>
+
+              @if (sessionsLoading()) {
+                <div class="p-4 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+                  <span class="material-symbols-outlined text-[16px] spinning-icon">sync</span>
+                  <span>Đang tải lịch sử phiên...</span>
+                </div>
+              } @else if (projectSessions().length > 0) {
+                <div class="sessions-list">
+                  @for (sess of projectSessions(); track sess.sessionId) {
+                    <button type="button" class="session-item-row" (click)="restoreSessionFromHistory(sess)">
+                      <div class="session-item-top">
+                        <span class="sess-model-pill">{{ sess.model }}</span>
+                        <span class="sess-time">{{ sess.createdAtUtc | date:'HH:mm dd/MM' }}</span>
+                      </div>
+                      <div class="sess-goal-title" [title]="sess.sprintGoal">{{ sess.sprintGoal }}</div>
+                      <div class="session-item-bottom">
+                        <span>{{ sess.taskCount }} việc ({{ sess.totalStoryPoints }} SP)</span>
+                        <span class="sess-creator">Bởi {{ sess.createdByName }}</span>
+                      </div>
+                    </button>
+                  }
+                </div>
+              } @else {
+                <div class="p-5 text-center text-xs text-slate-500">
+                  <span class="material-symbols-outlined text-[24px] text-slate-400 mb-1">history_toggle_off</span>
+                  <p>Chưa có phiên làm việc AI nào được lưu trữ trong dự án này.</p>
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+        @if (phase() !== 'compose' || chatHistory().length > 0) {
+          <button
+            type="button"
+            class="btn-new-session"
+            data-testid="btn-ai-new-session"
+            (click)="startNewSession()"
+            title="Bỏ đề xuất hiện tại và phân tích tài liệu khác"
+          >
+            <span class="material-symbols-outlined" aria-hidden="true">add_comment</span>
+            <span>Phiên mới</span>
+          </button>
+        }
+        <button type="button" class="icon-close-btn" data-testid="btn-ai-close-modal" aria-label="Đóng cửa sổ" (click)="closeModal()">
+          <span class="material-symbols-outlined" aria-hidden="true">close</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Scrollable Body -->
+    <div class="ai-modal-body">
+      <!-- Giai đoạn 1 & 2: soạn yêu cầu, rồi theo dõi tiến trình phân tích -->
+      <section class="ai-conversation-zone" aria-label="Soạn yêu cầu và tiến trình phân tích">
+        @if (phase() === 'compose') {
+          <div class="compose-panel" data-testid="ai-compose-panel">
+            <h3 class="compose-title">AI lập kế hoạch Sprint từ tài liệu của bạn</h3>
+            <p class="compose-subtitle">
+              Dán biên bản họp, mô tả yêu cầu hoặc đính kèm tệp. AI đọc thêm tài liệu Spec Hub, backlog và năng lực thành viên của
+              <strong>{{ projectName }}</strong> rồi đề xuất Sprint Goal, Task và Subtask để bạn duyệt trước khi thêm vào Sprint.
+            </p>
+
+            <div class="compose-box" [class.is-drag-over]="isDragOver()">
+              <label class="sr-only" for="ai-compose-input">Nội dung yêu cầu</label>
+              <textarea
+                #promptTextarea
+                id="ai-compose-input"
+                class="compose-textarea"
+                data-testid="ai-prompt-input"
+                [ngModel]="promptInput()"
+                (ngModelChange)="onPromptChange($event)"
+                (keydown)="onComposeKeydown($event)"
+                placeholder="Dán biên bản họp hoặc mô tả yêu cầu. Ví dụ: Sprint tới làm thông báo realtime và báo cáo burndown; Bảo làm backend, Hà kiểm thử."
+              ></textarea>
+
+              @if (attachedFile(); as f) {
+                <div class="compose-attachment" data-testid="ai-attached-file-chip">
+                  <span class="material-symbols-outlined" aria-hidden="true">description</span>
+                  <strong>{{ f.name }}</strong>
+                  <span>{{ formatFileSize(f.size) }}</span>
+                  <button type="button" aria-label="Gỡ tệp đính kèm" (click)="removeAttachedFile()">
+                    <span class="material-symbols-outlined" aria-hidden="true">close</span>
+                  </button>
+                </div>
+              }
+
+              <div class="compose-toolbar">
+                <label class="compose-attach-btn" title="Đính kèm tệp đặc tả: .docx, .pdf, .txt, .md, .xlsx">
+                  <input
+                    type="file"
+                    class="sr-only"
+                    data-testid="ai-file-input"
+                    accept=".docx,.pdf,.txt,.md,.xlsx,.csv,.json"
+                    (change)="onFileSelected($event)"
+                  />
+                  <span class="material-symbols-outlined" aria-hidden="true">attach_file</span>
+                  <span>Đính kèm tệp</span>
+                </label>
+                <span class="compose-hint">hoặc kéo thả tệp vào đây</span>
+
+                <span class="compose-spacer"></span>
+                @if (composeCharCount() > 0) {
+                  <span class="compose-count tabular-nums">{{ composeCharCount() }} ký tự</span>
+                }
+                <div class="agent-mode-selector" title="Chọn mô hình AI">
+                  <select
+                    class="model-select-input"
+                    data-testid="ai-model-selector"
+                    [ngModel]="selectedModel()"
+                    (ngModelChange)="onModelChange($event)"
+                    aria-label="Chọn mô hình AI"
+                  >
+                    @for (model of modelOptions; track model) {
+                      <option [value]="model">{{ model }}</option>
+                    }
+                  </select>
+                  <span class="material-symbols-outlined select-chevron" aria-hidden="true">expand_more</span>
+                </div>
+                <button
+                  type="button"
+                  class="compose-submit-btn"
+                  data-testid="btn-ai-send"
+                  [disabled]="!promptInput().trim() && !attachedFile()"
+                  (click)="submitDecompose()"
+                  title="Gửi (Ctrl + Enter)"
+                >
+                  <span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span>
+                  <span>Phân tách công việc</span>
+                  <kbd>Ctrl ↵</kbd>
+                </button>
+              </div>
+            </div>
+
+            <div class="compose-quickstarts">
+              <span class="quickstarts-label">Bắt đầu nhanh:</span>
+              @for (item of quickStarts; track item.label) {
+                <button
+                  type="button"
+                  class="quick-chip"
+                  [attr.data-testid]="item.run ? 'btn-ai-use-spec-hub' : null"
+                  (click)="applyQuickStart(item)"
+                >
+                  <span class="material-symbols-outlined" aria-hidden="true">{{ item.icon }}</span>
+                  <span>{{ item.label }}</span>
+                </button>
+              }
+            </div>
+          </div>
+        }
+
+        @if (phase() === 'running') {
+          <div class="run-panel" data-testid="ai-progress-panel">
+            <div class="run-source">
+              <span class="material-symbols-outlined" aria-hidden="true">{{ lastUserTurn()?.fileName ? 'description' : 'notes' }}</span>
+              <span class="run-source-text">Đang phân tích: <strong>{{ sourceLabel() }}</strong></span>
+            </div>
+
+            <div class="run-card" role="status" aria-live="polite">
+              <div class="run-head">
+                <span class="material-symbols-outlined spinning-icon" aria-hidden="true">progress_activity</span>
+                <div class="run-head-text">
+                  <strong>{{ currentStepLabel() || 'Đang khởi tạo phiên phân tích…' }}</strong>
+                  @if (currentStepDetail()) {
+                    <span>{{ currentStepDetail() }}</span>
+                  }
+                </div>
+                <span class="run-elapsed tabular-nums" aria-label="Thời gian đã chạy">{{ elapsedLabel() }}</span>
+                <button type="button" class="run-stop-btn" data-testid="btn-ai-stop" (click)="stopAndEdit()">
+                  <span class="material-symbols-outlined" aria-hidden="true">stop_circle</span>
+                  <span>Dừng</span>
+                </button>
+              </div>
+
+              <ol class="run-stepper">
+                @for (step of pipelineStepDefinitions; track step.index) {
+                  <li class="run-step" [attr.data-status]="getStepStatus(step.index)">
+                    <span class="run-step-dot" aria-hidden="true">
+                      @if (getStepStatus(step.index) === 'done') {
+                        <span class="material-symbols-outlined">check</span>
+                      } @else {
+                        {{ step.index }}
+                      }
+                    </span>
+                    <span class="run-step-label">{{ step.label }}</span>
+                  </li>
+                }
+              </ol>
+
+              <p class="run-note">Thường mất 20–60 giây. Cứ để cửa sổ mở, kết quả sẽ hiện ngay tại đây.</p>
+
+              @if (toolCallsLog().length > 0) {
+                <button
+                  type="button"
+                  class="run-detail-toggle"
+                  data-testid="btn-toggle-thinking"
+                  [attr.aria-expanded]="isRunDetailOpen()"
+                  (click)="isRunDetailOpen.update(v => !v)"
+                >
+                  <span class="material-symbols-outlined" aria-hidden="true">{{ isRunDetailOpen() ? 'expand_less' : 'expand_more' }}</span>
+                  <span>{{ isRunDetailOpen() ? 'Ẩn' : 'Xem' }} các bước tra cứu ({{ toolCallsLog().length }})</span>
+                </button>
+                @if (isRunDetailOpen()) {
+                  <ul class="run-tools">
+                    @for (tool of toolCallsLog(); track $index; let tIdx = $index) {
+                      <li [attr.data-testid]="'ai-tool-item-' + tIdx">
+                        <span class="material-symbols-outlined" aria-hidden="true">check</span>
+                        <span>{{ tool.summaryVi || tool.toolName }}</span>
+                      </li>
+                    }
+                  </ul>
+                }
+              }
+            </div>
+          </div>
+        }
+
+        @if (errorMessage()) {
+          <div class="ai-error-banner" data-testid="ai-error-banner" role="alert">
+            <span class="material-symbols-outlined" aria-hidden="true">error</span>
+            <span class="ai-error-text">{{ errorMessage() }}</span>
+            @if (canRetry()) {
+              <button type="button" class="ai-error-retry" data-testid="btn-ai-retry" (click)="retryLastRequest()">
+                <span class="material-symbols-outlined" aria-hidden="true">refresh</span>
+                <span>Thử lại</span>
+              </button>
+            }
+            <button type="button" class="ai-error-close" aria-label="Ẩn thông báo lỗi" (click)="errorMessage.set(null)">
+              <span class="material-symbols-outlined" aria-hidden="true">close</span>
+            </button>
+          </div>
+        }
+      </section>
+
+      <!-- Proposed Sprint & Tasks Section (Prioritized Content Layout) -->
+      @if (proposal(); as prop) {
+        <section class="proposal-workspace" data-testid="ai-proposal-section" aria-label="Đề xuất Sprint và danh sách công việc">
+          <!-- Tóm tắt đề xuất: mục tiêu, số liệu, nơi thêm vào và hành động chính; chi tiết nguồn thu gọn -->
+          <div class="sprint-goal-card result-summary">
+            <div class="result-summary-top">
+              <div class="result-title">
+                <span class="material-symbols-outlined" aria-hidden="true">flag</span>
+                <span>Đề xuất Sprint</span>
+              </div>
+              <div class="sprint-metrics">
+                <span class="metric-pill"><strong class="tabular-nums">{{ prop.tasks.length }}</strong> công việc</span>
+                @if (subtaskTotal() > 0) {
+                  <span class="metric-pill"><strong class="tabular-nums">{{ subtaskTotal() }}</strong> việc con</span>
+                }
+                <span class="metric-pill"><strong class="tabular-nums">{{ totalCalculatedSp() }}</strong> SP</span>
+                <span class="metric-pill"><strong class="tabular-nums">{{ totalCalculatedHours() }}</strong> giờ</span>
+              </div>
+            </div>
+
+            @if (prop.fallbackReason) {
+              <div class="result-fallback" role="alert" data-testid="ai-fallback-banner">
+                <span class="material-symbols-outlined" aria-hidden="true">warning</span>
+                <span class="result-fallback-text">{{ prop.fallbackReason }}</span>
+                <button type="button" class="result-fallback-btn" (click)="reanalyzeFromFallback()">
+                  <span class="material-symbols-outlined" aria-hidden="true">refresh</span>
+                  <span>Phân tích lại</span>
+                </button>
+              </div>
+            }
+
+            <label class="result-goal-label" for="ai-sprint-goal-input">Mục tiêu Sprint</label>
+            <input
+              id="ai-sprint-goal-input"
+              type="text"
+              class="sprint-goal-input"
+              data-testid="ai-sprint-goal-input"
+              [(ngModel)]="prop.sprintGoal"
+              (blur)="persistProposalEdits()"
+              placeholder="Nhập mục tiêu Sprint…"
+            />
+
+            <div class="proposal-toolbar">
+              <div class="toolbar-left">
+                @if (isRegeneratingBatch()) {
+                  <span class="result-busy" role="status">
+                    <span class="material-symbols-outlined spinning-icon" aria-hidden="true">progress_activity</span>
+                    <span>AI đang chỉnh sửa đề xuất…</span>
+                  </span>
+                } @else {
+                  @if (selectedTasksCount() > 0) {
+                    <button
+                      type="button"
+                      class="btn-outline-action"
+                      data-testid="btn-ai-regenerate-selected"
+                      (click)="regenerateSelectedTasksWithFeedback(promptInput())"
+                    >
+                      <span class="material-symbols-outlined" aria-hidden="true">autorenew</span>
+                      <span>Làm lại {{ selectedTasksCount() }} việc đã chọn</span>
+                    </button>
+                  }
+                  <button
+                    type="button"
+                    class="btn-outline-action"
+                    data-testid="btn-ai-toggle-regenerate-all"
+                    (click)="submitRegenerateAll()"
+                    title="AI đề xuất lại toàn bộ danh sách (các chỉnh sửa tay hiện tại sẽ bị thay)"
+                  >
+                    <span class="material-symbols-outlined" aria-hidden="true">refresh</span>
+                    <span>Làm lại toàn bộ</span>
+                  </button>
+                }
+              </div>
+
+              <div class="toolbar-right">
+                <button
+                  type="button"
+                  class="btn-commit-sprint"
+                  data-testid="btn-ai-apply-sprint"
+                  [disabled]="isApplying() || isRegeneratingBatch() || prop.tasks.length === 0"
+                  (click)="commitSprintProposal()"
+                  [title]="canCommitSprint ? 'Tạo các công việc này trong ' + targetSprintLabel() : 'Chỉ Giám đốc dự án, Chủ tổ chức hoặc Scrum Master mới thêm được vào Sprint'"
+                >
+                  <span class="material-symbols-outlined" [class.spinning-icon]="isApplying()" aria-hidden="true">
+                    {{ isApplying() ? 'progress_activity' : 'playlist_add_check' }}
+                  </span>
+                  <span>{{ isApplying() ? 'Đang thêm vào Sprint…' : 'Thêm ' + prop.tasks.length + ' việc vào ' + targetSprintLabel() }}</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="result-source">
+              <span class="material-symbols-outlined" aria-hidden="true">{{ lastUserTurn()?.fileName ? 'description' : 'notes' }}</span>
+              <span class="result-source-text">
+                Nguồn: <strong>{{ sourceLabel() }}</strong>
+                @if (toolCallsLog().length > 0) {
+                  · {{ toolCallsLog().length }} bước tra cứu
+                }
+                @if (lastRunLabel()) {
+                  · {{ lastRunLabel() }}
+                }
+              </span>
+              <button
+                type="button"
+                class="btn-toggle-goal-info"
+                [attr.aria-expanded]="isSourceDetailOpen()"
+                (click)="isSourceDetailOpen.update(v => !v)"
+              >
+                <span>{{ isSourceDetailOpen() ? 'Ẩn chi tiết' : 'Chi tiết' }}</span>
+                <span class="material-symbols-outlined text-[15px]" aria-hidden="true">{{ isSourceDetailOpen() ? 'expand_less' : 'expand_more' }}</span>
+              </button>
+            </div>
+
+            @if (isSourceDetailOpen()) {
+              <div class="goal-secondary-collapsible animate-fade-in">
+                @if (lastUserTurn()?.fullContent; as content) {
+                  <div class="result-request">
+                    <div class="result-request-head">
+                      <span>Nội dung bạn đã gửi</span>
+                      <button type="button" (click)="copyToClipboard(content)">
+                        <span class="material-symbols-outlined" aria-hidden="true">content_copy</span>
+                        <span>Sao chép</span>
+                      </button>
+                    </div>
+                    <pre>{{ content }}</pre>
+                  </div>
+                }
+
+                @if (prop.rationale) {
+                  <div class="sprint-rationale-box">
+                    <span class="material-symbols-outlined" aria-hidden="true">verified</span>
+                    <p>{{ prop.rationale }}</p>
+                  </div>
+                }
+
+                @if (proposalTags().length > 0) {
+                  <div class="proposal-hashtags-row" data-testid="ai-proposal-hashtags">
+                    <span class="hashtags-label">
+                      <span class="material-symbols-outlined" aria-hidden="true">tag</span>
+                      <span>Chủ đề chính:</span>
+                    </span>
+                    <div class="hashtags-pills">
+                      @for (tag of proposalTags(); track tag) {
+                        <span class="hashtag-pill">{{ tag }}</span>
+                      }
+                    </div>
+                  </div>
+                }
+
+                @if (allUniqueCitations().length > 0) {
+                  <div class="proposal-citations-row" data-testid="ai-proposal-citations">
+                    <span class="citations-label">
+                      <span class="material-symbols-outlined" aria-hidden="true">menu_book</span>
+                      <span>Tài liệu đặc tả liên quan (Spec Hub):</span>
+                    </span>
+                    <div class="citations-pills">
+                      @for (cite of allUniqueCitations(); track $index) {
+                        <button type="button" class="citation-doc-btn" (click)="openSpecDoc(cite)" title="Mở tài liệu này trong Spec Hub">
+                          <span class="material-symbols-outlined" aria-hidden="true">description</span>
+                          <span>{{ cite }}</span>
+                          <span class="material-symbols-outlined link-icon" aria-hidden="true">open_in_new</span>
+                        </button>
+                      }
+                    </div>
+                  </div>
+                }
+
+                @if (toolCallsLog().length > 0) {
+                  <ul class="run-tools">
+                    @for (tool of toolCallsLog(); track $index) {
+                      <li>
+                        <span class="material-symbols-outlined" aria-hidden="true">check</span>
+                        <span>{{ tool.summaryVi || tool.toolName }}</span>
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
+            }
+          </div>
+
+          <!-- Proposed Work Items Table (Reference Image 4 Layout) -->
+          <div class="proposal-table-card" data-testid="ai-proposal-table">
+            <div class="proposal-table-header">
+              <span class="col-check">
+                <input
+                  type="checkbox"
+                  aria-label="Chọn tất cả công việc đề xuất"
+                  (change)="toggleSelectAllTasks($event)"
+                />
+              </span>
+              <span>Mã</span>
+              <span>Công việc</span>
+              <span>Epic</span>
+              <span>Ưu tiên</span>
+              <span>SP</span>
+              <span>Trạng thái</span>
+              <span>Người xử lý</span>
+              <span></span>
+            </div>
+
+            @for (task of prop.tasks; track task.id; let idx = $index) {
+              @let taskCode = getTaskDisplayCode(idx);
+              <div class="proposal-task-group">
+                <div
+                  class="proposal-task-row"
+                  data-testid="ai-task-row"
+                  [class.is-active-drawer]="activeDrawerTaskId() === task.id"
+                  (click)="openTaskDrawer(task, $event)"
+                >
+                  <!-- Checkbox & Subtask Expand -->
+                  <div class="cell-select" (click)="$event.stopPropagation()">
+                    <span class="material-symbols-outlined drag-dots" aria-hidden="true">drag_indicator</span>
+                    <input
+                      type="checkbox"
+                      data-testid="ai-task-checkbox"
+                      [checked]="!!selectedTaskIds()[task.id]"
+                      (change)="toggleTaskCheckbox(task.id, $event)"
+                      [attr.aria-label]="'Chọn ' + task.title"
+                    />
+                    @if (task.subtasks && task.subtasks.length > 0) {
+                      <button
+                        type="button"
+                        class="subtask-expand-btn"
+                        (click)="toggleSubtaskExpand(task.id, $event)"
+                        [title]="expandedSubtasks()[task.id] ? 'Thu gọn việc con' : 'Mở việc con'"
+                      >
+                        <span class="material-symbols-outlined" aria-hidden="true">
+                          {{ expandedSubtasks()[task.id] ? 'expand_more' : 'chevron_right' }}
+                        </span>
+                      </button>
+                    }
+                  </div>
+
+                  <!-- Code Badge -->
+                  <div class="cell-code">
+                    <span class="type-icon-badge" [class.type-story]="task.type === 'Story'" [class.type-bug]="task.type === 'Bug'">
+                      <span class="material-symbols-outlined" aria-hidden="true">
+                        {{ task.type === 'Bug' ? 'bug_report' : (task.type === 'Story' ? 'bookmark' : 'task_alt') }}
+                      </span>
+                    </span>
+                    <strong>{{ taskCode }}</strong>
+                  </div>
+
+                  <!-- Title + Ready Badge + Subtask Count + Tags & Citations -->
+                  <div class="cell-work">
+                    @if (inlineEditingTitleId() === task.id) {
+                      <input
+                        type="text"
+                        class="inline-title-input"
+                        [(ngModel)]="task.title"
+                        (click)="$event.stopPropagation()"
+                        (blur)="inlineEditingTitleId.set(null); persistProposalEdits()"
+                        (keyup.enter)="inlineEditingTitleId.set(null); persistProposalEdits()"
+                      />
+                    } @else {
+                      <span class="task-title-text" [class.is-done-title]="task.status === 'Done'">{{ task.title }}</span>
+                      <button
+                        type="button"
+                        class="inline-edit-icon"
+                        title="Sửa nhanh tiêu đề"
+                        (click)="$event.stopPropagation(); inlineEditingTitleId.set(task.id)"
+                      >
+                        <span class="material-symbols-outlined" aria-hidden="true">edit</span>
+                      </button>
+                    }
+
+                    <div class="task-metadata-pills">
+                      @if (task.documentCitations && task.documentCitations.length > 0) {
+                        @for (cite of task.documentCitations; track $index) {
+                          <button
+                            type="button"
+                            class="task-cite-pill"
+                            (click)="openSpecDoc(cite, task.documentId); $event.stopPropagation()"
+                            title="Xem trích dẫn tài liệu trong Spec Hub"
+                          >
+                            <span class="material-symbols-outlined" aria-hidden="true">description</span>
+                            <span>{{ cite }}</span>
+                          </button>
+                        }
+                      }
+                    </div>
+                  </div>
+
+                  <!-- Epic Selector -->
+                  <div class="cell-epic" (click)="$event.stopPropagation()">
+                    <select
+                      class="epic-select-pill"
+                      [ngModel]="task.epicTitle || ''"
+                      (ngModelChange)="onEpicChange(task, $event)"
+                      aria-label="Chọn Epic"
+                    >
+                      @if (task.epicTitle && !epics.some(e => e.name === task.epicTitle)) {
+                        <option [value]="task.epicTitle">{{ task.epicTitle }}</option>
+                      }
+                      <option value="">Gán Epic</option>
+                      @for (epic of epics; track epic.id) {
+                        <option [value]="epic.name">{{ epic.name }}</option>
+                      }
+                    </select>
+                  </div>
+
+                  <!-- Priority Pill -->
+                  <div class="cell-priority" (click)="cyclePriority(task, $event)">
+                    <span
+                      class="priority-badge"
+                      [class.prio-high]="task.priority === 'High' || task.priority === 'Highest'"
+                      [class.prio-low]="task.priority === 'Low'"
+                      title="Nhấn để đổi độ ưu tiên"
+                    >
+                      {{ task.priority || 'Medium' }}
+                    </span>
+                  </div>
+
+                  <!-- Story Points -->
+                  <div class="cell-sp" (click)="$event.stopPropagation()">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      class="sp-number-box"
+                      data-testid="ai-row-sp-input"
+                      [(ngModel)]="task.storyPoints"
+                      (ngModelChange)="onTaskFieldChanged()"
+                      (blur)="persistProposalEdits()"
+                      aria-label="Story Points"
+                    />
+                    <span class="material-symbols-outlined sp-card-icon" aria-hidden="true">style</span>
+                  </div>
+
+                  <!-- Status Pill -->
+                  <div class="cell-status" (click)="$event.stopPropagation()">
+                    <span class="status-badge">
+                      <span>{{ task.status || 'To Do' }}</span>
+                      <span class="material-symbols-outlined" aria-hidden="true">expand_more</span>
+                    </span>
+                  </div>
+
+                  <!-- Assignee Selector -->
+                  <div class="cell-assignee" (click)="$event.stopPropagation()">
+                    <div class="assignee-box">
+                      @if (getMemberAvatar(task.assigneeName); as avatarUrl) {
+                        <img [src]="avatarUrl" [alt]="task.assigneeName || ''" class="member-avatar-img" />
+                      } @else {
+                        <span class="member-avatar-fallback">{{ getMemberInitials(task.assigneeName) }}</span>
+                      }
+                      <select
+                        class="assignee-select"
+                        [ngModel]="task.assigneeName || ''"
+                        (ngModelChange)="onAssigneeChange(task, $event)"
+                        aria-label="Chọn người xử lý"
+                      >
+                        <option value="">Chưa gán</option>
+                        @for (m of members; track m.id) {
+                          <option [value]="m.displayName">{{ m.displayName }}</option>
+                        }
+                      </select>
+                    </div>
+                  </div>
+
+                  <!-- Row Actions -->
+                  <div class="cell-more" (click)="$event.stopPropagation()">
+                    <button
+                      type="button"
+                      class="row-action-btn"
+                      title="Xem & chỉnh sửa chi tiết"
+                      (click)="openTaskDrawer(task, $event)"
+                    >
+                      <span class="material-symbols-outlined" aria-hidden="true">more_vert</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Expanded Subtasks List (Tree Wire Branch Connector matching Image 3 & Image 4) -->
+                @if (expandedSubtasks()[task.id] && task.subtasks && task.subtasks.length > 0) {
+                  <div class="subtasks-expanded-list" data-testid="ai-subtasks-tree">
+                    @for (sub of task.subtasks; track sub.id; let sIdx = $index; let isLast = $last) {
+                      @let subtaskCode = taskCode + '.' + (sIdx + 1);
+                      <div
+                        class="proposal-task-row is-subtask-row"
+                        data-testid="ai-subtask-row"
+                        [class.is-active-drawer]="activeDrawerSubtask()?.subtask?.id === sub.id"
+                        (click)="openSubtaskDrawer(task, sub, $event)"
+                      >
+                        <!-- Tree Wire Branch under parent drag handle (Image 3) -->
+                        <div class="cell-select is-subtask-select" (click)="$event.stopPropagation()">
+                          <div class="subtask-tree-wire" [class.is-last]="isLast" aria-hidden="true">
+                            <span class="wire-stem"></span>
+                            <span class="wire-curve"></span>
+                          </div>
+                          <input
+                            type="checkbox"
+                            data-testid="ai-subtask-checkbox"
+                            [checked]="!!selectedTaskIds()[sub.id]"
+                            (change)="toggleTaskCheckbox(sub.id, $event)"
+                            [attr.aria-label]="'Chọn việc con ' + sub.title"
+                          />
+                        </div>
+
+                        <!-- Subtask Code & Icon -->
+                        <div class="cell-code is-subtask-code">
+                          <span class="type-icon-badge type-subtask">
+                            <span class="material-symbols-outlined" aria-hidden="true">subdirectory_arrow_right</span>
+                          </span>
+                          <strong class="subtask-code-text">{{ subtaskCode }}</strong>
+                        </div>
+
+                        <!-- Subtask Title + Inline Edit -->
+                        <div class="cell-work is-subtask-work">
+                          @if (inlineEditingTitleId() === sub.id) {
+                            <input
+                              type="text"
+                              class="inline-title-input"
+                              [(ngModel)]="sub.title"
+                              (click)="$event.stopPropagation()"
+                              (blur)="inlineEditingTitleId.set(null); persistProposalEdits()"
+                              (keyup.enter)="inlineEditingTitleId.set(null); persistProposalEdits()"
+                            />
+                          } @else {
+                            <span class="task-title-text subtask-title-text" [class.is-done-title]="sub.status === 'Done'">{{ sub.title }}</span>
+                            <button
+                              type="button"
+                              class="inline-edit-icon"
+                              title="Sửa nhanh tên việc con"
+                              (click)="$event.stopPropagation(); inlineEditingTitleId.set(sub.id)"
+                            >
+                              <span class="material-symbols-outlined" aria-hidden="true">edit</span>
+                            </button>
+                          }
+                          <div class="task-metadata-pills">
+                            <span class="subtask-role-badge">{{ sub.role || 'Kỹ thuật' }}</span>
+                            <span class="subtask-hours-pill">{{ sub.estimatedHours || 4 }}h</span>
+                            @let subRowCites = (sub.documentCitations && sub.documentCitations.length > 0) ? sub.documentCitations : (task.documentCitations || []);
+                            @if (subRowCites.length > 0) {
+                              @for (cite of subRowCites; track $index) {
+                                <button
+                                  type="button"
+                                  class="task-cite-pill"
+                                  (click)="openSpecDoc(cite, task.documentId); $event.stopPropagation()"
+                                  title="Xem trích dẫn tài liệu trong Spec Hub"
+                                >
+                                  <span class="material-symbols-outlined" aria-hidden="true">description</span>
+                                  <span>{{ cite }}</span>
+                                </button>
+                              }
+                            }
+                          </div>
+                        </div>
+
+                        <!-- Epic / Parent Task Tag -->
+                        <div class="cell-epic" (click)="$event.stopPropagation()">
+                          <span class="subtask-epic-badge" title="{{ task.epicTitle || 'Gán Epic' }}">
+                            {{ task.epicTitle || taskCode }}
+                          </span>
+                        </div>
+
+                        <!-- Subtask Priority Pill -->
+                        <div class="cell-priority" (click)="cycleSubtaskPriority(sub, $event)">
+                          <span
+                            class="priority-badge"
+                            [class.prio-high]="sub.priority === 'High' || sub.priority === 'Highest'"
+                            [class.prio-low]="sub.priority === 'Low'"
+                            title="Nhấn để đổi độ ưu tiên việc con"
+                          >
+                            {{ sub.priority || 'Medium' }}
+                          </span>
+                        </div>
+
+                        <!-- Subtask Story Points -->
+                        <div class="cell-sp" (click)="$event.stopPropagation()">
+                          <input
+                            type="number"
+                            min="0"
+                            max="10"
+                            class="sp-number-box"
+                            data-testid="ai-subtask-sp-input"
+                            [(ngModel)]="sub.storyPoints"
+                            (ngModelChange)="onTaskFieldChanged()"
+                            (blur)="persistProposalEdits()"
+                            aria-label="Story Points việc con"
+                          />
+                          <span class="material-symbols-outlined sp-card-icon" aria-hidden="true">style</span>
+                        </div>
+
+                        <!-- Subtask Status Pill -->
+                        <div class="cell-status" (click)="$event.stopPropagation()">
+                          <select
+                            class="status-select-pill"
+                            [(ngModel)]="sub.status"
+                            (ngModelChange)="onTaskFieldChanged()"
+                            aria-label="Trạng thái việc con"
+                          >
+                            <option value="To Do">To Do</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Done">Done</option>
+                          </select>
+                        </div>
+
+                        <!-- Subtask Assignee (Matching Parent Task Avatar & Dropdown Layout) -->
+                        <div class="cell-assignee" (click)="$event.stopPropagation()">
+                          <div class="assignee-box">
+                            @if (getMemberAvatar(sub.assigneeName); as avatarUrl) {
+                              <img [src]="avatarUrl" [alt]="sub.assigneeName || ''" class="member-avatar-img" />
+                            } @else {
+                              <span class="member-avatar-fallback">{{ getMemberInitials(sub.assigneeName) }}</span>
+                            }
+                            <select
+                              class="assignee-select"
+                              [ngModel]="sub.assigneeName || ''"
+                              (ngModelChange)="onSubtaskAssigneeChange(sub, $event)"
+                              aria-label="Người xử lý việc con"
+                            >
+                              <option value="">Chưa gán</option>
+                              @for (m of members; track m.id) {
+                                <option [value]="m.displayName">{{ m.displayName }}</option>
+                              }
+                            </select>
+                          </div>
+                        </div>
+
+                        <!-- Subtask Actions -->
+                        <div class="cell-more" (click)="$event.stopPropagation()">
+                          <button
+                            type="button"
+                            class="row-action-btn"
+                            title="Xem chi tiết việc con"
+                            (click)="openSubtaskDrawer(task, sub, $event)"
+                          >
+                            <span class="material-symbols-outlined" aria-hidden="true">more_vert</span>
+                          </button>
+                        </div>
+                      </div>
+                    }
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        </section>
+      }
+    </div>
+
+    <!-- Giai đoạn 3: yêu cầu AI chỉnh sửa đề xuất hiện có (việc đã chọn hoặc toàn bộ) -->
+    @if (phase() === 'result') {
+      <footer class="ai-input-dock">
+        <div class="gemini-style-bar">
+          <span class="material-symbols-outlined refine-icon" aria-hidden="true">auto_fix_high</span>
+          <label class="sr-only" for="ai-refine-input">Yêu cầu AI chỉnh sửa đề xuất</label>
+          <textarea
+            #promptTextarea
+            id="ai-refine-input"
+            class="prompt-text-input"
+            data-testid="ai-prompt-input"
+            [ngModel]="promptInput()"
+            (ngModelChange)="onPromptChange($event)"
+            (keydown)="onPromptKeydown($event)"
+            rows="1"
+            [disabled]="isRegeneratingBatch()"
+            [placeholder]="
+              selectedTasksCount() > 0
+                ? 'Mô tả cách AI sửa ' + selectedTasksCount() + ' việc đã chọn (ví dụ: tách nhỏ hơn, giao cho Hà)…'
+                : 'Yêu cầu AI chỉnh sửa đề xuất (ví dụ: bỏ việc tài liệu, thêm kiểm thử hiệu năng, giảm còn 20 SP)…'
+            "
+          ></textarea>
+
+          <div class="bar-right-controls">
+            <button
+              type="button"
+              class="send-action-btn"
+              data-testid="btn-ai-send"
+              [disabled]="isRegeneratingBatch() || !promptInput().trim()"
+              (click)="submitDecompose()"
+              title="Gửi yêu cầu chỉnh sửa (Enter)"
+            >
+              <span class="material-symbols-outlined" [class.spinning-icon]="isRegeneratingBatch()" aria-hidden="true">
+                {{ isRegeneratingBatch() ? 'progress_activity' : 'arrow_upward' }}
+              </span>
+            </button>
+          </div>
+        </div>
+        <p class="gemini-disclaimer">
+          {{
+            selectedTasksCount() > 0
+              ? 'Chỉ sửa ' + selectedTasksCount() + ' việc đã chọn, các việc khác giữ nguyên.'
+              : 'Chọn việc trong bảng để chỉ sửa những việc đó. Phân tích tài liệu khác: bấm “Phiên mới”.'
+          }}
+          AI có thể sai, hãy kiểm tra trước khi thêm vào Sprint.
+        </p>
+      </footer>
+    }
+
+    <!-- Proposed Task Detail Drawer (Reference Image 5 Layout Adapted for AI Proposal) -->
+    @if (activeDrawerTask(); as detailTask) {
+      <div class="drawer-backdrop" (click)="closeTaskDrawer()"></div>
+      <aside
+        class="ai-task-drawer"
+        data-testid="ai-task-detail-drawer"
+        aria-label="Chi tiết công việc đề xuất"
+        (click)="$event.stopPropagation()"
+      >
+        <header class="drawer-top-bar">
+          <div class="drawer-key-group">
+            <span class="type-icon-badge" [class.type-story]="detailTask.type === 'Story'" [class.type-bug]="detailTask.type === 'Bug'">
+              <span class="material-symbols-outlined" aria-hidden="true">
+                {{ detailTask.type === 'Bug' ? 'bug_report' : 'task_alt' }}
+              </span>
+            </span>
+            <strong class="drawer-code">{{ projectKey }}-AI</strong>
+            <span class="drawer-sprint-badge">Đề xuất Sprint tiếp theo</span>
+          </div>
+
+          <div class="drawer-top-actions">
+            <button
+              type="button"
+              class="drawer-icon-btn"
+              title="Xóa công việc khỏi đề xuất"
+              (click)="deleteProposedTask(detailTask.id, $event)"
+            >
+              <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+            </button>
+            <button
+              type="button"
+              class="drawer-icon-btn"
+              data-testid="btn-close-task-drawer"
+              title="Đóng chi tiết"
+              (click)="closeTaskDrawer()"
+            >
+              <span class="material-symbols-outlined" aria-hidden="true">close</span>
+            </button>
+          </div>
+        </header>
+
+        <div class="drawer-scroll-content">
+          <!-- Task Title -->
+          <div class="drawer-title-block">
+            <input
+              type="text"
+              class="drawer-title-input"
+              data-testid="drawer-task-title"
+              [(ngModel)]="detailTask.title"
+              (ngModelChange)="onTaskFieldChanged()"
+              placeholder="Tên công việc..."
+            />
+          </div>
+
+          <!-- Document Citations in Task Detail (Matching Image 2) -->
+          @if (detailTask.documentCitations && detailTask.documentCitations.length > 0) {
+            <div class="drawer-citations-card" data-testid="drawer-citations-top">
+              <div class="drawer-citations-label">
+                <span class="material-symbols-outlined text-[15px] text-primary" aria-hidden="true">description</span>
+                <strong>Tài liệu căn cứ &amp; Trích dẫn đặc tả:</strong>
+              </div>
+              <div class="drawer-citations-pills">
+                @for (cite of detailTask.documentCitations; track $index) {
+                  <button
+                    type="button"
+                    class="drawer-citation-pill"
+                    (click)="openSpecDoc(cite, detailTask.documentId); $event.stopPropagation()"
+                    title="Nhấn để xem trước tài liệu này trong Spec Hub"
+                  >
+                    <span class="material-symbols-outlined" aria-hidden="true">description</span>
+                    <span class="cite-text">{{ cite }}</span>
+                    <span class="material-symbols-outlined link-icon" aria-hidden="true">open_in_new</span>
+                  </button>
+                }
+              </div>
+            </div>
+          }
+
+          <!-- 6-Field Metadata Box (Matching Reference Image 5) -->
+          <div class="drawer-meta-grid">
+            <label class="meta-field">
+              <span>TRẠNG THÁI</span>
+              <select [(ngModel)]="detailTask.status" (ngModelChange)="onTaskFieldChanged()">
+                <option value="To Do">Chưa làm (To Do)</option>
+                <option value="In Progress">Đang làm (In Progress)</option>
+                <option value="Done">Hoàn thành (Done)</option>
+              </select>
+            </label>
+
+            <label class="meta-field">
+              <span>ĐỘ ƯU TIÊN</span>
+              <select [(ngModel)]="detailTask.priority" (ngModelChange)="onTaskFieldChanged()">
+                <option value="Highest">Highest</option>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
+              </select>
+            </label>
+
+            <label class="meta-field">
+              <span>NGƯỜI THỰC HIỆN</span>
+              <select
+                [ngModel]="detailTask.assigneeName || ''"
+                (ngModelChange)="onAssigneeChange(detailTask, $event)"
+              >
+                <option value="">Chưa gán</option>
+                @for (m of members; track m.id) {
+                  <option [value]="m.displayName">{{ m.displayName }}</option>
+                }
+              </select>
+            </label>
+
+            <label class="meta-field">
+              <span>STORY POINTS</span>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                data-testid="drawer-story-points"
+                [(ngModel)]="detailTask.storyPoints"
+                (ngModelChange)="onTaskFieldChanged()"
+              />
+            </label>
+
+            <label class="meta-field">
+              <span>GIỜ ƯỚC TÍNH (H)</span>
+              <input
+                type="number"
+                min="0"
+                max="1000"
+                step="0.5"
+                data-testid="drawer-estimated-hours"
+                [(ngModel)]="detailTask.estimatedHours"
+                (ngModelChange)="detailTask.remainingHours = detailTask.estimatedHours; onTaskFieldChanged()"
+              />
+            </label>
+
+            <label class="meta-field">
+              <span>GIỜ CÒN LẠI (H)</span>
+              <input
+                type="number"
+                min="0"
+                max="1000"
+                step="0.5"
+                [(ngModel)]="detailTask.remainingHours"
+                (ngModelChange)="onTaskFieldChanged()"
+              />
+            </label>
+          </div>
+
+          <!-- AI Single-Task Regeneration Box -->
+          <div class="drawer-ai-regen-box">
+            <div class="regen-box-title">
+              <span class="material-symbols-outlined" aria-hidden="true">autorenew</span>
+              <strong>Yêu cầu AI làm lại riêng công việc này</strong>
+            </div>
+            <div class="regen-box-controls">
+              <input
+                type="text"
+                data-testid="drawer-regenerate-input"
+                [ngModel]="drawerRegenerateFeedback()"
+                (ngModelChange)="drawerRegenerateFeedback.set($event)"
+                (keyup.enter)="regenerateSingleTaskInDrawer()"
+                placeholder="VD: Chia nhỏ thêm subtask bảo mật, tăng lên 8 SP..."
+              />
+              <button
+                type="button"
+                data-testid="btn-drawer-regenerate-task"
+                [disabled]="isRegeneratingSingle() || !drawerRegenerateFeedback().trim()"
+                (click)="regenerateSingleTaskInDrawer()"
+              >
+                <span class="material-symbols-outlined" aria-hidden="true">
+                  {{ isRegeneratingSingle() ? 'sync' : 'bolt' }}
+                </span>
+                <span>{{ isRegeneratingSingle() ? 'Đang làm lại...' : 'Làm lại Task này' }}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Detailed Description -->
+          <div class="drawer-section">
+            <div class="section-label">
+              <strong>Mô tả chi tiết</strong>
+            </div>
+            <textarea
+              rows="4"
+              class="drawer-textarea"
+              data-testid="drawer-description"
+              [(ngModel)]="detailTask.description"
+              (ngModelChange)="onTaskFieldChanged()"
+              placeholder="Mô tả chi tiết phạm vi thực hiện công việc..."
+            ></textarea>
+          </div>
+
+          <!-- Subtasks Section -->
+          <div class="drawer-section">
+            <div class="section-header-row">
+              <div class="section-label">
+                <span class="material-symbols-outlined" aria-hidden="true">subdirectory_arrow_right</span>
+                <strong>Công việc con ({{ detailTask.subtasks.length || 0 }})</strong>
+              </div>
+              <button type="button" class="text-add-btn" data-testid="btn-drawer-add-subtask" (click)="addSubtask(detailTask)">
+                + Thêm việc con
+              </button>
+            </div>
+
+            @if (detailTask.subtasks && detailTask.subtasks.length > 0) {
+              <div class="drawer-subtasks-list">
+                @for (sub of detailTask.subtasks; track sub.id; let sIdx = $index) {
+                  <div class="drawer-subtask-item">
+                    <select [(ngModel)]="sub.role" class="sub-role-select" aria-label="Vai trò">
+                      <option value="Backend">Backend</option>
+                      <option value="Frontend">Frontend</option>
+                      <option value="QA">QA</option>
+                      <option value="DevOps">DevOps</option>
+                    </select>
+                    <input
+                      type="text"
+                      class="sub-title-input"
+                      [(ngModel)]="sub.title"
+                      placeholder="Tên công việc con..."
+                    />
+                    <input
+                      type="number"
+                      min="0.5"
+                      max="200"
+                      step="0.5"
+                      class="sub-hours-input"
+                      [(ngModel)]="sub.estimatedHours"
+                      title="Số giờ ước tính"
+                    />
+                    <span class="sub-unit">h</span>
+                    <button type="button" class="sub-del-btn" aria-label="Xóa việc con" (click)="removeSubtask(detailTask, sIdx)">
+                      <span class="material-symbols-outlined" aria-hidden="true">close</span>
+                    </button>
+                  </div>
+                }
+              </div>
+            } @else {
+              <p class="empty-muted-note">Chưa có công việc con.</p>
+            }
+          </div>
+
+          <!-- Acceptance Criteria Section -->
+          <div class="drawer-section">
+            <div class="section-header-row">
+              <div class="section-label">
+                <span class="material-symbols-outlined" aria-hidden="true">fact_check</span>
+                <strong>Tiêu chí nghiệm thu ({{ detailTask.acceptanceCriteria.length || 0 }})</strong>
+              </div>
+              <button type="button" class="text-add-btn" data-testid="btn-drawer-add-ac" (click)="addAcceptanceCriterion(detailTask)">
+                + Thêm tiêu chí
+              </button>
+            </div>
+
+            @if (detailTask.acceptanceCriteria && detailTask.acceptanceCriteria.length > 0) {
+              <div class="drawer-ac-list">
+                @for (ac of detailTask.acceptanceCriteria; track trackByIndex($index); let acIdx = $index) {
+                  <div class="drawer-ac-item">
+                    <span class="material-symbols-outlined ac-check-icon" aria-hidden="true">check_circle</span>
+                    <input
+                      type="text"
+                      class="ac-text-input"
+                      [(ngModel)]="detailTask.acceptanceCriteria[acIdx]"
+                      (ngModelChange)="onTaskFieldChanged()"
+                    />
+                    <button type="button" class="sub-del-btn" aria-label="Xóa tiêu chí" (click)="removeAcceptanceCriterion(detailTask, acIdx)">
+                      <span class="material-symbols-outlined" aria-hidden="true">close</span>
+                    </button>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+
+          <!-- MCP Document Citations & AI Rationale -->
+          <div class="drawer-section drawer-rationale-card">
+            <div class="section-label">
+              <span class="material-symbols-outlined" aria-hidden="true">menu_book</span>
+              <strong>Trích dẫn Tài liệu MCP &amp; Lập luận Phân bổ</strong>
+            </div>
+            @if (detailTask.aiRationale) {
+              <p class="rationale-text">{{ detailTask.aiRationale }}</p>
+            }
+            @if (detailTask.documentCitations && detailTask.documentCitations.length > 0) {
+              <div class="citation-chips">
+                @for (cite of detailTask.documentCitations; track $index) {
+                  <span class="citation-badge">
+                    <span class="material-symbols-outlined" aria-hidden="true">description</span>
+                    <span>{{ cite }}</span>
+                  </span>
+                }
+              </div>
+            }
+          </div>
+        </div>
+      </aside>
+    }
+
+
+
+    <!-- Inline Spec Document Preview Drawer (Direct Document Jump without losing chat) -->
+    @if (activeSpecDocPreview(); as docPreview) {
+      <div class="doc-preview-backdrop" (click)="closeSpecDocPreview()"></div>
+      <aside class="doc-preview-drawer" data-testid="ai-doc-preview-drawer" (click)="$event.stopPropagation()">
+        <header class="doc-preview-header">
+          <div class="preview-header-left">
+            <button
+              type="button"
+              class="btn-back-chat"
+              data-testid="btn-back-to-chat"
+              (click)="closeSpecDocPreview()"
+              title="Quay lại đoạn chat với AI sinh task"
+            >
+              <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+              <span>Quay lại đoạn chat</span>
+            </button>
+            <div class="preview-title-box">
+              <span class="material-symbols-outlined" aria-hidden="true">description</span>
+              <h3 class="preview-doc-title">{{ docPreview.title }}</h3>
+            </div>
+          </div>
+          <div class="preview-header-right">
+            @if (docPreview.docId !== 'meeting_notes') {
+              <button
+                type="button"
+                class="btn-open-tab"
+                (click)="openSpecDocInNewTab(docPreview.title, docPreview.docId, docPreview.section)"
+                title="Mở toàn bộ tài liệu trong trang Spec Hub ở tab mới"
+              >
+                <span class="material-symbols-outlined" aria-hidden="true">open_in_new</span>
+                <span>Mở trang Spec Hub</span>
+              </button>
+            }
+            <button
+              type="button"
+              class="icon-close-btn"
+              aria-label="Đóng xem tài liệu"
+              (click)="closeSpecDocPreview()"
+            >
+              <span class="material-symbols-outlined" aria-hidden="true">close</span>
+            </button>
+          </div>
+        </header>
+
+        <div class="doc-preview-body">
+          @if (docPreview.isLoading) {
+            <div class="preview-loading-state">
+              <span class="material-symbols-outlined spinning-icon" aria-hidden="true">sync</span>
+              <p>Đang tải tài liệu đặc tả từ Spec Hub...</p>
+            </div>
+          } @else {
+            @if (docPreview.section) {
+              <div class="preview-section-highlight-banner">
+                <span class="material-symbols-outlined" aria-hidden="true">my_location</span>
+                <span>Vị trí trích dẫn: <strong>{{ docPreview.section }}</strong></span>
+              </div>
+            }
+            <div class="preview-content-box">
+              @if (docPreview.highlightedHtml) {
+                <pre class="preview-content-text" [innerHTML]="docPreview.highlightedHtml"></pre>
+              } @else {
+                <pre class="preview-content-text">{{ docPreview.content }}</pre>
+              }
+            </div>
+          }
+        </div>
+      </aside>
+    }
+
+
+
+    <!-- Subtask Detail Drawer (Fully functional like a task) -->
+    @if (activeDrawerSubtask(); as subDetail) {
+      <div class="drawer-backdrop" (click)="closeSubtaskDrawer()"></div>
+      <aside
+        class="ai-task-drawer is-subtask-drawer"
+        data-testid="ai-subtask-detail-drawer"
+        aria-label="Chi tiết việc con đề xuất"
+        (click)="$event.stopPropagation()"
+      >
+        <header class="drawer-top-bar">
+          <div class="drawer-key-group">
+            <span class="type-icon-badge type-subtask">
+              <span class="material-symbols-outlined" aria-hidden="true">subdirectory_arrow_right</span>
+            </span>
+            <strong class="drawer-code">Việc con phụ trợ</strong>
+            <span class="drawer-parent-badge">Thuộc: {{ subDetail.parentTask.title }}</span>
+          </div>
+
+          <div class="drawer-top-actions">
+            <button
+              type="button"
+              class="drawer-icon-btn"
+              title="Xóa việc con khỏi đề xuất"
+              (click)="deleteProposedSubtask(subDetail.parentTask, subDetail.subtask.id, $event)"
+            >
+              <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+            </button>
+            <button
+              type="button"
+              class="drawer-icon-btn"
+              data-testid="btn-close-subtask-drawer"
+              title="Đóng chi tiết việc con"
+              (click)="closeSubtaskDrawer()"
+            >
+              <span class="material-symbols-outlined" aria-hidden="true">close</span>
+            </button>
+          </div>
+        </header>
+
+        <div class="drawer-scroll-content">
+          <!-- Subtask Title -->
+          <div class="drawer-title-block">
+            <input
+              type="text"
+              class="drawer-title-input"
+              data-testid="drawer-subtask-title"
+              [(ngModel)]="subDetail.subtask.title"
+              (ngModelChange)="onTaskFieldChanged()"
+              placeholder="Tên công việc con..."
+            />
+          </div>
+
+          <!-- Document Citations for Subtask -->
+          @let subCites = (subDetail.subtask.documentCitations && subDetail.subtask.documentCitations.length > 0) ? subDetail.subtask.documentCitations : (subDetail.parentTask.documentCitations || []);
+          @if (subCites.length > 0) {
+            <div class="drawer-citations-card" data-testid="drawer-subtask-citations">
+              <div class="drawer-citations-label">
+                <span class="material-symbols-outlined text-[15px] text-primary" aria-hidden="true">description</span>
+                <strong>Tài liệu căn cứ &amp; Trích dẫn đặc tả:</strong>
+              </div>
+              <div class="drawer-citations-pills">
+                @for (cite of subCites; track $index) {
+                  <button
+                    type="button"
+                    class="drawer-citation-pill"
+                    (click)="openSpecDoc(cite, subDetail.parentTask.documentId); $event.stopPropagation()"
+                    title="Nhấn để xem trước tài liệu này trong Spec Hub"
+                  >
+                    <span class="material-symbols-outlined" aria-hidden="true">description</span>
+                    <span class="cite-text">{{ cite }}</span>
+                    <span class="material-symbols-outlined link-icon" aria-hidden="true">open_in_new</span>
+                  </button>
+                }
+              </div>
+            </div>
+          }
+
+          <!-- Metadata Box for Subtask -->
+          <div class="drawer-meta-grid">
+            <label class="meta-field">
+              <span>TRẠNG THÁI</span>
+              <select [(ngModel)]="subDetail.subtask.status" (ngModelChange)="onTaskFieldChanged()">
+                <option value="To Do">Chưa làm (To Do)</option>
+                <option value="In Progress">Đang làm (In Progress)</option>
+                <option value="Done">Hoàn thành (Done)</option>
+              </select>
+            </label>
+
+            <label class="meta-field">
+              <span>ĐỘ ƯU TIÊN</span>
+              <select [(ngModel)]="subDetail.subtask.priority" (ngModelChange)="onTaskFieldChanged()">
+                <option value="Highest">Highest</option>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
+              </select>
+            </label>
+
+            <label class="meta-field">
+              <span>NGƯỜI THỰC HIỆN</span>
+              <select
+                [ngModel]="subDetail.subtask.assigneeName || ''"
+                (ngModelChange)="onSubtaskAssigneeChange(subDetail.subtask, $event)"
+              >
+                <option value="">Chưa gán</option>
+                @for (m of members; track m.id) {
+                  <option [value]="m.displayName">{{ m.displayName }}</option>
+                }
+              </select>
+            </label>
+
+            <label class="meta-field">
+              <span>VAI TRÒ KỸ THUẬT</span>
+              <select [(ngModel)]="subDetail.subtask.role" (ngModelChange)="onTaskFieldChanged()">
+                <option value="Backend">Backend</option>
+                <option value="Frontend">Frontend</option>
+                <option value="QA">QA / Kiểm thử</option>
+                <option value="DevOps">DevOps</option>
+              </select>
+            </label>
+
+            <label class="meta-field">
+              <span>STORY POINTS</span>
+              <input
+                type="number"
+                min="0"
+                max="10"
+                [(ngModel)]="subDetail.subtask.storyPoints"
+                (ngModelChange)="onTaskFieldChanged()"
+              />
+            </label>
+
+            <label class="meta-field">
+              <span>GIỜ ƯỚC TÍNH (H)</span>
+              <input
+                type="number"
+                min="0.5"
+                max="100"
+                step="0.5"
+                [(ngModel)]="subDetail.subtask.estimatedHours"
+                (ngModelChange)="onTaskFieldChanged()"
+              />
+            </label>
+          </div>
+
+          <!-- Subtask Description -->
+          <div class="drawer-section">
+            <div class="section-label">
+              <strong>Mô tả phạm vi việc con</strong>
+            </div>
+            <textarea
+              rows="4"
+              class="drawer-textarea"
+              [(ngModel)]="subDetail.subtask.description"
+              (ngModelChange)="onTaskFieldChanged()"
+              placeholder="Mô tả kỹ thuật cho việc con phụ trợ này..."
+            ></textarea>
+          </div>
+
+          <!-- Subtask Acceptance Criteria (Full parity with parent task) -->
+          <div class="drawer-section" data-testid="drawer-subtask-ac-section">
+            <div class="section-label flex items-center justify-between">
+              <strong>Tiêu chí Nghiệm thu (Acceptance Criteria)</strong>
+              <button
+                type="button"
+                class="btn-add-ac-pill"
+                (click)="addSubtaskAc(subDetail.subtask)"
+                title="Thêm tiêu chí nghiệm thu cho việc con này"
+              >
+                <span class="material-symbols-outlined text-[14px]">add</span>
+                <span>Thêm tiêu chí</span>
+              </button>
+            </div>
+            <div class="drawer-ac-list">
+              @if (subDetail.subtask.acceptanceCriteria && subDetail.subtask.acceptanceCriteria.length > 0) {
+                @for (ac of subDetail.subtask.acceptanceCriteria; track trackByIndex($index); let acIdx = $index) {
+                  <div class="ac-item-row">
+                    <span class="material-symbols-outlined ac-check-icon text-emerald-600">check_circle</span>
+                    <input
+                      type="text"
+                      class="ac-item-input"
+                      [(ngModel)]="subDetail.subtask.acceptanceCriteria[acIdx]"
+                      (ngModelChange)="onTaskFieldChanged()"
+                      placeholder="Mô tả tiêu chí nghiệm thu hoàn thành..."
+                    />
+                    <button
+                      type="button"
+                      class="ac-remove-btn"
+                      (click)="deleteSubtaskAc(subDetail.subtask, acIdx)"
+                      title="Xóa tiêu chí này"
+                    >
+                      <span class="material-symbols-outlined text-[15px]">close</span>
+                    </button>
+                  </div>
+                }
+              } @else {
+                <p class="ac-empty-hint">Chưa có tiêu chí nghiệm thu riêng cho việc con này.</p>
+              }
+            </div>
+          </div>
+        </div>
+      </aside>
+    }
+
+    <!-- Pasted Document / Meeting Notes Review & Edit Modal -->
+    @if (isReviewingPastedDoc()) {
+      <div class="review-doc-backdrop" (click)="closeReviewPastedDoc()">
+        <div class="review-doc-modal" (click)="$event.stopPropagation()">
+          <header class="review-doc-header">
+            <div class="header-left">
+              <span class="material-symbols-outlined" aria-hidden="true">edit_note</span>
+              <h3>Xem &amp; Chỉnh sửa Ghi chú Cuộc họp / Tài liệu đã dán</h3>
+            </div>
+            <button type="button" class="icon-close-btn" aria-label="Đóng" (click)="closeReviewPastedDoc()">
+              <span class="material-symbols-outlined" aria-hidden="true">close</span>
+            </button>
+          </header>
+
+          <div class="review-doc-body">
+            <p class="review-doc-guide">
+              Bạn có thể rà soát, cắt bớt thông tin thừa, chỉnh sửa tên thành viên hoặc bổ sung yêu cầu cụ thể trước khi gửi cho AI phân tích.
+            </p>
+            <textarea
+              class="review-doc-textarea"
+              data-testid="ai-pasted-review-textarea"
+              [ngModel]="editablePastedText()"
+              (ngModelChange)="editablePastedText.set($event)"
+              rows="14"
+              placeholder="Nhập hoặc dán nội dung cuộc họp..."
+            ></textarea>
+            <div class="review-doc-stats">
+              <span>{{ editablePastedText().length }} ký tự</span>
+              <span>{{ editablePastedText().split('\n').length }} dòng</span>
+            </div>
+          </div>
+
+          <footer class="review-doc-footer">
+            <button type="button" class="btn-cancel" (click)="closeReviewPastedDoc()">Hủy bỏ</button>
+            <button type="button" class="btn-save" data-testid="btn-save-reviewed-doc" (click)="saveReviewedPastedDoc()">
+              <span class="material-symbols-outlined" aria-hidden="true">check</span>
+              <span>Lưu nội dung</span>
+            </button>
+          </footer>
+        </div>
+      </div>
+    }
+  </div>
+</div>
