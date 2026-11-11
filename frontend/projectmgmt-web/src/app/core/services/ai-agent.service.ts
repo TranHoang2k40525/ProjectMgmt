@@ -369,4 +369,11 @@ export class AiAgentService {
     const params = new HttpParams().set('projectId', projectId);
     return this.http.get<AiSessionSummary[]>(`${this.baseUrl}/sessions`, { params });
   }
+
+  clearCache(sessionId?: string, projectId?: string): Observable<{ success: boolean; message: string }> {
+    return this.http.post<{ success: boolean; message: string }>(`${this.baseUrl}/clear-cache`, {
+      sessionId,
+      projectId,
+    });
+  }
 }

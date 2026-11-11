@@ -291,7 +291,9 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         await onThoughtDelta("Tự kiểm tra (Self-Check Agent): Kiểm tra độ phủ Acceptance Criteria, tính hợp lệ của Story Points và không vượt quá năng lực giờ của thành viên. Đạt chuẩn 100% Scrum Definition of Ready.\n");
 
         var rawAiOutput = responseContentBuilder.ToString();
+        _logger.LogInformation("[AiSprintDecomposition] Phản hồi thô từ LLM đạt {Length} ký tự. Bắt đầu phân tích cấu trúc.", rawAiOutput.Length);
         var proposal = ParseAiOutputToProposal(rawAiOutput, sessionId, scope.ProjectId, targetSprintId, sanitizedDoc, sanitizedPrompt, projectDocsList);
+        _logger.LogInformation("[AiSprintDecomposition] Phân tích hoàn tất: {TaskCount} tasks, {StoryPoints} SP.", proposal.Tasks.Count, proposal.TotalStoryPoints);
         EnrichProposalWithTeamMembers(proposal, teamCapacities);
 
         await onProposalReady(proposal);
@@ -431,96 +433,227 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
             if (!string.IsNullOrWhiteSpace(rawJson))
             {
                 var cleaned = ExtractJsonObject(rawJson);
+                var docNode = System.Text.Json.Nodes.JsonNode.Parse(cleaned);
 
-                var parsed = JsonSerializer.Deserialize<AiSprintProposalDto>(cleaned, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                if (parsed != null && parsed.Tasks.Count > 0)
+                if (docNode is System.Text.Json.Nodes.JsonObject obj)
                 {
-                    parsed.SessionId = sessionId;
-                    parsed.ProjectId = projectId;
-                    parsed.TargetSprintId = targetSprintId;
-                    if (parsed.Tags == null || parsed.Tags.Count == 0)
+                    var proposal = new AiSprintProposalDto
                     {
-                        parsed.Tags = new List<string> { "#SprintPlan", "#Scrum", "#SpecHub", "#FullStack" };
+                        SessionId = sessionId,
+                        ProjectId = projectId,
+                        TargetSprintId = targetSprintId,
+                        SprintGoal = obj["sprintGoal"]?.GetValue<string>() ?? obj["goal"]?.GetValue<string>() ?? "Hoàn thiện các mục tiêu Sprint theo đặc tả",
+                        Rationale = obj["rationale"]?.GetValue<string>() ?? "Phân rã công việc theo chuẩn Scrum và năng lực đội ngũ.",
+                        Tags = new List<string> { "#SprintPlan", "#Scrum", "#SpecHub" }
+                    };
+
+                    var tagsArray = obj["tags"]?.AsArray();
+                    if (tagsArray != null && tagsArray.Count > 0)
+                    {
+                        proposal.Tags = tagsArray
+                            .Select(t => t?.GetValue<string>()?.Trim())
+                            .Where(t => !string.IsNullOrEmpty(t))
+                            .Select(t => t!.StartsWith('#') ? t! : $"#{t}")
+                            .Distinct()
+                            .ToList()!;
                     }
-                    for (var i = 0; i < parsed.Tasks.Count; i++)
+
+                    var tasksArray = (obj["tasks"] ?? obj["proposedTasks"])?.AsArray();
+                    if (tasksArray != null && tasksArray.Count > 0)
                     {
-                        var t = parsed.Tasks[i];
-                        if (string.IsNullOrWhiteSpace(t.Id)) t.Id = $"task_{i + 1:D2}";
-                        if (t.RemainingHours <= 0) t.RemainingHours = t.EstimatedHours;
-                        if (string.IsNullOrWhiteSpace(t.Status)) t.Status = "To Do";
-                        if (t.Tags == null || t.Tags.Count == 0)
+                        var taskIndex = 1;
+                        foreach (var taskElem in tasksArray)
                         {
-                            t.Tags = new List<string> { $"#{t.Type}", "#SprintTask" };
-                        }
+                            if (taskElem is not System.Text.Json.Nodes.JsonObject tObj) continue;
 
-                        // Chuẩn hóa và gán tài liệu Spec Hub thực tế
-                        if (t.DocumentCitations == null || t.DocumentCitations.Count == 0 ||
-                            t.DocumentCitations.Any(c => c.Contains("Tài liệu đặc tả Spec Hub dự án", StringComparison.OrdinalIgnoreCase) ||
-                                                         c.Contains("Quy chuẩn UI/UX dự án", StringComparison.OrdinalIgnoreCase)))
-                        {
-                            if (availableDocs != null && availableDocs.Count > 0)
+                            var taskTitle = tObj["title"]?.GetValue<string>()?.Trim() ?? $"Công việc #{taskIndex}";
+                            var taskDesc = tObj["description"]?.GetValue<string>()?.Trim() ?? taskTitle;
+
+                            // Tránh trường hợp Description bị nhét nguyên văn toàn bộ tài liệu thô
+                            if (!string.IsNullOrWhiteSpace(sourceDoc) && taskDesc.Length > 500 && taskDesc.Contains(sourceDoc[..Math.Min(100, sourceDoc.Length)]))
                             {
-                                var assignedDoc = availableDocs[i % availableDocs.Count];
-                                t.DocumentId = assignedDoc.Id;
-                                t.DocumentCitations = new List<string> { $"{assignedDoc.Name} - Mục Phần II" };
+                                taskDesc = $"Triển khai các hạng mục kỹ thuật và nghiệp vụ cho '{taskTitle}' theo yêu cầu đặc tả.";
                             }
-                        }
-                        else
-                        {
-                            // Tự động tìm DocumentId tương ứng từ tên tệp được trích dẫn
-                            foreach (var cite in t.DocumentCitations)
+
+                            decimal sp = 3;
+                            if (tObj["storyPoints"] != null)
                             {
-                                var matched = availableDocs?.FirstOrDefault(d =>
-                                    !string.IsNullOrWhiteSpace(d.Name) &&
-                                    cite.IndexOf(d.Name, StringComparison.OrdinalIgnoreCase) >= 0);
-                                if (matched.HasValue && matched.Value != default)
+                                if (tObj["storyPoints"]!.AsValue().TryGetValue<decimal>(out var val)) sp = val;
+                                else if (decimal.TryParse(tObj["storyPoints"]!.ToString(), out var strVal)) sp = strVal;
+                            }
+                            if (sp <= 0) sp = 3;
+
+                            decimal hours = sp * 4;
+                            if (tObj["estimatedHours"] != null)
+                            {
+                                if (tObj["estimatedHours"]!.AsValue().TryGetValue<decimal>(out var hVal)) hours = hVal;
+                                else if (decimal.TryParse(tObj["estimatedHours"]!.ToString(), out var strHVal)) hours = strHVal;
+                            }
+                            if (hours <= 0) hours = sp * 4;
+
+                            var taskDto = new ProposedTaskDto
+                            {
+                                Id = tObj["id"]?.GetValue<string>() ?? $"task_{taskIndex:D2}",
+                                EpicTitle = tObj["epicTitle"]?.GetValue<string>() ?? tObj["epic"]?.GetValue<string>() ?? "Core Development",
+                                Title = taskTitle,
+                                Description = taskDesc,
+                                Type = tObj["type"]?.GetValue<string>() ?? "Story",
+                                Priority = tObj["priority"]?.GetValue<string>() ?? "High",
+                                Status = tObj["status"]?.GetValue<string>() ?? "To Do",
+                                StoryPoints = sp,
+                                EstimatedHours = hours,
+                                RemainingHours = hours,
+                                AssigneeName = tObj["assigneeName"]?.GetValue<string>() ?? tObj["assignee"]?.GetValue<string>(),
+                                AiRationale = tObj["aiRationale"]?.GetValue<string>() ?? "Phân rã theo kiến trúc và khả năng hoàn thành trong Sprint."
+                            };
+
+                            // Tags của Task
+                            var tTags = tObj["tags"]?.AsArray();
+                            if (tTags != null && tTags.Count > 0)
+                            {
+                                taskDto.Tags = tTags.Select(x => x?.GetValue<string>()?.Trim()).Where(x => !string.IsNullOrEmpty(x)).Select(x => x!.StartsWith('#') ? x! : $"#{x}").ToList()!;
+                            }
+                            else
+                            {
+                                taskDto.Tags = new List<string> { $"#{taskDto.Type}", "#SprintTask" };
+                            }
+
+                            // Acceptance Criteria
+                            var acNode = tObj["acceptanceCriteria"];
+                            if (acNode is System.Text.Json.Nodes.JsonArray acArr)
+                            {
+                                taskDto.AcceptanceCriteria = acArr.Select(x => x?.GetValue<string>()?.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList()!;
+                            }
+                            else if (acNode != null)
+                            {
+                                taskDto.AcceptanceCriteria = acNode.ToString().Split(new[] { '\n', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+                            }
+                            if (taskDto.AcceptanceCriteria.Count == 0)
+                            {
+                                taskDto.AcceptanceCriteria = new List<string> { $"Hoàn thành nghiệp vụ '{taskTitle}'", "Đảm bảo vượt qua kiểm thử tự động và review code" };
+                            }
+
+                            // Document Citations
+                            var citeNode = tObj["documentCitations"] ?? tObj["citations"];
+                            if (citeNode is System.Text.Json.Nodes.JsonArray cArr)
+                            {
+                                taskDto.DocumentCitations = cArr.Select(x => x?.GetValue<string>()?.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList()!;
+                            }
+                            else if (citeNode != null)
+                            {
+                                taskDto.DocumentCitations = citeNode.ToString().Split(new[] { '\n', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+                            }
+
+                            // Chuẩn hóa trích dẫn Spec Hub thực tế
+                            if (taskDto.DocumentCitations.Count == 0 ||
+                                taskDto.DocumentCitations.Any(c => c.Contains("Tài liệu đặc tả Spec Hub dự án", StringComparison.OrdinalIgnoreCase) ||
+                                                                   c.Contains("Quy chuẩn UI/UX dự án", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                if (availableDocs != null && availableDocs.Count > 0)
                                 {
-                                    t.DocumentId = matched.Value.Id;
-                                    break;
+                                    var assignedDoc = availableDocs[(taskIndex - 1) % availableDocs.Count];
+                                    taskDto.DocumentId = assignedDoc.Id;
+                                    taskDto.DocumentCitations = new List<string> { $"{assignedDoc.Name} - Mục Phần II" };
                                 }
                             }
-                        }
-
-                        if (t.Subtasks != null)
-                        {
-                            foreach (var s in t.Subtasks)
+                            else
                             {
-                                if (s.DocumentCitations == null || s.DocumentCitations.Count == 0 ||
-                                    s.DocumentCitations.Any(c => c.Contains("Quy chuẩn UI/UX dự án", StringComparison.OrdinalIgnoreCase) ||
-                                                                 c.Contains("Tài liệu đặc tả Spec Hub dự án", StringComparison.OrdinalIgnoreCase)))
+                                foreach (var cite in taskDto.DocumentCitations)
                                 {
-                                    s.DocumentCitations = t.DocumentCitations.ToList();
-                                    s.DocumentId = t.DocumentId;
-                                }
-                                else if (!s.DocumentId.HasValue)
-                                {
-                                    s.DocumentId = t.DocumentId;
-                                }
-
-                                if (string.IsNullOrWhiteSpace(s.Description))
-                                {
-                                    s.Description = $"Triển khai phân hệ kỹ thuật cho '{s.Title}' theo chuẩn kiến trúc hệ thống và tài liệu đặc tả ({string.Join(", ", s.DocumentCitations)}).";
-                                }
-                                if (s.AcceptanceCriteria == null || s.AcceptanceCriteria.Count == 0)
-                                {
-                                    s.AcceptanceCriteria = new List<string>
+                                    var matched = availableDocs?.FirstOrDefault(d =>
+                                        !string.IsNullOrWhiteSpace(d.Name) &&
+                                        cite.IndexOf(d.Name, StringComparison.OrdinalIgnoreCase) >= 0);
+                                    if (matched.HasValue && matched.Value != default)
                                     {
-                                        $"Hoàn tất công việc '{s.Title}' đúng đặc tả",
-                                        "Đảm bảo kiểm thử và không phát sinh lỗi hồi quy"
-                                    };
+                                        taskDto.DocumentId = matched.Value.Id;
+                                        break;
+                                    }
                                 }
                             }
+
+                            // Subtasks (hỗ trợ cả mảng object lẫn mảng string)
+                            var subNode = tObj["subtasks"] ?? tObj["subTasks"];
+                            if (subNode is System.Text.Json.Nodes.JsonArray sArr && sArr.Count > 0)
+                            {
+                                var subIdx = 1;
+                                foreach (var sElem in sArr)
+                                {
+                                    if (sElem is System.Text.Json.Nodes.JsonObject sObj)
+                                    {
+                                        var subTitle = sObj["title"]?.GetValue<string>()?.Trim() ?? $"Công việc con #{subIdx}";
+                                        var subHours = 4m;
+                                        if (sObj["estimatedHours"] != null && sObj["estimatedHours"]!.AsValue().TryGetValue<decimal>(out var sh)) subHours = sh;
+
+                                        var subDto = new ProposedSubTaskDto
+                                        {
+                                            Id = sObj["id"]?.GetValue<string>() ?? $"{taskDto.Id}_{subIdx}",
+                                            Title = subTitle,
+                                            Role = sObj["role"]?.GetValue<string>() ?? "Backend",
+                                            EstimatedHours = subHours > 0 ? subHours : 4m,
+                                            StoryPoints = (sObj["storyPoints"]?.GetValue<int>() ?? 1),
+                                            Priority = sObj["priority"]?.GetValue<string>() ?? taskDto.Priority,
+                                            Status = sObj["status"]?.GetValue<string>() ?? "To Do",
+                                            AssigneeName = sObj["assigneeName"]?.GetValue<string>() ?? taskDto.AssigneeName,
+                                            Description = sObj["description"]?.GetValue<string>()?.Trim() ?? $"Triển khai {subTitle} theo đặc tả kỹ thuật.",
+                                            DocumentId = taskDto.DocumentId,
+                                            DocumentCitations = taskDto.DocumentCitations.ToList()
+                                        };
+
+                                        var subAcNode = sObj["acceptanceCriteria"];
+                                        if (subAcNode is System.Text.Json.Nodes.JsonArray sAcArr)
+                                        {
+                                            subDto.AcceptanceCriteria = sAcArr.Select(x => x?.GetValue<string>()?.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList()!;
+                                        }
+                                        if (subDto.AcceptanceCriteria.Count == 0)
+                                        {
+                                            subDto.AcceptanceCriteria = new List<string> { $"Hoàn thành {subTitle} đúng tiêu chuẩn kỹ thuật." };
+                                        }
+
+                                        taskDto.Subtasks.Add(subDto);
+                                    }
+                                    else if (sElem != null)
+                                    {
+                                        // Trường hợp LLM trả về mảng chuỗi string["Bước 1", "Bước 2"]
+                                        var strTitle = sElem.GetValue<string>()?.Trim();
+                                        if (!string.IsNullOrEmpty(strTitle))
+                                        {
+                                            taskDto.Subtasks.Add(new ProposedSubTaskDto
+                                            {
+                                                Id = $"{taskDto.Id}_{subIdx}",
+                                                Title = strTitle,
+                                                Role = strTitle.Contains("UI", StringComparison.OrdinalIgnoreCase) || strTitle.Contains("Giao diện", StringComparison.OrdinalIgnoreCase) || strTitle.Contains("Component", StringComparison.OrdinalIgnoreCase) ? "Frontend"
+                                                     : strTitle.Contains("Test", StringComparison.OrdinalIgnoreCase) || strTitle.Contains("Kiểm thử", StringComparison.OrdinalIgnoreCase) ? "QA" : "Backend",
+                                                EstimatedHours = 4,
+                                                StoryPoints = 1,
+                                                Priority = taskDto.Priority,
+                                                Status = "To Do",
+                                                Description = $"Triển khai '{strTitle}' theo kiến trúc giải pháp và đặc tả tài liệu.",
+                                                AssigneeName = taskDto.AssigneeName,
+                                                DocumentId = taskDto.DocumentId,
+                                                DocumentCitations = taskDto.DocumentCitations.ToList(),
+                                                AcceptanceCriteria = new List<string> { $"Nghiệm thu hoàn tất '{strTitle}'" }
+                                            });
+                                        }
+                                    }
+                                    subIdx++;
+                                }
+                            }
+
+                            proposal.Tasks.Add(taskDto);
+                            taskIndex++;
                         }
+
+                        proposal.TotalStoryPoints = proposal.Tasks.Sum(t => t.StoryPoints);
+                        proposal.TotalEstimatedHours = proposal.Tasks.Sum(t => t.EstimatedHours);
+                        return proposal;
                     }
-                    parsed.TotalStoryPoints = parsed.Tasks.Sum(t => t.StoryPoints);
-                    parsed.TotalEstimatedHours = parsed.Tasks.Sum(t => t.EstimatedHours);
-                    return parsed;
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Fallback when LLM simulation throws or sends malformed JSON in adversarial tests
+            // Tránh nuốt lỗi im lặng - log chi tiết để theo dõi và khắc phục
+            Console.WriteLine($"[AiSprintDecomposition] Lỗi bóc tách JSON đề xuất: {ex.Message}");
         }
 
         return CreateFallbackProposal(sessionId, projectId, targetSprintId, sourceDoc, userPrompt, availableDocs);
@@ -535,9 +668,12 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         IReadOnlyList<(Guid Id, string Name)>? availableDocs = null)
     {
         var cleanDoc = (sourceDoc ?? string.Empty).Trim();
-        var snippet = cleanDoc.Length > 80 ? cleanDoc[..80] : cleanDoc;
+        var lines = cleanDoc.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var firstMeaningfulLine = lines.FirstOrDefault(l => l.Length > 5 && !l.StartsWith('#')) ?? "Đặc tả chức năng hệ thống";
+        var snippet = firstMeaningfulLine.Length > 70 ? firstMeaningfulLine[..70] + "..." : firstMeaningfulLine;
+
         var goal = string.IsNullOrWhiteSpace(userPrompt)
-            ? (string.IsNullOrWhiteSpace(snippet) ? "Lập kế hoạch Sprint tiếp theo theo đặc tả hệ thống" : $"Hiện thực hóa yêu cầu: {snippet}")
+            ? $"Lập kế hoạch Sprint: {snippet}"
             : $"Mục tiêu Sprint: {userPrompt}";
 
         var doc1 = availableDocs != null && availableDocs.Count > 0 ? availableDocs[0] : (Id: (Guid?)null, Name: "Cam-nang-ky-thuat.md");
@@ -548,12 +684,7 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         var cite2 = $"{doc2.Name} - Mục 5.1: Danh tính và quyền";
         var cite3 = $"{doc3.Name} - Mục 2.1: Phạm vi sản phẩm";
 
-        if (!string.IsNullOrWhiteSpace(cleanDoc))
-        {
-            cite1 = "Ghi chú cuộc họp đã nạp - Mục 1: Yêu cầu & Luồng nghiệp vụ chính";
-        }
-
-        return new AiSprintProposalDto
+        var proposal = new AiSprintProposalDto
         {
             SessionId = sessionId,
             ProjectId = projectId,
@@ -569,8 +700,8 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                 {
                     Id = "task_01",
                     EpicTitle = "Core Feature Implementation",
-                    Title = string.IsNullOrWhiteSpace(snippet) ? "Cài đặt các API nghiệp vụ chính" : $"Phát triển tính năng: {snippet}",
-                    Description = cleanDoc.Length > 20 ? cleanDoc : "Thiết kế và xây dựng các luồng dữ liệu, API và logic nghiệp vụ.",
+                    Title = $"Phát triển tính năng: {snippet}",
+                    Description = $"Thiết kế kiến trúc giải pháp, cấu hình dữ liệu và xây dựng các luồng xử lý nghiệp vụ cho '{snippet}'.",
                     Type = "Story",
                     Priority = "High",
                     StoryPoints = 5,
@@ -746,6 +877,10 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                 }
             }
         };
+
+        proposal.TotalStoryPoints = proposal.Tasks.Sum(t => t.StoryPoints);
+        proposal.TotalEstimatedHours = proposal.Tasks.Sum(t => t.EstimatedHours);
+        return proposal;
     }
 
     private static string ExtractJsonObject(string raw)

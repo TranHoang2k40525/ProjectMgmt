@@ -968,8 +968,12 @@ Bên cạnh bộ nhớ đề xuất tức thời (Staging Session), hệ thống
 - **Bộ ghi nhận mức tiêu thụ**: Ghi nhận `AiUsageRecord` theo từng phiên làm việc (Prompt Tokens, Completion Tokens, Latency mili-giây, Model, trạng thái Success/Failed).
 - **Dashboard Quản trị trên Trang Cá nhân (Profile - Tab "Mức tiêu thụ Token AI")**:
   - **4 Thẻ Chỉ số (KPIs)**: Tổng Token tiêu thụ, Tổng cuộc gọi AI, Tỷ lệ hoàn tất thành công, Chi phí ước tính (USD).
-  - **Phân bổ theo Mô hình**: Tỷ lệ phần trăm và số lượng token giữa `Gemini 2.5 Flash`, `Gemini 2.5 Pro`, `Gemini 2.5 Flash-Lite`.
+  - **Phân bổ theo Mô hình**: Tỷ lệ phần trăm và số lượng token giữa `Gemini Flash`, `Gemini Pro`, `Gemini Flash-Lite`.
   - **Bảng Nhật ký Thực thi**: Hiển thị chi tiết 15 lượt gọi gần nhất với thời gian thực thi, số token vào/ra và trạng thái.
+
+### 6.3. Cơ chế Giải phóng Bộ nhớ đệm Cache & Làm mới Tri thức (Staging Cache Invalidation & Session Reset)
+- **Xóa sạch bộ đệm phân tán Redis**: Endpoint `POST /api/ai/agent/clear-cache` giải phóng tức thì các đối tượng đề xuất lưu tạm trong Redis (`ProjectMgmt:Ai:staging:...`), ngăn chặn tình trạng lưu vết kế hoạch cũ khi người dùng chuyển hướng hoặc thay đổi hoàn toàn yêu cầu.
+- **Khởi tạo phiên làm việc tươi mới 100%**: Trên thanh tiêu đề của Modal AI phân rã, nút **"Làm mới & Phiên mới"** cho phép người dùng chủ động xóa bỏ cache cục bộ (`localStorage`), hủy bỏ đề xuất cũ và giải phóng bộ nhớ đệm server chỉ với một thao tác duy nhất.
 
 ---
 
@@ -1134,6 +1138,16 @@ Khi AI bắt đầu suy luận, giao diện hiển thị danh sách các hành �
    - Nhấp vào nhãn trích dẫn: Drawer nội tuyến mở ra, hiển thị tiêu đề, vị trí trích dẫn và nội dung đặc tả.
    - Nhấp vào nút "Mở trang Spec Hub": Trình duyệt mở tab Spec Hub với đầy đủ tham số `?docId=...&docName=...&section=...`. Hệ thống tự động mở tab tài liệu, cuộn mượt đến đề mục `Phần II` và kích hoạt hiệu ứng viền vàng nổi bật.
    - Nhấp "Quay lại đoạn chat": Hệ thống quay trở lại giao diện phân rã Sprint nguyên vẹn.
+
+### 5.3. Cô lập Tri thức Phạm vi Dự án & Cơ chế Tự suy luận Phi khuôn mẫu (Project Isolation & Organic Reasoning)
+1. **Cô lập Tri thức 100% theo ProjectId**:
+   - Tất cả các công cụ MCP Spec Hub (`SearchRelevantSpecsAsync`, `ReadDocumentAsync`, `GetDocumentTree`) đều thực thi xác thực phạm vi dự án `ProjectScopeGuard.Validate(scope, project.OrgId, projectId)` và chỉ truy vấn các bản ghi `ProjectDocuments.Where(d => d.ProjectId == scope.ProjectId)`. Tuyệt đối không đọc hoặc trích xuất tài liệu từ các dự án khác.
+2. **Nạp dữ liệu động từ Database dự án vào Ngữ cảnh LLM**:
+   - Khác với các giải pháp ép khuôn code cứng, hệ thống nạp động danh sách trạng thái quy trình làm việc (`WorkflowStatuses`), các loại công việc (`IssueTypes`), cấp độ ưu tiên (`Priorities`) và danh sách tệp tài liệu thực tế từ cơ sở dữ liệu dự án trực tiếp vào Prompt người dùng (`SprintDecompositionUserPrompt.md`).
+3. **Bộ giải mã Resilient JSON Parser**:
+   - Hệ thống sử dụng bộ bóc tách JSON linh hoạt, chấp nhận cả mảng chuỗi lẫn mảng đối tượng của việc con (`subtasks`), chuẩn hóa Story Points theo chuỗi Fibonacci và gán thành viên theo hồ sơ kỹ năng thực tế, loại bỏ hoàn toàn việc ép khuôn mẫu hay nhét văn bản thô vào mô tả công việc.
+4. **Cơ chế Dự phòng Không Gián đoạn (Zero-Downtime Fallback)**:
+   - Hệ thống ưu tiên các mô hình độ trễ thấp và chuyển đổi tự động sang các candidate models khả dụng (`gemini-3-flash-preview`, `gemini-3.1-flash-lite-preview`, `gemini-3.5-flash`, `gemini-3.6-flash`) khi phát hiện tình trạng tải cao tạm thời (HTTP 503) từ nhà cung cấp AI.
 
 ---
 

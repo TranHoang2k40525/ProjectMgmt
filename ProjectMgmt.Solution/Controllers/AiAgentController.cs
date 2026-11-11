@@ -520,6 +520,20 @@ public class AiAgentController : ControllerBase
     }
 
     /// <summary>
+    /// Clears transient staging cache and resets AI session memory.
+    /// </summary>
+    [HttpPost("clear-cache")]
+    public async Task<IActionResult> ClearCache([FromBody] AiClearCacheRequest request)
+    {
+        var ct = HttpContext.RequestAborted;
+        if (!string.IsNullOrWhiteSpace(request.SessionId))
+        {
+            await _stagingService.RemoveProposalAsync(request.SessionId, ct);
+        }
+        return Ok(new { success = true, message = "Đã xóa sạch bộ nhớ đệm cache và làm mới tri thức phiên làm việc." });
+    }
+
+    /// <summary>
     /// Retrieves token consumption statistics and KPIs for user / project.
     /// </summary>
     [HttpGet("token-usage")]

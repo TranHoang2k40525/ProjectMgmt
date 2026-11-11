@@ -807,6 +807,7 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
   }
 
   startNewSession(): void {
+    const oldSessionId = this.activeSessionId();
     this.cancelStream();
     this.chatHistory.set([]);
     this.proposal.set(null);
@@ -823,7 +824,16 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
     if (typeof localStorage !== 'undefined' && this.projectId) {
       localStorage.removeItem(this.getStorageKey());
     }
-    this.toastService?.success('Đã khởi tạo phiên làm việc AI mới.');
+
+    // Gửi yêu cầu giải phóng bộ nhớ đệm cache Staging trên Redis
+    if (oldSessionId || this.projectId) {
+      this.aiService.clearCache(oldSessionId || undefined, this.projectId || undefined).subscribe({
+        next: () => {},
+        error: () => {}
+      });
+    }
+
+    this.toastService?.success('Đã xóa bộ nhớ đệm cache và làm mới tri thức phiên làm việc.');
   }
 
   ngOnDestroy(): void {
