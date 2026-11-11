@@ -19,111 +19,106 @@ Sơ đồ tuần tự dưới đây mô tả chi tiết từ thời điểm Scru
 ```mermaid
 sequenceDiagram
     autonumber
-    actor SM as Scrum Master / PM
-    participant FE as Frontend Angular<br/>(ai-decompose-modal)
-    participant Svc as Angular Service<br/>(ai-agent.service.ts)
-    participant Ctrl as AiAgentController<br/>(.NET 8 Web API)
-    participant Pipeline as AiSprintDecompositionService<br/>(Agent Pipeline 5 bước)
-    participant Guard as ProjectScopeGuard &<br/>InputGuardrail
-    participant Mcp as In-Process MCP Tools<br/>(SpecHub, Backlog, Sprint, Team)
-    participant Router as MultiProviderAiModelClient<br/>(Gemini / Claude / OpenAI)
-    participant LLM as Mô hình AI Cung cấp<br/>(Google Gemini API)
-    participant Redis as ResilientStateStagingService<br/>(Redis 127.0.0.1:6379)
-    participant Tracker as IAiTokenUsageTracker<br/>(AiTokenUsageTracker.cs)
-    participant DB as MySQL Database<br/>(DbContext Transaction)
+    actor SM as Người điều phối (Scrum Master / PM)
+    participant UI as Giao diện Phân rã Sprint
+    participant ClientSvc as Dịch vụ Kết nối Phía Client
+    participant Gateway as Bộ Điều phối API AI
+    participant Pipeline as Bộ Xử lý Phân rã Sprint
+    participant Guard as Rào chắn Bảo mật & Phân quyền
+    participant Tools as Bộ Công cụ Dữ liệu Dự án
+    participant ModelHub as Bộ Chuyển tiếp Mô hình AI
+    participant AI as Dịch vụ Trí tuệ Nhân tạo
+    participant Staging as Bộ nhớ đệm Phiên Tạm thời
+    participant Tracker as Bộ Giám sát Tài nguyên & Lịch sử
+    participant DB as Cơ sở Dữ liệu Dự án
 
     %% Giai đoạn 1: Mở Modal & Tiếp nhận
-    Note over SM,FE: GIAI ĐOẠN 1: KHỞI TẠO VÀ GỬI YÊU CẦU
-    SM->>FE: Nhập mục tiêu / Dán biên bản họp / Đính kèm tài liệu (.docx, .pdf, .xlsx, .txt)
-    SM->>FE: Bấm "Phân rã Sprint với AI"
-    FE->>Svc: decomposeSprintStreaming(projectId, sprintId, request)
-    Svc->>Ctrl: HTTP POST /api/ai/agent/decompose/stream<br/>Accept: text/event-stream (Bearer JWT)
+    Note over SM,UI: GIAI ĐOẠN 1: KHỞI TẠO VÀ GỬI YÊU CẦU
+    SM->>UI: Nhập mục tiêu / Dán biên bản họp / Đính kèm tài liệu đặc tả
+    SM->>UI: Xác nhận yêu cầu phân rã Sprint
+    UI->>ClientSvc: Khởi tạo luồng phân rã kế hoạch
+    ClientSvc->>Gateway: Gửi yêu cầu phân rã kèm chứng thực phiên
     
-    %% Giai đoạn 2: Guardrail & Khởi tạo SSE
-    Note over Ctrl,Pipeline: GIAI ĐOẠN 2: BẢO MẬT & GUARDRAIL
-    Ctrl->>Guard: ValidateContext(userId, projectId, orgId)
-    Guard-->>Ctrl: OK (Người dùng có quyền trong Project)
-    Ctrl-->>Svc: HTTP 200 OK (Content-Type: text/event-stream)
-    Ctrl->>Pipeline: DecomposeSprintStreamingAsync(request, cancellationToken)
+    %% Giai đoạn 2: Guardrail & Khởi tạo luồng
+    Note over Gateway,Pipeline: GIAI ĐOẠN 2: BẢO MẬT & XÁC THỰC
+    Gateway->>Guard: Kiểm tra phân quyền truy cập và ranh giới dự án
+    Guard-->>Gateway: Xác thực hợp lệ
+    Gateway-->>ClientSvc: Mở luồng dữ liệu thời gian thực
+    Gateway->>Pipeline: Bắt đầu tiến trình phân rã
 
-    %% Giai đoạn 3: Chạy MCP Tools lấy ngữ cảnh dự án
-    Note over Pipeline,Mcp: GIAI ĐOẠN 3: GROUNDING DỮ LIỆU THỰC TẾ (MCP TOOLS)
-    Pipeline-->>Ctrl: Emit Event: Step 1 ("Tiếp nhận & Guardrail tài liệu")
-    Ctrl-->>Svc: data: {"type":"step","step":1}
-    Svc-->>FE: Cập nhật thanh tiến trình Bước 1 hoàn thành
+    %% Giai đoạn 3: Tra cứu dữ liệu thực tế
+    Note over Pipeline,Tools: GIAI ĐOẠN 3: THU THẬP DỮ LIỆU THỰC TẾ
+    Pipeline-->>Gateway: Cập nhật bước 1: Tiếp nhận và chuẩn hóa tài liệu
+    Gateway-->>ClientSvc: Báo cáo tiến độ bước 1
+    ClientSvc-->>UI: Cập nhật trạng thái trên giao diện
 
-    Pipeline-->>Ctrl: Emit Event: Step 2 ("Truy vấn MCP Spec Hub & Lịch sử Sprint")
-    Ctrl-->>Svc: data: {"type":"step","step":2}
+    Pipeline-->>Gateway: Cập nhật bước 2: Tra cứu tài liệu đặc tả & lịch sử dự án
+    Gateway-->>ClientSvc: Báo cáo tiến độ bước 2
     
-    Pipeline->>Mcp: SpecHubTools.SearchRelevantSpecs(query, projectId)
-    Mcp-->>Pipeline: Trả về các đoạn trích đặc tả yêu cầu & tên file
-    Pipeline-->>Ctrl: Emit Event: ToolCall ("Tìm kiếm tài liệu đặc tả trong Spec Hub", 7ms)
-    Ctrl-->>Svc: data: {"type":"tool","name":"SpecHub","latencyMs":7}
+    Pipeline->>Tools: Tìm kiếm các phân đoạn đặc tả phù hợp
+    Tools-->>Pipeline: Trả về trích đoạn yêu cầu kỹ thuật
+    Pipeline-->>Gateway: Báo cáo kết quả tra cứu đặc tả
 
-    Pipeline->>Mcp: BacklogTools.GetBacklogStories(projectId)
-    Mcp-->>Pipeline: Trả về danh sách User Stories & độ ưu tiên
-    Pipeline-->>Ctrl: Emit Event: ToolCall ("Lấy danh sách User Story Backlog", 13ms)
-    Ctrl-->>Svc: data: {"type":"tool","name":"Backlog","latencyMs":13}
+    Pipeline->>Tools: Lấy danh sách hạng mục tồn đọng trong Backlog
+    Tools-->>Pipeline: Trả về danh sách hạng mục công việc
+    Pipeline-->>Gateway: Báo cáo kết quả tra cứu Backlog
 
-    Pipeline->>Mcp: SprintTools.GetSprintHistoryAndVelocity(projectId)
-    Mcp-->>Pipeline: Vận tốc trung bình (VD: 32 SP) & các việc dở dang
-    Pipeline-->>Ctrl: Emit Event: ToolCall ("Truy xuất vận tốc Scrum", 37ms)
-    Ctrl-->>Svc: data: {"type":"tool","name":"SprintVelocity","latencyMs":37}
+    Pipeline->>Tools: Lấy dữ liệu vận tốc các chu kỳ trước
+    Tools-->>Pipeline: Trả về vận tốc trung bình của nhóm
+    Pipeline-->>Gateway: Báo cáo kết quả tính toán vận tốc
 
     %% Giai đoạn 4: Phân tích Năng lực Đội ngũ
-    Pipeline-->>Ctrl: Emit Event: Step 3 ("Đánh giá Năng lực & Tải công việc Đội ngũ")
-    Ctrl-->>Svc: data: {"type":"step","step":3}
-    Pipeline->>Mcp: TeamTools.GetTeamDevCapacities(projectId)
-    Mcp-->>Pipeline: Kỹ năng thành viên (Frontend, Backend, QA) & số giờ khả dụng
-    Pipeline-->>Ctrl: Emit Event: ToolCall ("Phân tích kỹ năng thành viên Scrum", 25ms)
-    Ctrl-->>Svc: data: {"type":"tool","name":"TeamCapacity","latencyMs":25}
+    Pipeline-->>Gateway: Cập nhật bước 3: Đánh giá năng lực đội ngũ
+    Gateway-->>ClientSvc: Báo cáo tiến độ bước 3
+    Pipeline->>Tools: Phân tích kỹ năng và số giờ làm việc khả dụng
+    Tools-->>Pipeline: Trả về cơ cấu chuyên môn và định mức giờ
+    Pipeline-->>Gateway: Báo cáo kết quả phân tích năng lực
 
     %% Giai đoạn 5: Gọi Mô hình AI
-    Note over Pipeline,LLM: GIAI ĐOẠN 4: SUY LUẬN AI (MULTI-PROVIDER CLIENT)
-    Pipeline-->>Ctrl: Emit Event: Step 4 ("Phân rã Sprint Goal, Epics, Tasks & Subtasks")
-    Ctrl-->>Svc: data: {"type":"step","step":4}
-    Pipeline->>Router: SendChatAsync(systemPrompt, userPrompt, model="gemini-3.6-flash")
-    Router->>LLM: POST https://generativelanguage.googleapis.com/... (Payload)
-    LLM-->>Router: JSON Stream / Output (Sprint Goal, Epics, Tasks, SP, Hours, Citations)
-    Router-->>Pipeline: Structured JSON String
+    Note over Pipeline,AI: GIAI ĐOẠN 4: SUY LUẬN VÀ PHÂN RÃ KẾ HOẠCH
+    Pipeline-->>Gateway: Cập nhật bước 4: Suy luận phân rã công việc
+    Gateway-->>ClientSvc: Báo cáo tiến độ bước 4
+    Pipeline->>ModelHub: Điều phối yêu cầu suy luận theo mô hình đã chọn
+    ModelHub->>AI: Gửi toàn bộ ngữ cảnh và quy chuẩn dự án
+    AI-->>ModelHub: Trả về luồng suy luận và cấu trúc đề xuất
+    ModelHub-->>Pipeline: Chuyển giao dữ liệu đề xuất đã chuẩn hóa
 
-    %% Giai đoạn 6: Self-Check Critique & Lưu Staging Redis
-    Note over Pipeline,Redis: GIAI ĐOẠN 5: TỰ KIỂM TRA (SELF-CHECK CRITIQUE AGENT) & LƯU STAGING
-    Pipeline-->>Ctrl: Emit Event: Step 5 ("Tự kiểm tra (Self-Check) & Lưu Staging")
-    Ctrl-->>Svc: data: {"type":"step","step":5}
-    Pipeline->>Pipeline: Self-Check Agent: Đối chiếu Definition of Ready (DoR), độ phủ Acceptance Criteria và cân bằng tải
-    Pipeline->>Redis: SaveStagedProposalAsync(stagingId, proposalJson, ttl=24h)
-    Redis-->>Pipeline: OK (Key: ProjectMgmt:Ai:staging:{id})
-    Pipeline-->>Ctrl: Emit Event: ProposalPayload (Full Sprint Proposal)
-    Ctrl->>Tracker: RecordUsage(tokens, latency, model) & RecordSession(summary)
-    Tracker-->>Ctrl: Đã lưu vết phiên làm việc & số liệu Token
-    Ctrl-->>Svc: data: {"type":"proposal","payload":{...}}
-    Svc-->>FE: Hiển thị kết quả đề xuất (Thẻ Tóm tắt Điều hành, Epics, Tasks, Subtasks, Citations)
+    %% Giai đoạn 6: Self-Check Critique & Lưu Staging
+    Note over Pipeline,Staging: GIAI ĐOẠN 5: TỰ KIỂM TRA & LƯU BỘ NHỚ ĐỆM PHIÊN
+    Pipeline-->>Gateway: Cập nhật bước 5: Tự kiểm tra & Lưu trữ tạm thời
+    Gateway-->>ClientSvc: Báo cáo tiến độ bước 5
+    Pipeline->>Pipeline: Kiểm tra tiêu chuẩn nghiệm thu và cân bằng khối lượng
+    Pipeline->>Staging: Lưu trữ bản đề xuất vào bộ nhớ đệm phiên
+    Staging-->>Pipeline: Xác nhận lưu trữ tạm thời thành công
+    Pipeline-->>Gateway: Báo cáo hoàn tất phân rã
+    Gateway->>Tracker: Ghi nhận mức tiêu thụ tài nguyên và lịch sử phiên
+    Tracker-->>Gateway: Xác nhận lưu vết thành công
+    Gateway-->>ClientSvc: Gửi bản đề xuất kế hoạch Sprint hoàn chỉnh
+    ClientSvc-->>UI: Hiển thị Thẻ Tóm tắt Điều hành, Epics, Tasks và Subtasks
 
     %% Giai đoạn 7: Người dùng chỉnh sửa & Áp dụng
     Note over SM,DB: GIAI ĐOẠN 6: PHÊ DUYỆT & GHI DỮ LIỆU CHÍNH THỨC
     opt Người dùng xem trước tài liệu trích dẫn
-        SM->>FE: Bấm vào trích dẫn tài liệu (Citations)
-        FE->>FE: Mở Drawer xem tài liệu nội tuyến (không mất hội thoại)
+        SM->>UI: Nhấp vào nguồn trích dẫn tài liệu
+        UI->>UI: Mở ngăn kéo hiển thị nội dung đặc tả liên quan
     end
 
-    opt Người dùng yêu cầu sinh lại riêng 1 task
-        SM->>FE: Bấm "Sinh lại" tại Task #2 với ghi chú "Chia nhỏ thêm tiêu chí kiểm thử"
-        FE->>Ctrl: POST /api/ai/agent/regenerate-task (stagingId, taskId, prompt)
-        Ctrl->>Pipeline: RegenerateSingleTaskAsync(...)
-        Pipeline->>Redis: UpdateTaskInStaging(stagingId, updatedTask)
-        Pipeline-->>FE: Trả về Task đã được cập nhật độc lập
+    opt Người dùng yêu cầu làm lại một việc cụ thể
+        SM->>UI: Yêu cầu tinh chỉnh lại công việc được chọn
+        UI->>Gateway: Gửi yêu cầu tái tạo công việc kèm phản hồi
+        Gateway->>Pipeline: Tái cấu trúc công việc độc lập
+        Pipeline->>Staging: Cập nhật công việc mới vào bộ nhớ đệm phiên
+        Pipeline-->>UI: Cập nhật công việc hiển thị trên giao diện
     end
 
-    SM->>FE: Bấm "Áp dụng vào Sprint"
-    FE->>Ctrl: POST /api/ai/agent/apply-staging (stagingId, targetSprintId)
-    Ctrl->>Redis: GetStagedProposalAsync(stagingId)
-    Redis-->>Ctrl: Trả về JSON đề xuất đã được người dùng chỉnh sửa
-    Ctrl->>DB: Bắt đầu Transaction: Tạo Epic, Tasks, Subtasks, Gán thành viên
-    DB-->>Ctrl: Commit Transaction thành công
-    Ctrl->>Redis: RemoveStagedProposalAsync(stagingId)
-    Ctrl-->>FE: HTTP 200 OK (Số lượng task đã tạo)
-    FE-->>SM: Thông báo thành công & Chuyển hướng về Bảng Sprint Backlog
+    SM->>UI: Xác nhận áp dụng kế hoạch vào Sprint
+    UI->>Gateway: Gửi lệnh phê duyệt kế hoạch chính thức
+    Gateway->>Staging: Truy xuất bản kế hoạch đã qua chỉnh sửa
+    Staging-->>Gateway: Trả về dữ liệu kế hoạch hoàn chỉnh
+    Gateway->>DB: Ghi nhận Epics, Tasks, Subtasks và phân công nhân sự
+    DB-->>Gateway: Xác nhận ghi nhận thành công
+    Gateway->>Staging: Dọn dẹp dữ liệu phiên tạm thời
+    Gateway-->>UI: Thông báo hoàn tất và chuyển hướng đến bảng điều phối Sprint
 ```
 
 ---
@@ -134,36 +129,36 @@ Quy trình xử lý nội bộ của [`AiSprintDecompositionService.cs`](file://
 
 ```mermaid
 flowchart TD
-    Start(["Bắt đầu: Nhận Yêu cầu Phân rã Sprint"]) --> Step1["BƯỚC 1: TIẾP NHẬN & GUARDRAIL TÀI LIỆU\n- Kiểm tra phân quyền ProjectScopeGuard (Org & Project)\n- Trích xuất văn bản từ tệp (.docx, .pdf, .xlsx, .txt)\n- Chuẩn hóa text ghi chú cuộc họp & User input\n- Phát SSE Event: Step 1 hoàn tất"]
+    Start(["Bắt đầu: Tiếp nhận yêu cầu phân rã kế hoạch"]) --> Step1["BƯỚC 1: TIẾP NHẬN & XÁC THỰC BẢO MẬT\n- Xác thực quyền hạn và ranh giới an toàn của dự án\n- Trích xuất nội dung văn bản từ tài liệu tải lên\n- Chuẩn hóa ghi chú cuộc họp và yêu cầu người dùng\n- Phát tín hiệu tiến trình bước 1"]
 
-    Step1 --> Step2["BƯỚC 2: TRUY VẤN MCP SPEC HUB & LỊCH SỬ SPRINT\n- Gọi SpecHubTools: Tìm các đoạn đặc tả yêu cầu khớp ngữ cảnh\n- Gọi BacklogTools: Lấy các User Story đang tồn đọng\n- Gọi SprintTools: Lấy vận tốc (Velocity) trung bình các Sprint trước\n- Phát SSE Event: Step 2 & danh sách ToolCall latency"]
+    Step1 --> Step2["BƯỚC 2: TRA CỨU ĐẶC TẢ & DỮ LIỆU LỊCH SỬ\n- Tìm kiếm các đoạn tài liệu đặc tả kỹ thuật phù hợp\n- Quét danh sách các hạng mục tồn đọng trong Backlog\n- Tính toán vận tốc trung bình từ các chu kỳ trước\n- Phát tín hiệu tiến trình bước 2"]
 
-    Step2 --> Step3["BƯỚC 3: ĐÁNH GIÁ NĂNG LỰC & TẢI CÔNG VIỆC ĐỘI NGŨ\n- Gọi TeamTools: Quét danh sách thành viên trong dự án\n- Lấy profile kỹ năng: Frontend, Backend, Tester, DevOps\n- Tính tổng số giờ làm việc khả dụng trong chu kỳ Sprint\n- Phát SSE Event: Step 3 & danh sách ToolCall latency"]
+    Step2 --> Step3["BƯỚC 3: ĐÁNH GIÁ NĂNG LỰC ĐỘI NGŨ\n- Rà soát hồ sơ chuyên môn của các thành viên\n- Xác định phân bổ kỹ năng: Giao diện, Xử lý phía sau, Kiểm thử\n- Xác định tổng quỹ giờ làm việc khả dụng trong chu kỳ\n- Phát tín hiệu tiến trình bước 3"]
 
-    Step3 --> Step4["BƯỚC 4: SUY LUẬN MÔ HÌNH AI (PROMPT ENGINEERING)\n- Ghép toàn bộ ngữ cảnh thực tế vào System Prompt nghiêm ngặt\n- Áp dụng nguyên tắc Thực tế: Task 1-3 SP độc lập; chỉ $\ge 5$ SP mới chia subtask\n- Gọi MultiProviderAiModelClient (Gemini 3.6/3.5 Flash, Claude, OpenAI)\n- Phân tích cú pháp JSON phản hồi từ LLM\n- Phát SSE Event: Step 4 hoàn tất"]
+    Step3 --> Step4["BƯỚC 4: SUY LUẬN & PHÂN RÃ KẾ HOẠCH\n- Nạp toàn bộ dữ liệu thực tế và quy chuẩn dự án vào mô hình\n- Áp dụng nguyên tắc: Việc nhỏ độc lập; việc phức tạp chia việc con\n- Điều phối yêu cầu suy luận đến Mô hình AI\n- Chuẩn hóa cấu trúc dữ liệu đề xuất từ phản hồi\n- Phát tín hiệu tiến trình bước 4"]
 
-    Step4 --> Check{"BƯỚC 5: TỰ KIỂM TRA (SELF-CHECK)\n- Tổng Story Points có vượt quá Velocity nhóm không?\n- Đã phân bổ đúng người theo chuyên môn kỹ năng chưa?\n- Có việc nào thiếu trích dẫn tài liệu không?"}
+    Step4 --> Check{"BƯỚC 5: TỰ KIỂM TRA CHẤT LƯỢNG\n- Tổng khối lượng có vượt quá vận tốc đội ngũ?\n- Phân bổ nhân sự đã đúng chuyên môn kỹ thuật chưa?\n- Đã đầy đủ tiêu chí nghiệm thu và trích dẫn đặc tả chưa?"}
 
-    Check -- "Có vi phạm nghiêm trọng" --> AutoFix["Tự động điều chỉnh cân bằng lại Story Points\n& gắn nhãn cảnh báo (Warning flag)"]
+    Check -- "Chưa tối ưu" --> AutoFix["Tự động điều chỉnh cân bằng lại khối lượng\n& gắn nhãn lưu ý để người dùng xem xét"]
     AutoFix --> SaveStaging
-    Check -- "Hợp lệ chuẩn Scrum" --> SaveStaging["LƯU TRỮ VÀO BỘ NHỚ ĐỆM REDIS (STAGING)\n- Tạo StagingId ngẫu nhiên an toàn (Guid)\n- Serialize JSON đề xuất vào Redis Key với TTL 24 giờ\n- Fallback In-Memory nếu kết nối Redis gián đoạn\n- Phát SSE Event: Step 5 & Gửi toàn bộ Proposal Payload"]
+    Check -- "Đạt chuẩn" --> SaveStaging["LƯU TRỮ VÀO BỘ NHỚ ĐỆM PHIÊN TẠM THỜI\n- Tạo mã phiên ngẫu nhiên an toàn\n- Lưu trữ bản đề xuất vào bộ nhớ đệm với thời hạn an toàn\n- Ghi nhận chỉ số tài nguyên và lịch sử phiên\n- Phát tín hiệu hoàn tất và gửi bản đề xuất đầy đủ"]
 
-    SaveStaging --> DisplayUI["GIAO DIỆN HIỂN THỊ ĐỀ XUẤT CHO NGƯỜI DÙNG\n- Hiển thị Sprint Goal & danh sách Epics, Tasks\n- Badges: Trạng thái, Số việc con, #Tags công nghệ\n- Trích dẫn tài liệu Spec Hub có liên kết mở Drawer"]
+    SaveStaging --> DisplayUI["GIAO DIỆN HIỂN THỊ KẾ HOẠCH CHO NGƯỜI DÙNG\n- Hiển thị Thẻ Tóm tắt Điều hành, mục tiêu chu kỳ và danh sách công việc\n- Huy hiệu phân loại: Vai trò kỹ thuật, độ ưu tiên, việc con\n- Nguồn trích dẫn tài liệu cho phép mở xem trực tiếp"]
 
-    DisplayUI --> UserAction{"Lựa chọn của Scrum Master"}
+    DisplayUI --> UserAction{"Lựa chọn của Người điều phối"}
 
-    UserAction -- "Xem tài liệu đặc tả" --> OpenDrawer["Mở Drawer nội tuyến xem chi tiết tài liệu\n(Không reload, không mất lịch sử hội thoại)"]
+    UserAction -- "Xem tài liệu đặc tả" --> OpenDrawer["Mở ngăn kéo xem phân đoạn tài liệu trích dẫn\n(Không làm gián đoạn hay mất phiên làm việc)"]
     OpenDrawer --> DisplayUI
 
-    UserAction -- "Chỉnh sửa trực tiếp" --> EditItem["Sửa tiêu đề, số SP, người phụ trách trên bảng"]
+    UserAction -- "Chỉnh sửa trực tiếp" --> EditItem["Hiệu chỉnh tiêu đề, điểm ước lượng, người phụ trách"]
     EditItem --> DisplayUI
 
-    UserAction -- "Yêu cầu AI làm lại task riêng" --> RegenTask["Gửi yêu cầu Regenerate kèm lý do đến API\nAI cập nhật lại riêng task đó trong Staging"]
+    UserAction -- "Yêu cầu AI làm lại việc cụ thể" --> RegenTask["Gửi yêu cầu tái tạo kèm góp ý chi tiết\nCập nhật công việc mới vào bộ nhớ đệm phiên"]
     RegenTask --> DisplayUI
 
-    UserAction -- "Phê duyệt áp dụng" --> CommitDB["BẤM NÚT 'ÁP DỤNG VÀO SPRINT'\n- Thực thi DB Transaction tạo Issues, Tasks, Subtasks\n- Xóa Staging Key khỏi Redis\n- Cập nhật Sprint Backlog chính thức"]
+    UserAction -- "Phê duyệt áp dụng" --> CommitDB["XÁC NHẬN ÁP DỤNG KẾ HOẠCH VÀO SPRINT\n- Ghi nhận chính thức danh mục công việc vào cơ sở dữ liệu\n- Dọn dẹp dữ liệu phiên tạm thời trong bộ nhớ đệm\n- Cập nhật bảng công việc của chu kỳ Sprint"]
 
-    CommitDB --> Finish(["Kết thúc: Sprint sẵn sàng thực thi"])
+    CommitDB --> Finish(["Kết thúc: Chu kỳ Sprint sẵn sàng thực thi"])
 ```
 
 ---

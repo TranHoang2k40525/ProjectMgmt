@@ -10,38 +10,38 @@ Dự án thiết kế một **Kiến trúc Trí nhớ 4 Tầng Đa Cấp (Four-T
 ```mermaid
 flowchart TD
     subgraph T1["TẦNG 1: TRÍ NHỚ LÀM VIỆC TỨC THỜI (WORKING MEMORY)"]
-        WM1["Context Window của Mô hình LLM (Gemini / Claude / OpenAI)"]
-        WM2["Scratchpad lưu kết quả tạm của các Tool Calls (SpecHub, Backlog, Team)"]
-        WM3["Thời gian tồn tại: Trong suốt vòng lặp Pipeline 5 bước (vài giây đến vài chục giây)"]
+        WM1["Cửa sổ Ngữ cảnh của Mô hình Trí tuệ Nhân tạo"]
+        WM2["Vùng nhớ Tạm thời lưu Kết quả Tra cứu Công cụ"]
+        WM3["Thời gian tồn tại: Trong suốt tiến trình phân rã (vài giây đến vài chục giây)"]
     end
 
-    subgraph T2["TẦNG 2: TRÍ NHỚ PHIÊN PHÂN TÁN (STAGING SESSION MEMORY - REDIS)"]
-        SM1["Lưu trữ trên Redis Cache (127.0.0.1:6379, Key: ProjectMgmt:Ai:staging:{id})"]
-        SM2["Chứa toàn bộ đề xuất Sprint Goal, Epics, Tasks, Subtasks (đầy đủ AC & Citations)"]
-        SM3["Thời gian tồn tại: TTL 24 giờ (Tự động giải phóng bộ nhớ khi hết hạn)"]
-        SM4["Cho phép người dùng Review, Chỉnh sửa, Tái sinh (Regenerate) từng task độc lập"]
+    subgraph T2["TẦNG 2: TRÍ NHỚ PHIÊN TẠM THỜI (STAGING SESSION MEMORY)"]
+        SM1["Lưu trữ trên Hệ thống Bộ nhớ đệm Phân tán Đàn hồi"]
+        SM2["Chứa toàn bộ đề xuất: Mục tiêu, Epics, Tasks, Subtasks, Nghiệm thu & Trích dẫn"]
+        SM3["Thời gian tồn tại: Tự động giải phóng sau thời hạn an toàn quy định"]
+        SM4["Cho phép Người dùng Rà soát, Hiệu chỉnh hoặc Yêu cầu Tái tạo độc lập"]
     end
 
-    subgraph T3["TẦNG 3: BỘ NHỚ LỊCH SỬ PHIÊN & ĐIỀU HÀNH TOKEN (CROSS-SESSION PROJECT MEMORY)"]
-        PM1["Quản lý bởi IAiTokenUsageTracker (AiTokenUsageTracker.cs)"]
-        PM2["Lưu vết các phiên phân tách Sprint của từng dự án (AiSessionSummary)"]
-        PM3["Lưu vết lượng Token, Latency, Tỷ lệ thành công & Chi phí ước tính (AiUsageRecord)"]
-        PM4["Hỗ trợ khôi phục phiên làm việc cũ qua biểu tượng đồng hồ (History) trên Modal AI"]
+    subgraph T3["TẦNG 3: BỘ NHỚ LỊCH SỬ PHIÊN DỰ ÁN (PROJECT SESSION MEMORY)"]
+        PM1["Quản lý bởi Bộ Giám sát Tài nguyên & Lịch sử Phiên"]
+        PM2["Lưu vết các phiên phân rã Sprint của từng dự án theo thời gian"]
+        PM3["Lưu vết chỉ số tài nguyên, độ trễ và tỷ lệ hoàn tất thành công"]
+        PM4["Hỗ trợ khôi phục phiên làm việc trước đó trực tiếp từ giao diện"]
     end
 
     subgraph T4["TẦNG 4: TRÍ NHỚ DÀI HẠN CỐ ĐỊNH (LONG-TERM GROUNDING MEMORY)"]
-        LM1["Kho tài liệu đặc tả Spec Hub (Word, Excel, PDF, Markdown, Text)"]
-        LM2["Lịch sử Sprint, Vận tốc (Velocity) trung bình, User Stories Backlog (MySQL)"]
-        LM3["Quy chuẩn dự án: WorkflowStatus, IssueTypes, Priorities từ MySQL"]
-        LM4["Hồ sơ năng lực, vai trò và kỹ năng thành viên Scrum (MySQL)"]
-        LM5["Vector Embeddings lưu trữ trong Vector Database (Qdrant)"]
+        LM1["Kho tài liệu đặc tả kỹ thuật và biên bản họp dự án"]
+        LM2["Lịch sử chu kỳ, vận tốc thực tế và danh mục công việc tồn đọng"]
+        LM3["Bộ quy chuẩn dự án: Trạng thái quy trình, loại công việc, mức ưu tiên"]
+        LM4["Hồ sơ năng lực, cơ cấu chuyên môn và định mức giờ của đội ngũ"]
+        LM5["Không gian lưu trữ Vector phục vụ tìm kiếm ngữ nghĩa chuyên sâu"]
     end
 
-    T1 -->|Khi suy luận hoàn tất, lưu Staging| T2
-    T2 -->|Ghi nhận tóm tắt phiên & Token tiêu thụ| T3
-    T2 -->|Khi người dùng bấm 'Áp dụng vào Sprint'| T4
-    T3 -.->|Khôi phục lại phiên đề xuất cũ| T2
-    T4 -.->|RAG Grounding, MCP Tools & Quy chuẩn dự án nạp vào| T1
+    T1 -->|Khi suy luận hoàn tất, lưu bộ nhớ tạm| T2
+    T2 -->|Ghi nhận tóm tắt phiên & chỉ số tài nguyên| T3
+    T2 -->|Khi người điều phối phê duyệt áp dụng| T4
+    T3 -.->|Khôi phục lại dữ liệu phiên trước đó| T2
+    T4 -.->|Cung cấp ngữ cảnh thực tế & quy chuẩn vào| T1
 ```
 
 ---
@@ -52,32 +52,32 @@ Sơ đồ dưới đây minh họa chi tiết cách dữ liệu đề xuất AI 
 
 ```mermaid
 flowchart TD
-    StartInput["AI hoàn thành phân rã Sprint / Người dùng yêu cầu sửa"] --> CheckRedisConfig{"Cấu hình Redis.Enabled == true?"}
+    StartInput["Hoàn thành phân rã hoặc Người dùng yêu cầu sửa"] --> CheckConfig{"Kiểm tra Cấu hình Bộ nhớ đệm Phân tán"}
 
-    CheckRedisConfig -- "Không (hoặc chưa cấu hình)" --> MemoryFallback["Lưu vào Bộ nhớ RAM MemoryStateStagingService\n(ConcurrentDictionary)"]
-    CheckRedisConfig -- "Có (Enabled = true)" --> CheckCircuit{"Kiểm tra Circuit Breaker Status"}
+    CheckConfig -- "Chưa bật" --> MemoryFallback["Chuyển hướng lưu vào Bộ nhớ đệm Nội bộ an toàn"]
+    CheckConfig -- "Đã bật" --> CheckCircuit{"Kiểm tra Trạng thái Ngắt mạch Tự động"}
 
-    CheckCircuit -- "Mạch Hở (Open - Redis đang lỗi)" --> MemoryFallback
-    CheckCircuit -- "Mạch Đóng (Closed - Bình thường)" --> TryRedis["Thực thi StackExchangeRedisStagingProvider\nKey: ProjectMgmt:Ai:staging:{guid}\nTTL: 24 giờ"]
+    CheckCircuit -- "Mạch Đang Mở (Hệ thống gặp sự cố)" --> MemoryFallback
+    CheckCircuit -- "Mạch Đang Đóng (Hoạt động bình thường)" --> TryDistributed["Ghi dữ liệu vào Bộ nhớ đệm Phân tán\nkèm thời hạn tồn tại an toàn"]
 
-    TryRedis --> RedisResult{"Giao tiếp Redis thành công?"}
-    RedisResult -- "Thành công" --> ResetFailures["Đặt lại số lần lỗi Circuit Breaker = 0\nTrả về StagingId cho Client"]
-    RedisResult -- "Thất bại (Timeout / Drop connection)" --> RecordFailure["Ghi nhận 1 Failure vào Circuit Breaker\n(Nếu đủ 3 lỗi liên tiếp -> Mở mạch 60s)"]
+    TryDistributed --> CheckResult{"Giao tiếp thành công?"}
+    CheckResult -- "Thành công" --> ResetFailures["Khởi tạo lại bộ đếm lỗi ngắt mạch\nTrả về mã định danh phiên cho Client"]
+    CheckResult -- "Gián đoạn / Timeout" --> RecordFailure["Ghi nhận lỗi vào bộ ngắt mạch\n(Đạt ngưỡng quy định -> Mở mạch tự động)"]
     RecordFailure --> MemoryFallback
 
-    MemoryFallback --> ReturnClient["Trả về StagingId cho Client\n(Người dùng không hề bị gián đoạn hay thấy lỗi)"]
+    MemoryFallback --> ReturnClient["Trả về mã định danh phiên cho Client\n(Đảm bảo trải nghiệm liền mạch không ngắt quãng)"]
 
-    ReturnClient --> UserAction{"Tương tác tiếp theo của Người dùng"}
+    ReturnClient --> UserAction{"Tương tác tiếp theo của Người điều phối"}
 
-    UserAction -- "Chỉnh sửa tiêu đề, SP, thành viên" --> PatchMemory["Client gửi PATCH /api/ai/agent/staging/{id}\nCập nhật trực tiếp JSON trong Redis"]
+    UserAction -- "Hiệu chỉnh trực tiếp thông tin" --> PatchMemory["Gửi dữ liệu cập nhật trực tiếp vào bộ nhớ phiên"]
     PatchMemory --> ReturnClient
 
-    UserAction -- "Yêu cầu AI làm lại riêng 1 Task" --> RegenTask["Client gửi POST /api/ai/agent/regenerate-task\n1. Đọc Staging JSON từ Redis\n2. Gọi AI sinh lại riêng Task này\n3. Ghi đè task mới vào JSON trong Redis\n4. Trả về Task mới cho Client"]
+    UserAction -- "Yêu cầu tái tạo riêng một việc" --> RegenTask["Gửi yêu cầu tái tạo đến Động cơ AI\n1. Đọc ngữ cảnh phiên hiện tại\n2. Tái cấu trúc công việc độc lập\n3. Cập nhật dữ liệu mới vào bộ nhớ phiên\n4. Phản hồi công việc mới về giao diện"]
     RegenTask --> ReturnClient
 
-    UserAction -- "Bấm 'Áp dụng vào Sprint'" --> CommitPhase["1. Đọc toàn bộ Staging JSON từ Redis\n2. Mở MySQL Transaction: Tạo Issue, Task, Subtask\n3. Gọi RemoveAsync(Key) xóa dữ liệu tạm trên Redis\n4. Commit Transaction"]
+    UserAction -- "Phê duyệt áp dụng vào Sprint" --> CommitPhase["1. Đọc toàn bộ kế hoạch từ bộ nhớ phiên\n2. Mở giao dịch cơ sở dữ liệu: Ghi nhận danh mục công việc\n3. Dọn dẹp dữ liệu phiên tạm thời\n4. Xác nhận giao dịch thành công"]
 
-    CommitPhase --> Done(["Hoàn tất: Dữ liệu chính thức được ghi nhận"])
+    CommitPhase --> Done(["Hoàn tất: Kế hoạch chính thức được ghi nhận"])
 ```
 
 ---

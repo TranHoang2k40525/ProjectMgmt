@@ -15,38 +15,36 @@
 
 ```mermaid
 flowchart TD
-    subgraph EXTERNAL["Các AI Client / IDE Bên Ngoài"]
-        ClaudeDesktop["Claude Desktop"]
-        Cursor["Cursor IDE / Roo Code"]
-        GeminiCli["Gemini CLI / Antigravity"]
+    subgraph EXTERNAL["Các Ứng dụng & Môi trường Phát triển Bên ngoài"]
+        ExtClients["Các Trợ lý Trí tuệ Nhân tạo & Môi trường Lập trình"]
     end
 
-    subgraph MCP_SERVER["Ứng Dụng Console Độc Lập (ProjectMgmt.McpServer)"]
-        StdioHandler["Bộ Xử lý JSON-RPC 2.0 qua Standard Input / Output (Stdio)"]
-        ToolsList["Danh Mục Công Cụ (tools/list)"]
-        ToolExecutor["Bộ Điều Phối Thực Thi (tools/call)"]
+    subgraph MCP_SERVER["Máy chủ Giao thức Mở rộng Độc lập"]
+        StdioHandler["Bộ Xử lý Giao thức Chuẩn qua Luồng Vào/Ra Tiêu chuẩn"]
+        ToolsList["Danh Mục Định nghĩa Công cụ Nghiệp vụ"]
+        ToolExecutor["Bộ Điều phối và Thực thi Lệnh"]
     end
 
-    subgraph WEB_APP["Ứng Dụng Web Chính (ProjectMgmt.Solution)"]
-        Controller["AiAgentController.cs"]
-        InProcessPipeline["AiSprintDecompositionService.cs"]
-        InProcessTools["In-Process Tools (SpecHubTools, BacklogTools, SprintTools, TeamTools)"]
+    subgraph WEB_APP["Hệ thống Quản lý Dự án Chính"]
+        Controller["Cổng Tiếp nhận & Điều phối Dịch vụ AI"]
+        InProcessPipeline["Động cơ Phân rã Kế hoạch Dự án"]
+        InProcessTools["Bộ Công cụ Dữ liệu Tích hợp Trực tiếp"]
     end
 
-    subgraph DATA["Tầng Dữ Liệu & Tài Liệu"]
-        MySQL[("MySQL Database")]
-        SpecFolder["Thư mục Spec_Hub (.docx, .pdf, .xlsx, .md)"]
+    subgraph DATA["Tầng Lưu trữ Tri thức & Dữ liệu Dự án"]
+        Database[("Cơ sở Dữ liệu Hệ thống")]
+        SpecFolder["Kho Lưu trữ Tài liệu Đặc tả Kỹ thuật"]
     end
 
-    EXTERNAL -->|JSON-RPC qua Stdio| StdioHandler
+    EXTERNAL -->|Giao thức Chuẩn qua Luồng Tiêu chuẩn| StdioHandler
     StdioHandler --> ToolsList
     StdioHandler --> ToolExecutor
-    ToolExecutor --> MySQL
+    ToolExecutor --> Database
     ToolExecutor --> SpecFolder
 
     Controller --> InProcessPipeline
     InProcessPipeline --> InProcessTools
-    InProcessTools --> MySQL
+    InProcessTools --> Database
     InProcessTools --> SpecFolder
 ```
 

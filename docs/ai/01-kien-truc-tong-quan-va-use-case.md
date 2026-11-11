@@ -27,38 +27,38 @@ Hệ thống tuân thủ nghiêm ngặt mô hình **Modular Monolith kết hợp
 
 ```mermaid
 flowchart TD
-    subgraph UI["Tầng Giao Diện (Frontend Angular)"]
-        Modal["ai-decompose-modal\n(Giao diện Hội thoại, Drawer xem Spec, History Dropdown)"]
-        Profile["profile-page\n(Tab Giám sát Tiêu thụ Token AI, KPI & Lịch sử)"]
-        Service["ai-agent.service.ts\n(Kết nối SSE Stream, Token Refresh, Staging & Usage API)"]
+    subgraph UI["Tầng Giao Diện Người Dùng"]
+        Modal["Giao diện Hội thoại & Phân rã Kế hoạch\n(Điều khiển Lập kế hoạch & Khôi phục Lịch sử)"]
+        Profile["Bảng Điều khiển Giám sát Tài nguyên\n(Chỉ số Tiêu thụ, Tỷ lệ Thành công & Lịch sử)"]
+        Service["Dịch vụ Kết nối Thời gian thực Phía Client\n(Kết nối Luồng Dữ liệu, Điều phối Trạng thái)"]
     end
 
-    subgraph API["Tầng Điều Khiển (ProjectMgmt.Solution)"]
-        Ctrl["AiAgentController.cs\n(API Endpoints, SSE Stream, Token Usage, Sessions)"]
-        DecompSvc["AiSprintDecompositionService.cs\n(Pipeline 5 bước, Self-Check Critique Agent)"]
-        TokenTracker["IAiTokenUsageTracker / AiTokenUsageTracker\n(Đo lường Token, Chi phí, Lưu vết Phiên Dự án)"]
+    subgraph API["Tầng Điều Phối Ứng Dụng"]
+        Ctrl["Cổng Tiếp nhận & Điều phối API AI\n(Xác thực Phiên, Quản lý Luồng & Phiên làm việc)"]
+        DecompSvc["Động cơ Xử lý Phân rã Kế hoạch Sprint\n(Quy trình Đa bước, Tự kiểm tra Chất lượng)"]
+        TokenTracker["Bộ Giám sát Tài nguyên & Lịch sử Phiên\n(Đo lường Tài nguyên, Thống kê Lịch sử Dự án)"]
     end
 
-    subgraph CORE["Tầng Lõi Dùng Chung (ProjectMgmt.Core)"]
-        ModelClient["IAiModelClient / MultiProviderAiModelClient\n(Router Gemini, Claude, OpenAI, Ollama)"]
-        Staging["IStateStagingService / ResilientStateStagingService\n(Bộ nhớ đệm phân tán Redis + Fallback)"]
-        ScopeGuard["ProjectScopeGuard.cs & InputGuardrail.cs\n(Bảo mật cách ly Project/Org, Chống rò rỉ)"]
+    subgraph CORE["Tầng Lõi Nghiệp Vụ & An Toàn"]
+        ModelClient["Cổng Chuyển tiếp Đa Mô hình AI\n(Điều phối Giao tiếp với các Mô hình Ngôn ngữ)"]
+        Staging["Dịch vụ Quản lý Trạng thái Bộ nhớ đệm\n(Lưu trữ Tạm thời Đàn hồi & Phục hồi Lỗi)"]
+        ScopeGuard["Rào chắn Bảo mật & Cách ly Dự án\n(Kiểm soát Phạm vi Truy cập, Chống Tiêm nhiễm)"]
     end
 
-    subgraph TOOLS["Tầng Công Cụ (MCP Tools & Spec Hub)"]
-        McpInternal["SpecHubTools, BacklogTools, SprintTools, TeamTools\n(Truy xuất dữ liệu nghiệp vụ nội bộ)"]
-        McpServer["ProjectMgmt.McpServer\n(Máy chủ Stdio JSON-RPC phục vụ Agent bên ngoài)"]
+    subgraph TOOLS["Tầng Công Cụ Tích Hợp"]
+        McpInternal["Bộ Công cụ Truy vấn Dữ liệu Dự án Nội bộ\n(Kho Đặc tả, Danh mục Backlog, Năng lực Đội ngũ)"]
+        McpServer["Giao thức Mở rộng Máy chủ Công cụ Ngoại vi\n(Cung cấp Ngữ cảnh Dự án cho Công cụ Bên ngoài)"]
     end
 
     subgraph INFRA["Tầng Hạ Tầng & Dữ Liệu"]
-        Redis[("Redis Cache 127.0.0.1:6379\n(Trí nhớ Ngữ cảnh & State Staging)")]
-        MySQL[("MySQL Database\n(Projects, Sprints, Backlog, Issues, WorkflowRules)")]
-        LLM[("Cloud / Local LLMs\n(Gemini 2.5/3.6 Flash, Claude 3.7, GPT-4o, Ollama)")]
+        Redis[("Bộ nhớ đệm Phân tán\n(Lưu trữ Ngữ cảnh Phiên Tạm thời)")]
+        MySQL[("Cơ sở Dữ liệu Quan hệ Chính\n(Dự án, Chu kỳ Sprint, Danh mục Công việc, Quy chuẩn)")]
+        LLM[("Dịch vụ Trí tuệ Nhân tạo\n(Mô hình Suy luận Ngôn ngữ Lớn)")]
     end
 
     Modal --> Service
     Profile --> Service
-    Service -->|HTTP POST / SSE Stream| Ctrl
+    Service -->|Luồng Sự kiện Thời gian thực| Ctrl
     Ctrl --> DecompSvc
     Ctrl --> TokenTracker
     DecompSvc --> ScopeGuard
@@ -87,26 +87,26 @@ Sơ đồ thể hiện tương tác giữa các tác nhân người dùng (**Ch�
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"primaryColor": "#f8fafc", "edgeLabelBackground":"#ffffff"}}}%%
 flowchart LR
-    SM["Scrum Master / Giám đốc Dự án"]
-    DEV["Developer / QA Tester"]
-    AI["AI Agent Engine (Backend)"]
-    EXT["Mô hình LLM Bên ngoài\n(Gemini / Claude / OpenAI)"]
-    EXT_AGENT["Agent Ngoài\n(Claude Desktop / Cursor)"]
+    SM["Người điều phối (Scrum Master / PM)"]
+    DEV["Thành viên thực thi (Developer / QA)"]
+    AI["Hệ thống Trí tuệ Nhân tạo Nội bộ"]
+    EXT["Nhà cung cấp Trí tuệ Nhân tạo Ngoại vi"]
+    EXT_AGENT["Công cụ Lập trình Hỗ trợ Bên ngoài"]
 
     subgraph UC["Phạm Vi Nghiệp Vụ Module AI"]
-        UC1["Mở Modal AI Phân rã Sprint"]
+        UC1["Mở Giao diện Phân rã Kế hoạch"]
         UC2["Nhập yêu cầu / Dán biên bản họp / Đính kèm tệp"]
         UC3["Xem & Chỉnh sửa trước nội dung văn bản đã dán"]
-        UC4["Chọn mô hình AI (Flash Cao / 3.5 / Claude / Local)"]
-        UC5["Xem quá trình suy luận & căn cứ tra cứu MCP"]
-        UC6["Xem đề xuất Sprint Goal, Tasks, SP, Ước lượng giờ"]
-        UC7["Xem trước tài liệu Spec Hub không mất hội thoại"]
-        UC8["Yêu cầu AI làm lại riêng 1 Task hoặc toàn bộ"]
-        UC9["Chỉnh sửa nhanh tiêu đề, SP, người làm trực tiếp"]
-        UC10["Áp dụng đề xuất vào Sprint tiếp theo"]
-        UC11["Kết nối MCP Server qua Stdio để hỏi đáp dự án"]
-        UC12["Xem Thống kê Tiêu thụ Token AI & Chi phí (Profile)"]
-        UC13["Khôi phục Phiên Phân rã cũ từ Lịch sử (Session History)"]
+        UC4["Lựa chọn Cấu hình Mô hình Phù hợp"]
+        UC5["Theo dõi Tiến trình Suy luận & Căn cứ Tra cứu"]
+        UC6["Xem đề xuất Mục tiêu, Công việc, Điểm ước lượng"]
+        UC7["Xem trước Tài liệu Đặc tả Không Mất Ngữ cảnh"]
+        UC8["Yêu cầu Tái tạo Riêng một Việc hoặc Toàn bộ"]
+        UC9["Hiệu chỉnh trực tiếp Tiêu đề, Điểm số, Nhân sự"]
+        UC10["Phê duyệt Áp dụng Kế hoạch vào Sprint"]
+        UC11["Truy vấn Dữ liệu Dự án qua Giao thức Mở rộng"]
+        UC12["Theo dõi Tài nguyên Tiêu thụ & Thống kê Sử dụng"]
+        UC13["Khôi phục Phiên Phân rã từ Lịch sử"]
     end
 
     SM --> UC1

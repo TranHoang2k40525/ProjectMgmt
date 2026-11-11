@@ -18,13 +18,13 @@ Khi yêu cầu một mô hình AI thông thường (Zero-shot Prompting) lập k
 
 ```mermaid
 flowchart LR
-    Doc["Tài liệu Đặc tả Spec Hub\n(.docx, .xlsx, .pdf, .md, .txt)"] --> Extractor["AiDocumentTextExtractor\n(Trích xuất cấu trúc văn bản)"]
-    MeetingNotes["Ghi chú Cuộc họp / User Story\n(Dán trực tiếp hoặc tải lên)"] --> Extractor
+    Doc["Kho Tài liệu Đặc tả Kỹ thuật\n(Đa dạng định dạng tệp lưu trữ)"] --> Extractor["Bộ Trích xuất Văn bản Đa Định dạng\n(Bóc tách cấu trúc nội dung và bảng)"]
+    MeetingNotes["Ghi chú Cuộc họp & Yêu cầu Người dùng\n(Văn bản dán trực tiếp hoặc tải lên)"] --> Extractor
     
-    Extractor --> VectorStore["Vector Search / Full-Text Search\n(Qdrant / SpecHubTools)"]
-    VectorStore --> ContextPrompt["Ngữ cảnh Thực tế Xác thực\n(Grounded Context & Citations)"]
-    ContextPrompt --> LLM["Mô hình AI Suy luận\n(Gemini 3.6/3.5 Flash)"]
-    LLM --> VerifiedTasks["Sprint Goal, Epics, Tasks\n(Kèm trích dẫn nguồn gốc 100%)"]
+    Extractor --> VectorStore["Cơ chế Tìm kiếm Ngữ nghĩa & Toàn văn\n(Tra cứu theo độ tương đồng và từ khóa)"]
+    VectorStore --> ContextPrompt["Ngữ cảnh Thực tế Đã Xác thực\n(Đầy đủ trích dẫn nguồn gốc tài liệu)"]
+    ContextPrompt --> LLM["Mô hình Trí tuệ Nhân tạo Suy luận\n(Phân tích và đối chiếu yêu cầu)"]
+    LLM --> VerifiedTasks["Mục tiêu, Danh mục Công việc\n(Đính kèm trích dẫn tài liệu 100%)"]
 ```
 
 ---
@@ -37,24 +37,24 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    InputFile["Tệp tải lên hoặc Luồng dữ liệu (Stream)"] --> CheckSize{"Kiểm tra kích thước <= 30MB?"}
-    CheckSize -- "Vượt quá 30MB" --> ErrSize["Ném lỗi InvalidOperationException"]
-    CheckSize -- "Hợp lệ" --> DetectExt{"Nhận diện Đuôi tệp (Extension)"}
+    InputFile["Tệp tải lên hoặc Luồng dữ liệu"] --> CheckSize{"Kiểm tra kích thước tệp quy định"}
+    CheckSize -- "Vượt ngưỡng an toàn" --> ErrSize["Báo lỗi dung lượng vượt giới hạn"]
+    CheckSize -- "Hợp lệ" --> DetectExt{"Phân loại Định dạng Tài liệu"}
 
-    DetectExt -- ".docx" --> ParseDocx["GIẢI NÉN WORD .DOCX (ZIP ARCHIVE)\n- Mở word/document.xml bằng XDocument\n- Đọc đoạn văn bản w:p (w:t)\n- Chuyển đổi bảng biểu w:tbl thành dạng văn bản cột"]
+    DetectExt -- "Tài liệu Văn bản Soạn thảo" --> ParseDocx["XỬ LÝ VĂN BẢN SOẠN THẢO\n- Phân tích cấu trúc đoạn văn bản và tiêu đề\n- Chuyển đổi bảng biểu thành dạng cột có cấu trúc"]
     
-    DetectExt -- ".xlsx" --> ParseXlsx["GIẢI NÉN EXCEL .XLSX (ZIP ARCHIVE)\n- Đọc danh mục chuỗi dùng chung xl/sharedStrings.xml\n- Đọc dữ liệu ô trong xl/worksheets/sheet1.xml\n- Chuyển đổi thành bảng dạng 'Cột 1 | Cột 2 | Cột 3'"]
+    DetectExt -- "Bảng tính Dữ liệu" --> ParseXlsx["XỬ LÝ BẢNG TÍNH DỮ LIỆU\n- Đọc danh mục dữ liệu ô và chuỗi dùng chung\n- Chuyển đổi bảng biểu thành dữ liệu hàng và cột có cấu trúc"]
 
-    DetectExt -- ".pdf" --> ParsePdf["GIẢI MÃ PDF STREAM (DEFLATE STREAM)\n- Quét các khối 'stream' ... 'endstream'\n- Giải nén luồng nén FlateDecode bằng DeflateStream\n- Bóc tách lệnh hiển thị văn bản PDF (Tj, TJ)"]
+    DetectExt -- "Tài liệu Kỹ thuật Định dạng Cố định" --> ParsePdf["XỬ LÝ TÀI LIỆU ĐỊNH DẠNG CỐ ĐỊNH\n- Quét các khối luồng nội dung tài liệu\n- Giải mã và bóc tách các dòng văn bản kỹ thuật"]
 
-    DetectExt -- ".txt / .md / .csv / .json" --> ParseText["ĐỌC VĂN BẢN UTF-8\n- StreamReader với kiểm tra Byte Order Mark (BOM)\n- Giữ nguyên cấu trúc Markdown tiêu đề và danh sách"]
+    DetectExt -- "Văn bản Thuần & Cấu trúc Mở" --> ParseText["XỬ LÝ VĂN BẢN CẤU TRÚC MỞ\n- Đọc chuẩn mã hóa quốc tế\n- Giữ nguyên cấu trúc phân cấp tiêu đề và danh mục"]
 
-    ParseDocx --> Combine["Kết hợp với Ghi chú cuộc họp đã dán"]
+    ParseDocx --> Combine["Hợp nhất với Yêu cầu và Ghi chú cuộc họp"]
     ParseXlsx --> Combine
     ParsePdf --> Combine
     ParseText --> Combine
 
-    Combine --> FinalText["Chuỗi Ngữ cảnh Văn bản Hoàn chỉnh\n(Gửi vào Agent Pipeline)"]
+    Combine --> FinalText["Ngữ cảnh Hoàn chỉnh\n(Đưa vào Động cơ Phân rã Kế hoạch)"]
 ```
 
 ### 2.2. Điểm đặc sắc trong Kỹ thuật Trích xuất:
@@ -86,22 +86,22 @@ Mỗi Task do AI sinh ra bắt buộc phải có thuộc tính `citations` chỉ
 
 ```mermaid
 sequenceDiagram
-    actor User as Scrum Master
-    participant UI as Giao diện Hội thoại AI (Modal)
+    actor User as Người điều phối (Scrum Master / PM)
+    participant UI as Giao diện Hội thoại Phân rã Kế hoạch
     participant Drawer as Ngăn kéo Xem trước Tài liệu
-    participant Hub as Spec Hub Page
+    participant Hub as Trang Quản trị Tài liệu Đặc tả
 
-    User->>UI: Bấm vào nhãn trích dẫn: "Cam-nang-ky-thuat.md - Phần II"
-    UI->>Drawer: Mở Drawer nội tuyến từ cạnh phải màn hình
-    Drawer->>Drawer: Hiển thị nội dung chi tiết của phần II trong tài liệu
-    Note over UI,Drawer: Cuộc hội thoại và kết quả phân rã AI ở bên trái vẫn giữ nguyên 100%
+    User->>UI: Nhấp vào nguồn trích dẫn tài liệu kỹ thuật
+    UI->>Drawer: Mở ngăn kéo nội tuyến từ cạnh phải màn hình
+    Drawer->>Drawer: Hiển thị nội dung chi tiết của phân đoạn tài liệu
+    Note over UI,Drawer: Cuộc hội thoại và kết quả phân rã ở bên trái vẫn giữ nguyên trạng thái
     
-    alt Người dùng muốn tiếp tục phân rã
-        User->>Drawer: Bấm "Quay lại đoạn chat"
-        Drawer-->>UI: Đóng drawer, tiêu điểm trở về bảng phân rã
-    else Người dùng muốn chuyển sang chỉnh sửa sâu trong Spec Hub
-        User->>Drawer: Bấm "Mở trong Spec Hub"
-        Drawer->>Hub: Điều hướng sang /projects/:id/spec-hub?docId={id}&section={name}
+    alt Người dùng muốn tiếp tục rà soát kế hoạch
+        User->>Drawer: Xác nhận quay lại giao diện phân rã
+        Drawer-->>UI: Đóng ngăn kéo, tiêu điểm trở về bảng phân rã
+    else Người dùng muốn chuyển sang xem toàn văn tài liệu
+        User->>Drawer: Xác nhận mở toàn văn tài liệu
+        Drawer->>Hub: Điều hướng trực tiếp đến vị trí phân đoạn trích dẫn
     end
 ```
 

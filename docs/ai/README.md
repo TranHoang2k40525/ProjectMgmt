@@ -21,12 +21,12 @@ Bộ tài liệu được tổ chức thành 7 chuyên đề chuyên sâu, liề
 
 ```mermaid
 flowchart TD
-    README["docs/ai/README.md\n(Mục lục & Bản đồ Điều hướng)"] --> D1["01-kien-truc-tong-quan-va-use-case.md\n(Kiến trúc Hệ thống, Khái niệm, Sơ đồ Use Case)"]
-    README --> D2["02-so-do-tuan-tu-va-hoat-dong.md\n(Sơ đồ Tuần tự, Sơ đồ Hoạt động, SSE Realtime Stream)"]
-    README --> D3["03-co-che-tri-nho-redis-memory.md\n(Cơ chế Trí nhớ Ngữ cảnh & Phân tán Redis)"]
-    README --> D4["04-rag-va-spec-hub-grounding.md\n(RAG Đa định dạng, Trích xuất Docx/PDF/Xlsx, Spec Hub)"]
-    README --> D5["05-mcp-server-va-tools.md\n(Kiến trúc MCP Tools & Máy chủ Stdio Ngoài)"]
-    README --> D6["06-huong-dan-tra-cuu-chung-minh-phan-bien.md\n(Bộ Hỏi Đáp Phản biện: Là gì? Ở đâu? Chứng minh thế nào?)"]
+    Index["Mục lục & Bản đồ Điều hướng"] --> D1["Chuyên đề 1: Kiến trúc Hệ thống & Sơ đồ Use Case"]
+    Index --> D2["Chuyên đề 2: Sơ đồ Tuần tự & Sơ đồ Hoạt động"]
+    Index --> D3["Chuyên đề 3: Cơ chế Trí nhớ Ngữ cảnh & Bộ nhớ đệm Phân tán"]
+    Index --> D4["Chuyên đề 4: Tạo sinh Tăng cường Truy xuất (RAG) & Kho Đặc tả"]
+    Index --> D5["Chuyên đề 5: Kiến trúc Giao thức Mở rộng & Danh mục Công cụ"]
+    Index --> D6["Chuyên đề 6: Cẩm nang Tra cứu & Trả lời Phản biện Chuyên sâu"]
 ```
 
 ### Danh mục các chuyên đề chi tiết:
