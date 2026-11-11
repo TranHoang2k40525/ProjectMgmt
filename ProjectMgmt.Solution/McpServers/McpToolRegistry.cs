@@ -106,7 +106,8 @@ public class McpToolRegistry : IMcpToolRegistry
                 {
                     var projectId = ParseGuid(args["projectId"]);
                     var keyword = ParseString(args["keyword"]);
-                    return await _specHub.SearchAsync(projectId, keyword, scope, cancellationToken);
+                    var topK = int.TryParse(ParseString(args["topK"], "5"), out var parsedTopK) ? parsedTopK : 5;
+                    return await _specHub.SearchAsync(projectId, keyword, scope, topK, cancellationToken);
                 }
 
                 case "backlog_get_stories":

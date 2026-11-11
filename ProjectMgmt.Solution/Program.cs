@@ -30,6 +30,8 @@ using ProjectMgmt.ProjectManagement.Contracts;
 using ProjectMgmt.Solution.Security;
 using ProjectMgmt.Solution.Realtime;
 using ProjectMgmt.Solution.Services;
+using ProjectMgmt.Solution.Services.Ai.Rag;
+using DeliveryIntelligence.Infrastructure.Services.Rag;
 using Serilog;
 using System.Globalization;
 using System.Security.Claims;
@@ -352,6 +354,32 @@ builder.Services.Configure<RedisOptions>(builder.Configuration.GetSection("Redis
 builder.Services.Configure<QdrantOptions>(builder.Configuration.GetSection("Qdrant"));
 builder.Services.Configure<LangfuseOptions>(builder.Configuration.GetSection("Langfuse"));
 
+// --- RAG trên Spec Hub: URL, model, tham số đọc từ section "Rag" (appsettings*.json), key từ user-secrets/biến môi trường ---
+builder.Services.Configure<RagOptions>(builder.Configuration.GetSection(RagOptions.SectionName));
+builder.Services.PostConfigure<RagOptions>(rag =>
+{
+    // Thử nghiệm với OpenAI: chưa đặt Rag:*:ApiKey thì dùng key Ai:OpenAi:ApiKey đã cấu hình cho phần chat.
+    var openAiKey = builder.Configuration["Ai:OpenAi:ApiKey"];
+    foreach (var endpoint in new[] { rag.Embedding, rag.Vision })
+    {
+        if (string.IsNullOrWhiteSpace(endpoint.ApiKey) && string.Equals(endpoint.Provider, "OpenAi", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(openAiKey) && !openAiKey.StartsWith("YOUR_", StringComparison.OrdinalIgnoreCase))
+        {
+            endpoint.ApiKey = openAiKey;
+        }
+    }
+});
+builder.Services.AddSingleton(sp => sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<RagOptions>>().Value);
+builder.Services.AddHttpClient("RagClient", client => client.Timeout = Timeout.InfiniteTimeSpan); // timeout theo Rag:*:TimeoutSeconds
+builder.Services.AddScoped<IEmbeddingClient>(sp => new OpenAiCompatibleEmbeddingClient(
+    sp.GetRequiredService<IHttpClientFactory>().CreateClient("RagClient"), sp.GetRequiredService<RagOptions>().Embedding));
+builder.Services.AddScoped<IImageTextReader>(sp => new OpenAiCompatibleVisionClient(
+    sp.GetRequiredService<IHttpClientFactory>().CreateClient("RagClient"), sp.GetRequiredService<RagOptions>().Vision));
+builder.Services.AddScoped<DocumentChunkStore>();
+builder.Services.AddScoped<RagSearchService>();
+builder.Services.AddScoped<SpecDocumentIndexer>();
+builder.Services.AddHostedService<RagIndexingBackgroundService>();
+
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<MemoryStateStagingService>();
 builder.Services.AddScoped<IStateStagingService>(sp =>
@@ -362,7 +390,14 @@ builder.Services.AddScoped<IStateStagingService>(sp =>
     var logger = sp.GetService<ILogger<ResilientStateStagingService>>();
     return new ResilientStateStagingService(memory, redisOptions, primary, logger);
 });
-builder.Services.AddScoped<IVectorSearchService, ResilientVectorSearchService>();
+// Tìm kiếm ngữ nghĩa qua bảng AiDocumentChunk khi RAG đã cấu hình; chưa cấu hình hoặc API lỗi thì tìm theo từ khóa.
+builder.Services.AddScoped<IVectorSearchService>(sp => new ResilientVectorSearchService(
+    sp.GetRequiredService<IExternalVectorSearchProvider>(),
+    sp.GetRequiredService<ISpecKeywordFallbackProvider>(),
+    circuitBreaker: null,
+    qdrantEnabled: sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<RagOptions>>().Value.IsSearchReady,
+    timeout: TimeSpan.FromSeconds(Math.Max(5, builder.Configuration.GetValue<int?>("Rag:Embedding:TimeoutSeconds") ?? 30)),
+    logger: sp.GetService<ILogger<ResilientVectorSearchService>>()));
 builder.Services.AddScoped<IAiTraceService, ResilientTraceService>();
 
 // --- AI Model Client & External Providers (Milestone M2) ---
@@ -373,7 +408,7 @@ builder.Services.AddHttpClient("AiClient", client =>
 });
 builder.Services.AddScoped<IAiModelClient, MultiProviderAiModelClient>();
 builder.Services.AddScoped<IExternalStagingProvider, StackExchangeRedisStagingProvider>();
-builder.Services.AddScoped<IExternalVectorSearchProvider, QdrantVectorSearchProvider>();
+builder.Services.AddScoped<IExternalVectorSearchProvider, MySqlVectorSearchProvider>();
 builder.Services.AddScoped<IExternalTraceExporter, LangfuseTraceExporter>();
 builder.Services.AddScoped<ISpecKeywordFallbackProvider, SpecHubKeywordFallbackProvider>();
 

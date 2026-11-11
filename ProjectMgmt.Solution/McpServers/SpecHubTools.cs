@@ -11,6 +11,7 @@ using Planning.Infrastructure;
 using Planning.Infrastructure.Services;
 using ProjectMgmt.Core.Ai;
 using ProjectMgmt.Core.Security;
+using ProjectMgmt.Core.VectorSearch;
 
 public class SpecHubTools
 {
@@ -32,15 +33,18 @@ public class SpecHubTools
     private readonly PlanningDbContext _planning;
     private readonly ISpecHubStorageService _specStorage;
     private readonly ILogger<SpecHubTools> _logger;
+    private readonly IVectorSearchService? _vectorSearch;
 
     public SpecHubTools(
         PlanningDbContext planning,
         ISpecHubStorageService specStorage,
-        ILogger<SpecHubTools> logger)
+        ILogger<SpecHubTools> logger,
+        IVectorSearchService? vectorSearch = null)
     {
         _planning = planning;
         _specStorage = specStorage;
         _logger = logger;
+        _vectorSearch = vectorSearch;
     }
 
     public IReadOnlyList<AiToolDefinition> GetToolDefinitions()
@@ -83,14 +87,16 @@ public class SpecHubTools
             ),
             new(
                 "spec_hub_search",
-                "Tìm kiếm từ khóa, thuật ngữ kỹ thuật hoặc quy tắc nghiệp vụ xuyên suốt tất cả các tài liệu đặc tả trong Spec Hub của dự án.",
+                "Tìm theo ngữ nghĩa (RAG) các đoạn liên quan nhất trong toàn bộ tài liệu Spec Hub của dự án (văn bản, Word, Excel, PDF, ảnh). " +
+                "Trả về nội dung đoạn kèm trích dẫn: tài liệu, đề mục, số trang, điểm tương đồng. Chưa bật RAG thì tìm theo từ khóa.",
                 new JsonObject
                 {
                     ["type"] = "object",
                     ["properties"] = new JsonObject
                     {
                         ["projectId"] = new JsonObject { ["type"] = "string", ["description"] = "GUID của dự án" },
-                        ["keyword"] = new JsonObject { ["type"] = "string", ["description"] = "Từ khóa cần tra cứu" }
+                        ["keyword"] = new JsonObject { ["type"] = "string", ["description"] = "Câu hỏi hoặc từ khóa cần tra cứu (viết tự nhiên được)" },
+                        ["topK"] = new JsonObject { ["type"] = "integer", ["description"] = "Số đoạn trả về (1-20, mặc định 5)" }
                     },
                     ["required"] = new JsonArray { "projectId", "keyword" }
                 }
@@ -229,7 +235,10 @@ public class SpecHubTools
         return SerializeJson(result, indented: true);
     }
 
-    public async Task<string> SearchAsync(Guid projectId, string keyword, IProjectScopeContext scope, CancellationToken ct = default)
+    public async Task<string> SearchAsync(Guid projectId, string keyword, IProjectScopeContext scope, CancellationToken ct = default) =>
+        await SearchAsync(projectId, keyword, scope, topK: 5, ct);
+
+    public async Task<string> SearchAsync(Guid projectId, string keyword, IProjectScopeContext scope, int topK, CancellationToken ct = default)
     {
         if (projectId == Guid.Empty)
         {
@@ -250,6 +259,29 @@ public class SpecHubTools
         }
 
         ProjectScopeGuard.Validate(scope, project.OrgId, projectId);
+
+        if (_vectorSearch != null)
+        {
+            // Ngữ nghĩa khi RAG đã bật; ResilientVectorSearchService tự quay về từ khóa nếu RAG tắt hoặc API lỗi.
+            var hits = await _vectorSearch.SearchRelevantSpecsAsync(projectId, keyword.Trim(), Math.Clamp(topK, 1, 20), ct);
+            if (hits.Count > 0)
+            {
+                return SerializeJson(new
+                {
+                    mode = hits.Any(hit => hit.Metadata.ContainsKey("chunkId")) ? "semantic" : "keyword",
+                    query = keyword.Trim(),
+                    results = hits.Select(hit => new
+                    {
+                        documentId = hit.Metadata.GetValueOrDefault("documentId") ?? hit.Id,
+                        documentName = hit.Title,
+                        heading = hit.Metadata.GetValueOrDefault("heading"),
+                        page = hit.Metadata.GetValueOrDefault("page"),
+                        score = hit.Score,
+                        content = hit.ContentSnippet
+                    })
+                }, indented: true);
+            }
+        }
 
         var docs = await _planning.ProjectDocuments.AsNoTracking()
             .Where(d => d.ProjectId == projectId && !d.IsDirectory)
@@ -278,7 +310,7 @@ public class SpecHubTools
 
     public async Task<string> SearchRelevantSpecsAsync(IProjectScopeContext scope, string keyword, int topK = 5, CancellationToken ct = default)
     {
-        return await SearchAsync(scope.ProjectId, keyword, scope, ct);
+        return await SearchAsync(scope.ProjectId, keyword, scope, topK, ct);
     }
 
     private static async Task<string> ExtractPdfAsync(Stream stream, CancellationToken ct)
