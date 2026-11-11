@@ -424,6 +424,99 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
 
             project.IssueCounter = currentIssueNumber;
 
+            // 4. Kế thừa công việc dở dang từ Sprint trước (Sprint Rollover) & Xử lý Task quá hạn
+            var rolloverCount = 0;
+            var backlogReturnedCount = 0;
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+            var doneStatusIds = statuses
+                .Where(s => s.Name.Equals("Done", StringComparison.OrdinalIgnoreCase) ||
+                            s.Name.Equals("Closed", StringComparison.OrdinalIgnoreCase) ||
+                            s.Name.Equals("Resolved", StringComparison.OrdinalIgnoreCase))
+                .Select(s => s.Id)
+                .ToHashSet();
+
+            // Tìm Sprint trước đó của dự án (Sprint có OrderIndex ngay trước targetSprint hoặc Sprint gần nhất)
+            var previousSprint = await _planningDb.Sprints.AsNoTracking()
+                .Where(s => s.ProjectId == project.Id && s.Id != targetSprint.Id && s.OrderIndex <= targetSprint.OrderIndex)
+                .OrderByDescending(s => s.OrderIndex)
+                .ThenByDescending(s => s.CreatedAt)
+                .FirstOrDefaultAsync(ct);
+
+            if (previousSprint != null)
+            {
+                var unfinishedIssues = await _deliveryDb.Issues
+                    .Where(i => i.SprintId == previousSprint.Id && !i.IsDeleted && !doneStatusIds.Contains(i.StatusId))
+                    .ToListAsync(ct);
+
+                var bugTypeId = issueTypes.FirstOrDefault(t => t.Name.Contains("Bug", StringComparison.OrdinalIgnoreCase))?.Id;
+
+                foreach (var unfinished in unfinishedIssues)
+                {
+                    var isBug = bugTypeId.HasValue && unfinished.IssueTypeId == bugTypeId.Value;
+                    var isInProgress = unfinished.TimeSpentMinutes > 0;
+                    var isOverdue = unfinished.DueDate.HasValue && unfinished.DueDate.Value < today;
+
+                    if (isBug || isInProgress || !isOverdue)
+                    {
+                        // Kế thừa sang Sprint mới (Rollover)
+                        unfinished.SprintId = targetSprint.Id;
+                        unfinished.UpdatedAt = now;
+
+                        // Nếu là Bug quá hạn, tăng mức ưu tiên lên cao nhất để xử lý dứt điểm
+                        if (isBug && isOverdue && priorities.Count > 0)
+                        {
+                            var highestPrio = priorities.FirstOrDefault(p => p.Name.Equals("Highest", StringComparison.OrdinalIgnoreCase)) ?? priorities.First();
+                            unfinished.PriorityId = highestPrio.Id;
+                        }
+
+                        newLogs.Add(new ActivityLog
+                        {
+                            Id = Guid.NewGuid(),
+                            IssueId = unfinished.Id,
+                            UserId = scope.UserId,
+                            Action = "AiSprintRollover",
+                            Detail = JsonSerializer.Serialize(new
+                            {
+                                fromSprintId = previousSprint.Id,
+                                fromSprintName = previousSprint.Name,
+                                toSprintId = targetSprint.Id,
+                                toSprintName = targetSprint.Name,
+                                reason = isBug ? "Bug tồn đọng nghiêm trọng được tự động kế thừa" : "Công việc dở dang được kế thừa tiếp tục hoàn thiện"
+                            }),
+                            Source = "AI",
+                            CreatedAt = now
+                        });
+
+                        rolloverCount++;
+                    }
+                    else
+                    {
+                        // Task thường chưa từng bắt đầu (TimeSpent = 0) nhưng đã quá hạn -> Chuyển về Product Backlog
+                        unfinished.SprintId = null;
+                        unfinished.UpdatedAt = now;
+
+                        newLogs.Add(new ActivityLog
+                        {
+                            Id = Guid.NewGuid(),
+                            IssueId = unfinished.Id,
+                            UserId = scope.UserId,
+                            Action = "AiSprintOverdueReturnedToBacklog",
+                            Detail = JsonSerializer.Serialize(new
+                            {
+                                fromSprintId = previousSprint.Id,
+                                fromSprintName = previousSprint.Name,
+                                reason = "Công việc quá hạn từ Sprint cũ chưa bắt đầu, chuyển về Product Backlog để PO thẩm định lại độ ưu tiên và giá trị"
+                            }),
+                            Source = "AI",
+                            CreatedAt = now
+                        });
+
+                        backlogReturnedCount++;
+                    }
+                }
+            }
+
             await _deliveryDb.Issues.AddRangeAsync(newIssues, ct);
             if (newCriteria.Count > 0)
             {
@@ -444,16 +537,25 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
 
             var totalSp = request.Tasks.Sum(t => Math.Max(0m, t.StoryPoints));
 
+            var rolloverSummary = rolloverCount > 0
+                ? $" Đã kế thừa {rolloverCount} hạng mục dở dang từ {previousSprint?.Name}."
+                : string.Empty;
+            var backlogSummary = backlogReturnedCount > 0
+                ? $" Đã chuyển {backlogReturnedCount} công việc quá hạn về Product Backlog để thẩm định lại."
+                : string.Empty;
+
             return new AiApplySprintProposalResponse
             {
                 Success = true,
-                Message = $"Đã áp dụng thành công {createdTaskCount} công việc và {createdSubtaskCount} công việc con vào {targetSprint.Name}.",
+                Message = $"Đã áp dụng thành công {createdTaskCount} công việc và {createdSubtaskCount} công việc con vào {targetSprint.Name}.{rolloverSummary}{backlogSummary}",
                 SprintId = targetSprint.Id,
                 SprintName = targetSprint.Name,
                 SprintGoal = targetSprint.Goal ?? request.SprintGoal,
                 CreatedIssueCount = createdTaskCount + createdSubtaskCount,
                 CreatedTaskCount = createdTaskCount,
                 CreatedSubtaskCount = createdSubtaskCount,
+                RolloverTaskCount = rolloverCount,
+                BacklogReturnedCount = backlogReturnedCount,
                 TotalStoryPoints = totalSp,
                 CreatedIssues = createdSummaries
             };

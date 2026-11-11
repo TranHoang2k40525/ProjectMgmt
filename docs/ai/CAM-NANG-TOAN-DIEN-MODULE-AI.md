@@ -140,7 +140,13 @@ Trong quy trình phát triển phần mềm theo khung Scrum (Scrum Framework), 
 Module AI Agent của dự án được xây dựng theo mô hình **Agentic Workflow có kiểm soát (Human-in-the-loop AI Agent)**:
 - **Tiếp nhận đa kênh**: Hỗ trợ đính kèm file Word, Excel, PDF, Text hoặc dán trực tiếp ghi chú cuộc họp vào ô nhập liệu tự co giãn.
 - **RAG & MCP Grounding**: Tự động truy xuất kho tài liệu đặc tả dự án (**Spec Hub**) qua giao thức MCP, đối chiếu số liệu Backlog, vận tốc Sprint trước và kỹ năng của từng thành viên trong nhóm.
-- **Phân tách thực tế (Pragmatic Decomposition)**: Bóc tách thành các công việc độc lập, tự nhiên. Không ép buộc sinh subtask giả tạo cho các việc nhỏ (1-3 SP); chỉ chia việc con phụ trợ cho các việc phức tạp ($\ge 5$ SP).
+- **Phân tách thực tế & Không giới hạn quy mô**: Bóc tách tự nhiên theo cấu trúc sản phẩm và biên bản họp, hoàn toàn không bị gò bó bởi các giới hạn cứng về số lượng task hay subtask. Đa dạng hóa loại công việc (Story, Task, Bug, Technical Debt, Improvement).
+- **Kế thừa Sprint cũ & Xử lý việc quá hạn (Sprint Rollover & Overdue Intelligence)**:
+  - Tự động truy xuất các hạng mục dở dang từ Sprint liền kề để kế thừa sang Sprint mới.
+  - Phân loại thông minh các việc quá hạn theo chuẩn Scrum:
+    - *Bug/Blocker dở dang*: Bắt buộc chuyển sang Sprint mới dưới dạng Hotfix với mức ưu tiên cao nhất (`Highest`), gắn cảnh báo gia hạn deadline.
+    - *Task đang làm dở dang (`In Progress`)*: Chuyển tiếp vào Sprint mới để hoàn thiện (bảo vệ công sức WIP).
+    - *Task thường chưa bắt đầu (`To Do`) nhưng đã quá hạn*: Tự động hoàn trả về Product Backlog (`SprintId = null`) để Product Owner thẩm định lại giá trị và độ ưu tiên, tránh làm loãng cam kết Sprint Goal.
 - **Trích dẫn minh bạch 100%**: Mọi công việc sinh ra đều đính kèm trích dẫn tài liệu cụ thể (`documentCitations`), có thể nhấp vào để mở ngăn kéo xem tài liệu ngay lập tức mà không làm mất đoạn chat.
 - **Phê duyệt Staging**: Đề xuất được lưu tạm trên bộ nhớ đệm phân tán **Redis** để người dùng thoải mái chỉnh sửa, yêu cầu AI làm lại từng task trước khi bấm nút áp dụng chính thức vào Sprint.
 
@@ -232,6 +238,7 @@ flowchart LR
         UC11["Truy vấn Dữ liệu Dự án qua Giao thức Mở rộng"]
         UC12["Theo dõi Tài nguyên Tiêu thụ & Thống kê Sử dụng"]
         UC13["Khôi phục Phiên Phân rã từ Lịch sử"]
+        UC14["Tự Động Kế Thừa Việc Dở Dang & Xử Lý Việc Quá Hạn"]
     end
 
     SM --> UC1
@@ -246,6 +253,7 @@ flowchart LR
     SM --> UC10
     SM --> UC12
     SM --> UC13
+    SM --> UC14
 
     DEV --> UC7
     DEV --> UC11
@@ -257,6 +265,7 @@ flowchart LR
     UC10 --> AI
     UC12 --> AI
     UC13 --> AI
+    UC14 --> AI
     AI --> EXT
     EXT_AGENT --> UC11
     UC11 --> AI
@@ -968,8 +977,12 @@ Bên cạnh bộ nhớ đề xuất tức thời (Staging Session), hệ thống
 - **Bộ ghi nhận mức tiêu thụ**: Ghi nhận `AiUsageRecord` theo từng phiên làm việc (Prompt Tokens, Completion Tokens, Latency mili-giây, Model, trạng thái Success/Failed).
 - **Dashboard Quản trị trên Trang Cá nhân (Profile - Tab "Mức tiêu thụ Token AI")**:
   - **4 Thẻ Chỉ số (KPIs)**: Tổng Token tiêu thụ, Tổng cuộc gọi AI, Tỷ lệ hoàn tất thành công, Chi phí ước tính (USD).
-  - **Phân bổ theo Mô hình**: Tỷ lệ phần trăm và số lượng token giữa `Gemini 2.5 Flash`, `Gemini 2.5 Pro`, `Gemini 2.5 Flash-Lite`.
+  - **Phân bổ theo Mô hình**: Tỷ lệ phần trăm và số lượng token giữa `Gemini Flash`, `Gemini Pro`, `Gemini Flash-Lite`.
   - **Bảng Nhật ký Thực thi**: Hiển thị chi tiết 15 lượt gọi gần nhất với thời gian thực thi, số token vào/ra và trạng thái.
+
+### 6.3. Cơ chế Giải phóng Bộ nhớ đệm Cache & Làm mới Tri thức (Staging Cache Invalidation & Session Reset)
+- **Xóa sạch bộ đệm phân tán Redis**: Endpoint `POST /api/ai/agent/clear-cache` giải phóng tức thì các đối tượng đề xuất lưu tạm trong Redis (`ProjectMgmt:Ai:staging:...`), ngăn chặn tình trạng lưu vết kế hoạch cũ khi người dùng chuyển hướng hoặc thay đổi hoàn toàn yêu cầu.
+- **Khởi tạo phiên làm việc tươi mới 100%**: Trên thanh tiêu đề của Modal AI phân rã, nút **"Làm mới & Phiên mới"** cho phép người dùng chủ động xóa bỏ cache cục bộ (`localStorage`), hủy bỏ đề xuất cũ và giải phóng bộ nhớ đệm server chỉ với một thao tác duy nhất.
 
 ---
 
@@ -1068,6 +1081,10 @@ Kho tài liệu đặc tả **Spec Hub** là "kho lưu trữ tri thức" của d
 - Khi cấu hình `Qdrant:Enabled = true`: Hệ thống nhúng (Embed) các đoạn tài liệu thành vector 768 chiều bằng `gemini-embedding-001` và lưu trên Qdrant Vector Database để tìm kiếm theo độ tương đồng ngữ nghĩa (Cosine Similarity).
 - Khi cấu hình `Qdrant:Enabled = false`: Hệ thống tự động chuyển sang cơ chế tìm kiếm toàn văn Full-Text Search trong SQL và lọc theo từ khóa, đảm bảo hệ thống hoạt động ổn định trong mọi điều kiện triển khai.
 
+### 3.1. Các Tài liệu Mẫu Chuẩn Mực trong Spec Hub:
+- [`SRS-Quan-Ly-Sprint-Va-Kanban-Realtime.md`](file:///c:/Users/hoang/Downloads/ProjectMgmt/docs/cam-nang-du-an/SRS-Quan-Ly-Sprint-Va-Kanban-Realtime.md): Bản đặc tả yêu cầu phần mềm toàn diện về quản lý Sprint, phân rã công việc tự động, bảng Kanban kéo thả thời gian thực qua SignalR và cơ chế cảnh báo quá hạn.
+- [`BRD-Phan-Quyen-Va-Bao-Mat-Enterprise.md`](file:///c:/Users/hoang/Downloads/ProjectMgmt/docs/cam-nang-du-an/BRD-Phan-Quyen-Va-Bao-Mat-Enterprise.md): Bản đặc tả yêu cầu nghiệp vụ về mô hình phân quyền phân cấp từ trên xuống (Chủ tổ chức -> Giám đốc dự án -> Scrum Master -> Developer/QA) và tiêu chuẩn an toàn thông tin Zero-Secret-Leakage.
+
 ---
 
 ## 4. Cơ chế Trích dẫn Nguồn gốc (Citation Grounding) & Trải nghiệm Người dùng
@@ -1134,6 +1151,16 @@ Khi AI bắt đầu suy luận, giao diện hiển thị danh sách các hành �
    - Nhấp vào nhãn trích dẫn: Drawer nội tuyến mở ra, hiển thị tiêu đề, vị trí trích dẫn và nội dung đặc tả.
    - Nhấp vào nút "Mở trang Spec Hub": Trình duyệt mở tab Spec Hub với đầy đủ tham số `?docId=...&docName=...&section=...`. Hệ thống tự động mở tab tài liệu, cuộn mượt đến đề mục `Phần II` và kích hoạt hiệu ứng viền vàng nổi bật.
    - Nhấp "Quay lại đoạn chat": Hệ thống quay trở lại giao diện phân rã Sprint nguyên vẹn.
+
+### 5.3. Cô lập Tri thức Phạm vi Dự án & Cơ chế Tự suy luận Phi khuôn mẫu (Project Isolation & Organic Reasoning)
+1. **Cô lập Tri thức 100% theo ProjectId**:
+   - Tất cả các công cụ MCP Spec Hub (`SearchRelevantSpecsAsync`, `ReadDocumentAsync`, `GetDocumentTree`) đều thực thi xác thực phạm vi dự án `ProjectScopeGuard.Validate(scope, project.OrgId, projectId)` và chỉ truy vấn các bản ghi `ProjectDocuments.Where(d => d.ProjectId == scope.ProjectId)`. Tuyệt đối không đọc hoặc trích xuất tài liệu từ các dự án khác.
+2. **Nạp dữ liệu động từ Database dự án vào Ngữ cảnh LLM**:
+   - Khác với các giải pháp ép khuôn code cứng, hệ thống nạp động danh sách trạng thái quy trình làm việc (`WorkflowStatuses`), các loại công việc (`IssueTypes`), cấp độ ưu tiên (`Priorities`) và danh sách tệp tài liệu thực tế từ cơ sở dữ liệu dự án trực tiếp vào Prompt người dùng (`SprintDecompositionUserPrompt.md`).
+3. **Bộ giải mã Resilient JSON Parser**:
+   - Hệ thống sử dụng bộ bóc tách JSON linh hoạt, chấp nhận cả mảng chuỗi lẫn mảng đối tượng của việc con (`subtasks`), chuẩn hóa Story Points theo chuỗi Fibonacci và gán thành viên theo hồ sơ kỹ năng thực tế, loại bỏ hoàn toàn việc ép khuôn mẫu hay nhét văn bản thô vào mô tả công việc.
+4. **Cơ chế Dự phòng Không Gián đoạn (Zero-Downtime Fallback)**:
+   - Hệ thống ưu tiên các mô hình độ trễ thấp và chuyển đổi tự động sang các candidate models khả dụng (`gemini-3-flash-preview`, `gemini-3.1-flash-lite-preview`, `gemini-3.5-flash`, `gemini-3.6-flash`) khi phát hiện tình trạng tải cao tạm thời (HTTP 503) từ nhà cung cấp AI.
 
 ---
 
@@ -1284,6 +1311,33 @@ Hệ thống cung cấp 7 công cụ cốt lõi phục vụ lập kế hoạch v
         "text": "Danh sách nhân sự dự án (Tổng khả dụng: 120 giờ):\n1. Hoàng Văn A - Backend Lead (C#, .NET 8, MySQL) - Khả dụng: 40 giờ\n2. Trần Thị B - Frontend Dev (Angular, TypeScript, SCSS) - Khả dụng: 40 giờ\n3. Lê Văn C - QA / Tester (Playwright, Postman, Automation) - Khả dụng: 40 giờ"
       }
     ]
+  }
+}
+```
+
+### 3.3. Tool: `sprint_get_history_and_velocity`
+- **Mục đích**: Cung cấp vận tốc lịch sử (Velocity), danh sách User Story & Bug dở dang kèm khuyến nghị phân loại hành động kế thừa (Sprint Rollover).
+- **Lược đồ dữ liệu trả về**:
+  - `AverageVelocity`: Vận tốc trung bình qua các Sprint đã hoàn thành.
+  - `CompletedSprintsCount`: Số lượng Sprint đã đóng.
+  - `UnfinishedItemsFromSprint`: Danh sách các công việc chưa hoàn thành từ Sprint liền kề:
+    - `Key`, `Title`, `Type` (Bug, Story, Task), `Priority`, `Status`, `DueDate`, `IsOverdue`, `TimeSpentHours`.
+    - `RecommendedAction`:
+      - `Rollover_Hotfix_Highest`: Bug quá hạn hoặc dở dang, bắt buộc kế thừa vào Sprint mới với mức ưu tiên cao nhất (`Highest`).
+      - `Rollover_Continue_WIP`: Task dở dang (`In Progress`) có công sức đã bỏ ra (`TimeSpent > 0`), kế thừa vào Sprint mới để bảo vệ tiến độ.
+      - `Backlog_Reevaluate`: Task chưa làm (`To Do`) nhưng đã quá hạn, tự động chuyển về Product Backlog (`SprintId = null`) để PO đánh giá lại.
+      - `Candidate_Rollover`: Các hạng mục khác để AI và PO xem xét.
+- **Request JSON-RPC mẫu**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "sprint_get_history_and_velocity",
+    "arguments": {
+      "projectId": "12"
+    }
   }
 }
 ```

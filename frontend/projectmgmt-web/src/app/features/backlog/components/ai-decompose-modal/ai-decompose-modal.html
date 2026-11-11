@@ -76,18 +76,16 @@
           }
         </div>
 
-        @if (chatHistory().length > 0 || proposal()) {
-          <button
-            type="button"
-            class="btn-new-session"
-            data-testid="btn-ai-new-session"
-            (click)="startNewSession()"
-            title="Bắt đầu phiên làm việc AI mới"
-          >
-            <span class="material-symbols-outlined" aria-hidden="true">add</span>
-            <span>Phiên mới</span>
-          </button>
-        }
+        <button
+          type="button"
+          class="btn-new-session"
+          data-testid="btn-ai-new-session"
+          (click)="startNewSession()"
+          title="Xóa cache và bắt đầu phiên làm việc AI mới"
+        >
+          <span class="material-symbols-outlined" aria-hidden="true">refresh</span>
+          <span>Làm mới & Phiên mới</span>
+        </button>
         @if (!proposal() && !isStreaming()) {
           <button
             type="button"

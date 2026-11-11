@@ -1,5 +1,32 @@
 # CHUYÊN ĐỀ 5: KIẾN TRÚC MCP SERVER & HỆ THỐNG MCP TOOLS (MODEL CONTEXT PROTOCOL)
 
+### 3.3. Tool: `sprint_get_history_and_velocity`
+- **Mục đích**: Cung cấp vận tốc lịch sử (Velocity), danh sách User Story & Bug dở dang kèm khuyến nghị phân loại hành động kế thừa (Sprint Rollover).
+- **Lược đồ dữ liệu trả về**:
+  - `AverageVelocity`: Vận tốc trung bình qua các Sprint đã hoàn thành.
+  - `CompletedSprintsCount`: Số lượng Sprint đã đóng.
+  - `UnfinishedItemsFromSprint`: Danh sách các công việc chưa hoàn thành từ Sprint liền kề:
+    - `Key`, `Title`, `Type` (Bug, Story, Task), `Priority`, `Status`, `DueDate`, `IsOverdue`, `TimeSpentHours`.
+    - `RecommendedAction`:
+      - `Rollover_Hotfix_Highest`: Bug quá hạn hoặc dở dang, bắt buộc kế thừa vào Sprint mới với mức ưu tiên cao nhất (`Highest`).
+      - `Rollover_Continue_WIP`: Task dở dang (`In Progress`) có công sức đã bỏ ra (`TimeSpent > 0`), kế thừa vào Sprint mới để bảo vệ tiến độ.
+      - `Backlog_Reevaluate`: Task chưa làm (`To Do`) nhưng đã quá hạn, tự động chuyển về Product Backlog (`SprintId = null`) để PO đánh giá lại.
+      - `Candidate_Rollover`: Các hạng mục khác để AI và PO xem xét.
+- **Request JSON-RPC mẫu**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "sprint_get_history_and_velocity",
+    "arguments": {
+      "projectId": "12"
+    }
+  }
+}
+```
+
 ---
 
 ## 1. Bản chất Chuẩn Model Context Protocol (MCP)
@@ -48,6 +75,33 @@ flowchart TD
     InProcessTools --> SpecFolder
 ```
 
+### 3.3. Tool: `sprint_get_history_and_velocity`
+- **Mục đích**: Cung cấp vận tốc lịch sử (Velocity), danh sách User Story & Bug dở dang kèm khuyến nghị phân loại hành động kế thừa (Sprint Rollover).
+- **Lược đồ dữ liệu trả về**:
+  - `AverageVelocity`: Vận tốc trung bình qua các Sprint đã hoàn thành.
+  - `CompletedSprintsCount`: Số lượng Sprint đã đóng.
+  - `UnfinishedItemsFromSprint`: Danh sách các công việc chưa hoàn thành từ Sprint liền kề:
+    - `Key`, `Title`, `Type` (Bug, Story, Task), `Priority`, `Status`, `DueDate`, `IsOverdue`, `TimeSpentHours`.
+    - `RecommendedAction`:
+      - `Rollover_Hotfix_Highest`: Bug quá hạn hoặc dở dang, bắt buộc kế thừa vào Sprint mới với mức ưu tiên cao nhất (`Highest`).
+      - `Rollover_Continue_WIP`: Task dở dang (`In Progress`) có công sức đã bỏ ra (`TimeSpent > 0`), kế thừa vào Sprint mới để bảo vệ tiến độ.
+      - `Backlog_Reevaluate`: Task chưa làm (`To Do`) nhưng đã quá hạn, tự động chuyển về Product Backlog (`SprintId = null`) để PO đánh giá lại.
+      - `Candidate_Rollover`: Các hạng mục khác để AI và PO xem xét.
+- **Request JSON-RPC mẫu**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "sprint_get_history_and_velocity",
+    "arguments": {
+      "projectId": "12"
+    }
+  }
+}
+```
+
 ---
 
 ## 2. Danh mục Chi tiết Toàn bộ Hệ thống MCP Tools
@@ -57,7 +111,115 @@ Hệ thống cung cấp 7 công cụ cốt lõi phục vụ lập kế hoạch v
 ### 2.1. Bảng Tổng Hợp Thông Số & Chức Năng
 
 | Tên Công Cụ (Tool Name) | Tham Số Đầu Vào (Input Schema) | Dữ Liệu Trả Về (Return Model) | Tệp Mã Nguồn Triển Khai |
-| :--- | :--- | :--- | :--- |
+| :### 3.3. Tool: `sprint_get_history_and_velocity`
+- **Mục đích**: Cung cấp vận tốc lịch sử (Velocity), danh sách User Story & Bug dở dang kèm khuyến nghị phân loại hành động kế thừa (Sprint Rollover).
+- **Lược đồ dữ liệu trả về**:
+  - `AverageVelocity`: Vận tốc trung bình qua các Sprint đã hoàn thành.
+  - `CompletedSprintsCount`: Số lượng Sprint đã đóng.
+  - `UnfinishedItemsFromSprint`: Danh sách các công việc chưa hoàn thành từ Sprint liền kề:
+    - `Key`, `Title`, `Type` (Bug, Story, Task), `Priority`, `Status`, `DueDate`, `IsOverdue`, `TimeSpentHours`.
+    - `RecommendedAction`:
+      - `Rollover_Hotfix_Highest`: Bug quá hạn hoặc dở dang, bắt buộc kế thừa vào Sprint mới với mức ưu tiên cao nhất (`Highest`).
+      - `Rollover_Continue_WIP`: Task dở dang (`In Progress`) có công sức đã bỏ ra (`TimeSpent > 0`), kế thừa vào Sprint mới để bảo vệ tiến độ.
+      - `Backlog_Reevaluate`: Task chưa làm (`To Do`) nhưng đã quá hạn, tự động chuyển về Product Backlog (`SprintId = null`) để PO đánh giá lại.
+      - `Candidate_Rollover`: Các hạng mục khác để AI và PO xem xét.
+- **Request JSON-RPC mẫu**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "sprint_get_history_and_velocity",
+    "arguments": {
+      "projectId": "12"
+    }
+  }
+}
+```
+
+--- | :### 3.3. Tool: `sprint_get_history_and_velocity`
+- **Mục đích**: Cung cấp vận tốc lịch sử (Velocity), danh sách User Story & Bug dở dang kèm khuyến nghị phân loại hành động kế thừa (Sprint Rollover).
+- **Lược đồ dữ liệu trả về**:
+  - `AverageVelocity`: Vận tốc trung bình qua các Sprint đã hoàn thành.
+  - `CompletedSprintsCount`: Số lượng Sprint đã đóng.
+  - `UnfinishedItemsFromSprint`: Danh sách các công việc chưa hoàn thành từ Sprint liền kề:
+    - `Key`, `Title`, `Type` (Bug, Story, Task), `Priority`, `Status`, `DueDate`, `IsOverdue`, `TimeSpentHours`.
+    - `RecommendedAction`:
+      - `Rollover_Hotfix_Highest`: Bug quá hạn hoặc dở dang, bắt buộc kế thừa vào Sprint mới với mức ưu tiên cao nhất (`Highest`).
+      - `Rollover_Continue_WIP`: Task dở dang (`In Progress`) có công sức đã bỏ ra (`TimeSpent > 0`), kế thừa vào Sprint mới để bảo vệ tiến độ.
+      - `Backlog_Reevaluate`: Task chưa làm (`To Do`) nhưng đã quá hạn, tự động chuyển về Product Backlog (`SprintId = null`) để PO đánh giá lại.
+      - `Candidate_Rollover`: Các hạng mục khác để AI và PO xem xét.
+- **Request JSON-RPC mẫu**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "sprint_get_history_and_velocity",
+    "arguments": {
+      "projectId": "12"
+    }
+  }
+}
+```
+
+--- | :### 3.3. Tool: `sprint_get_history_and_velocity`
+- **Mục đích**: Cung cấp vận tốc lịch sử (Velocity), danh sách User Story & Bug dở dang kèm khuyến nghị phân loại hành động kế thừa (Sprint Rollover).
+- **Lược đồ dữ liệu trả về**:
+  - `AverageVelocity`: Vận tốc trung bình qua các Sprint đã hoàn thành.
+  - `CompletedSprintsCount`: Số lượng Sprint đã đóng.
+  - `UnfinishedItemsFromSprint`: Danh sách các công việc chưa hoàn thành từ Sprint liền kề:
+    - `Key`, `Title`, `Type` (Bug, Story, Task), `Priority`, `Status`, `DueDate`, `IsOverdue`, `TimeSpentHours`.
+    - `RecommendedAction`:
+      - `Rollover_Hotfix_Highest`: Bug quá hạn hoặc dở dang, bắt buộc kế thừa vào Sprint mới với mức ưu tiên cao nhất (`Highest`).
+      - `Rollover_Continue_WIP`: Task dở dang (`In Progress`) có công sức đã bỏ ra (`TimeSpent > 0`), kế thừa vào Sprint mới để bảo vệ tiến độ.
+      - `Backlog_Reevaluate`: Task chưa làm (`To Do`) nhưng đã quá hạn, tự động chuyển về Product Backlog (`SprintId = null`) để PO đánh giá lại.
+      - `Candidate_Rollover`: Các hạng mục khác để AI và PO xem xét.
+- **Request JSON-RPC mẫu**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "sprint_get_history_and_velocity",
+    "arguments": {
+      "projectId": "12"
+    }
+  }
+}
+```
+
+--- | :### 3.3. Tool: `sprint_get_history_and_velocity`
+- **Mục đích**: Cung cấp vận tốc lịch sử (Velocity), danh sách User Story & Bug dở dang kèm khuyến nghị phân loại hành động kế thừa (Sprint Rollover).
+- **Lược đồ dữ liệu trả về**:
+  - `AverageVelocity`: Vận tốc trung bình qua các Sprint đã hoàn thành.
+  - `CompletedSprintsCount`: Số lượng Sprint đã đóng.
+  - `UnfinishedItemsFromSprint`: Danh sách các công việc chưa hoàn thành từ Sprint liền kề:
+    - `Key`, `Title`, `Type` (Bug, Story, Task), `Priority`, `Status`, `DueDate`, `IsOverdue`, `TimeSpentHours`.
+    - `RecommendedAction`:
+      - `Rollover_Hotfix_Highest`: Bug quá hạn hoặc dở dang, bắt buộc kế thừa vào Sprint mới với mức ưu tiên cao nhất (`Highest`).
+      - `Rollover_Continue_WIP`: Task dở dang (`In Progress`) có công sức đã bỏ ra (`TimeSpent > 0`), kế thừa vào Sprint mới để bảo vệ tiến độ.
+      - `Backlog_Reevaluate`: Task chưa làm (`To Do`) nhưng đã quá hạn, tự động chuyển về Product Backlog (`SprintId = null`) để PO đánh giá lại.
+      - `Candidate_Rollover`: Các hạng mục khác để AI và PO xem xét.
+- **Request JSON-RPC mẫu**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "sprint_get_history_and_velocity",
+    "arguments": {
+      "projectId": "12"
+    }
+  }
+}
+```
+
+--- |
 | **spec_hub_list_documents** | `projectId` (string, required) | Danh sách cây thư mục, tên file, định dạng (.docx, .pdf, .xlsx, .md) và kích thước tệp | [`SpecHubTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SpecHubTools.cs#L45-L66) |
 | **spec_hub_read_document** | `documentId` (string, required) | Toàn văn nội dung tài liệu đã bóc tách, tiêu chí nghiệm thu (AC) và bảng biểu | [`SpecHubTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SpecHubTools.cs#L67-L83) |
 | **spec_hub_search** | `projectId` (string), `keyword` (string) | Các phân đoạn văn bản khớp từ khóa, tên file gốc và chỉ số tương đồng | [`SpecHubTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SpecHubTools.cs#L84-L98) |
@@ -65,6 +227,33 @@ Hệ thống cung cấp 7 công cụ cốt lõi phục vụ lập kế hoạch v
 | **sprint_get_history_and_velocity** | `projectId` (string, required) | Vận tốc trung bình (Velocity), các User Story dở dang bị rollover, danh sách bug tồn đọng | [`SprintTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SprintTools.cs#L35-L70) |
 | **team_get_dev_capacities** | `projectId` (string, required) | Danh sách kỹ sư (Developers, QA), chuyên môn (Frontend, Backend, Tester), số giờ khả dụng | [`TeamTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/TeamTools.cs#L35-L70) |
 | **ai_sprint_plan_propose** | `projectId` (string), `meetingNotes` (string), `targetStoryIds` (array) | Đề xuất Sprint Goal, Epics, Tasks độc lập (1-3 SP) hoặc kèm Subtasks ($\ge 5$ SP), trích dẫn tài liệu | [`Program.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.McpServer/Program.cs#L265-L287) |
+
+### 3.3. Tool: `sprint_get_history_and_velocity`
+- **Mục đích**: Cung cấp vận tốc lịch sử (Velocity), danh sách User Story & Bug dở dang kèm khuyến nghị phân loại hành động kế thừa (Sprint Rollover).
+- **Lược đồ dữ liệu trả về**:
+  - `AverageVelocity`: Vận tốc trung bình qua các Sprint đã hoàn thành.
+  - `CompletedSprintsCount`: Số lượng Sprint đã đóng.
+  - `UnfinishedItemsFromSprint`: Danh sách các công việc chưa hoàn thành từ Sprint liền kề:
+    - `Key`, `Title`, `Type` (Bug, Story, Task), `Priority`, `Status`, `DueDate`, `IsOverdue`, `TimeSpentHours`.
+    - `RecommendedAction`:
+      - `Rollover_Hotfix_Highest`: Bug quá hạn hoặc dở dang, bắt buộc kế thừa vào Sprint mới với mức ưu tiên cao nhất (`Highest`).
+      - `Rollover_Continue_WIP`: Task dở dang (`In Progress`) có công sức đã bỏ ra (`TimeSpent > 0`), kế thừa vào Sprint mới để bảo vệ tiến độ.
+      - `Backlog_Reevaluate`: Task chưa làm (`To Do`) nhưng đã quá hạn, tự động chuyển về Product Backlog (`SprintId = null`) để PO đánh giá lại.
+      - `Candidate_Rollover`: Các hạng mục khác để AI và PO xem xét.
+- **Request JSON-RPC mẫu**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "sprint_get_history_and_velocity",
+    "arguments": {
+      "projectId": "12"
+    }
+  }
+}
+```
 
 ---
 
@@ -135,6 +324,33 @@ Hệ thống cung cấp 7 công cụ cốt lõi phục vụ lập kế hoạch v
 }
 ```
 
+### 3.3. Tool: `sprint_get_history_and_velocity`
+- **Mục đích**: Cung cấp vận tốc lịch sử (Velocity), danh sách User Story & Bug dở dang kèm khuyến nghị phân loại hành động kế thừa (Sprint Rollover).
+- **Lược đồ dữ liệu trả về**:
+  - `AverageVelocity`: Vận tốc trung bình qua các Sprint đã hoàn thành.
+  - `CompletedSprintsCount`: Số lượng Sprint đã đóng.
+  - `UnfinishedItemsFromSprint`: Danh sách các công việc chưa hoàn thành từ Sprint liền kề:
+    - `Key`, `Title`, `Type` (Bug, Story, Task), `Priority`, `Status`, `DueDate`, `IsOverdue`, `TimeSpentHours`.
+    - `RecommendedAction`:
+      - `Rollover_Hotfix_Highest`: Bug quá hạn hoặc dở dang, bắt buộc kế thừa vào Sprint mới với mức ưu tiên cao nhất (`Highest`).
+      - `Rollover_Continue_WIP`: Task dở dang (`In Progress`) có công sức đã bỏ ra (`TimeSpent > 0`), kế thừa vào Sprint mới để bảo vệ tiến độ.
+      - `Backlog_Reevaluate`: Task chưa làm (`To Do`) nhưng đã quá hạn, tự động chuyển về Product Backlog (`SprintId = null`) để PO đánh giá lại.
+      - `Candidate_Rollover`: Các hạng mục khác để AI và PO xem xét.
+- **Request JSON-RPC mẫu**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "sprint_get_history_and_velocity",
+    "arguments": {
+      "projectId": "12"
+    }
+  }
+}
+```
+
 ---
 
 ## 4. Hướng Dẫn Cấu Hình Kết Nối cho AI Agents Bên Ngoài
@@ -178,6 +394,33 @@ Thêm vào tệp cấu hình MCP của Cursor / Roo Code (`.cursor/mcp.json`):
 }
 ```
 
+### 3.3. Tool: `sprint_get_history_and_velocity`
+- **Mục đích**: Cung cấp vận tốc lịch sử (Velocity), danh sách User Story & Bug dở dang kèm khuyến nghị phân loại hành động kế thừa (Sprint Rollover).
+- **Lược đồ dữ liệu trả về**:
+  - `AverageVelocity`: Vận tốc trung bình qua các Sprint đã hoàn thành.
+  - `CompletedSprintsCount`: Số lượng Sprint đã đóng.
+  - `UnfinishedItemsFromSprint`: Danh sách các công việc chưa hoàn thành từ Sprint liền kề:
+    - `Key`, `Title`, `Type` (Bug, Story, Task), `Priority`, `Status`, `DueDate`, `IsOverdue`, `TimeSpentHours`.
+    - `RecommendedAction`:
+      - `Rollover_Hotfix_Highest`: Bug quá hạn hoặc dở dang, bắt buộc kế thừa vào Sprint mới với mức ưu tiên cao nhất (`Highest`).
+      - `Rollover_Continue_WIP`: Task dở dang (`In Progress`) có công sức đã bỏ ra (`TimeSpent > 0`), kế thừa vào Sprint mới để bảo vệ tiến độ.
+      - `Backlog_Reevaluate`: Task chưa làm (`To Do`) nhưng đã quá hạn, tự động chuyển về Product Backlog (`SprintId = null`) để PO đánh giá lại.
+      - `Candidate_Rollover`: Các hạng mục khác để AI và PO xem xét.
+- **Request JSON-RPC mẫu**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "sprint_get_history_and_velocity",
+    "arguments": {
+      "projectId": "12"
+    }
+  }
+}
+```
+
 ---
 
 ## 5. Hướng Dẫn Chạy & Kiểm Thử Tương Tác Qua Terminal Stdio
@@ -206,12 +449,120 @@ Dán dòng JSON sau vào terminal và nhấn Enter:
 ```
 **Kết quả:** Server trả về đầy đủ 7 công cụ kèm inputSchema chuẩn xác.
 
+### 3.3. Tool: `sprint_get_history_and_velocity`
+- **Mục đích**: Cung cấp vận tốc lịch sử (Velocity), danh sách User Story & Bug dở dang kèm khuyến nghị phân loại hành động kế thừa (Sprint Rollover).
+- **Lược đồ dữ liệu trả về**:
+  - `AverageVelocity`: Vận tốc trung bình qua các Sprint đã hoàn thành.
+  - `CompletedSprintsCount`: Số lượng Sprint đã đóng.
+  - `UnfinishedItemsFromSprint`: Danh sách các công việc chưa hoàn thành từ Sprint liền kề:
+    - `Key`, `Title`, `Type` (Bug, Story, Task), `Priority`, `Status`, `DueDate`, `IsOverdue`, `TimeSpentHours`.
+    - `RecommendedAction`:
+      - `Rollover_Hotfix_Highest`: Bug quá hạn hoặc dở dang, bắt buộc kế thừa vào Sprint mới với mức ưu tiên cao nhất (`Highest`).
+      - `Rollover_Continue_WIP`: Task dở dang (`In Progress`) có công sức đã bỏ ra (`TimeSpent > 0`), kế thừa vào Sprint mới để bảo vệ tiến độ.
+      - `Backlog_Reevaluate`: Task chưa làm (`To Do`) nhưng đã quá hạn, tự động chuyển về Product Backlog (`SprintId = null`) để PO đánh giá lại.
+      - `Candidate_Rollover`: Các hạng mục khác để AI và PO xem xét.
+- **Request JSON-RPC mẫu**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "sprint_get_history_and_velocity",
+    "arguments": {
+      "projectId": "12"
+    }
+  }
+}
+```
+
 ---
 
 ## 6. Danh mục Tệp Mã Nguồn Tham Chiếu Chuyên Đề 5
 
 | Thành phần | Vai trò kỹ thuật | Liên kết mã nguồn |
-| :--- | :--- | :--- |
+| :### 3.3. Tool: `sprint_get_history_and_velocity`
+- **Mục đích**: Cung cấp vận tốc lịch sử (Velocity), danh sách User Story & Bug dở dang kèm khuyến nghị phân loại hành động kế thừa (Sprint Rollover).
+- **Lược đồ dữ liệu trả về**:
+  - `AverageVelocity`: Vận tốc trung bình qua các Sprint đã hoàn thành.
+  - `CompletedSprintsCount`: Số lượng Sprint đã đóng.
+  - `UnfinishedItemsFromSprint`: Danh sách các công việc chưa hoàn thành từ Sprint liền kề:
+    - `Key`, `Title`, `Type` (Bug, Story, Task), `Priority`, `Status`, `DueDate`, `IsOverdue`, `TimeSpentHours`.
+    - `RecommendedAction`:
+      - `Rollover_Hotfix_Highest`: Bug quá hạn hoặc dở dang, bắt buộc kế thừa vào Sprint mới với mức ưu tiên cao nhất (`Highest`).
+      - `Rollover_Continue_WIP`: Task dở dang (`In Progress`) có công sức đã bỏ ra (`TimeSpent > 0`), kế thừa vào Sprint mới để bảo vệ tiến độ.
+      - `Backlog_Reevaluate`: Task chưa làm (`To Do`) nhưng đã quá hạn, tự động chuyển về Product Backlog (`SprintId = null`) để PO đánh giá lại.
+      - `Candidate_Rollover`: Các hạng mục khác để AI và PO xem xét.
+- **Request JSON-RPC mẫu**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "sprint_get_history_and_velocity",
+    "arguments": {
+      "projectId": "12"
+    }
+  }
+}
+```
+
+--- | :### 3.3. Tool: `sprint_get_history_and_velocity`
+- **Mục đích**: Cung cấp vận tốc lịch sử (Velocity), danh sách User Story & Bug dở dang kèm khuyến nghị phân loại hành động kế thừa (Sprint Rollover).
+- **Lược đồ dữ liệu trả về**:
+  - `AverageVelocity`: Vận tốc trung bình qua các Sprint đã hoàn thành.
+  - `CompletedSprintsCount`: Số lượng Sprint đã đóng.
+  - `UnfinishedItemsFromSprint`: Danh sách các công việc chưa hoàn thành từ Sprint liền kề:
+    - `Key`, `Title`, `Type` (Bug, Story, Task), `Priority`, `Status`, `DueDate`, `IsOverdue`, `TimeSpentHours`.
+    - `RecommendedAction`:
+      - `Rollover_Hotfix_Highest`: Bug quá hạn hoặc dở dang, bắt buộc kế thừa vào Sprint mới với mức ưu tiên cao nhất (`Highest`).
+      - `Rollover_Continue_WIP`: Task dở dang (`In Progress`) có công sức đã bỏ ra (`TimeSpent > 0`), kế thừa vào Sprint mới để bảo vệ tiến độ.
+      - `Backlog_Reevaluate`: Task chưa làm (`To Do`) nhưng đã quá hạn, tự động chuyển về Product Backlog (`SprintId = null`) để PO đánh giá lại.
+      - `Candidate_Rollover`: Các hạng mục khác để AI và PO xem xét.
+- **Request JSON-RPC mẫu**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "sprint_get_history_and_velocity",
+    "arguments": {
+      "projectId": "12"
+    }
+  }
+}
+```
+
+--- | :### 3.3. Tool: `sprint_get_history_and_velocity`
+- **Mục đích**: Cung cấp vận tốc lịch sử (Velocity), danh sách User Story & Bug dở dang kèm khuyến nghị phân loại hành động kế thừa (Sprint Rollover).
+- **Lược đồ dữ liệu trả về**:
+  - `AverageVelocity`: Vận tốc trung bình qua các Sprint đã hoàn thành.
+  - `CompletedSprintsCount`: Số lượng Sprint đã đóng.
+  - `UnfinishedItemsFromSprint`: Danh sách các công việc chưa hoàn thành từ Sprint liền kề:
+    - `Key`, `Title`, `Type` (Bug, Story, Task), `Priority`, `Status`, `DueDate`, `IsOverdue`, `TimeSpentHours`.
+    - `RecommendedAction`:
+      - `Rollover_Hotfix_Highest`: Bug quá hạn hoặc dở dang, bắt buộc kế thừa vào Sprint mới với mức ưu tiên cao nhất (`Highest`).
+      - `Rollover_Continue_WIP`: Task dở dang (`In Progress`) có công sức đã bỏ ra (`TimeSpent > 0`), kế thừa vào Sprint mới để bảo vệ tiến độ.
+      - `Backlog_Reevaluate`: Task chưa làm (`To Do`) nhưng đã quá hạn, tự động chuyển về Product Backlog (`SprintId = null`) để PO đánh giá lại.
+      - `Candidate_Rollover`: Các hạng mục khác để AI và PO xem xét.
+- **Request JSON-RPC mẫu**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "sprint_get_history_and_velocity",
+    "arguments": {
+      "projectId": "12"
+    }
+  }
+}
+```
+
+--- |
 | **ProjectMgmt.McpServer** | Ứng dụng Console phục vụ kết nối JSON-RPC 2.0 Stdio ngoài | [`Program.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.McpServer/Program.cs#L20-L150) |
 | **SpecHubTools** | Công cụ đọc và tìm kiếm tài liệu đặc tả Spec Hub | [`SpecHubTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SpecHubTools.cs#L45-L100) |
 | **BacklogTools** | Công cụ truy vấn User Story và độ ưu tiên Backlog | [`BacklogTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/BacklogTools.cs#L35-L75) |

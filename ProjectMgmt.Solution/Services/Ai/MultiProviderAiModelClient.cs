@@ -134,17 +134,21 @@ public sealed class MultiProviderAiModelClient : IAiModelClient
     {
         var m = (rawModel ?? string.Empty).Trim().ToLowerInvariant().Replace(" ", "-");
         if (m.StartsWith("models/")) m = m["models/".Length..];
-        if (string.IsNullOrEmpty(m) || m.Contains("2.5") || m.Contains("2.0") || m.Contains("1.5"))
+        if (string.IsNullOrEmpty(m) || m.Contains("2.5") || m.Contains("2.0") || m.Contains("1.5") || m.Contains("preview"))
         {
-            return "gemini-3.6-flash";
+            return "gemini-3-flash-preview";
         }
         if (m.Contains("cao") || m.Contains("high") || m.Contains("pro") || m.Contains("3.6"))
         {
-            return "gemini-3.6-flash";
+            return "gemini-3-flash-preview";
         }
         if (m.Contains("3.5"))
         {
             return "gemini-3.5-flash";
+        }
+        if (m.Contains("lite"))
+        {
+            return "gemini-3.1-flash-lite-preview";
         }
         return m;
     }
@@ -157,7 +161,15 @@ public sealed class MultiProviderAiModelClient : IAiModelClient
     {
         var client = _httpClientFactory.CreateClient("AiClient");
         var primaryModel = NormalizeGeminiModel(prompt.Model ?? settings.ModelName);
-        var candidateModels = new List<string> { primaryModel, "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3-flash-preview" }.Distinct().ToList();
+        var candidateModels = new List<string>
+        {
+            primaryModel,
+            "gemini-3-flash-preview",
+            "gemini-3.1-flash-lite-preview",
+            "gemini-flash-latest",
+            "gemini-3.5-flash",
+            "gemini-3.6-flash"
+        }.Distinct().ToList();
 
         Exception? lastException = null;
         var streamCompleted = false;
@@ -211,7 +223,7 @@ public sealed class MultiProviderAiModelClient : IAiModelClient
                 if (!response.IsSuccessStatusCode)
                 {
                     var errBody = await response.Content.ReadAsStringAsync(ct);
-                    _logger.LogWarning("[GeminiStream] Model {Model} returned {StatusCode}: {ErrorBody}", model, response.StatusCode, errBody);
+                    _logger.LogWarning("[GeminiStream] Model {Model} returned {StatusCode}: {ErrorBody}, tiếp tục thử model dự phòng", model, response.StatusCode, errBody);
                     continue;
                 }
 

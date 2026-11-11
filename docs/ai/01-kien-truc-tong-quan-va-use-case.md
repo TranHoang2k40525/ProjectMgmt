@@ -15,7 +15,13 @@ Trong quy trình phát triển phần mềm theo khung Scrum (Scrum Framework), 
 Module AI Agent của dự án được xây dựng theo mô hình **Agentic Workflow có kiểm soát (Human-in-the-loop AI Agent)**:
 - **Tiếp nhận đa kênh**: Hỗ trợ đính kèm file Word, Excel, PDF, Text hoặc dán trực tiếp ghi chú cuộc họp vào ô nhập liệu tự co giãn.
 - **RAG & MCP Grounding**: Tự động truy xuất kho tài liệu đặc tả dự án (**Spec Hub**) qua giao thức MCP, đối chiếu số liệu Backlog, vận tốc Sprint trước và kỹ năng của từng thành viên trong nhóm.
-- **Phân tách thực tế (Pragmatic Decomposition)**: Bóc tách thành các công việc độc lập, tự nhiên. Không ép buộc sinh subtask giả tạo cho các việc nhỏ (1-3 SP); chỉ chia việc con phụ trợ cho các việc phức tạp ($\ge 5$ SP).
+- **Phân tách thực tế & Không giới hạn quy mô**: Bóc tách tự nhiên theo cấu trúc sản phẩm và biên bản họp, hoàn toàn không bị gò bó bởi các giới hạn cứng về số lượng task hay subtask. Đa dạng hóa loại công việc (Story, Task, Bug, Technical Debt, Improvement).
+- **Kế thừa Sprint cũ & Xử lý việc quá hạn (Sprint Rollover & Overdue Intelligence)**:
+  - Tự động truy xuất các hạng mục dở dang từ Sprint liền kề để kế thừa sang Sprint mới.
+  - Phân loại thông minh các việc quá hạn theo chuẩn Scrum:
+    - *Bug/Blocker dở dang*: Bắt buộc chuyển sang Sprint mới dưới dạng Hotfix với mức ưu tiên cao nhất (`Highest`), gắn cảnh báo gia hạn deadline.
+    - *Task đang làm dở dang (`In Progress`)*: Chuyển tiếp vào Sprint mới để hoàn thiện (bảo vệ công sức WIP).
+    - *Task thường chưa bắt đầu (`To Do`) nhưng đã quá hạn*: Tự động hoàn trả về Product Backlog (`SprintId = null`) để Product Owner thẩm định lại giá trị và độ ưu tiên, tránh làm loãng cam kết Sprint Goal.
 - **Trích dẫn minh bạch 100%**: Mọi công việc sinh ra đều đính kèm trích dẫn tài liệu cụ thể (`documentCitations`), có thể nhấp vào để mở ngăn kéo xem tài liệu ngay lập tức mà không làm mất đoạn chat.
 - **Phê duyệt Staging**: Đề xuất được lưu tạm trên bộ nhớ đệm phân tán **Redis** để người dùng thoải mái chỉnh sửa, yêu cầu AI làm lại từng task trước khi bấm nút áp dụng chính thức vào Sprint.
 
@@ -107,6 +113,7 @@ flowchart LR
         UC11["Truy vấn Dữ liệu Dự án qua Giao thức Mở rộng"]
         UC12["Theo dõi Tài nguyên Tiêu thụ & Thống kê Sử dụng"]
         UC13["Khôi phục Phiên Phân rã từ Lịch sử"]
+        UC14["Tự Động Kế Thừa Việc Dở Dang & Xử Lý Việc Quá Hạn"]
     end
 
     SM --> UC1
@@ -121,6 +128,7 @@ flowchart LR
     SM --> UC10
     SM --> UC12
     SM --> UC13
+    SM --> UC14
 
     DEV --> UC7
     DEV --> UC11
@@ -132,6 +140,7 @@ flowchart LR
     UC10 --> AI
     UC12 --> AI
     UC13 --> AI
+    UC14 --> AI
     AI --> EXT
     EXT_AGENT --> UC11
     UC11 --> AI

@@ -152,6 +152,21 @@ export class AppShellComponent {
     this.isQuickProfileOpen.set(true);
   }
 
+  /** Điều hướng an toàn về Trang chủ ban đầu ngoài tổ chức (Agile Workspace / Dành cho bạn) */
+  goToHome(event?: Event): void {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    this.workspace.currentOrg.set(null);
+    this.projectService.clearActiveProject();
+    this.closeFlyouts();
+    if (typeof window !== 'undefined' && window.innerWidth < 1280) {
+      this.isSidebarCollapsed.set(true);
+    }
+    void this.router.navigate(['/for-you']);
+  }
+
   // Sidebar 2 cấp: trang chủ (Tổ chức) và tổ chức đang xem (Dự án, Cài đặt)
   readonly projectsList = this.projectService.allProjectsList;
   readonly activeProject = this.projectService.currentProject;
@@ -162,12 +177,16 @@ export class AppShellComponent {
   /** Tổ chức đang xem: theo URL /orgs/:id, hoặc tổ chức của dự án đang mở khi ở trong màn dự án / công việc. */
   readonly currentOrgId = computed(() => {
     const url = this.currentUrl();
+    // Khi người dùng ở trang chủ ban đầu ngoài tổ chức hoặc các trang toàn cục, không gán Org context
+    if (!url || url === '/' || url.startsWith('/for-you') || url.startsWith('/profile') || url.startsWith('/notifications') || url.startsWith('/admin') || url.startsWith('/auth') || url.startsWith('/login') || url.startsWith('/invite')) {
+      return null;
+    }
     const match = /^\/orgs\/([^/?#]+)/.exec(url);
     if (match) return decodeURIComponent(match[1]);
     if (this.isProjectRoute() || url.startsWith('/issues/')) {
       return this.activeProject().orgId || null;
     }
-    // Giữ nguyên tổ chức nếu đang có dự án được chọn (tránh mất context khi xem hồ sơ hoặc trang khác)
+    // Giữ nguyên tổ chức nếu đang có dự án được chọn trong ngữ cảnh dự án
     if (this.projectService.hasActiveProject() && this.activeProject()?.orgId) {
       return this.activeProject().orgId;
     }

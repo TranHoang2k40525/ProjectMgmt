@@ -16,3 +16,9 @@ public sealed class AiRegenerateTaskRequest
     [Required, MinLength(2), MaxLength(2000)]
     public string Feedback { get; set; } = string.Empty;
 }
+
+public sealed class AiClearCacheRequest
+{
+    public string? SessionId { get; set; }
+    public Guid? ProjectId { get; set; }
+}
