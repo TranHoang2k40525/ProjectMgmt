@@ -333,9 +333,25 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
               },
             });
           } else {
-            // Nếu không tìm thấy tên chính xác, tìm tệp văn bản đầu tiên trong kho Spec Hub
             const firstFile = this.findFirstNonDirFile(nodes);
-            if (firstFile) {
+            // Kiểm tra nếu trích dẫn từ ghi chú cuộc họp / biên bản đã nạp
+            const pastedText = this.pastedDocumentText() || this.promptInput();
+            const isMeetingNoteCite = /cuộc họp|ghi chú|biên bản|meeting|notes/i.test(docTitle);
+
+            if (isMeetingNoteCite && pastedText) {
+              this.activeSpecDocPreview.update((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      docId: 'meeting_notes',
+                      title: 'Ghi chú & Biên bản cuộc họp đã nạp',
+                      content: pastedText,
+                      isLoading: false,
+                    }
+                  : null
+              );
+              this.scrollPreviewToSection(section);
+            } else if (firstFile) {
               this.projectManagementService.getFileContent(firstFile.id).subscribe({
                 next: (res) => {
                   this.activeSpecDocPreview.update((prev) =>
@@ -371,10 +387,11 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
                   ? {
                       ...prev,
                       isLoading: false,
-                      content: `Tài liệu: ${docTitle}\nTrích dẫn trực tiếp từ phiên làm việc và ngữ cảnh dự án.`,
+                      content: pastedText || `Tài liệu: ${docTitle}\nTrích dẫn trực tiếp từ phiên làm việc và ngữ cảnh dự án.`,
                     }
                   : null
               );
+              this.scrollPreviewToSection(section);
             }
           }
         },
@@ -492,20 +509,50 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
 
   private scrollPreviewToSection(section?: string | null): void {
     if (!section) return;
-    setTimeout(() => {
-      const container = document.querySelector('.doc-preview-body');
-      if (!container) return;
-      const clean = section.trim().toLowerCase();
-      const preEl = container.querySelector('pre') as HTMLElement | null;
-      if (preEl) {
-        const text = (preEl.innerText || '').toLowerCase();
-        const idx = text.indexOf(clean);
-        if (idx >= 0) {
-          const lineNum = text.substring(0, idx).split('\n').length;
-          preEl.scrollTop = Math.max(0, (lineNum - 2) * 22);
+    const clean = section.trim().toLowerCase();
+
+    const tryScroll = (): boolean => {
+      const container = document.querySelector('.doc-preview-body') as HTMLElement | null;
+      if (!container) return false;
+
+      const preEl = container.querySelector('.preview-content-text') as HTMLElement | null;
+      if (!preEl) return false;
+
+      const text = (preEl.innerText || '').toLowerCase();
+      let targetIdx = text.indexOf(clean);
+
+      // Nếu không khớp toàn bộ, tìm theo các từ khóa dài (> 3 ký tự)
+      if (targetIdx < 0) {
+        const keywords = clean.split(/[\s:,\-]+/).filter((w) => w.length > 3);
+        for (const kw of keywords) {
+          const kIdx = text.indexOf(kw);
+          if (kIdx >= 0) {
+            targetIdx = kIdx;
+            break;
+          }
         }
       }
-    }, 350);
+
+      if (targetIdx >= 0) {
+        const precedingText = text.substring(0, targetIdx);
+        const lineNum = precedingText.split('\n').length;
+        const totalLines = Math.max(1, text.split('\n').length);
+        const targetScrollTop = (lineNum / totalLines) * preEl.scrollHeight;
+        container.scrollTo({ top: Math.max(0, targetScrollTop - 80), behavior: 'smooth' });
+
+        // Tạo hiệu ứng sóng sáng amber nổi bật vị trí trích dẫn
+        preEl.classList.add('spec-highlight-pulse');
+        setTimeout(() => preEl.classList.remove('spec-highlight-pulse'), 3500);
+        return true;
+      }
+      return false;
+    };
+
+    setTimeout(() => {
+      if (!tryScroll()) {
+        setTimeout(tryScroll, 350);
+      }
+    }, 200);
   }
 
   openReviewPastedDoc(): void {
