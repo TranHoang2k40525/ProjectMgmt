@@ -15,6 +15,11 @@ public sealed class AiSprintProposalDto
     public decimal TotalStoryPoints { get; set; }
     public List<ProposedTaskDto> Tasks { get; set; } = [];
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+    /// <summary>
+    /// Khác null khi mô hình AI không trả kết quả dùng được (quá tải, JSON hỏng): đề xuất là bản nháp dựng từ khuôn mẫu
+    /// (khi phân tích) hoặc là đề xuất cũ giữ nguyên (khi làm lại). Giao diện dùng để cảnh báo thay vì báo thành công.
+    /// </summary>
+    public string? FallbackReason { get; set; }
 }
 
 public sealed class ProposedTaskDto

@@ -306,7 +306,11 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         CancellationToken cancellationToken = default)
     {
         var sanitizedFeedback = InputGuardrail.Sanitize(userFeedback ?? string.Empty).SanitizedText;
-        var currentTasksJson = JsonSerializer.Serialize(proposal.Tasks);
+        // camelCase giống schema yêu cầu trả về; PascalCase làm mô hình bắt chước "Tasks" và đề xuất bị bỏ.
+        var currentTasksJson = JsonSerializer.Serialize(proposal.Tasks, new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        });
         var teamCapacities = await _teamTools.GetDevCapacitiesAsync(scope, cancellationToken);
 
         var fullVariables = new Dictionary<string, string>
@@ -333,26 +337,29 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
             Temperature = 0.3
         };
 
+        string fallbackReason;
         try
         {
             var result = await _aiClient.GenerateAsync(prompt, scope, cancellationToken);
-            if (result.IsSuccess && !string.IsNullOrWhiteSpace(result.Content))
+            var updated = result.IsSuccess && !string.IsNullOrWhiteSpace(result.Content)
+                ? TryParseAiOutputToProposal(result.Content, proposal.SessionId, proposal.ProjectId, proposal.TargetSprintId, string.Empty)
+                : null;
+            if (updated != null)
             {
-                var updated = ParseAiOutputToProposal(result.Content, proposal.SessionId, proposal.ProjectId, proposal.TargetSprintId, sanitizedFeedback);
                 EnrichProposalWithTeamMembers(updated, teamCapacities);
                 return updated;
             }
+            _logger.LogWarning("[RegenerateFullProposal] Mô hình không trả JSON đề xuất hợp lệ ({Length} ký tự); giữ nguyên đề xuất cũ.", result.Content?.Length ?? 0);
+            fallbackReason = "AI trả kết quả không đọc được nên chưa chỉnh được đề xuất. Đề xuất hiện tại được giữ nguyên, hãy thử lại.";
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "[RegenerateFullProposal] Không thể sinh lại toàn bộ qua model AI, áp dụng điều chỉnh cục bộ");
+            _logger.LogWarning(ex, "[RegenerateFullProposal] Không thể sinh lại toàn bộ qua model AI; giữ nguyên đề xuất cũ.");
+            fallbackReason = "Mô hình AI đang quá tải hoặc không phản hồi nên chưa chỉnh được đề xuất. Đề xuất hiện tại được giữ nguyên, hãy thử lại sau ít giây.";
         }
 
-        proposal.SprintGoal = $"{proposal.SprintGoal} ({sanitizedFeedback})";
-        foreach (var task in proposal.Tasks)
-        {
-            task.Description = $"{task.Description}\n[Cập nhật theo yêu cầu: {sanitizedFeedback}]";
-        }
+        // Không thay đề xuất người dùng đang duyệt bằng khuôn mẫu dựng sẵn: trả lại nguyên trạng kèm lý do.
+        proposal.FallbackReason = fallbackReason;
         return proposal;
     }
 
@@ -426,6 +433,17 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         Guid? targetSprintId,
         string sourceDoc,
         string? userPrompt = null,
+        IReadOnlyList<(Guid Id, string Name)>? availableDocs = null) =>
+        TryParseAiOutputToProposal(rawJson, sessionId, projectId, targetSprintId, sourceDoc, availableDocs)
+            ?? CreateFallbackProposal(sessionId, projectId, targetSprintId, sourceDoc, userPrompt, availableDocs);
+
+    /// <summary>Đọc JSON đề xuất từ mô hình; null nếu không đọc được hoặc không có task nào.</summary>
+    private static AiSprintProposalDto? TryParseAiOutputToProposal(
+        string rawJson,
+        string sessionId,
+        Guid projectId,
+        Guid? targetSprintId,
+        string sourceDoc,
         IReadOnlyList<(Guid Id, string Name)>? availableDocs = null)
     {
         try
@@ -433,7 +451,8 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
             if (!string.IsNullOrWhiteSpace(rawJson))
             {
                 var cleaned = ExtractJsonObject(rawJson);
-                var docNode = System.Text.Json.Nodes.JsonNode.Parse(cleaned);
+                // Mô hình có khi trả "Tasks"/"SprintGoal" (PascalCase): đọc khóa không phân biệt hoa thường.
+                var docNode = System.Text.Json.Nodes.JsonNode.Parse(cleaned, new System.Text.Json.Nodes.JsonNodeOptions { PropertyNameCaseInsensitive = true });
 
                 if (docNode is System.Text.Json.Nodes.JsonObject obj)
                 {
@@ -656,7 +675,7 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
             Console.WriteLine($"[AiSprintDecomposition] Lỗi bóc tách JSON đề xuất: {ex.Message}");
         }
 
-        return CreateFallbackProposal(sessionId, projectId, targetSprintId, sourceDoc, userPrompt, availableDocs);
+        return null;
     }
 
     private static AiSprintProposalDto CreateFallbackProposal(
@@ -707,6 +726,7 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
             Tags = new List<string> { "#SprintPlan", "#Scrum", "#SpecHub", "#FullStack" },
             TotalStoryPoints = 13,
             TotalEstimatedHours = 40,
+            FallbackReason = "Mô hình AI không trả về kết quả dùng được (có thể đang quá tải). Đây là bản nháp dựng sẵn từ nội dung bạn gửi, chưa phải phân tích của AI.",
             Tasks = new List<ProposedTaskDto>
             {
                 new()

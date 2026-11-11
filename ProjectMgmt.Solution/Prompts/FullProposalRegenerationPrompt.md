@@ -15,4 +15,40 @@ Chỉ đạo tái cấu trúc cho Agent:
 3. Hỗ trợ đa dạng loại công việc (Story, Task, Bug, Technical Debt, Improvement) theo ngữ cảnh.
 4. Story Points tuân thủ dãy Fibonacci (1, 2, 3, 5, 8), phân công đúng chuyên môn kỹ thuật (Frontend, Backend, QA) và cân bằng tải.
 5. Giữ vững trích dẫn tài liệu thật (documentCitations) từ các tệp Spec Hub của dự án.
-6. Trả về đúng duy nhất đối tượng JSON SprintProposal theo quy chuẩn (không có markdown giải thích ở ngoài).
+6. Giữ nguyên các Task không bị yêu cầu thay đổi (cùng `id`, nội dung), chỉ sửa/bỏ/thêm đúng phần người dùng yêu cầu.
+7. Trả về đúng duy nhất một đối tượng JSON (không có markdown giải thích ở ngoài), khóa viết camelCase đúng như sau:
+{
+  "sprintGoal": "Mục tiêu Sprint sau điều chỉnh",
+  "rationale": "Lý do điều chỉnh",
+  "tags": ["#SprintPlan"],
+  "tasks": [
+    {
+      "id": "task_01",
+      "epicTitle": "Tên Epic",
+      "title": "Tiêu đề hành động kỹ thuật",
+      "description": "Mô tả chi tiết",
+      "type": "Story",
+      "priority": "High",
+      "storyPoints": 5,
+      "estimatedHours": 14,
+      "assigneeName": "Họ và tên thành viên",
+      "tags": ["#Backend"],
+      "acceptanceCriteria": ["Tiêu chí 1", "Tiêu chí 2"],
+      "documentCitations": ["TênTàiLiệu.md - Mục X"],
+      "aiRationale": "Căn cứ phân công",
+      "subtasks": [
+        {
+          "id": "task_01_1",
+          "title": "Tiêu đề việc con",
+          "role": "Backend",
+          "estimatedHours": 6,
+          "storyPoints": 2,
+          "priority": "High",
+          "assigneeName": "Họ và tên thành viên",
+          "description": "Mô tả việc con",
+          "acceptanceCriteria": ["Tiêu chí"]
+        }
+      ]
+    }
+  ]
+}

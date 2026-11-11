@@ -395,7 +395,11 @@ public class AiAgentController : ControllerBase
             scope,
             ct);
 
-        await _stagingService.SaveProposalAsync(request.SessionId, updatedProposal, TimeSpan.FromHours(2), ct);
+        // AI không chỉnh được (FallbackReason): đề xuất cũ trong staging giữ nguyên, chỉ báo lý do về giao diện.
+        if (updatedProposal.FallbackReason is null)
+        {
+            await _stagingService.SaveProposalAsync(request.SessionId, updatedProposal, TimeSpan.FromHours(2), ct);
+        }
 
         return Ok(updatedProposal);
     }

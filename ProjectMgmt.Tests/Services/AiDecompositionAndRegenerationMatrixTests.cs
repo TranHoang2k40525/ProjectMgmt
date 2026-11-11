@@ -626,6 +626,67 @@ public class AiDecompositionAndRegenerationMatrixTests
         Assert.NotEmpty(updated.Tasks);
     }
 
+    private static async Task<AiSprintProposalDto> RegenerateWithAsync(AiSprintProposalDto proposal, string generateOutput, bool throwOnGenerate)
+    {
+        var suffix = Guid.NewGuid().ToString("N");
+        await using var planningDb = new TestPlanningDbContext(new DbContextOptionsBuilder<PlanningDbContext>().UseInMemoryDatabase($"Regen_Plan_{suffix}").Options);
+        await using var identityDb = new TestIdentityDbContext(new DbContextOptionsBuilder<IdentityExperienceDbContext>().UseInMemoryDatabase($"Regen_Id_{suffix}").Options);
+        await using var deliveryDb = new TestDeliveryDbContext(new DbContextOptionsBuilder<DeliveryIntelligenceDbContext>().UseInMemoryDatabase($"Regen_Del_{suffix}").Options);
+        var service = new AiSprintDecompositionService(
+            new ConfigurableMockAiClient(streamOutput: string.Empty, generateOutput: generateOutput, throwOnGenerate: throwOnGenerate),
+            new NoOpVectorSearch(),
+            new NoOpTraceService(),
+            planningDb,
+            new SpecHubTools(planningDb, new NoOpSpecHubStorageService(), NullLogger<SpecHubTools>.Instance),
+            new BacklogTools(deliveryDb, planningDb),
+            new SprintTools(planningDb, deliveryDb),
+            new TeamTools(planningDb, identityDb, deliveryDb),
+            new PromptTemplateService(NullLogger<PromptTemplateService>.Instance),
+            NullLogger<AiSprintDecompositionService>.Instance);
+        return await service.RegenerateFullProposalAsync(proposal, "Bỏ việc tài liệu", new ProjectScopeContext(Guid.NewGuid(), proposal.ProjectId, Guid.NewGuid()));
+    }
+
+    private static AiSprintProposalDto OriginalProposal() => new()
+    {
+        SessionId = "sess_keep",
+        ProjectId = Guid.NewGuid(),
+        SprintGoal = "Sprint Goal Gốc",
+        Tasks = new List<ProposedTaskDto> { new() { Id = "task_01", Title = "Task 1", Description = "Desc 1", StoryPoints = 5, EstimatedHours = 10 } }
+    };
+
+    [Fact]
+    public async Task RegenerateFullProposalAsync_ShouldReadPascalCaseJsonInsteadOfFallingBackToTemplate()
+    {
+        // Mô hình hay trả "Tasks"/"SprintGoal" viết hoa: trước đây bị bỏ qua và thay bằng khuôn mẫu dựng sẵn.
+        var regenerated = new AiSprintProposalDto
+        {
+            SprintGoal = "Chỉ làm thông báo và báo cáo",
+            Tasks = new List<ProposedTaskDto> { new() { Id = "task_02", Title = "Xây dựng thông báo realtime", StoryPoints = 5, EstimatedHours = 12 } }
+        };
+
+        var updated = await RegenerateWithAsync(OriginalProposal(), JsonSerializer.Serialize(regenerated), throwOnGenerate: false);
+
+        Assert.Null(updated.FallbackReason);
+        Assert.Equal("Chỉ làm thông báo và báo cáo", updated.SprintGoal);
+        Assert.Equal(["Xây dựng thông báo realtime"], updated.Tasks.Select(t => t.Title));
+    }
+
+    [Theory]
+    [InlineData("{ broken_json", false)]
+    [InlineData("{\"message\":\"không có tasks\"}", false)]
+    [InlineData("", true)]
+    public async Task RegenerateFullProposalAsync_ShouldKeepCurrentProposalUnchangedWhenAiOutputIsUnusable(string generateOutput, bool throwOnGenerate)
+    {
+        var original = OriginalProposal();
+
+        var updated = await RegenerateWithAsync(original, generateOutput, throwOnGenerate);
+
+        Assert.False(string.IsNullOrWhiteSpace(updated.FallbackReason));
+        Assert.Equal("Sprint Goal Gốc", updated.SprintGoal);
+        var task = Assert.Single(updated.Tasks);
+        Assert.Equal(("Task 1", "Desc 1"), (task.Title, task.Description));
+    }
+
     public static IEnumerable<object[]> GetDocumentExtractorPermutations()
     {
         var extensions = new[] { ".txt", ".md", ".json", ".csv", ".docx" };
