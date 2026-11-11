@@ -669,20 +669,33 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
     {
         var cleanDoc = (sourceDoc ?? string.Empty).Trim();
         var lines = cleanDoc.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var firstMeaningfulLine = lines.FirstOrDefault(l => l.Length > 5 && !l.StartsWith('#')) ?? "Đặc tả chức năng hệ thống";
-        var snippet = firstMeaningfulLine.Length > 70 ? firstMeaningfulLine[..70] + "..." : firstMeaningfulLine;
 
-        var goal = string.IsNullOrWhiteSpace(userPrompt)
-            ? $"Lập kế hoạch Sprint: {snippet}"
-            : $"Mục tiêu Sprint: {userPrompt}";
+        // Lọc bỏ triệt để các tiêu đề meta, chỉ dẫn hoặc dòng ghi chú thô của người dùng
+        var firstMeaningfulLine = lines.FirstOrDefault(l =>
+            l.Length > 8 &&
+            !l.StartsWith('#') &&
+            !l.StartsWith("---") &&
+            !l.Contains("GHI CHÚ", StringComparison.OrdinalIgnoreCase) &&
+            !l.Contains("YÊU CẦU BỔ SUNG", StringComparison.OrdinalIgnoreCase) &&
+            !l.Contains("Phân tích tài liệu đặc tả", StringComparison.OrdinalIgnoreCase))
+            ?? "Triển khai tính năng cốt lõi theo đặc tả hệ thống";
 
-        var doc1 = availableDocs != null && availableDocs.Count > 0 ? availableDocs[0] : (Id: (Guid?)null, Name: "Cam-nang-ky-thuat.md");
+        var featureName = firstMeaningfulLine.Length > 60 ? firstMeaningfulLine[..60] + "..." : firstMeaningfulLine;
+        featureName = featureName.Trim(' ', ':', '-', '.');
+
+        var goal = !string.IsNullOrWhiteSpace(userPrompt) && userPrompt.Length > 10
+            ? userPrompt.Trim()
+            : $"Hoàn thiện module tính năng cốt lõi và đảm bảo chất lượng kiểm thử: {featureName}";
+
+        var doc1 = availableDocs != null && availableDocs.Count > 0 ? availableDocs[0] : (Id: (Guid?)null, Name: "SRS-Quan-Ly-Sprint-Va-Kanban-Realtime.md");
         var doc2 = availableDocs != null && availableDocs.Count > 1 ? availableDocs[1] : doc1;
         var doc3 = availableDocs != null && availableDocs.Count > 2 ? availableDocs[2] : doc1;
 
         var cite1 = $"{doc1.Name} - Mục Phần II: Đặc tả chức năng và quy tắc nghiệp vụ";
         var cite2 = $"{doc2.Name} - Mục 5.1: Danh tính và quyền";
         var cite3 = $"{doc3.Name} - Mục 2.1: Phạm vi sản phẩm";
+
+        var task1Title = $"Xây dựng kiến trúc xử lý nghiệp vụ và RESTful API cho {featureName}";
 
         var proposal = new AiSprintProposalDto
         {
@@ -700,8 +713,8 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                 {
                     Id = "task_01",
                     EpicTitle = "Core Feature Implementation",
-                    Title = $"Phát triển tính năng: {snippet}",
-                    Description = $"Thiết kế kiến trúc giải pháp, cấu hình dữ liệu và xây dựng các luồng xử lý nghiệp vụ cho '{snippet}'.",
+                    Title = task1Title,
+                    Description = $"Thiết kế kiến trúc giải pháp, cấu hình dữ liệu và xây dựng các luồng xử lý nghiệp vụ cho '{featureName}'.",
                     Type = "Story",
                     Priority = "High",
                     StoryPoints = 5,

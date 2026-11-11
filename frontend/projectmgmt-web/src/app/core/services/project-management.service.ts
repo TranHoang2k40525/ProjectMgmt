@@ -452,12 +452,16 @@ export class ProjectManagementService {
   // Active Projects Signal List
   readonly allProjectsList = signal<Project[]>([]);
   // An empty selection keeps existing feature consumers safe until real projects load.
-  private readonly emptyProject: Project = {
+  readonly emptyProject: Project = {
     id: '', orgId: '', projectKey: '', name: 'Chưa chọn dự án', leadUserId: '',
     issueCounter: 0, isArchived: false, isDeleted: false, createdAt: ''
   };
   readonly currentProject = signal<Project>(this.emptyProject);
   readonly hasActiveProject = computed(() => !!this.currentProject().id && this.currentProject().id.trim() !== '');
+
+  clearActiveProject(): void {
+    this.currentProject.set(this.emptyProject);
+  }
 
   // Issue Types Signal (Standard Scrum Types)
   readonly customIssueTypes = signal<CustomIssueType[]>([]);

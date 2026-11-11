@@ -76,6 +76,10 @@ Kho tài liệu đặc tả **Spec Hub** là "kho lưu trữ tri thức" của d
 - Khi cấu hình `Qdrant:Enabled = true`: Hệ thống nhúng (Embed) các đoạn tài liệu thành vector 768 chiều bằng `gemini-embedding-001` và lưu trên Qdrant Vector Database để tìm kiếm theo độ tương đồng ngữ nghĩa (Cosine Similarity).
 - Khi cấu hình `Qdrant:Enabled = false`: Hệ thống tự động chuyển sang cơ chế tìm kiếm toàn văn Full-Text Search trong SQL và lọc theo từ khóa, đảm bảo hệ thống hoạt động ổn định trong mọi điều kiện triển khai.
 
+### 3.1. Các Tài liệu Mẫu Chuẩn Mực trong Spec Hub:
+- [`SRS-Quan-Ly-Sprint-Va-Kanban-Realtime.md`](file:///c:/Users/hoang/Downloads/ProjectMgmt/docs/cam-nang-du-an/SRS-Quan-Ly-Sprint-Va-Kanban-Realtime.md): Bản đặc tả yêu cầu phần mềm toàn diện về quản lý Sprint, phân rã công việc tự động, bảng Kanban kéo thả thời gian thực qua SignalR và cơ chế cảnh báo quá hạn.
+- [`BRD-Phan-Quyen-Va-Bao-Mat-Enterprise.md`](file:///c:/Users/hoang/Downloads/ProjectMgmt/docs/cam-nang-du-an/BRD-Phan-Quyen-Va-Bao-Mat-Enterprise.md): Bản đặc tả yêu cầu nghiệp vụ về mô hình phân quyền phân cấp từ trên xuống (Chủ tổ chức -> Giám đốc dự án -> Scrum Master -> Developer/QA) và tiêu chuẩn an toàn thông tin Zero-Secret-Leakage.
+
 ---
 
 ## 4. Cơ chế Trích dẫn Nguồn gốc (Citation Grounding) & Trải nghiệm Người dùng

@@ -110,9 +110,13 @@ public class SprintTools
                     i.Id,
                     i.IssueNumber,
                     i.SprintId,
+                    i.IssueTypeId,
+                    i.PriorityId,
                     i.Title,
                     i.StoryPoints,
                     i.EstimatedHours,
+                    i.TimeSpentMinutes,
+                    i.DueDate,
                     i.StatusId,
                     i.ResolvedAt,
                     i.AssigneeId
@@ -152,6 +156,20 @@ public class SprintTools
         }
 
         var projectKey = project.ProjectKey ?? "QLDA";
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        // Nạp danh mục loại công việc, trạng thái, mức độ ưu tiên để enrich dữ liệu cho AI
+        var issueTypeById = await _planning.IssueTypes.AsNoTracking()
+            .Where(t => t.ProjectId == projectId)
+            .ToDictionaryAsync(t => t.Id, t => t.Name, ct);
+
+        var statusById = await _planning.WorkflowStatuses.AsNoTracking()
+            .Where(s => s.ProjectId == projectId)
+            .ToDictionaryAsync(s => s.Id, s => s.Name, ct);
+
+        var priorityById = await _planning.Priorities.AsNoTracking()
+            .Where(p => p.ProjectId == projectId || p.ProjectId == null)
+            .ToDictionaryAsync(p => p.Id, p => p.Name, ct);
 
         var recentSprintDetails = pastSprints.Select(s =>
         {
@@ -181,6 +199,65 @@ public class SprintTools
             };
         }).ToList();
 
+        // Danh sách công việc dở dang từ Sprint gần nhất hoặc Sprint đang kích hoạt (để đánh giá Rollover)
+        var sourceSprintId = activeSprint?.Id ?? pastSprints.FirstOrDefault()?.Id;
+        var unfinishedFromPreviousSprint = sprintIssues
+            .Where(i => (sourceSprintId == null || i.SprintId == sourceSprintId) &&
+                        i.ResolvedAt == null &&
+                        !doneStatusIds.Contains(i.StatusId))
+            .Select(i =>
+            {
+                var typeName = issueTypeById.TryGetValue(i.IssueTypeId, out var tName) ? tName : "Story";
+                var statusName = statusById.TryGetValue(i.StatusId, out var sName) ? sName : "To Do";
+                var prioName = "Medium";
+                if (i.PriorityId.HasValue && priorityById.TryGetValue(i.PriorityId.Value, out var foundPrio))
+                {
+                    prioName = foundPrio;
+                }
+
+                var isOverdue = i.DueDate.HasValue && i.DueDate.Value < today;
+                var isBug = typeName.Contains("Bug", StringComparison.OrdinalIgnoreCase);
+                var isInProgress = statusName.Contains("Progress", StringComparison.OrdinalIgnoreCase) ||
+                                   statusName.Contains("Review", StringComparison.OrdinalIgnoreCase) ||
+                                   i.TimeSpentMinutes > 0;
+
+                string recommendedAction;
+                if (isBug)
+                {
+                    recommendedAction = "Rollover_Hotfix_Highest (Bug tồn đọng nghiêm trọng - Bắt buộc kéo vào Sprint mới dưới dạng Hotfix)";
+                }
+                else if (isInProgress)
+                {
+                    recommendedAction = "Rollover_Continue_WIP (Công việc đang làm dở dang - Kéo vào Sprint mới để hoàn thiện)";
+                }
+                else if (isOverdue)
+                {
+                    recommendedAction = "Backlog_Reevaluate (Công việc quá hạn nhưng chưa từng bắt đầu - Đề xuất trả về Backlog cho PO thẩm định)";
+                }
+                else
+                {
+                    recommendedAction = "Candidate_Rollover (Công việc kế thừa - Xem xét đưa vào Sprint nếu còn năng lực)";
+                }
+
+                return new
+                {
+                    i.Id,
+                    IssueKey = $"{projectKey}-{i.IssueNumber}",
+                    i.Title,
+                    Type = typeName,
+                    Status = statusName,
+                    Priority = prioName,
+                    StoryPoints = i.StoryPoints ?? 0m,
+                    EstimatedHours = i.EstimatedHours ?? 0m,
+                    TimeSpentHours = Math.Round(i.TimeSpentMinutes / 60m, 1),
+                    DueDate = i.DueDate?.ToString("yyyy-MM-dd"),
+                    IsOverdue = isOverdue,
+                    i.AssigneeId,
+                    RecommendedAction = recommendedAction
+                };
+            })
+            .ToList();
+
         var unfinishedBugs = await _delivery.Issues.AsNoTracking()
             .Where(i => i.ProjectId == projectId && !i.IsDeleted && i.ParentId == null && i.ResolvedAt == null && !doneStatusIds.Contains(i.StatusId))
             .OrderBy(i => i.RankOrder)
@@ -190,8 +267,8 @@ public class SprintTools
                 i.Id,
                 IssueKey = $"{projectKey}-{i.IssueNumber}",
                 i.Title,
-                i.StoryPoints,
-                i.EstimatedHours,
+                StoryPoints = i.StoryPoints ?? 0m,
+                EstimatedHours = i.EstimatedHours ?? 0m,
                 i.SprintId,
                 i.AssigneeId
             })
@@ -212,6 +289,7 @@ public class SprintTools
                 }
                 : null,
             RecentSprints = recentSprintDetails,
+            UnfinishedItemsFromSprint = unfinishedFromPreviousSprint,
             OpenBugsAndTechnicalDebt = unfinishedBugs
         };
 
