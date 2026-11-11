@@ -118,7 +118,7 @@ if ($ResetDemoAccounts) {
 foreach ($user in $users) {
   $exists = Invoke-Sql "SELECT COUNT(*) FROM ``User`` WHERE LOWER(Email) = '$($user.Email)';"
   if ("$exists".Trim() -eq '0') {
-    Invoke-Api POST '/v1/auth/register' @{ email = $user.Email; password = $DemoPassword; fullName = $user.Name; phoneNumber = $user.Phone } | Out-Null
+    Invoke-Api POST '/auth/register' @{ email = $user.Email; password = $DemoPassword; fullName = $user.Name; phoneNumber = $user.Phone } | Out-Null
     $saved = Invoke-Sql "SELECT COUNT(*) FROM ``User`` WHERE LOWER(Email) = '$($user.Email)';"
     if ("$saved".Trim() -eq '0') {
       throw "Backend ở $ApiBase không ghi vào DB '$Database' (đăng ký xong nhưng không thấy tài khoản). Kiểm tra backend đang chạy dùng đúng DB, hoặc truyền -Database / -ApiBase cho khớp."
@@ -132,12 +132,12 @@ Invoke-Sql "UPDATE ``User`` SET IsEmailVerified = 1 WHERE LOWER(Email) IN ($demo
 $tokens = @{}
 foreach ($user in $users) {
   try {
-    $login = Invoke-Api POST '/v1/auth/login' @{ email = $user.Email; password = $DemoPassword }
+    $login = Invoke-Api POST '/auth/login' @{ email = $user.Email; password = $DemoPassword }
   } catch {
     throw "Không đăng nhập được $($user.Email). Nếu tài khoản demo đã tạo trước đó với mật khẩu khác, dùng lại mật khẩu cũ (-DemoPassword) hoặc chạy lại với -ResetDemoAccounts. Chi tiết: $_"
   }
   $tokens[$user.Key] = $login.accessToken
-  $user.Id = (Invoke-Api GET '/v1/users/me' $null $login.accessToken).userId
+  $user.Id = (Invoke-Api GET '/users/me' $null $login.accessToken).userId
 }
 Write-Ok 'Đăng nhập được cả 3 tài khoản.'
 $owner = $tokens['owner']
@@ -154,8 +154,8 @@ if ($seedOwners.Count -gt 0) {
 } else {
   # --- Tổ chức & dự án --------------------------------------------------------------------
   Write-Step 'Tổ chức'
-  $lab = Invoke-Api POST '/v1/organizations' @{ name = 'HUCE Software Lab'; slug = 'huce-software-lab' } $owner
-  $thesis = Invoke-Api POST '/v1/organizations' @{ name = 'Nhóm Đồ án Tốt nghiệp'; slug = 'nhom-do-an-tot-nghiep' } $owner
+  $lab = Invoke-Api POST '/organizations' @{ name = 'HUCE Software Lab'; slug = 'huce-software-lab' } $owner
+  $thesis = Invoke-Api POST '/organizations' @{ name = 'Nhóm Đồ án Tốt nghiệp'; slug = 'nhom-do-an-tot-nghiep' } $owner
   Write-Ok "$($lab.name), $($thesis.name)"
 
   # Trạng thái của từng mẫu, cùng tên với ProjectCustomizationController.ApplyTemplate.
@@ -166,24 +166,24 @@ if ($seedOwners.Count -gt 0) {
   }
 
   function New-Project($org,[string]$key, [string]$name, [string]$description, [string[]]$members, [string]$template) {
-    $project = Invoke-Api POST '/v1/projects' @{
+    $project = Invoke-Api POST '/projects' @{
       orgId = $org.id; projectKey = $key; name = $name; description = $description; leadUserId = $ownerId; memberUserIds = $members
     } $owner
     if ($template) {
       # Áp mẫu chỉ thêm trạng thái; bỏ các trạng thái mặc định không thuộc mẫu (giống wizard tạo dự án) để mỗi loại hình
       # có đúng các giai đoạn của nó, và lấy trạng thái đầu của mẫu làm trạng thái khởi đầu.
       # PowerShell 5.1 trả mảng JSON thành một object: ForEach-Object để tách ra từng trạng thái.
-      $statuses = @(Invoke-Api POST "/v1/projects/$($project.id)/workflow/template" @{ templateId = $template } $owner | ForEach-Object { $_ })
+      $statuses = @(Invoke-Api POST "/projects/$($project.id)/workflow/template" @{ templateId = $template } $owner | ForEach-Object { $_ })
       $wanted = $templateStatuses[$template]
       $first = $statuses | Where-Object { $_.name -eq $wanted[0] } | Select-Object -First 1
       if ($first -and -not $first.isInitial) {
-        Invoke-Api PUT "/v1/projects/$($project.id)/statuses/$($first.id)" @{
+        Invoke-Api PUT "/projects/$($project.id)/statuses/$($first.id)" @{
           name = $first.name; colorHex = $first.colorHex; category = $first.category; isInitial = $true
           isDone = [bool]$first.isDone; isActiveWork = [bool]$first.isActiveWork; isCanceled = [bool]$first.isCanceled
         } $owner | Out-Null
       }
       foreach ($status in $statuses | Where-Object { $wanted -notcontains $_.name }) {
-        Invoke-Api DELETE "/v1/projects/$($project.id)/statuses/$($status.id)" $null $owner | Out-Null
+        Invoke-Api DELETE "/projects/$($project.id)/statuses/$($status.id)" $null $owner | Out-Null
       }
     }
     Write-Ok "Dự án $key · $name"
@@ -199,9 +199,9 @@ if ($seedOwners.Count -gt 0) {
   Write-Step 'Sprint'
   $today = Get-Date
   $fmt = { param($days) $today.AddDays($days).ToString('yyyy-MM-dd') }
-  $ctsvSprint = Invoke-Api POST "/v1/projects/$($ctsv.id)/sprints" @{ name = 'CTSV Sprint 1'; goal = 'Tra cứu điểm và lịch học'; startDate = (& $fmt -7); endDate = (& $fmt 7); status = 'active' } $owner
-  Invoke-Api POST "/v1/projects/$($ctsv.id)/sprints" @{ name = 'CTSV Sprint 2'; goal = 'Học phí và thông báo'; startDate = (& $fmt 8); endDate = (& $fmt 21); status = 'future' } $owner | Out-Null
-  $qldaSprint = Invoke-Api POST "/v1/projects/$($qlda.id)/sprints" @{ name = 'QLDA Sprint 3'; goal = 'Hoàn thiện báo cáo'; startDate = (& $fmt -3); endDate = (& $fmt 11); status = 'active' } $owner
+  $ctsvSprint = Invoke-Api POST "/projects/$($ctsv.id)/sprints" @{ name = 'CTSV Sprint 1'; goal = 'Tra cứu điểm và lịch học'; startDate = (& $fmt -7); endDate = (& $fmt 7); status = 'active' } $owner
+  Invoke-Api POST "/projects/$($ctsv.id)/sprints" @{ name = 'CTSV Sprint 2'; goal = 'Học phí và thông báo'; startDate = (& $fmt 8); endDate = (& $fmt 21); status = 'future' } $owner | Out-Null
+  $qldaSprint = Invoke-Api POST "/projects/$($qlda.id)/sprints" @{ name = 'QLDA Sprint 3'; goal = 'Hoàn thiện báo cáo'; startDate = (& $fmt -3); endDate = (& $fmt 11); status = 'active' } $owner
   Write-Ok 'CTSV Sprint 1 (đang chạy), CTSV Sprint 2, QLDA Sprint 3 (đang chạy)'
 
   # --- Công việc ----------------------------------------------------------------------------
@@ -218,7 +218,7 @@ if ($seedOwners.Count -gt 0) {
     if ($fields.Parent) { $body.parentId = $fields.Parent }
     if ($fields.Epic) { $body.epicId = $fields.Epic }
     if ($fields.Description) { $body.description = $fields.Description }
-    $issue = Invoke-Api POST "/v1/projects/$($project.id)/issues" $body $owner
+    $issue = Invoke-Api POST "/projects/$($project.id)/issues" $body $owner
     if ($null -ne $dueInDays) { $script:dueDates += @{ Id = $issue.id; Days = $dueInDays } }
     return $issue
   }

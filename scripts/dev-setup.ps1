@@ -1,6 +1,6 @@
-<#
+﻿<#
 .SYNOPSIS
-  Dựng nhanh môi trường dev local: tạo DB, chạy migration 3 module, vá các cột còn thiếu migration,
+  Dựng nhanh môi trường dev local: tạo DB, chạy migration 3 module, bổ sung bảng/cột còn thiếu migration,
   kích hoạt tài khoản (khi không có SMTP) và (tùy chọn) chạy backend.
 
 .EXAMPLE
@@ -20,7 +20,7 @@
     hoặc hỏi khi chạy (không hiện ra màn hình). Script không ghi mật khẩu vào file nào.
   - Chuỗi kết nối được đặt bằng biến môi trường ConnectionStrings__ProjectMgmt cho tiến trình này,
     nên không cần sửa appsettings.Development.json.
-  - Phần "vá cột" chỉ là tạm thời cho tới khi có migration chính thức; cột đã có thì bỏ qua.
+  - Phần "bổ sung bảng/cột" chỉ là tạm thời cho tới khi có migration chính thức; cái đã có thì bỏ qua.
 #>
 [CmdletBinding()]
 param(
@@ -87,36 +87,91 @@ if (-not $SkipMigrations) {
         ForEach-Object { Write-Host "    $_" }
       if ($LASTEXITCODE -ne 0) { throw "Migration $($module.Context) thất bại." }
     }
+
+    # --- Bổ sung bảng/cột có trong model EF nhưng chưa có migration (tạm thời) ---------------
+    # Nhiều entity đã thêm bảng/cột mà chưa có migration (ProjectDocument, Role.IsActive, WorkflowStatus.IsDone...).
+    # DDL sinh từ chính model EF nên khớp code: chỉ tạo bảng còn thiếu và thêm cột còn thiếu, không sửa/xóa gì đã có.
+    Write-Step 'Bổ sung bảng/cột còn thiếu migration'
+    $existingTables = @(Invoke-Sql "SELECT LOWER(TABLE_NAME) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$Database';" | ForEach-Object { "$_".Trim() })
+    $existingColumns = @{}
+    Invoke-Sql "SELECT LOWER(TABLE_NAME), LOWER(COLUMN_NAME) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='$Database';" | ForEach-Object {
+      $parts = "$_".Trim() -split "`t"
+      if ($parts.Count -eq 2) { $existingColumns["$($parts[0]).$($parts[1])"] = $true }
+    }
+    $changes = @()
+    foreach ($module in $modules) {
+      $modelScript = Join-Path ([IO.Path]::GetTempPath()) "projectmgmt-$($module.Context).sql"
+      & dotnet ef dbcontext script --project $module.Project --startup-project ProjectMgmt.Solution --context $module.Context @efArgs -o $modelScript | Out-Null
+      if ($LASTEXITCODE -ne 0) { throw "Không sinh được script model $($module.Context)." }
+      $createdTables = @()
+      foreach ($statement in ((Get-Content $modelScript -Raw -Encoding UTF8) -split ";\s*\r?\n")) {
+        if ($statement -match 'CREATE TABLE `(\w+)`') {
+          $table = $Matches[1]
+          if ($existingTables -notcontains $table.ToLower()) {
+            try {
+              Invoke-Sql "$statement;" $Database | Out-Null
+            } catch {
+              # Model có khóa ngoại lệch kiểu với bảng đích: tạo bảng không kèm khóa ngoại để dev vẫn chạy được.
+              $withoutFk = (($statement -split "\r?\n") | Where-Object { $_ -notmatch 'FOREIGN KEY' }) -join "`n"
+              $withoutFk = $withoutFk -replace ',(\s*\n\s*\))', '$1'
+              Invoke-Sql ($withoutFk + ';') $Database | Out-Null
+              Write-Warn "Tạo $table không kèm khóa ngoại (model lệch kiểu cột với bảng đích)."
+            }
+            $createdTables += $table
+            $changes += "bảng $table"
+            continue
+          }
+          foreach ($line in ($statement -split "\r?\n")) {
+            if ($line -match '^\s*`(\w+)`\s+(.+?),?\s*$' -and -not $existingColumns.ContainsKey("$($table.ToLower()).$($Matches[1].ToLower())")) {
+              $column = $Matches[1]
+              Invoke-Sql "ALTER TABLE ``$table`` ADD COLUMN ``$column`` $($Matches[2]);" $Database | Out-Null
+              $changes += "$table.$column"
+            }
+          }
+        } elseif ($statement -match 'CREATE (UNIQUE )?INDEX `\w+` ON `(\w+)`' -and $createdTables -contains $Matches[2]) {
+          Invoke-Sql "$statement;" $Database | Out-Null
+        }
+      }
+      Remove-Item $modelScript -ErrorAction SilentlyContinue
+    }
+    if ($changes.Count -gt 0) { Write-Ok "Đã bổ sung: $($changes -join ', ')" } else { Write-Ok 'Không thiếu gì.' }
   } finally {
     Pop-Location
   }
 
-  # --- Vá cột code đã dùng nhưng chưa có migration (tạm thời) ----------------------------
-  Write-Step 'Vá các cột còn thiếu migration'
-  $patches = @(
-    @{ Table = 'Issue'; Column = 'IsBlocked'; Definition = 'TINYINT(1) NOT NULL DEFAULT 0' },
-    @{ Table = 'Issue'; Column = 'BlockReason'; Definition = 'VARCHAR(500) NULL' },
-    @{ Table = 'Issue'; Column = 'BlockedAt'; Definition = 'DATETIME(6) NULL' },
-    @{ Table = 'Issue'; Column = 'EstimatedHours'; Definition = 'DECIMAL(5,2) NULL' },
-    @{ Table = 'Issue'; Column = 'RemainingHours'; Definition = 'DECIMAL(5,2) NULL' },
-    @{ Table = 'WorkflowStatus'; Column = 'IsDone'; Definition = 'TINYINT(1) NOT NULL DEFAULT 0' },
-    @{ Table = 'WorkflowStatus'; Column = 'IsActiveWork'; Definition = 'TINYINT(1) NOT NULL DEFAULT 0' },
-    @{ Table = 'WorkflowStatus'; Column = 'IsCanceled'; Definition = 'TINYINT(1) NOT NULL DEFAULT 0' },
-    @{ Table = 'ProjectDocument'; Column = 'ParentId'; Definition = 'CHAR(36) NULL' },
-    @{ Table = 'ProjectDocument'; Column = 'Name'; Definition = 'VARCHAR(255) NOT NULL DEFAULT \'\'' },
-    @{ Table = 'ProjectDocument'; Column = 'RelativePath'; Definition = 'VARCHAR(1000) NOT NULL DEFAULT \'\'' },
-    @{ Table = 'ProjectDocument'; Column = 'IsDirectory'; Definition = 'TINYINT(1) NOT NULL DEFAULT 0' },
-    @{ Table = 'ProjectDocument'; Column = 'Extension'; Definition = 'VARCHAR(20) NULL' },
-    @{ Table = 'ProjectDocument'; Column = 'FileSize'; Definition = 'BIGINT NOT NULL DEFAULT 0' }
-  )
-  foreach ($patch in $patches) {
-    $exists = Invoke-Sql "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='$Database' AND TABLE_NAME='$($patch.Table)' AND COLUMN_NAME='$($patch.Column)';"
-    if ("$exists".Trim() -eq '0') {
-      Invoke-Sql "ALTER TABLE ``$($patch.Table)`` ADD COLUMN ``$($patch.Column)`` $($patch.Definition);" $Database | Out-Null
-      Write-Ok "Đã thêm $($patch.Table).$($patch.Column)"
+  # --- Bảng Workspace dùng SQL thô, không nằm trong model EF (thành viên, lời mời, mẫu workflow tổ chức...) ---
+  $workspaceSql = Join-Path $repoRoot 'scratch/create_workspace_tables.sql'
+  if (Test-Path $workspaceSql) {
+    Write-Step 'Tạo bảng Workspace (scratch/create_workspace_tables.sql)'
+    # File tự chọn DB bằng USE: bỏ dòng đó để chạy đúng DB của script này; toàn bộ là CREATE TABLE IF NOT EXISTS.
+    $workspaceDdl = (Get-Content $workspaceSql -Encoding UTF8 | Where-Object { $_ -notmatch '^\s*USE\s' }) -join "`n"
+    Invoke-Sql $workspaceDdl $Database | Out-Null
+
+    # Code (WorkspaceController, ProjectCustomizationController.ApplyTemplate) đọc thêm Code/IsActive/IsPreset và
+    # các mẫu có sẵn OrgId = NULL, nhưng file SQL trên chưa có: bổ sung để áp mẫu workflow không lỗi 500.
+    $templateColumns = @(
+      @{ Column = 'Code'; Definition = 'VARCHAR(64) NULL' },
+      @{ Column = 'IsActive'; Definition = 'TINYINT(1) NOT NULL DEFAULT 1' },
+      @{ Column = 'IsPreset'; Definition = 'TINYINT(1) NOT NULL DEFAULT 0' }
+    )
+    foreach ($item in $templateColumns) {
+      $exists = Invoke-Sql "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='$Database' AND TABLE_NAME='OrganizationWorkflowTemplate' AND COLUMN_NAME='$($item.Column)';"
+      if ("$exists".Trim() -eq '0') { Invoke-Sql "ALTER TABLE OrganizationWorkflowTemplate ADD COLUMN ``$($item.Column)`` $($item.Definition);" $Database | Out-Null }
     }
+    Invoke-Sql "ALTER TABLE OrganizationWorkflowTemplate MODIFY OrgId CHAR(36) NULL;" $Database | Out-Null
+    # Cùng tên, trạng thái với WorkspaceController.GetSystemPresets; Id trùng thì bỏ qua (chạy lại không nhân bản).
+    $presets = @(
+      @{ Code = 'scrum-std'; Name = 'Scrum chuẩn'; Type = 'Scrum'; Default = 1; Statuses = @(@('To Do', 'ToDo'), @('In Progress', 'InProgress'), @('Code Review', 'InProgress'), @('Done', 'Done')) },
+      @{ Code = 'agile-qa'; Name = 'Agile + QA'; Type = 'Scrum'; Default = 0; Statuses = @(@('To Do', 'ToDo'), @('In Progress', 'InProgress'), @('Code Review', 'InProgress'), @('QA Testing', 'InProgress'), @('Done', 'Done')) },
+      @{ Code = 'kanban-simple'; Name = 'Kanban đơn giản'; Type = 'Kanban'; Default = 0; Statuses = @(@('To Do', 'ToDo'), @('In Progress', 'InProgress'), @('Done', 'Done')) },
+      @{ Code = 'enterprise'; Name = 'Enterprise'; Type = 'Scrum'; Default = 0; Statuses = @(@('Backlog', 'ToDo'), @('Spec Review', 'InProgress'), @('In Progress', 'InProgress'), @('Code Review', 'InProgress'), @('QA Verification', 'InProgress'), @('Done', 'Done')) }
+    )
+    foreach ($preset in $presets) {
+      $json = '[' + (($preset.Statuses | ForEach-Object { '{"Name":"' + $_[0] + '","Category":"' + $_[1] + '"}' }) -join ',') + ']'
+      Invoke-Sql "INSERT IGNORE INTO OrganizationWorkflowTemplate (Id, OrgId, Name, ManagementType, StatusesJson, IsDefault, Code, IsActive, IsPreset) VALUES ('preset-$($preset.Code)', NULL, '$($preset.Name)', '$($preset.Type)', '$json', $($preset.Default), '$($preset.Code)', 1, 1);" $Database | Out-Null
+    }
+    Write-Ok 'Xong (kèm 4 mẫu workflow có sẵn).'
   }
-  Write-Ok 'Xong.'
 }
 
 # --- Kích hoạt tài khoản (thay cho OTP khi không có SMTP) --------------------------------

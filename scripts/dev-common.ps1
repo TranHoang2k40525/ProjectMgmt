@@ -23,17 +23,30 @@ function Find-MySqlExe {
 }
 
 # $MySql: hashtable { Exe, Host, Port, User, Password }
+# Câu SQL ghi thẳng vào stdin dạng UTF-8 (không BOM): pipe của PowerShell 5.1 đổi tiếng Việt thành '?' tùy $OutputEncoding.
+# Mật khẩu chỉ nằm trong biến môi trường của tiến trình mysql, không hiện trên dòng lệnh.
 function Invoke-MySql([hashtable]$MySql, [string]$sql, [string]$db = '') {
-  $env:MYSQL_PWD = $MySql.Password
-  try {
-    $mysqlArgs = @('-h', $MySql.Host, '-P', "$($MySql.Port)", '-u', $MySql.User, '-N', '--default-character-set=utf8mb4')
-    if ($db) { $mysqlArgs += @('-D', $db) }
-    $output = $sql | & $MySql.Exe @mysqlArgs 2>&1
-    if ($LASTEXITCODE -ne 0) { throw "MySQL lỗi: $($output | Out-String)" }
-    return $output
-  } finally {
-    Remove-Item Env:\MYSQL_PWD -ErrorAction SilentlyContinue
-  }
+  $mysqlArgs = @('-h', $MySql.Host, '-P', "$($MySql.Port)", '-u', $MySql.User, '-N', '--default-character-set=utf8mb4')
+  if ($db) { $mysqlArgs += @('-D', $db) }
+  $utf8 = New-Object System.Text.UTF8Encoding($false)
+  $info = New-Object System.Diagnostics.ProcessStartInfo $MySql.Exe
+  $info.Arguments = ($mysqlArgs | ForEach-Object { '"' + $_ + '"' }) -join ' '
+  $info.UseShellExecute = $false
+  $info.RedirectStandardInput = $true
+  $info.RedirectStandardOutput = $true
+  $info.RedirectStandardError = $true
+  $info.StandardOutputEncoding = $utf8
+  $info.StandardErrorEncoding = $utf8
+  $info.EnvironmentVariables['MYSQL_PWD'] = $MySql.Password
+  $process = [System.Diagnostics.Process]::Start($info)
+  $stdout = $process.StandardOutput.ReadToEndAsync()
+  $stderr = $process.StandardError.ReadToEndAsync()
+  $stdin = New-Object System.IO.StreamWriter($process.StandardInput.BaseStream, $utf8)
+  $stdin.Write($sql)
+  $stdin.Close()
+  $process.WaitForExit()
+  if ($process.ExitCode -ne 0) { throw "MySQL lỗi: $($stderr.Result.Trim())" }
+  return @($stdout.Result -split "\r?\n" | Where-Object { $_ -ne '' })
 }
 
 function Assert-DatabaseName([string]$name) {
