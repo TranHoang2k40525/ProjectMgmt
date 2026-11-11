@@ -339,6 +339,7 @@ public class AiDecompositionAndRegenerationMatrixTests
             backlogTools,
             sprintTools,
             teamTools,
+            new PromptTemplateService(NullLogger<PromptTemplateService>.Instance),
             NullLogger<AiSprintDecompositionService>.Instance);
 
         var scope = new ProjectScopeContext(orgId, projectId, actorId);
@@ -489,6 +490,7 @@ public class AiDecompositionAndRegenerationMatrixTests
             new BacklogTools(deliveryDb, planningDb),
             new SprintTools(planningDb, deliveryDb),
             new TeamTools(planningDb, identityDb, deliveryDb),
+            new PromptTemplateService(NullLogger<PromptTemplateService>.Instance),
             NullLogger<AiSprintDecompositionService>.Instance);
 
         var scope = new ProjectScopeContext(Guid.NewGuid(), proposal.ProjectId, Guid.NewGuid());
@@ -613,6 +615,7 @@ public class AiDecompositionAndRegenerationMatrixTests
             new BacklogTools(deliveryDb, planningDb),
             new SprintTools(planningDb, deliveryDb),
             new TeamTools(planningDb, identityDb, deliveryDb),
+            new PromptTemplateService(NullLogger<PromptTemplateService>.Instance),
             NullLogger<AiSprintDecompositionService>.Instance);
 
         var scope = new ProjectScopeContext(Guid.NewGuid(), projectId, Guid.NewGuid());

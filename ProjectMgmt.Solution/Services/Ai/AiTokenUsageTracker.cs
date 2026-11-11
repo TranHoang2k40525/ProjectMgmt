@@ -79,3 +79,4 @@ public sealed class AiTokenUsageTracker : IAiTokenUsageTracker
             RecentHistory: records.Take(15).ToList());
     }
 }
+

@@ -189,27 +189,38 @@
                   }
                   <p class="turn-text-line">{{ turn.text }}</p>
 
-                  <!-- Expandable User Submitted Content Box (Image 2 Fix) -->
+                  <!-- Expandable User Submitted Content Box (Review full prompt/meeting text) -->
                   @if (turn.fullContent) {
                     <div class="user-content-expand-wrapper">
-                      <button
-                        type="button"
-                        class="btn-toggle-user-content"
-                        (click)="turn.isContentExpanded = !turn.isContentExpanded"
-                        title="Xem lại nội dung đầy đủ bạn đã dán hoặc gửi"
-                      >
-                        <span class="material-symbols-outlined text-[15px]" aria-hidden="true">
-                          {{ turn.isContentExpanded ? 'visibility_off' : 'visibility' }}
-                        </span>
-                        <span>{{ turn.isContentExpanded ? 'Thu gọn nội dung đã gửi' : 'Xem chi tiết nội dung đã nạp (' + turn.fullContent.length + ' ký tự)' }}</span>
-                        <span class="material-symbols-outlined text-[15px]" aria-hidden="true">
-                          {{ turn.isContentExpanded ? 'expand_less' : 'expand_more' }}
-                        </span>
-                      </button>
+                      <div class="flex items-center gap-2">
+                        <button
+                          type="button"
+                          class="btn-toggle-user-content"
+                          (click)="turn.isContentExpanded = !turn.isContentExpanded"
+                          title="Xem lại nội dung đầy đủ bạn đã dán hoặc gửi"
+                        >
+                          <span class="material-symbols-outlined text-[15px]" aria-hidden="true">
+                            {{ turn.isContentExpanded ? 'visibility_off' : 'visibility' }}
+                          </span>
+                          <span>{{ turn.isContentExpanded ? 'Thu gọn nội dung đã gửi' : 'Xem nội dung chi tiết (' + turn.fullContent.length + ' ký tự)' }}</span>
+                          <span class="material-symbols-outlined text-[15px]" aria-hidden="true">
+                            {{ turn.isContentExpanded ? 'expand_less' : 'expand_more' }}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          class="px-2 py-1 text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 flex items-center gap-1 cursor-pointer transition-colors"
+                          (click)="copyToClipboard(turn.fullContent)"
+                          title="Sao chép toàn bộ nội dung đã gửi"
+                        >
+                          <span class="material-symbols-outlined text-[14px]" aria-hidden="true">content_copy</span>
+                          <span>Sao chép</span>
+                        </button>
+                      </div>
 
                       @if (turn.isContentExpanded) {
                         <div class="user-submitted-preview-box animate-fade-in">
-                          <pre>{{ turn.fullContent }}</pre>
+                          <pre class="max-h-60 overflow-y-auto whitespace-pre-wrap font-sans text-xs leading-relaxed text-slate-700 dark:text-slate-300 p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 select-text">{{ turn.fullContent }}</pre>
                         </div>
                       }
                     </div>
@@ -314,26 +325,27 @@
                 </div>
 
                 <div class="activity-right">
-                  <button
-                    type="button"
-                    class="activity-toggle-btn"
+                  <div
+                    class="activity-toggle-link"
                     (click)="toggleThinkingAccordion()"
                     [attr.aria-expanded]="isThinkingExpanded()"
                     data-testid="btn-toggle-thinking"
-                    title="Bấm để ẩn/hiện chi tiết các hành động AI"
+                    role="button"
+                    tabindex="0"
+                    title="Bấm để ẩn hoặc mở rộng quy trình"
                   >
-                    <span>{{ isThinkingExpanded() ? 'Thu gọn quy trình' : 'Xem chi tiết quy trình (' + toolCallsLog().length + ')' }}</span>
-                    <span class="material-symbols-outlined" aria-hidden="true">
+                    <span>{{ isThinkingExpanded() ? 'Thu gọn' : 'Mở rộng quy trình (' + toolCallsLog().length + ')' }}</span>
+                    <span class="material-symbols-outlined text-[16px]" aria-hidden="true">
                       {{ isThinkingExpanded() ? 'expand_less' : 'expand_more' }}
                     </span>
-                  </button>
+                  </div>
                 </div>
               </div>
 
               <!-- Collapsible Tool Actions & Reasoning Body -->
               @if (isThinkingExpanded()) {
                 <div class="activity-details-panel">
-                  <!-- Live Tool Execution Timeline (Dark Terminal Cards matching Image 1) -->
+                  <!-- Live Tool Execution Timeline -->
                   @if (toolCallsLog().length > 0) {
                     <div class="thinking-tools-timeline">
                       @for (tool of toolCallsLog(); track $index; let tIdx = $index) {
@@ -348,7 +360,7 @@
                           </div>
                           <div class="tool-content">
                             <div class="tool-summary-row">
-                              <span class="tool-action-name">Running {{ tool.summaryVi || tool.toolName }} &gt;</span>
+                              <span class="tool-action-name">{{ (isStreaming() && tIdx === toolCallsLog().length - 1) ? 'Đang thực thi: ' : '' }}{{ tool.summaryVi || tool.toolName }}</span>
                               @if (tool.durationMs !== undefined && tool.durationMs !== null) {
                                 <span class="tool-duration-pill">{{ tool.durationMs }}ms</span>
                               }
@@ -382,13 +394,13 @@
                   }
 
                   <!-- Realtime SSE Stream Thought Output (CoT) -->
-                  @if (streamedThoughts()) {
+                  @if (cleanStreamedThoughts()) {
                     <div class="streamed-thought-terminal">
                       <div class="terminal-header">
                         <span class="material-symbols-outlined" aria-hidden="true">terminal</span>
                         <span>Luồng suy luận thời gian thực (Agent Chain-of-Thought)</span>
                       </div>
-                      <pre class="terminal-body">{{ streamedThoughts() }}</pre>
+                      <pre class="terminal-body">{{ cleanStreamedThoughts() }}</pre>
                     </div>
                   }
                 </div>

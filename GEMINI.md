@@ -96,3 +96,13 @@
   - Không để các trường dữ liệu bị chèn ép, che khuất hoặc tràn lề ngoài ý muốn.
 - **TRẢI NGHIỆM THÔNG BÁO TINH GỌN**:
   - Không hiển thị toast popup nổi chiếm màn hình cho các hành vi thường xuyên lặp lại như bình luận công việc. Thay vào đó sử dụng đồng bộ dữ liệu thời gian thực (SignalR) và cập nhật trực tiếp tại giao diện.
+
+---
+
+## 6. ĐỒNG BỘ TÀI LIỆU AI TOÀN DIỆN & TẬP TRUNG (MANDATORY AI DOCUMENTATION SYNC & SINGLE MASTER FILE)
+- **BẮT BUỘC ĐỒNG BỘ TÀI LIỆU KHI THAY ĐỔI TÍNH NĂNG AI**:
+  - Mọi thay đổi, bổ sung hoặc sửa lỗi liên quan đến Module AI (Prompt, MCP Tools, RAG, Trí nhớ Redis, luồng phân rã, SSE stream, giao diện modal AI, Spec Hub) BẮT BUỘC phải cập nhật ngay vào hệ thống tài liệu trong `docs/ai/`. Tuyệt đối không để tài liệu bị cũ hoặc lệch lạc so với mã nguồn thực tế của dự án.
+- **DUY TRÌ VÀ CẬP NHẬT TỆP TÀI LIỆU TẬP TRUNG DUY NHẤT (SINGLE MASTER DOCUMENT)**:
+  - Dự án luôn duy trì tệp tài liệu tổng hợp toàn diện `docs/ai/CAM-NANG-TOAN-DIEN-MODULE-AI.md` chứa trọn vẹn nội dung của toàn bộ các chuyên đề để người đọc có thể đọc liền mạch từ đầu đến cuối.
+- **TIÊU CHUẨN SƠ ĐỒ KHÔNG LỘ MÃ NGUỒN (ARCHITECTURAL PURITY IN DIAGRAMS)**:
+  - Mọi sơ đồ Mermaid (Use Case, Sequence, Activity, Architecture, Memory) tuyệt đối không để lộ tên tệp mã nguồn (`.cs`, `.ts`, `.html`), tên công nghệ cụ thể trong nhãn, địa chỉ mạng hay tên hàm lập trình (method names). Bắt buộc sử dụng định danh vai trò kiến trúc và mô tả hành vi nghiệp vụ chuẩn mực.

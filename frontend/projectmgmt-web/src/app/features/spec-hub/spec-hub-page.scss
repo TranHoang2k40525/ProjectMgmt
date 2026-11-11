@@ -74,4 +74,24 @@
       margin-bottom: 0.75rem;
     }
   }
+
+  /* Deep Section Highlight Pulse Effect */
+  .spec-highlight-pulse {
+    background-color: rgba(245, 158, 11, 0.22) !important;
+    outline: 2px solid #f59e0b !important;
+    border-radius: 4px;
+    box-shadow: 0 0 16px rgba(245, 158, 11, 0.35);
+    animation: specPulseAnim 1.2s ease-in-out infinite alternate;
+  }
+
+  @keyframes specPulseAnim {
+    from {
+      background-color: rgba(245, 158, 11, 0.15);
+      outline-color: #f59e0b;
+    }
+    to {
+      background-color: rgba(245, 158, 11, 0.35);
+      outline-color: #d97706;
+    }
+  }
 }

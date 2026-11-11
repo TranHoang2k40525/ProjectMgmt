@@ -107,26 +107,30 @@ sequenceDiagram
 
 ### Lợi ích Trải nghiệm Vượt trội:
 1. **Không ngắt quãng luồng tư duy (Zero Context Loss)**: Người dùng vừa xem kết quả AI đề xuất, vừa đọc lại đoạn đặc tả gốc trong tài liệu để đối chiếu xem AI có hiểu đúng ý mình không.
-2. **Deep Linking chính xác**: Đường dẫn `?docId=...&section=...` tự động cuộn đến đúng vị trí đề mục cần xem trong Spec Hub.
+2. **Deep Linking & Tự động Cuộn Mượt (Smooth Auto-Scroll)**: Đường dẫn `?docId=...&docName=...&section=...` tự động mở tệp tin và kích hoạt cơ chế `scrollIntoView({ behavior: 'smooth', block: 'center' })` đưa người dùng đến đúng vị trí đề mục cần xem trong Spec Hub (áp dụng cho Markdown, Word .docx, Excel .xlsx và tệp văn bản .txt).
+3. **Hiệu ứng Thị giác Nhận diện Điểm đọc (.spec-highlight-pulse)**: Đề mục hoặc phân đoạn trích dẫn được nhấp nháy viền vàng hổ phách nổi bật trong 4.5 giây, giúp người dùng nhận diện ngay phân đoạn trọng tâm ngay cả trong các bộ tài liệu đặc tả dài hàng nghìn trang.
+4. **Bảo tồn Tuyệt đối Ngữ cảnh Hội thoại**: Nút "Quay lại đoạn chat" cho phép đóng Drawer tức thì, trả lại tiêu điểm bảng đề xuất công việc mà không làm mất phiên làm việc hay nội dung người dùng đã nạp.
 
 ---
 
 ## 5. Hướng dẫn Thực nghiệm & Kiểm chứng RAG Grounding
 
-### 5.1. Kiểm tra Độ trễ (Latency) Gọi Công Cụ trên Giao diện
-Khi AI bắt đầu suy luận, giao diện hiển thị danh sách các Tool Call kèm thời gian thực thi chính xác từ máy chủ:
-- `Running Tìm kiếm tài liệu đặc tả liên quan trong Spec Hub > 7ms`
-- `Running Lấy danh sách các User Story đang có trong Backlog > 13ms`
-- `Running Truy xuất vận tốc Scrum và các hạng mục dở dang > 37ms`
-- `Running Phân tích kỹ năng và số giờ khả dụng của thành viên đội Scrum > 25ms`
+### 5.1. Kiểm tra Độ trễ (Latency) & Trạng thái Công Cụ trên Giao diện
+Khi AI bắt đầu suy luận, giao diện hiển thị danh sách các hành động với biểu tượng `check_circle` xanh lục chuẩn xác và thời gian thực thi (latency ms):
+- `Tìm kiếm tài liệu đặc tả liên quan trong Spec Hub · 7ms`
+- `Đọc phân đoạn tài liệu đặc tả: Cam-nang-ky-thuat.md · 14ms`
+- `Lấy danh sách các User Story đang có trong Backlog · 13ms`
+- `Truy xuất vận tốc Scrum và các hạng mục dở dang · 37ms`
+- `Phân tích kỹ năng và số giờ khả dụng của thành viên đội Scrum · 25ms`
 
-### 5.2. Kiểm tra Tính Xác thực của Nguồn Trích dẫn
-1. Tải lên một tệp tài liệu đặc tả mang tên đặc biệt (ví dụ: `Bản đặc tả về quản lý dự án.txt`).
-2. Gõ yêu cầu phân rã Sprint.
+### 5.2. Kiểm tra Tính Xác thực của Nguồn Trích dẫn & Điều Hướng Phân Đoạn
+1. Tải lên hoặc tạo một tệp tài liệu đặc tả trong Spec Hub (ví dụ: `Cam-nang-ky-thuat.md` chứa đề mục `Phần II: Xử lý ngữ cảnh AI Engine`).
+2. Gõ yêu cầu phân rã Sprint hoặc phân tích kế hoạch.
 3. Quan sát kết quả đề xuất:
-   - Các task sinh ra có nhãn tài liệu đúng tên `Bản đặc tả về quản lý dự án.txt`.
-   - Tiêu đề và mô tả task chứa đúng thuật ngữ kỹ thuật chỉ có trong tệp đó.
-   - Nhấp vào nhãn trích dẫn để mở Drawer nội tuyến và thấy đúng đoạn văn bản trích xuất từ tệp.
+   - Các task sinh ra có nhãn tài liệu trích dẫn đúng định dạng `Tài liệu Spec Hub: Cam-nang-ky-thuat.md - Phần II`.
+   - Nhấp vào nhãn trích dẫn: Drawer nội tuyến mở ra, hiển thị tiêu đề, vị trí trích dẫn và nội dung đặc tả.
+   - Nhấp vào nút "Mở trang Spec Hub": Trình duyệt mở tab Spec Hub với đầy đủ tham số `?docId=...&docName=...&section=...`. Hệ thống tự động mở tab tài liệu, cuộn mượt đến đề mục `Phần II` và kích hoạt hiệu ứng viền vàng nổi bật.
+   - Nhấp "Quay lại đoạn chat": Hệ thống quay trở lại giao diện phân rã Sprint nguyên vẹn.
 
 ---
 

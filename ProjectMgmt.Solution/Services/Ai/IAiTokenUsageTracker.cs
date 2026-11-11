@@ -42,3 +42,4 @@ public interface IAiTokenUsageTracker
     void RecordSession(AiSessionSummary session);
     List<AiSessionSummary> GetProjectSessions(Guid projectId, int limit = 10);
 }
+

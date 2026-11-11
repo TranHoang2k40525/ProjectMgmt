@@ -120,17 +120,38 @@ export class SpecHubPageComponent implements OnInit {
   readonly draggedNode = signal<SpecTreeNode | null>(null);
   readonly dragOverFolderId = signal<string | null>(null);
 
+  // Phân đoạn cần tự động cuộn tới sau khi mở tài liệu
+  private pendingScrollSection: string | null = null;
+
   ngOnInit(): void {
     // Lắng nghe cả paramMap và queryParamMap để mở đúng tài liệu khi click từ AI Agent hoặc liên kết
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(qParams => {
       const docId = qParams.get('docId') || this.route.snapshot.paramMap.get('docId');
-      this.loadTree(docId);
+      const docName = qParams.get('docName') || qParams.get('name') || qParams.get('title');
+      const section = qParams.get('section') || qParams.get('q');
+      if (section) {
+        this.pendingScrollSection = section;
+      }
+      this.loadTree(docId, docName, section);
     });
   }
 
-  loadTree(autoOpenDocId?: string | null): void {
-    const projectId = this.activeProject()?.id;
+  loadTree(autoOpenDocId?: string | null, docName?: string | null, section?: string | null): void {
+    const projectId =
+      this.activeProject()?.id ||
+      this.route.snapshot.paramMap.get('id') ||
+      this.route.parent?.snapshot.paramMap.get('id') ||
+      (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('projectmgmt.selected-project') : null);
+
     if (!projectId) return;
+
+    if (!this.activeProject()?.id) {
+      this.projectService.loadWorkspace(projectId);
+    }
+
+    if (section) {
+      this.pendingScrollSection = section;
+    }
 
     this.isLoadingTree.set(true);
     this.projectService.getSpecTree(projectId).subscribe({
@@ -145,11 +166,15 @@ export class SpecHubPageComponent implements OnInit {
         });
         this.expandedFolderIds.set(folderIds);
 
+        let targetNode: SpecTreeNode | null = null;
         if (autoOpenDocId) {
-          const targetNode = this.findNodeInTree(nodes, autoOpenDocId);
-          if (targetNode && !targetNode.isDirectory) {
-            this.openTabForNode(targetNode);
-          }
+          targetNode = this.findNodeInTree(nodes, autoOpenDocId, docName || undefined);
+        } else if (docName) {
+          targetNode = this.findNodeInTree(nodes, docName, docName);
+        }
+
+        if (targetNode && !targetNode.isDirectory) {
+          this.openTabForNode(targetNode, section || this.pendingScrollSection);
         } else if (this.openTabs().length === 0) {
           // Mở tệp đầu tiên tìm thấy
           const firstFile = this.findFirstFile(nodes);
@@ -165,17 +190,61 @@ export class SpecHubPageComponent implements OnInit {
     });
   }
 
-  private findNodeInTree(nodes: SpecTreeNode[], identifier: string): SpecTreeNode | null {
-    const cleanId = identifier.trim().toLowerCase();
+  private findNodeInTree(nodes: SpecTreeNode[], identifier: string, nameFallback?: string): SpecTreeNode | null {
+    if (!identifier && !nameFallback) return null;
+    const cleanId = (identifier || '').trim().toLowerCase();
+    const cleanFallback = (nameFallback || '').trim().toLowerCase();
+
+    // 1. Khớp chính xác ID
     for (const node of nodes) {
-      if (node.id === identifier || node.name.toLowerCase() === cleanId || cleanId.includes(node.name.toLowerCase())) {
-        return node;
-      }
+      if (node.id === identifier) return node;
       if (node.children?.length) {
-        const found = this.findNodeInTree(node.children, identifier);
+        const found = this.findNodeInTree(node.children, identifier, nameFallback);
         if (found) return found;
       }
     }
+
+    // 2. Khớp theo tên tệp (có hoặc không có phần mở rộng .md, .txt, .docx, .xlsx, .pdf)
+    const stripExt = (name: string) => name.replace(/\.[^/.]+$/, '').trim().toLowerCase();
+    const targetBase = stripExt(cleanId);
+    const fallbackBase = cleanFallback ? stripExt(cleanFallback) : '';
+
+    for (const node of nodes) {
+      if (node.isDirectory) {
+        if (node.children?.length) {
+          const found = this.findNodeInTree(node.children, identifier, nameFallback);
+          if (found) return found;
+        }
+        continue;
+      }
+
+      const nodeNameLower = node.name.toLowerCase();
+      const nodeBase = stripExt(nodeNameLower);
+
+      if (
+        nodeNameLower === cleanId ||
+        nodeBase === targetBase ||
+        (cleanFallback && (nodeNameLower === cleanFallback || nodeBase === fallbackBase))
+      ) {
+        return node;
+      }
+
+      // Khớp một phần từ khóa
+      if (
+        cleanId.length > 3 &&
+        (nodeNameLower.includes(cleanId) || cleanId.includes(nodeNameLower) || nodeBase.includes(targetBase) || targetBase.includes(nodeBase))
+      ) {
+        return node;
+      }
+
+      if (
+        cleanFallback.length > 3 &&
+        (nodeNameLower.includes(cleanFallback) || cleanFallback.includes(nodeNameLower) || nodeBase.includes(fallbackBase) || fallbackBase.includes(nodeBase))
+      ) {
+        return node;
+      }
+    }
+
     return null;
   }
 
@@ -223,10 +292,15 @@ export class SpecHubPageComponent implements OnInit {
     }
   }
 
-  openTabForNode(node: SpecTreeNode): void {
+  openTabForNode(node: SpecTreeNode, scrollSection?: string | null): void {
+    const targetSection = scrollSection || this.pendingScrollSection;
     const existing = this.openTabs().find(t => t.id === node.id);
     if (existing) {
       this.activeTabId.set(node.id);
+      if (targetSection) {
+        this.scrollToSection(targetSection);
+        this.pendingScrollSection = null;
+      }
       return;
     }
 
@@ -279,6 +353,10 @@ export class SpecHubPageComponent implements OnInit {
             return t;
           })
         );
+        if (targetSection) {
+          this.scrollToSection(targetSection);
+          this.pendingScrollSection = null;
+        }
       },
       error: () => {
         this.openTabs.update(tabs =>
@@ -287,6 +365,77 @@ export class SpecHubPageComponent implements OnInit {
         this.toastService.error('Tệp tin', `Không thể nạp nội dung của tệp "${node.name}".`);
       }
     });
+  }
+
+  scrollToSection(sectionText: string): void {
+    if (!sectionText) return;
+    const clean = sectionText.trim().toLowerCase();
+
+    // Thử cuộn sau khi template đã vẽ nội dung ra DOM
+    setTimeout(() => {
+      const activeContainers = document.querySelectorAll(
+        '.prose, .spec-hub-content-container, .spec-viewer-container, .spec-doc-canvas, textarea, table'
+      );
+      if (!activeContainers || activeContainers.length === 0) return;
+
+      for (let c = 0; c < activeContainers.length; c++) {
+        const container = activeContainers[c] as HTMLElement;
+
+        // Nếu là textarea (.txt / .md ở chế độ edit)
+        if (container.tagName === 'TEXTAREA') {
+          const ta = container as HTMLTextAreaElement;
+          const val = (ta.value || '').toLowerCase();
+          const idx = val.indexOf(clean);
+          if (idx >= 0) {
+            ta.focus();
+            ta.setSelectionRange(idx, idx + clean.length);
+            const lineNum = val.substring(0, idx).split('\n').length;
+            ta.scrollTop = Math.max(0, (lineNum - 3) * 22);
+            return;
+          }
+          continue;
+        }
+
+        // Tìm kiếm các thẻ tiêu đề và phân đoạn văn bản
+        const candidates = container.querySelectorAll(
+          'h1, h2, h3, h4, h5, h6, p, li, strong, b, tr, td, th, span, div'
+        );
+        let matchedEl: HTMLElement | null = null;
+
+        for (let i = 0; i < candidates.length; i++) {
+          const el = candidates[i] as HTMLElement;
+          const text = (el.innerText || '').trim().toLowerCase();
+          if (text && (text === clean || text.includes(clean) || (clean.length > 5 && clean.includes(text)))) {
+            matchedEl = el;
+            break;
+          }
+        }
+
+        // Nếu chưa tìm thấy chính xác, tìm theo từ khóa nổi bật
+        if (!matchedEl) {
+          const keywords = clean.split(/[\s:,\-]+/).filter(w => w.length > 3);
+          if (keywords.length > 0) {
+            let maxCount = 0;
+            for (let i = 0; i < candidates.length; i++) {
+              const el = candidates[i] as HTMLElement;
+              const text = (el.innerText || '').toLowerCase();
+              const count = keywords.filter(k => text.includes(k)).length;
+              if (count > maxCount && count >= Math.min(2, keywords.length)) {
+                maxCount = count;
+                matchedEl = el;
+              }
+            }
+          }
+        }
+
+        if (matchedEl) {
+          matchedEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          matchedEl.classList.add('spec-highlight-pulse');
+          setTimeout(() => matchedEl?.classList.remove('spec-highlight-pulse'), 4500);
+          return;
+        }
+      }
+    }, 450);
   }
 
   selectTab(tabId: string): void {
