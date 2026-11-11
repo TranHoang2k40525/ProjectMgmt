@@ -174,6 +174,130 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
 
   private abortController: AbortController | null = null;
 
+  // Luồng 3 giai đoạn: soạn yêu cầu → đang phân tích → xem & chỉnh đề xuất
+  readonly phase = computed<'compose' | 'running' | 'result'>(() =>
+    this.isStreaming() ? 'running' : this.proposal() ? 'result' : 'compose'
+  );
+  readonly elapsedSeconds = signal<number>(0);
+  readonly lastRunSeconds = signal<number | null>(null);
+  readonly isSourceDetailOpen = signal<boolean>(false);
+  readonly isRunDetailOpen = signal<boolean>(false);
+  private elapsedTimer: ReturnType<typeof setInterval> | null = null;
+  private lastRequestFile: File | null = null;
+
+  /** Lối tắt ở màn soạn: chạy ngay hoặc điền sẵn khung để người dùng bổ sung. */
+  readonly quickStarts = [
+    { icon: 'menu_book', label: 'Lập Sprint tiếp theo từ tài liệu Spec Hub', run: true, text: '' },
+    {
+      icon: 'groups',
+      label: 'Từ biên bản họp',
+      run: false,
+      text: 'Lập kế hoạch Sprint từ biên bản họp dưới đây (mục tiêu, việc cần làm, người phụ trách):\n\n',
+    },
+    {
+      icon: 'account_tree',
+      label: 'Phân rã một tính năng',
+      run: false,
+      text: 'Phân rã tính năng sau thành Task và Subtask, ước lượng Story Points và giao người phù hợp:\n\nTính năng: ',
+    },
+  ];
+
+  readonly modelOptions = ['Gemini 3.6 Flash', 'Gemini 3.5 Flash', 'Gemini 3 Flash Preview'];
+
+  readonly elapsedLabel = computed(() => this.formatDuration(this.elapsedSeconds()));
+  readonly lastRunLabel = computed(() => {
+    const seconds = this.lastRunSeconds();
+    return seconds === null ? '' : seconds < 60 ? `${seconds} giây` : this.formatDuration(seconds);
+  });
+  readonly composeCharCount = computed(() => this.promptInput().length);
+
+  /** Sprint mà đề xuất sẽ được thêm vào: sprint đích của AI, nếu không có thì backend tạo Sprint tiếp theo. */
+  readonly targetSprintLabel = computed(() => {
+    const targetId = this.proposal()?.targetSprintId;
+    const sprint = targetId ? (this.sprints || []).find((s) => s.id === targetId) : null;
+    return sprint?.name || 'Sprint tiếp theo';
+  });
+
+  readonly subtaskTotal = computed(() =>
+    (this.proposal()?.tasks ?? []).reduce((sum, t) => sum + (t.subtasks?.length ?? 0), 0)
+  );
+
+  /** Yêu cầu gần nhất người dùng gửi, dùng cho dòng "Nguồn" và khi đang phân tích. */
+  readonly lastUserTurn = computed<ChatTurn | null>(() => {
+    const turns = this.chatHistory().filter((t) => t.role === 'user');
+    return turns.length > 0 ? turns[turns.length - 1] : null;
+  });
+  readonly sourceLabel = computed(() => {
+    const turn = this.lastUserTurn();
+    if (!turn) return 'Tài liệu Spec Hub của dự án';
+    if (turn.fileName) return `Tệp ${turn.fileName}${turn.fileSizeLabel ? ` (${turn.fileSizeLabel})` : ''}`;
+    const content = (turn.fullContent || turn.text || '').trim();
+    const firstLine = content.split('\n').find((line) => line.trim())?.trim() ?? '';
+    return firstLine.length > 70 ? `${firstLine.slice(0, 70)}…` : firstLine || 'Yêu cầu của bạn';
+  });
+
+  private formatDuration(totalSeconds: number): string {
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  }
+
+  private startElapsedTimer(): void {
+    this.stopElapsedTimer();
+    const startedAt = Date.now();
+    this.elapsedSeconds.set(0);
+    this.elapsedTimer = setInterval(() => this.elapsedSeconds.set(Math.floor((Date.now() - startedAt) / 1000)), 1000);
+  }
+
+  private stopElapsedTimer(): void {
+    if (this.elapsedTimer) {
+      clearInterval(this.elapsedTimer);
+      this.elapsedTimer = null;
+    }
+  }
+
+  applyQuickStart(item: { run: boolean; text: string }): void {
+    if (item.run) {
+      this.useProjectSpecContext();
+      return;
+    }
+    this.promptInput.set(item.text + this.promptInput());
+    setTimeout(() => {
+      const el = this.promptTextarea?.nativeElement;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    });
+  }
+
+  /** Khung soạn: Enter xuống dòng (biên bản nhiều dòng), Ctrl/Cmd + Enter để gửi. */
+  onComposeKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      this.submitDecompose();
+    }
+  }
+
+  readonly canRetry = computed(() => !!this.errorMessage() && !this.isStreaming() && !this.proposal() && !!this.lastUserTurn());
+
+  /** Kết quả là bản nháp dựng sẵn (AI không phản hồi): bỏ bản nháp và phân tích lại đúng yêu cầu đó. */
+  reanalyzeFromFallback(): void {
+    if (this.isStreaming() || !this.lastUserTurn()) return;
+    this.proposal.set(null);
+    this.selectedTaskIds.set({});
+    this.retryLastRequest();
+  }
+
+  /** Gửi lại đúng yêu cầu vừa lỗi (ví dụ mô hình quá tải), không nhân đôi lượt trong lịch sử. */
+  retryLastRequest(): void {
+    const turn = this.lastUserTurn();
+    if (!turn || this.isStreaming()) return;
+    this.chatHistory.update((list) => list.filter((t) => t.id !== turn.id));
+    this.promptInput.set(turn.fullContent || '');
+    if (this.lastRequestFile) this.attachedFile.set(this.lastRequestFile);
+    this.submitDecompose();
+  }
+
   readonly pipelineStepDefinitions = [
     { index: 1, code: 'INGEST_DOCUMENTS', label: 'Tiếp nhận & Guardrail tài liệu', icon: 'shield_lock' },
     { index: 2, code: 'QUERY_CONTEXT', label: 'Truy vấn MCP Spec Hub & Lịch sử Sprint', icon: 'manage_search' },
@@ -736,7 +860,9 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
       const el = this.promptTextarea?.nativeElement;
       if (!el) return;
       el.style.height = 'auto';
-      const nextHeight = Math.min(Math.max(el.scrollHeight, 44), 180);
+      // Khung soạn ban đầu rộng cho biên bản họp; ô chỉnh sửa ở cuối giữ gọn.
+      const [minHeight, maxHeight] = this.phase() === 'compose' ? [168, 380] : [44, 180];
+      const nextHeight = Math.min(Math.max(el.scrollHeight, minHeight), maxHeight);
       el.style.height = `${nextHeight}px`;
     });
   }
@@ -821,6 +947,9 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
     this.selectedTaskIds.set({});
     this.expandedSubtasks.set({});
     this.isThinkingExpanded.set(false);
+    this.isSourceDetailOpen.set(false);
+    this.lastRunSeconds.set(null);
+    this.lastRequestFile = null;
     if (typeof localStorage !== 'undefined' && this.projectId) {
       localStorage.removeItem(this.getStorageKey());
     }
@@ -851,7 +980,19 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
       this.abortController.abort();
       this.abortController = null;
     }
+    this.stopElapsedTimer();
     this.isStreaming.set(false);
+  }
+
+  /** Dừng giữa chừng: trả nội dung đã gửi về khung soạn để sửa và gửi lại. */
+  stopAndEdit(): void {
+    this.cancelStream();
+    const turn = this.lastUserTurn();
+    if (turn && !this.proposal()) {
+      this.chatHistory.update((list) => list.filter((t) => t.id !== turn.id));
+      this.promptInput.set(turn.fullContent || '');
+      if (this.lastRequestFile) this.attachedFile.set(this.lastRequestFile);
+    }
   }
 
   onFileSelected(event: Event): void {
@@ -900,11 +1041,15 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
       return;
     }
 
+    // Văn bản dán vào khung soạn hiện ngay để xem/sửa (không giấu thành chip). Dán khi chưa đặt con trỏ vào ô
+    // nào thì vẫn đưa vào khung soạn.
+    const target = event.target as HTMLElement | null;
     const pastedText = event.clipboardData?.getData('text/plain');
-    if (pastedText && pastedText.length > 80 && !this.pastedDocumentText()) {
+    if (pastedText && this.phase() === 'compose' && !(target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement)) {
       event.preventDefault();
-      this.pastedDocumentText.set(pastedText.trim());
-      this.toastService.info('Dán nội dung', 'Đã tiếp nhận văn bản từ clipboard. Bạn có thể bấm "Xem & Sửa" để kiểm tra.');
+      const current = this.promptInput();
+      this.promptInput.set(current ? `${current}\n\n${pastedText.trim()}` : pastedText.trim());
+      this.promptTextarea?.nativeElement.focus();
     }
   }
 
@@ -914,7 +1059,7 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
 
   useProjectSpecContext(): void {
     this.promptInput.set(
-      'Phân tích tài liệu đặc tả trong Spec Hub của dự án Quản lý dự án, lập kế hoạch Sprint tiếp theo kèm Sprint Goal, phân rã Epics, Tasks, Subtasks kỹ thuật và phân bổ cho thành viên theo đúng năng lực.'
+      `Phân tích tài liệu đặc tả trong Spec Hub của dự án ${this.projectName}, lập kế hoạch Sprint tiếp theo kèm Sprint Goal, phân rã Epics, Tasks, Subtasks kỹ thuật và phân bổ cho thành viên theo đúng năng lực.`
     );
     this.submitDecompose();
   }
@@ -937,11 +1082,16 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
       .filter(([, checked]) => checked)
       .map(([id]) => id);
 
-    // If a proposal already exists and user typed follow-up instructions in chat:
-    // - If specific tasks are checked, regenerate only those selected tasks!
-    // - Otherwise, if no file is attached and proposal exists, regenerate full proposal or run new stream!
-    if (currentProposal && !file && !docText && promptText && checkedIds.length > 0) {
-      await this.regenerateSelectedTasksWithFeedback(promptText);
+    // Đã có đề xuất mà chỉ gõ thêm yêu cầu: chỉnh sửa đề xuất hiện có thay vì phân tích lại từ đầu.
+    // Có việc đang chọn → chỉ sửa các việc đó; không chọn → sửa toàn bộ đề xuất. Phân tích tài liệu khác: "Phiên mới".
+    if (currentProposal && !file && !docText && promptText) {
+      if (checkedIds.length > 0) {
+        await this.regenerateSelectedTasksWithFeedback(promptText);
+      } else {
+        this.regenerateAllFeedback.set(promptText);
+        await this.submitRegenerateAll();
+      }
+      this.promptInput.set('');
       return;
     }
 
@@ -952,6 +1102,7 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
     }
 
     this.errorMessage.set(null);
+    this.lastRequestFile = file;
     const nowTime = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
 
     this.chatHistory.update((list) => [
@@ -981,6 +1132,9 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
     this.toolCallsLog.set([]);
     this.streamedThoughts.set('');
     this.isThinkingExpanded.set(true);
+    this.isRunDetailOpen.set(false);
+    this.lastRunSeconds.set(null);
+    this.startElapsedTimer();
 
     this.abortController = new AbortController();
 
@@ -1082,23 +1236,28 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
             this.saveSession();
           },
           onCompleted: () => {
-            this.isStreaming.set(false);
-            this.isThinkingExpanded.set(true); // Always keep workflow trace open so user can inspect anytime
+            this.finishRun();
             this.saveSession();
           },
           onError: (err) => {
             this.errorMessage.set(err.message || 'Đã xảy ra lỗi khi phân tách công việc.');
-            this.isStreaming.set(false);
+            this.finishRun();
           },
         },
         this.abortController.signal
       );
     } catch (err: any) {
       if (err?.name !== 'AbortError') {
-        this.errorMessage.set('Kết nối luồng SSE bị gián đoạn. Vui lòng thử lại.');
+        this.errorMessage.set('Mất kết nối tới máy chủ trong lúc phân tích. Vui lòng thử lại.');
       }
-      this.isStreaming.set(false);
+      this.finishRun();
     }
+  }
+
+  private finishRun(): void {
+    this.stopElapsedTimer();
+    if (this.isStreaming()) this.lastRunSeconds.set(this.elapsedSeconds());
+    this.isStreaming.set(false);
   }
 
   private normalizeProposal(prop: AiSprintProposalDto): void {
@@ -1462,11 +1621,17 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
     this.isRegeneratingBatch.set(true);
     try {
       const updated = await firstValueFrom(this.aiService.regenerateFullProposal(sessionId, feedback));
+      this.regenerateAllFeedback.set('');
+      if (updated.fallbackReason) {
+        // AI không chỉnh được: giữ nguyên đề xuất đang duyệt (kể cả chỉnh tay), chỉ báo lý do.
+        this.toastService.warning('Chưa chỉnh được đề xuất', updated.fallbackReason);
+        return;
+      }
       this.normalizeProposal(updated);
       this.proposal.set(updated);
       this.showRegenerateAllBar.set(false);
-      this.regenerateAllFeedback.set('');
-      this.toastService.show('Đã làm lại toàn bộ đề xuất Sprint thành công.', 'success');
+      this.saveSession();
+      this.toastService.show('Đã chỉnh sửa đề xuất theo yêu cầu.', 'success');
     } catch {
       this.toastService.show('Không thể làm lại toàn bộ đề xuất.', 'error');
     } finally {

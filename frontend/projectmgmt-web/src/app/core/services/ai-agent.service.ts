@@ -56,6 +56,8 @@ export interface AiSprintProposalDto {
   totalStoryPoints: number;
   tasks: ProposedTaskDto[];
   createdAtUtc?: string;
+  /** Có khi AI không trả kết quả dùng được: bản nháp dựng sẵn (phân tích) hoặc đề xuất cũ giữ nguyên (làm lại). */
+  fallbackReason?: string | null;
 }
 
 export interface AiStepProgressEvent {
