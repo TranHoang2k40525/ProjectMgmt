@@ -23,3 +23,4 @@ Hệ thống thiết lập nguyên tắc phân quyền từ trên xuống nghiê
 - Nghiêm cấm hardcode bất kỳ secret, mật khẩu cơ sở dữ liệu, API keys (Gemini, Claude, OpenAI), SMTP password hay token bí mật vào repository.
 - Toàn bộ thông tin nhạy cảm ở môi trường cục bộ lưu trữ trong `appsettings.Local.json` hoặc `.env` (được bảo vệ bởi `.gitignore`).
 - Các phản hồi và log hệ thống phải chủ động che giấu (masking) thông tin mật khẩu và mã token.
+

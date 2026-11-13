@@ -64,3 +64,4 @@ Hệ thống Quản lý Dự án Doanh nghiệp cung cấp giải pháp hoạch 
 - **Unit Testing**: Bộ kiểm thử xUnit bao phủ tối thiểu 80% logic nghiệp vụ cốt lõi.
 - **Integration Testing**: Xác thực toàn bộ các luồng giao dịch cơ sở dữ liệu và đồng bộ dữ liệu.
 - **E2E Testing**: Kịch bản kiểm thử tự động Playwright chạy ổn định trong chế độ headless.
+

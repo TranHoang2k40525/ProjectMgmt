@@ -86,18 +86,6 @@
           <span class="material-symbols-outlined" aria-hidden="true">refresh</span>
           <span>Làm mới & Phiên mới</span>
         </button>
-        @if (!proposal() && !isStreaming()) {
-          <button
-            type="button"
-            class="btn-spec-shortcut"
-            data-testid="btn-ai-use-spec-hub"
-            (click)="useProjectSpecContext()"
-            title="Phân tách ngay từ tài liệu đặc tả trong Spec Hub của dự án"
-          >
-            <span class="material-symbols-outlined" aria-hidden="true">folder_open</span>
-            <span>Phân tích Tài liệu Dự án (Spec Hub)</span>
-          </button>
-        }
         <button type="button" class="icon-close-btn" data-testid="btn-ai-close-modal" aria-label="Đóng cửa sổ" (click)="closeModal()">
           <span class="material-symbols-outlined" aria-hidden="true">close</span>
         </button>
