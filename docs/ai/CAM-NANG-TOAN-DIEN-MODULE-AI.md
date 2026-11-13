@@ -84,7 +84,7 @@ flowchart TD
 5. [**Chuyên đề 5: Kiến trúc MCP Server & Hệ thống MCP Tools**](file:///c:/Users/hoang/Downloads/ProjectMgmt/docs/ai/05-mcp-server-va-tools.md)
    - Khái niệm chuẩn Model Context Protocol (MCP) JSON-RPC 2.0.
    - 2 hình thái MCP trong dự án: In-Process Tools vs Standalone Stdio Server.
-   - Danh mục đầy đủ các tools (`spec_hub_search`, `backlog_get_stories`, `sprint_get_history_and_velocity`, `team_get_dev_capacities`).
+   - Danh mục đầy đủ 8 công cụ (`spec_hub_list_documents`, `spec_hub_read_document`, `spec_hub_search`, `project_get_active_config`, `backlog_get_stories`, `sprint_get_history_and_velocity`, `team_get_dev_capacities`, `ai_sprint_plan_propose`).
    - Cấu hình kết nối cho Claude Desktop, Cursor, Roo Code, Gemini CLI.
 
 6. [**Chuyên đề 6: Cẩm nang Tra cứu & Trả lời Phản biện (Q&A Master Guide)**](file:///c:/Users/hoang/Downloads/ProjectMgmt/docs/ai/06-huong-dan-tra-cuu-chung-minh-phan-bien.md)
@@ -102,6 +102,8 @@ flowchart TD
 | :--- | :--- | :--- |
 | **AiAgentController** | API Controller phục vụ SSE stream, staging, tái tạo và commit | [`AiAgentController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/AiAgentController.cs) |
 | **AiSprintDecompositionService** | Dịch vụ phân rã Sprint 5 bước, điều phối RAG & MCP tools | [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs) |
+| **ProjectActiveConfigResolver** | Phân giải cấu hình thực tế đang áp dụng của dự án (Workflow, Priorities, IssueTypes, Labels) | [`ProjectActiveConfigResolver.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/ProjectActiveConfigResolver.cs) |
+| **AiSprintCommitCoordinator** | Ghi nhận Sprint, di chuyển hạng mục Backlog không trùng lặp & xử lý Rollover | [`AiSprintCommitCoordinator.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintCommitCoordinator.cs) |
 | **AiTokenUsageTracker** | Theo dõi tiêu thụ Token AI, thống kê chi phí & lịch sử phiên | [`AiTokenUsageTracker.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiTokenUsageTracker.cs) |
 | **MultiProviderAiModelClient** | Router gọi đa mô hình (Gemini, Claude, OpenAI, Ollama) | [`MultiProviderAiModelClient.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/MultiProviderAiModelClient.cs) |
 | **AiDocumentTextExtractor** | Trích xuất văn bản từ file Word, Excel, PDF, Markdown, Text | [`AiDocumentTextExtractor.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiDocumentTextExtractor.cs) |
@@ -140,13 +142,16 @@ Trong quy trình phát triển phần mềm theo khung Scrum (Scrum Framework), 
 Module AI Agent của dự án được xây dựng theo mô hình **Agentic Workflow có kiểm soát (Human-in-the-loop AI Agent)**:
 - **Tiếp nhận đa kênh**: Hỗ trợ đính kèm file Word, Excel, PDF, Text hoặc dán trực tiếp ghi chú cuộc họp vào ô nhập liệu tự co giãn.
 - **RAG & MCP Grounding**: Tự động truy xuất kho tài liệu đặc tả dự án (**Spec Hub**) qua giao thức MCP, đối chiếu số liệu Backlog, vận tốc Sprint trước và kỹ năng của từng thành viên trong nhóm.
-- **Phân tách thực tế & Không giới hạn quy mô**: Bóc tách tự nhiên theo cấu trúc sản phẩm và biên bản họp, hoàn toàn không bị gò bó bởi các giới hạn cứng về số lượng task hay subtask. Đa dạng hóa loại công việc (Story, Task, Bug, Technical Debt, Improvement).
+- **Phân tách thực tế & Không giới hạn quy mô**: Bóc tách tự nhiên theo cấu trúc sản phẩm và biên bản họp, hoàn toàn không bị gò bó bởi các giới hạn cứng về số lượng task hay subtask. Phân biệt chuẩn xác bản chất Scrum giữa **User Story (`Story`)** (nhu cầu/giá trị dưới góc nhìn người dùng, được phân rã thành các đầu việc kỹ thuật khả thi), **Task** (công việc kỹ thuật độc lập) và **Bug** (lỗi cần khắc phục).
+- **Khai thác Kho Product Backlog & Di chuyển Không Trùng lặp (Backlog Sourcing & Move Semantics)**:
+  - AI đọc toàn bộ các hạng mục đang chờ trong Product Backlog (`SprintId = null`) kèm loại việc, mức ưu tiên, nhãn và việc con hiện có.
+  - Khi AI chọn đưa một User Story hoặc Task có sẵn từ kho Backlog vào Sprint (`sourceBacklogIssueId` / `sourceBacklogIssueKey`), hệ thống thực hiện **di chuyển trực tiếp (Move)** bản ghi gốc từ Backlog vào Sprint mục tiêu (cập nhật `SprintId`, trạng thái, mức ưu tiên, nhãn `IssueLabels`, tiêu chí nghiệm thu và kéo theo các việc con hiện có), tuyệt đối không sinh bản sao gây trùng lặp trong kho Backlog.
 - **Kế thừa Sprint cũ & Xử lý việc quá hạn (Sprint Rollover & Overdue Intelligence)**:
-  - Tự động truy xuất các hạng mục dở dang từ Sprint liền kề để kế thừa sang Sprint mới.
+  - Tự động truy xuất các hạng mục dở dang từ Sprint liền kề dựa trên cấu hình trạng thái hoàn tất thực tế (`IsDone` / `Category = Done`) của dự án để kế thừa sang Sprint mới.
   - Phân loại thông minh các việc quá hạn theo chuẩn Scrum:
-    - *Bug/Blocker dở dang*: Bắt buộc chuyển sang Sprint mới dưới dạng Hotfix với mức ưu tiên cao nhất (`Highest`), gắn cảnh báo gia hạn deadline.
-    - *Task đang làm dở dang (`In Progress`)*: Chuyển tiếp vào Sprint mới để hoàn thiện (bảo vệ công sức WIP).
-    - *Task thường chưa bắt đầu (`To Do`) nhưng đã quá hạn*: Tự động hoàn trả về Product Backlog (`SprintId = null`) để Product Owner thẩm định lại giá trị và độ ưu tiên, tránh làm loãng cam kết Sprint Goal.
+    - *Bug/Blocker dở dang*: Bắt buộc chuyển sang Sprint mới dưới dạng Hotfix với mức ưu tiên khẩn cấp cao nhất đang áp dụng của dự án (`Level = 1`, ví dụ `Urgent`, `Highest` hoặc `Blocker`), gắn cảnh báo gia hạn deadline.
+    - *Task đang làm dở dang (`IsActiveWork`)*: Chuyển tiếp vào Sprint mới để hoàn thiện (bảo vệ công sức WIP).
+    - *Task thường chưa bắt đầu (`IsInitial`) nhưng đã quá hạn*: Tự động hoàn trả về Product Backlog (`SprintId = null`) để Product Owner thẩm định lại giá trị và độ ưu tiên, tránh làm loãng cam kết Sprint Goal.
 - **Trích dẫn minh bạch 100%**: Mọi công việc sinh ra đều đính kèm trích dẫn tài liệu cụ thể (`documentCitations`), có thể nhấp vào để mở ngăn kéo xem tài liệu ngay lập tức mà không làm mất đoạn chat.
 - **Phê duyệt Staging**: Đề xuất được lưu tạm trên bộ nhớ đệm phân tán **Redis** để người dùng thoải mái chỉnh sửa, yêu cầu AI làm lại từng task trước khi bấm nút áp dụng chính thức vào Sprint.
 
@@ -379,33 +384,24 @@ Dịch vụ [`PromptTemplateService`](file:///c:/Users/hoang/Downloads/ProjectMg
 
 ---
 
-## 7. Tiêm Quy Chuẩn Quản Trị Dự Án Động (Dynamic Project Governance Grounding)
+## 7. Tiêm Cấu Hình Thực Tế Đang Áp Dụng Của Dự Án (Project Active Config Grounding)
 
-Để đảm bảo AI không "ảo giác" hoặc gán bừa các trạng thái (Status), loại việc (IssueType) và độ ưu tiên (Priority) không tồn tại trong dự án, hệ thống áp dụng cơ chế **Truy vấn Động từ Cơ sở Dữ liệu MySQL** trước khi gửi prompt cho mô hình:
+Để đảm bảo AI nắm bắt chính xác 100% quy trình làm việc (Workflow), mức độ ưu tiên (Priorities), loại công việc (IssueTypes) và nhãn (Labels) **đang thực sự được áp dụng** cho dự án thay vì đoán mò hoặc lấy nhầm cấu hình lưu trữ chung, hệ thống xây dựng bộ phân giải tập trung [`ProjectActiveConfigResolver.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/ProjectActiveConfigResolver.cs) và công cụ MCP `project_get_active_config`:
 
-- **Nạp trực tiếp từ `PlanningDbContext`**:
-  ```csharp
-  var workflowStatuses = await _planningDb.WorkflowStatuses
-      .AsNoTracking()
-      .Where(s => s.ProjectId == scope.ProjectId)
-      .OrderBy(s => s.OrderIndex)
-      .Select(s => s.Name)
-      .ToListAsync(cancellationToken);
-
-  var issueTypes = await _planningDb.IssueTypes
-      .AsNoTracking()
-      .Where(t => t.ProjectId == scope.ProjectId)
-      .Select(t => t.Name)
-      .ToListAsync(cancellationToken);
-
-  var priorities = await _planningDb.Priorities
-      .AsNoTracking()
-      .Where(p => p.ProjectId == scope.ProjectId)
-      .OrderBy(p => p.Level)
-      .Select(p => p.Name)
-      .ToListAsync(cancellationToken);
-  ```
-- **Ràng buộc vào System & User Prompt**: Danh sách này được đưa vào mục `### 7. Quy chuẩn dự án` trong prompt. Nhờ đó, AI luôn chỉ gán các trạng thái thực tế của dự án (`To Do`, `In Progress`, `Code Review`, `Done`), không sinh ra các trạng thái lạ như "Pending", "Testing".
+1. **Quy trình Workflow, Cột Bảng & Chuyển đổi Trạng thái (`Boards`, `BoardColumns`, `WorkflowStatuses`, `WorkflowTransitions`)**:
+   - Đọc bảng mặc định đang kích hoạt của dự án (`Boards.IsDefault`), sắp xếp thứ tự các trạng thái theo đúng cột trên bảng (`BoardColumns.OrderIndex` kèm giới hạn `WipLimit`).
+   - Xác định rõ trạng thái khởi tạo (`IsInitial`), trạng thái đang thực thi (`IsActiveWork`), trạng thái hoàn tất (`IsDone` / `Category = Done`) và danh sách các luồng chuyển tiếp hợp lệ (`WorkflowTransitions`: `FromStatus -> ToStatus`).
+   - Toàn bộ các công việc mới hoặc kéo từ Backlog vào Sprint được gán đúng trạng thái khởi tạo thực tế (`InitialStatusName`) của quy trình đang áp dụng (kể cả khi dự án áp dụng quy trình tùy chỉnh không theo mẫu chung như `Open -> In Dev -> QA Testing -> Released`, tuyệt đối không gán cứng `"To Do"`).
+2. **Mức độ Ưu tiên Đang Áp dụng (`Priorities`)**:
+   - Tuân thủ quy tắc cô lập cấu hình: nếu dự án đã thiết lập bộ mức ưu tiên riêng (`ProjectId == scope.ProjectId`), hệ thống **chỉ sử dụng duy nhất bộ mức ưu tiên riêng của dự án đó** (sắp xếp theo `Level` từ cao nhất `Level = 1` trở xuống, ví dụ `Urgent, High, Normal, Low` hoặc `Blocker, Major, Normal, Minor`), tuyệt đối không trộn lẫn với các dòng mặc định hệ thống (`ProjectId == null`).
+   - Chỉ khi dự án chưa tạo cấu hình riêng (`customPriorities.Count == 0`), hệ thống mới lấy bộ mức ưu tiên mặc định (`ProjectId == null`).
+   - Khi áp dụng đề xuất vào Sprint, hệ thống giữ nguyên tên mức ưu tiên của dự án (như `Urgent`, `Blocker`), không tự ý ép đổi về `"Highest"`.
+3. **Loại Công việc (`IssueTypes`) & Ngữ nghĩa Scrum (`Story` vs `Task` vs `Bug`)**:
+   - Tách biệt rõ nhóm hạng mục cấp 1 (`ParentWorkItemTypes`), nhóm việc con (`SubtaskTypes`, `IsSubtask = true`) và `Epic`.
+   - Hướng dẫn AI phân biệt rõ: `Story` là nhu cầu mang lại giá trị cho người dùng (cần được làm rõ hoặc bóc tách thành các đầu việc kỹ thuật cụ thể), `Task` là công việc kỹ thuật độc lập, và `Bug` là lỗi cần sửa.
+4. **Nhãn Dự án (`Labels` & `IssueLabels`) & Hiển thị Việc Con Đầy đủ**:
+   - Truy vấn danh mục nhãn đang áp dụng của dự án từ `DeliveryIntelligenceDbContext.Labels` (`ProjectId == scope.ProjectId`), tiêm vào cả System Prompt và User Prompt để AI gắn nhãn chuẩn xác, đồng thời tự động liên kết vào bảng `IssueLabels` khi lưu Sprint.
+   - Trên cả Modal AI và trang Kế hoạch Sprint & Backlog, mỗi dòng việc con (Sub-task) đều hiển thị đầy đủ 9 cột thông tin thẳng hàng với công việc cha và loại bỏ nhãn đếm phụ `0/2 Sub-task`.
 
 ---
 
@@ -1155,8 +1151,8 @@ Khi AI bắt đầu suy luận, giao diện hiển thị danh sách các hành �
 ### 5.3. Cô lập Tri thức Phạm vi Dự án & Cơ chế Tự suy luận Phi khuôn mẫu (Project Isolation & Organic Reasoning)
 1. **Cô lập Tri thức 100% theo ProjectId**:
    - Tất cả các công cụ MCP Spec Hub (`SearchRelevantSpecsAsync`, `ReadDocumentAsync`, `GetDocumentTree`) đều thực thi xác thực phạm vi dự án `ProjectScopeGuard.Validate(scope, project.OrgId, projectId)` và chỉ truy vấn các bản ghi `ProjectDocuments.Where(d => d.ProjectId == scope.ProjectId)`. Tuyệt đối không đọc hoặc trích xuất tài liệu từ các dự án khác.
-2. **Nạp dữ liệu động từ Database dự án vào Ngữ cảnh LLM**:
-   - Khác với các giải pháp ép khuôn code cứng, hệ thống nạp động danh sách trạng thái quy trình làm việc (`WorkflowStatuses`), các loại công việc (`IssueTypes`), cấp độ ưu tiên (`Priorities`) và danh sách tệp tài liệu thực tế từ cơ sở dữ liệu dự án trực tiếp vào Prompt người dùng (`SprintDecompositionUserPrompt.md`).
+2. **Nạp Cấu hình Thực tế Đang Áp dụng của Dự án vào Ngữ cảnh LLM (`ProjectActiveConfigResolver`)**:
+   - Thay vì dùng giá trị mặc định cố định hoặc lấy trộn lẫn dữ liệu toàn cục, hệ thống gọi công cụ MCP `project_get_active_config` để nạp chính xác cấu hình đang áp dụng của dự án: quy trình `WorkflowStatuses` theo thứ tự cột `BoardColumns` kèm trạng thái khởi tạo (`IsInitial`), trạng thái hoàn tất (`IsDone`) và ma trận chuyển trạng thái `WorkflowTransitions`; bộ mức độ ưu tiên đang áp dụng (`Priorities` riêng của dự án nếu có, không trộn lẫn cấu hình mặc định `ProjectId == null`); phân loại `IssueTypes` (`Story`, `Task`, `Bug`, `Sub-task`, `Epic`) và danh sách nhãn `Labels`. Toàn bộ thông tin này được tiêm trực tiếp vào cả `SprintDecompositionSystemPrompt.md` và `SprintDecompositionUserPrompt.md`.
 3. **Bộ giải mã Resilient JSON Parser**:
    - Hệ thống sử dụng bộ bóc tách JSON linh hoạt, chấp nhận cả mảng chuỗi lẫn mảng đối tượng của việc con (`subtasks`), chuẩn hóa Story Points theo chuỗi Fibonacci và gán thành viên theo hồ sơ kỹ năng thực tế, loại bỏ hoàn toàn việc ép khuôn mẫu hay nhét văn bản thô vào mô tả công việc.
 4. **Cơ chế Dự phòng Không Gián đoạn (Zero-Downtime Fallback)**:
@@ -1232,7 +1228,7 @@ flowchart TD
 
 ## 2. Danh mục Chi tiết Toàn bộ Hệ thống MCP Tools
 
-Hệ thống cung cấp 7 công cụ cốt lõi phục vụ lập kế hoạch và phân rã Sprint:
+Hệ thống cung cấp **8 công cụ cốt lõi** phục vụ lập kế hoạch, truy xuất cấu hình thực tế của dự án và phân rã Sprint:
 
 ### 2.1. Bảng Tổng Hợp Thông Số & Chức Năng
 
@@ -1241,10 +1237,11 @@ Hệ thống cung cấp 7 công cụ cốt lõi phục vụ lập kế hoạch v
 | **spec_hub_list_documents** | `projectId` (string, required) | Danh sách cây thư mục, tên file, định dạng (.docx, .pdf, .xlsx, .md) và kích thước tệp | [`SpecHubTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SpecHubTools.cs#L45-L66) |
 | **spec_hub_read_document** | `documentId` (string, required) | Toàn văn nội dung tài liệu đã bóc tách, tiêu chí nghiệm thu (AC) và bảng biểu | [`SpecHubTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SpecHubTools.cs#L67-L83) |
 | **spec_hub_search** | `projectId` (string), `keyword` (string) | Các phân đoạn văn bản khớp từ khóa, tên file gốc và chỉ số tương đồng | [`SpecHubTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SpecHubTools.cs#L84-L98) |
-| **backlog_get_stories** | `projectId` (string, required) | Danh sách User Stories Backlog: ID, Tiêu đề, Mô tả, Story Points, Độ ưu tiên | [`BacklogTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/BacklogTools.cs#L40-L75) |
-| **sprint_get_history_and_velocity** | `projectId` (string, required) | Vận tốc trung bình (Velocity), các User Story dở dang bị rollover, danh sách bug tồn đọng | [`SprintTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SprintTools.cs#L35-L70) |
+| **project_get_active_config** | `projectId` (string, required) | Cấu hình thực tế đang áp dụng của dự án: Quy trình `Workflow` (Board, cột `Statuses`, cờ `IsInitial`/`IsDone`, luồng chuyển tiếp `Transitions`), bộ `Priorities` đang dùng (riêng dự án hoặc mặc định), `IssueTypes` và `Labels` | [`BacklogTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/BacklogTools.cs) |
+| **backlog_get_stories** | `projectId` (string, required) | Toàn bộ hạng mục trong Product Backlog (`SprintId = null`): `Id`, `IssueKey`, `Title`, `IssueType`, `IsUserStory`, `Priority`, `StatusName`, `Labels`, `EpicTitle`, `StoryPoints`, `EstimatedHours`, `ExistingSubtasks` và `AcceptanceCriteria` | [`BacklogTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/BacklogTools.cs#L40-L75) |
+| **sprint_get_history_and_velocity** | `projectId` (string, required) | Vận tốc trung bình (Velocity), các hạng mục dở dang bị rollover (đối chiếu trạng thái `IsDone` thực tế), danh sách bug tồn đọng | [`SprintTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SprintTools.cs#L35-L70) |
 | **team_get_dev_capacities** | `projectId` (string, required) | Danh sách kỹ sư (Developers, QA), chuyên môn (Frontend, Backend, Tester), số giờ khả dụng | [`TeamTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/TeamTools.cs#L35-L70) |
-| **ai_sprint_plan_propose** | `projectId` (string), `meetingNotes` (string), `targetStoryIds` (array) | Đề xuất Sprint Goal, Epics, Tasks độc lập (1-3 SP) hoặc kèm Subtasks ($\ge 5$ SP), trích dẫn tài liệu | [`Program.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.McpServer/Program.cs#L265-L287) |
+| **ai_sprint_plan_propose** | `projectId` (string), `meetingNotes` (string), `targetStoryIds` (array) | Đề xuất Sprint Goal, Epics, Tasks độc lập (1-3 SP) hoặc kèm Subtasks ($\ge 5$ SP), liên kết Backlog (`sourceBacklogIssueId`) và trích dẫn tài liệu | [`Program.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.McpServer/Program.cs#L265-L287) |
 
 ---
 
@@ -1411,7 +1408,7 @@ Dán dòng JSON sau vào terminal và nhấn Enter:
 ```json
 {"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}
 ```
-**Kết quả:** Server trả về đầy đủ 7 công cụ kèm inputSchema chuẩn xác.
+**Kết quả:** Server trả về đầy đủ 8 công cụ kèm inputSchema chuẩn xác.
 
 ---
 
@@ -1420,9 +1417,11 @@ Dán dòng JSON sau vào terminal và nhấn Enter:
 | Thành phần | Vai trò kỹ thuật | Liên kết mã nguồn |
 | :--- | :--- | :--- |
 | **ProjectMgmt.McpServer** | Ứng dụng Console phục vụ kết nối JSON-RPC 2.0 Stdio ngoài | [`Program.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.McpServer/Program.cs#L20-L150) |
+| **McpToolRegistry** | Bộ đăng ký và thực thi 8 công cụ MCP In-Process | [`McpToolRegistry.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/McpToolRegistry.cs) |
+| **ProjectActiveConfigResolver** | Phân giải cấu hình thực tế đang áp dụng của dự án (Workflow, Priorities, IssueTypes, Labels) | [`ProjectActiveConfigResolver.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/ProjectActiveConfigResolver.cs) |
 | **SpecHubTools** | Công cụ đọc và tìm kiếm tài liệu đặc tả Spec Hub | [`SpecHubTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SpecHubTools.cs#L45-L100) |
-| **BacklogTools** | Công cụ truy vấn User Story và độ ưu tiên Backlog | [`BacklogTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/BacklogTools.cs#L35-L75) |
-| **SprintTools** | Công cụ tính toán vận tốc (Velocity) và User Story dở dang | [`SprintTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SprintTools.cs#L30-L70) |
+| **BacklogTools** | Công cụ truy vấn cấu hình dự án (`project_get_active_config`) và hạng mục Backlog (`backlog_get_stories`) | [`BacklogTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/BacklogTools.cs#L35-L75) |
+| **SprintTools** | Công cụ tính toán vận tốc (Velocity) và hạng mục dở dang theo trạng thái `IsDone` thực tế | [`SprintTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SprintTools.cs#L30-L70) |
 | **TeamTools** | Công cụ phân tích hồ sơ chuyên môn và số giờ làm việc | [`TeamTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/TeamTools.cs#L30-L70) |
 
 
@@ -1647,9 +1646,14 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
     - `ChunkType == AiStreamChunkType.Content`: Chỉ gom vào bộ đệm JSON nội bộ để phân tích cú pháp, không đẩy vào ô tư duy.
     - Nếu mô hình không hỗ trợ luồng suy nghĩ độc lập, hệ thống phát luồng suy luận tổng hợp (Synthesized Thought Milestones) bằng tiếng Việt mạch lạc.
 
-### Câu hỏi 8.4: Làm thế nào để AI tuân thủ đúng quy chuẩn trạng thái, loại công việc và mức ưu tiên của từng dự án mà không bị gán bừa?
+### Câu hỏi 8.4: Làm thế nào để AI tuân thủ đúng quy chuẩn Workflow, mức ưu tiên, loại công việc, nhãn đang áp dụng của từng dự án và lấy việc từ kho Backlog vào Sprint mà không bị trùng lặp?
 - **Trả lời**:
-  Hệ thống áp dụng kỹ thuật **Dynamic Project Governance Grounding**: Trước khi gửi prompt cho AI, hệ thống đọc trực tiếp các bảng `WorkflowStatuses`, `IssueTypes`, `Priorities` từ MySQL theo đúng `ProjectId`. Sau đó tiêm trực tiếp vào prompt, ép buộc AI chỉ được phân bổ các trạng thái thực tế đang có trong dự án (`To Do`, `In Progress`, `Code Review`, `Done`).
+  1. **Đọc cấu hình thực tế đang áp dụng (`ProjectActiveConfigResolver` & `project_get_active_config`)**:
+     - **Workflow**: Đọc bảng mặc định (`Boards`), thứ tự cột (`BoardColumns`), trạng thái (`WorkflowStatuses` kèm cờ `IsInitial`, `IsActiveWork`, `IsDone`, `IsCanceled`) và luồng chuyển tiếp (`WorkflowTransitions`). Kể cả khi dự án áp dụng quy trình tùy chỉnh không theo mẫu chung (ví dụ: `Open -> In Dev -> QA Testing -> Released`), AI và hệ thống tự động nhận diện trạng thái khởi tạo là `Open` và trạng thái hoàn tất là `Released`, tuyệt đối không đoán mò hay gán cứng `"To Do"`.
+     - **Mức độ ưu tiên (`Priorities`)**: Nếu dự án có bộ mức ưu tiên riêng (`ProjectId == projectId`), hệ thống **chỉ lấy bộ mức ưu tiên đang áp dụng của dự án đó**, không trộn lẫn với các dòng mặc định toàn cục (`ProjectId == null`). Khi lưu vào Sprint, hệ thống giữ nguyên mức ưu tiên của dự án (như `Urgent`, `Blocker`).
+     - **Loại công việc (`IssueTypes`) & Nhãn (`Labels`)**: Tách rõ `Story` (nhu cầu người dùng cần bóc tách thành các đầu việc kỹ thuật), `Task` (đầu việc kỹ thuật thực thi), `Bug` và `Sub-task`, đồng thời nạp danh mục `Labels` của dự án và lưu liên kết `IssueLabels`.
+  2. **Di chuyển hạng mục từ kho Backlog vào Sprint không trùng lặp (`AiSprintCommitCoordinator`)**:
+     - Khi AI chọn hạng mục từ Product Backlog (`sourceBacklogIssueId` / `sourceBacklogIssueKey`), bộ điều phối thực hiện **di chuyển trực tiếp (Move)** bản ghi từ kho Backlog (`SprintId = null`) sang `TargetSprintId` (kéo theo các việc con sẵn có), tuyệt đối không tạo bản ghi mới trùng lặp trong kho Backlog.
 
 ---
 
@@ -1659,6 +1663,8 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
 | :--- | :--- | :--- |
 | **API Endpoints & SSE** | `AiAgentController` | [`AiAgentController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/AiAgentController.cs) |
 | **Agent Pipeline 5 Bước** | `AiSprintDecompositionService` | [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs) |
+| **Phân Giải Cấu Hình Dự Án** | `ProjectActiveConfigResolver` | [`ProjectActiveConfigResolver.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/ProjectActiveConfigResolver.cs) |
+| **Ghi Nhận Sprint & Di Chuyển Backlog** | `AiSprintCommitCoordinator` | [`AiSprintCommitCoordinator.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintCommitCoordinator.cs) |
 | **Theo Dõi Token & Phiên** | `AiTokenUsageTracker` | [`AiTokenUsageTracker.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiTokenUsageTracker.cs) |
 | **Hợp Đồng Đo Lường Token** | `IAiTokenUsageTracker` | [`IAiTokenUsageTracker.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/IAiTokenUsageTracker.cs) |
 | **Quản Lý Prompt Động** | `PromptTemplateService` | [`PromptTemplateService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/PromptTemplateService.cs) |

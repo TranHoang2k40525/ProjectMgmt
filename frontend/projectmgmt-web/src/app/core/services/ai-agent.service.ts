@@ -23,6 +23,8 @@ export interface ProposedSubTaskDto {
 
 export interface ProposedTaskDto {
   id: string;
+  sourceBacklogIssueId?: string | null;
+  sourceBacklogIssueKey?: string | null;
   epicId?: string | null;
   epicTitle?: string | null;
   title: string;
@@ -54,6 +56,12 @@ export interface AiSprintProposalDto {
   tags?: string[];
   totalEstimatedHours: number;
   totalStoryPoints: number;
+  workflowName?: string | null;
+  initialStatus?: string | null;
+  appliedWorkflowStatuses?: string[];
+  appliedPriorities?: string[];
+  appliedIssueTypes?: string[];
+  appliedLabels?: string[];
   tasks: ProposedTaskDto[];
   createdAtUtc?: string;
 }
@@ -84,6 +92,7 @@ export interface AiApplySprintProposalResponse {
   createdIssueCount: number;
   createdTaskCount: number;
   createdSubtaskCount: number;
+  movedFromBacklogCount?: number;
   totalStoryPoints: number;
 }
 

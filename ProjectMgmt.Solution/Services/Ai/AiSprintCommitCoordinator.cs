@@ -71,30 +71,22 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
 
             ProjectScopeGuard.Validate(scope, project.OrgId, project.Id);
 
+            var activeConfig = await ProjectActiveConfigResolver.ResolveAsync(_planningDb, _deliveryDb, project.Id, ct);
+
             var issueTypes = await _planningDb.IssueTypes.AsNoTracking()
                 .Where(t => t.ProjectId == project.Id)
                 .OrderBy(t => t.OrderIndex)
                 .ToListAsync(ct);
 
-            var statuses = await _planningDb.WorkflowStatuses.AsNoTracking()
-                .Where(s => s.ProjectId == project.Id)
-                .OrderByDescending(s => s.IsInitial)
-                .ThenBy(s => s.OrderIndex)
-                .ToListAsync(ct);
-
-            var initialStatus = statuses.FirstOrDefault();
+            var initialStatus = activeConfig.Statuses
+                .FirstOrDefault(s => s.Name.Equals(activeConfig.InitialStatusName, StringComparison.OrdinalIgnoreCase))
+                ?? activeConfig.Statuses.FirstOrDefault();
             if (initialStatus == null || issueTypes.Count == 0)
             {
                 return Failure("PROJECT_CONFIG_MISSING", "Dự án chưa được cấu hình loại công việc hoặc trạng thái quy trình.");
             }
 
-            var priorities = await _planningDb.Priorities.AsNoTracking()
-                .Where(p => p.ProjectId == project.Id || p.ProjectId == null)
-                .OrderBy(p => p.Level)
-                .ToListAsync(ct);
-
-            var defaultPriority = priorities.FirstOrDefault(p => p.Name.Equals("Medium", StringComparison.OrdinalIgnoreCase))
-                ?? priorities.FirstOrDefault();
+            var defaultPriority = activeConfig.ResolvePriorityEntity(null);
 
             var epicIssueType = issueTypes.FirstOrDefault(t => !t.IsSubtask && t.Name.Equals("Epic", StringComparison.OrdinalIgnoreCase));
             var subtaskIssueType = issueTypes.FirstOrDefault(t => t.IsSubtask)
@@ -171,12 +163,51 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                 .Where(i => i.ProjectId == project.Id)
                 .MaxAsync(i => (decimal?)i.RankOrder, ct) ?? 0m;
 
+            var epicTypeId = epicIssueType?.Id;
+            var backlogIssues = await _deliveryDb.Issues
+                .Where(i => i.ProjectId == project.Id && i.SprintId == null && !i.IsDeleted && i.ParentId == null && (!epicTypeId.HasValue || i.IssueTypeId != epicTypeId.Value))
+                .ToListAsync(ct);
+            var backlogById = backlogIssues.ToDictionary(i => i.Id);
+            var backlogByNumber = backlogIssues.GroupBy(i => i.IssueNumber).ToDictionary(g => g.Key, g => g.First());
+            var movedBacklogIds = new HashSet<Guid>();
+
+            var backlogParentIds = backlogIssues.Select(i => i.Id).ToList();
+            var existingBacklogSubtasks = backlogParentIds.Count > 0
+                ? await _deliveryDb.Issues
+                    .Where(i => i.ProjectId == project.Id && i.ParentId.HasValue && backlogParentIds.Contains(i.ParentId.Value) && !i.IsDeleted)
+                    .ToListAsync(ct)
+                : [];
+            var existingCriteriaByIssue = backlogParentIds.Count > 0
+                ? (await _deliveryDb.AcceptanceCriteria.AsNoTracking()
+                    .Where(c => backlogParentIds.Contains(c.IssueId))
+                    .ToListAsync(ct))
+                    .GroupBy(c => c.IssueId)
+                    .ToDictionary(g => g.Key, g => g.Select(c => c.Content).ToHashSet(StringComparer.OrdinalIgnoreCase))
+                : new Dictionary<Guid, HashSet<string>>();
+            var existingIssueLabelsByIssue = backlogParentIds.Count > 0
+                ? (await _deliveryDb.IssueLabels.AsNoTracking()
+                    .Where(il => backlogParentIds.Contains(il.IssueId))
+                    .ToListAsync(ct))
+                    .GroupBy(il => il.IssueId)
+                    .ToDictionary(g => g.Key, g => g.Select(il => il.LabelId).ToHashSet())
+                : new Dictionary<Guid, HashSet<Guid>>();
+
+            var existingLabels = await _deliveryDb.Labels
+                .Where(l => l.ProjectId == project.Id)
+                .ToListAsync(ct);
+            var labelByName = existingLabels
+                .GroupBy(l => l.Name.Trim().TrimStart('#'), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
             var newIssues = new List<Issue>();
+            var newLabels = new List<Label>();
+            var newIssueLabels = new List<IssueLabel>();
             var newCriteria = new List<AcceptanceCriteria>();
             var newLogs = new List<ActivityLog>();
             var createdSummaries = new List<AiCreatedIssueItemDto>();
             var createdTaskCount = 0;
             var createdSubtaskCount = 0;
+            var movedFromBacklogCount = 0;
             var aiLogId = Guid.NewGuid();
 
             foreach (var taskDto in request.Tasks)
@@ -229,22 +260,19 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                     }
                 }
 
-                // Resolve IssueType
+                // Resolve IssueType from active project IssueTypes
+                var resolvedTypeName = activeConfig.ResolveIssueTypeName(taskDto.Type);
                 var parentIssueType = issueTypes.FirstOrDefault(t =>
-                    !t.IsSubtask && t.Name.Equals(taskDto.Type?.Trim(), StringComparison.OrdinalIgnoreCase))
+                    !t.IsSubtask && t.Name.Equals(resolvedTypeName, StringComparison.OrdinalIgnoreCase))
                     ?? defaultParentType;
 
-                // Resolve Priority
-                var priorityName = string.Equals(taskDto.Priority, "Urgent", StringComparison.OrdinalIgnoreCase)
-                    ? "Highest"
-                    : (taskDto.Priority ?? "Medium");
-                var matchedPriority = priorities.FirstOrDefault(p => p.Name.Equals(priorityName, StringComparison.OrdinalIgnoreCase))
-                    ?? defaultPriority;
+                // Resolve Priority from active project Priorities (respects custom priority schemes such as Urgent/High/Normal/Low)
+                var matchedPriority = activeConfig.ResolvePriorityEntity(taskDto.Priority) ?? defaultPriority;
 
-                // Resolve Status
-                var matchedStatus = !string.IsNullOrWhiteSpace(taskDto.Status)
-                    ? statuses.FirstOrDefault(s => s.Name.Equals(taskDto.Status.Trim(), StringComparison.OrdinalIgnoreCase)) ?? initialStatus
-                    : initialStatus;
+                // Resolve Status from active project WorkflowStatuses (respects custom initial/active statuses)
+                var resolvedStatusName = activeConfig.ResolveStatusName(taskDto.Status);
+                var matchedStatus = activeConfig.Statuses.FirstOrDefault(s =>
+                    s.Name.Equals(resolvedStatusName, StringComparison.OrdinalIgnoreCase)) ?? initialStatus;
 
                 // Resolve Assignee
                 Guid? resolvedAssigneeId = null;
@@ -260,67 +288,186 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                     resolvedAssigneeId = matchedUser?.UserId;
                 }
 
-                currentIssueNumber++;
-                maxRank += 1000m;
-                var parentIssueId = Guid.NewGuid();
+                // Match existing Product Backlog item so it is MOVED into Sprint instead of duplicated
+                Issue? matchedBacklogIssue = null;
+                if (taskDto.SourceBacklogIssueId.HasValue &&
+                    backlogById.TryGetValue(taskDto.SourceBacklogIssueId.Value, out var byIdCandidate) &&
+                    !movedBacklogIds.Contains(byIdCandidate.Id))
+                {
+                    matchedBacklogIssue = byIdCandidate;
+                }
+                else if (!string.IsNullOrWhiteSpace(taskDto.SourceBacklogIssueKey))
+                {
+                    var dashIdx = taskDto.SourceBacklogIssueKey.LastIndexOf('-');
+                    var numStr = dashIdx >= 0 ? taskDto.SourceBacklogIssueKey[(dashIdx + 1)..] : taskDto.SourceBacklogIssueKey;
+                    if (int.TryParse(numStr.Trim(), out var issueNum) &&
+                        backlogByNumber.TryGetValue(issueNum, out var byKeyCandidate) &&
+                        !movedBacklogIds.Contains(byKeyCandidate.Id))
+                    {
+                        matchedBacklogIssue = byKeyCandidate;
+                    }
+                }
+                else
+                {
+                    var normalizedTitle = taskDto.Title.Trim();
+                    matchedBacklogIssue = backlogIssues.FirstOrDefault(b =>
+                        !movedBacklogIds.Contains(b.Id) &&
+                        string.Equals(b.Title?.Trim(), normalizedTitle, StringComparison.OrdinalIgnoreCase));
+                }
+
+                Guid parentIssueId;
+                string parentIssueKey;
+                string parentTitle;
                 var estHours = Math.Max(0m, taskDto.EstimatedHours);
                 var remHours = taskDto.RemainingHours > 0m ? taskDto.RemainingHours : estHours;
                 var points = Math.Max(0m, taskDto.StoryPoints);
 
-                var parentIssue = new Issue
+                if (matchedBacklogIssue != null)
                 {
-                    Id = parentIssueId,
-                    ProjectId = project.Id,
-                    IssueNumber = currentIssueNumber,
-                    SprintId = targetSprint.Id,
-                    EpicId = resolvedEpicId,
-                    AssigneeId = resolvedAssigneeId,
-                    ReporterId = scope.UserId,
-                    StatusId = matchedStatus.Id,
-                    IssueTypeId = parentIssueType.Id,
-                    PriorityId = matchedPriority?.Id,
-                    Title = taskDto.Title.Trim(),
-                    Description = taskDto.Description?.Trim(),
-                    StoryPoints = points,
-                    EstimatedHours = estHours,
-                    RemainingHours = remHours,
-                    OriginalEstimateMinutes = (int)Math.Round(estHours * 60m, MidpointRounding.AwayFromZero),
-                    TimeSpentMinutes = 0,
-                    RankOrder = maxRank,
-                    IsAiGenerated = true,
-                    AiGenerationLogId = aiLogId,
-                    IsAiAssigned = resolvedAssigneeId.HasValue,
-                    IsDeleted = false,
-                    CreatedAt = now,
-                    UpdatedAt = now
-                };
+                    movedBacklogIds.Add(matchedBacklogIssue.Id);
+                    movedFromBacklogCount++;
+                    parentIssueId = matchedBacklogIssue.Id;
+                    parentIssueKey = $"{project.ProjectKey}-{matchedBacklogIssue.IssueNumber}";
 
-                newIssues.Add(parentIssue);
-                createdTaskCount++;
-                createdSummaries.Add(new AiCreatedIssueItemDto
+                    matchedBacklogIssue.SprintId = targetSprint.Id;
+                    if (resolvedEpicId.HasValue) matchedBacklogIssue.EpicId = resolvedEpicId.Value;
+                    matchedBacklogIssue.StatusId = matchedStatus.Id;
+                    matchedBacklogIssue.IssueTypeId = parentIssueType.Id;
+                    if (matchedPriority != null) matchedBacklogIssue.PriorityId = matchedPriority.Id;
+                    if (resolvedAssigneeId.HasValue)
+                    {
+                        matchedBacklogIssue.AssigneeId = resolvedAssigneeId.Value;
+                        matchedBacklogIssue.IsAiAssigned = true;
+                    }
+                    matchedBacklogIssue.Title = taskDto.Title.Trim();
+                    if (!string.IsNullOrWhiteSpace(taskDto.Description))
+                    {
+                        matchedBacklogIssue.Description = taskDto.Description.Trim();
+                    }
+                    matchedBacklogIssue.StoryPoints = points;
+                    matchedBacklogIssue.EstimatedHours = estHours;
+                    matchedBacklogIssue.RemainingHours = remHours;
+                    matchedBacklogIssue.OriginalEstimateMinutes = (int)Math.Round(estHours * 60m, MidpointRounding.AwayFromZero);
+                    matchedBacklogIssue.IsAiGenerated = true;
+                    matchedBacklogIssue.AiGenerationLogId = aiLogId;
+                    matchedBacklogIssue.UpdatedAt = now;
+                    parentTitle = matchedBacklogIssue.Title;
+
+                    // Also move any pre-existing child subtasks belonging to this backlog item into the target sprint
+                    foreach (var existingChild in existingBacklogSubtasks.Where(s => s.ParentId == matchedBacklogIssue.Id))
+                    {
+                        existingChild.SprintId = targetSprint.Id;
+                        existingChild.UpdatedAt = now;
+                    }
+
+                    createdTaskCount++;
+                    createdSummaries.Add(new AiCreatedIssueItemDto
+                    {
+                        IssueId = matchedBacklogIssue.Id,
+                        IssueKey = parentIssueKey,
+                        Title = matchedBacklogIssue.Title,
+                        Type = parentIssueType.Name,
+                        StoryPoints = matchedBacklogIssue.StoryPoints
+                    });
+                }
+                else
                 {
-                    IssueId = parentIssue.Id,
-                    IssueKey = $"{project.ProjectKey}-{parentIssue.IssueNumber}",
-                    Title = parentIssue.Title,
-                    Type = parentIssueType.Name,
-                    StoryPoints = parentIssue.StoryPoints
-                });
+                    currentIssueNumber++;
+                    maxRank += 1000m;
+                    parentIssueId = Guid.NewGuid();
+                    parentIssueKey = $"{project.ProjectKey}-{currentIssueNumber}";
 
-                // Add Acceptance Criteria
+                    var parentIssue = new Issue
+                    {
+                        Id = parentIssueId,
+                        ProjectId = project.Id,
+                        IssueNumber = currentIssueNumber,
+                        SprintId = targetSprint.Id,
+                        EpicId = resolvedEpicId,
+                        AssigneeId = resolvedAssigneeId,
+                        ReporterId = scope.UserId,
+                        StatusId = matchedStatus.Id,
+                        IssueTypeId = parentIssueType.Id,
+                        PriorityId = matchedPriority?.Id,
+                        Title = taskDto.Title.Trim(),
+                        Description = taskDto.Description?.Trim(),
+                        StoryPoints = points,
+                        EstimatedHours = estHours,
+                        RemainingHours = remHours,
+                        OriginalEstimateMinutes = (int)Math.Round(estHours * 60m, MidpointRounding.AwayFromZero),
+                        TimeSpentMinutes = 0,
+                        RankOrder = maxRank,
+                        IsAiGenerated = true,
+                        AiGenerationLogId = aiLogId,
+                        IsAiAssigned = resolvedAssigneeId.HasValue,
+                        IsDeleted = false,
+                        CreatedAt = now,
+                        UpdatedAt = now
+                    };
+
+                    parentTitle = parentIssue.Title;
+                    newIssues.Add(parentIssue);
+                    createdTaskCount++;
+                    createdSummaries.Add(new AiCreatedIssueItemDto
+                    {
+                        IssueId = parentIssue.Id,
+                        IssueKey = parentIssueKey,
+                        Title = parentIssue.Title,
+                        Type = parentIssueType.Name,
+                        StoryPoints = parentIssue.StoryPoints
+                    });
+                }
+
+                // Persist project Labels (reusing existing project labels first)
+                if (taskDto.Tags != null && taskDto.Tags.Count > 0)
+                {
+                    var alreadyLinkedLabels = existingIssueLabelsByIssue.GetValueOrDefault(parentIssueId) ?? new HashSet<Guid>();
+                    foreach (var rawTag in taskDto.Tags)
+                    {
+                        var cleanTag = rawTag?.Trim().TrimStart('#').Trim();
+                        if (string.IsNullOrWhiteSpace(cleanTag) || cleanTag.Length > 100) continue;
+
+                        if (!labelByName.TryGetValue(cleanTag, out var targetLabel))
+                        {
+                            targetLabel = new Label
+                            {
+                                Id = Guid.NewGuid(),
+                                ProjectId = project.Id,
+                                Name = cleanTag,
+                                ColorHex = "#DFE1E6"
+                            };
+                            labelByName[cleanTag] = targetLabel;
+                            newLabels.Add(targetLabel);
+                        }
+
+                        if (alreadyLinkedLabels.Add(targetLabel.Id))
+                        {
+                            newIssueLabels.Add(new IssueLabel
+                            {
+                                IssueId = parentIssueId,
+                                LabelId = targetLabel.Id
+                            });
+                        }
+                    }
+                }
+
+                // Add Acceptance Criteria (skipping duplicates on moved backlog items)
                 if (taskDto.AcceptanceCriteria != null)
                 {
+                    var existingAcSet = existingCriteriaByIssue.GetValueOrDefault(parentIssueId) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                     for (var idx = 0; idx < taskDto.AcceptanceCriteria.Count; idx++)
                     {
                         var criterionText = taskDto.AcceptanceCriteria[idx]?.Trim();
-                        if (string.IsNullOrWhiteSpace(criterionText)) continue;
+                        if (string.IsNullOrWhiteSpace(criterionText) || existingAcSet.Contains(criterionText)) continue;
 
+                        existingAcSet.Add(criterionText);
                         newCriteria.Add(new AcceptanceCriteria
                         {
                             Id = Guid.NewGuid(),
                             IssueId = parentIssueId,
                             Content = criterionText.Length > 2000 ? criterionText[..2000] : criterionText,
                             IsMet = false,
-                            OrderIndex = idx,
+                            OrderIndex = existingAcSet.Count + idx,
                             Source = "AI",
                             CreatedAt = now
                         });
@@ -332,12 +479,13 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                     Id = Guid.NewGuid(),
                     IssueId = parentIssueId,
                     UserId = scope.UserId,
-                    Action = "AiSprintTaskCommitted",
+                    Action = matchedBacklogIssue != null ? "AiSprintBacklogItemMovedToSprint" : "AiSprintTaskCommitted",
                     Detail = JsonSerializer.Serialize(new
                     {
                         sessionId = request.SessionId,
                         sprintId = targetSprint.Id,
-                        sprintName = targetSprint.Name
+                        sprintName = targetSprint.Name,
+                        movedFromBacklog = matchedBacklogIssue != null
                     }),
                     Source = "AI",
                     CreatedAt = now
@@ -346,19 +494,29 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                 // Add Subtasks if Subtask IssueType exists
                 if (subtaskIssueType != null && taskDto.Subtasks != null)
                 {
+                    var existingChildTitles = existingBacklogSubtasks
+                        .Where(s => s.ParentId == parentIssueId)
+                        .Select(s => s.Title.Trim())
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
                     foreach (var subDto in taskDto.Subtasks)
                     {
                         if (string.IsNullOrWhiteSpace(subDto.Title)) continue;
+
+                        var rawSubTitle = subDto.Title.Trim();
+                        var prefixedSubTitle = !string.IsNullOrWhiteSpace(subDto.Role) && !rawSubTitle.StartsWith("[", StringComparison.Ordinal)
+                            ? $"[{subDto.Role.Trim()}] {rawSubTitle}"
+                            : rawSubTitle;
+
+                        if (existingChildTitles.Contains(rawSubTitle) || existingChildTitles.Contains(prefixedSubTitle))
+                        {
+                            continue;
+                        }
 
                         currentIssueNumber++;
                         maxRank += 1000m;
                         var subId = Guid.NewGuid();
                         var subHours = Math.Max(0m, subDto.EstimatedHours);
-                        var subTitle = subDto.Title.Trim();
-                        if (!string.IsNullOrWhiteSpace(subDto.Role) && !subTitle.StartsWith("[", StringComparison.Ordinal))
-                        {
-                            subTitle = $"[{subDto.Role.Trim()}] {subTitle}";
-                        }
 
                         Guid? subAssigneeId = resolvedAssigneeId;
                         if (subDto.AssigneeUserId.HasValue && userById.ContainsKey(subDto.AssigneeUserId.Value))
@@ -373,6 +531,11 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                             if (matchedSubUser != null) subAssigneeId = matchedSubUser.UserId;
                         }
 
+                        var subStatusName = activeConfig.ResolveStatusName(subDto.Status);
+                        var subStatus = activeConfig.Statuses.FirstOrDefault(s =>
+                            s.Name.Equals(subStatusName, StringComparison.OrdinalIgnoreCase)) ?? matchedStatus;
+                        var subPriority = activeConfig.ResolvePriorityEntity(subDto.Priority) ?? matchedPriority;
+
                         var subIssue = new Issue
                         {
                             Id = subId,
@@ -383,12 +546,14 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                             EpicId = resolvedEpicId,
                             AssigneeId = subAssigneeId,
                             ReporterId = scope.UserId,
-                            StatusId = initialStatus.Id,
+                            StatusId = subStatus.Id,
                             IssueTypeId = subtaskIssueType.Id,
-                            PriorityId = matchedPriority?.Id,
-                            Title = subTitle,
-                            Description = $"Công việc con thuộc {project.ProjectKey}-{parentIssue.IssueNumber}: {parentIssue.Title}",
-                            StoryPoints = 0,
+                            PriorityId = subPriority?.Id,
+                            Title = prefixedSubTitle,
+                            Description = !string.IsNullOrWhiteSpace(subDto.Description)
+                                ? subDto.Description.Trim()
+                                : $"Công việc con thuộc {parentIssueKey}: {parentTitle}",
+                            StoryPoints = Math.Max(0, subDto.StoryPoints),
                             EstimatedHours = subHours,
                             RemainingHours = subHours,
                             OriginalEstimateMinutes = (int)Math.Round(subHours * 60m, MidpointRounding.AwayFromZero),
@@ -404,6 +569,26 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
 
                         newIssues.Add(subIssue);
                         createdSubtaskCount++;
+
+                        if (subDto.AcceptanceCriteria != null)
+                        {
+                            for (var acIdx = 0; acIdx < subDto.AcceptanceCriteria.Count; acIdx++)
+                            {
+                                var subAc = subDto.AcceptanceCriteria[acIdx]?.Trim();
+                                if (string.IsNullOrWhiteSpace(subAc)) continue;
+                                newCriteria.Add(new AcceptanceCriteria
+                                {
+                                    Id = Guid.NewGuid(),
+                                    IssueId = subId,
+                                    Content = subAc.Length > 2000 ? subAc[..2000] : subAc,
+                                    IsMet = false,
+                                    OrderIndex = acIdx,
+                                    Source = "AI",
+                                    CreatedAt = now
+                                });
+                            }
+                        }
+
                         createdSummaries.Add(new AiCreatedIssueItemDto
                         {
                             IssueId = subIssue.Id,
@@ -411,7 +596,7 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                             Title = subIssue.Title,
                             Type = subtaskIssueType.Name,
                             ParentIssueId = parentIssueId,
-                            StoryPoints = 0
+                            StoryPoints = subIssue.StoryPoints
                         });
                     }
                 }
@@ -429,12 +614,7 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
             var backlogReturnedCount = 0;
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
-            var doneStatusIds = statuses
-                .Where(s => s.Name.Equals("Done", StringComparison.OrdinalIgnoreCase) ||
-                            s.Name.Equals("Closed", StringComparison.OrdinalIgnoreCase) ||
-                            s.Name.Equals("Resolved", StringComparison.OrdinalIgnoreCase))
-                .Select(s => s.Id)
-                .ToHashSet();
+            var doneStatusIds = activeConfig.DoneStatusIds;
 
             // Tìm Sprint trước đó của dự án (Sprint có OrderIndex ngay trước targetSprint hoặc Sprint gần nhất)
             var previousSprint = await _planningDb.Sprints.AsNoTracking()
@@ -454,7 +634,8 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                 foreach (var unfinished in unfinishedIssues)
                 {
                     var isBug = bugTypeId.HasValue && unfinished.IssueTypeId == bugTypeId.Value;
-                    var isInProgress = unfinished.TimeSpentMinutes > 0;
+                    var isInProgress = unfinished.TimeSpentMinutes > 0 ||
+                                       activeConfig.Statuses.Any(s => s.Id == unfinished.StatusId && (s.IsActiveWork || s.Category.Equals("InProgress", StringComparison.OrdinalIgnoreCase)));
                     var isOverdue = unfinished.DueDate.HasValue && unfinished.DueDate.Value < today;
 
                     if (isBug || isInProgress || !isOverdue)
@@ -463,11 +644,14 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                         unfinished.SprintId = targetSprint.Id;
                         unfinished.UpdatedAt = now;
 
-                        // Nếu là Bug quá hạn, tăng mức ưu tiên lên cao nhất để xử lý dứt điểm
-                        if (isBug && isOverdue && priorities.Count > 0)
+                        // Nếu là Bug quá hạn, tăng mức ưu tiên lên cấp độ khẩn cấp nhất theo cấu hình dự án
+                        if (isBug && isOverdue)
                         {
-                            var highestPrio = priorities.FirstOrDefault(p => p.Name.Equals("Highest", StringComparison.OrdinalIgnoreCase)) ?? priorities.First();
-                            unfinished.PriorityId = highestPrio.Id;
+                            var highestPrio = activeConfig.GetHighestUrgencyPriority();
+                            if (highestPrio != null)
+                            {
+                                unfinished.PriorityId = highestPrio.Id;
+                            }
                         }
 
                         newLogs.Add(new ActivityLog
@@ -517,7 +701,18 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                 }
             }
 
-            await _deliveryDb.Issues.AddRangeAsync(newIssues, ct);
+            if (newIssues.Count > 0)
+            {
+                await _deliveryDb.Issues.AddRangeAsync(newIssues, ct);
+            }
+            if (newLabels.Count > 0)
+            {
+                await _deliveryDb.Labels.AddRangeAsync(newLabels, ct);
+            }
+            if (newIssueLabels.Count > 0)
+            {
+                await _deliveryDb.IssueLabels.AddRangeAsync(newIssueLabels, ct);
+            }
             if (newCriteria.Count > 0)
             {
                 await _deliveryDb.AcceptanceCriteria.AddRangeAsync(newCriteria, ct);
@@ -537,6 +732,9 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
 
             var totalSp = request.Tasks.Sum(t => Math.Max(0m, t.StoryPoints));
 
+            var movedSummary = movedFromBacklogCount > 0
+                ? $" (trong đó đã chuyển {movedFromBacklogCount} công việc từ Backlog sang)"
+                : string.Empty;
             var rolloverSummary = rolloverCount > 0
                 ? $" Đã kế thừa {rolloverCount} hạng mục dở dang từ {previousSprint?.Name}."
                 : string.Empty;
@@ -547,13 +745,14 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
             return new AiApplySprintProposalResponse
             {
                 Success = true,
-                Message = $"Đã áp dụng thành công {createdTaskCount} công việc và {createdSubtaskCount} công việc con vào {targetSprint.Name}.{rolloverSummary}{backlogSummary}",
+                Message = $"Đã áp dụng thành công {createdTaskCount} công việc{movedSummary} và {createdSubtaskCount} công việc con vào {targetSprint.Name}.{rolloverSummary}{backlogSummary}",
                 SprintId = targetSprint.Id,
                 SprintName = targetSprint.Name,
                 SprintGoal = targetSprint.Goal ?? request.SprintGoal,
                 CreatedIssueCount = createdTaskCount + createdSubtaskCount,
                 CreatedTaskCount = createdTaskCount,
                 CreatedSubtaskCount = createdSubtaskCount,
+                MovedFromBacklogCount = movedFromBacklogCount,
                 RolloverTaskCount = rolloverCount,
                 BacklogReturnedCount = backlogReturnedCount,
                 TotalStoryPoints = totalSp,

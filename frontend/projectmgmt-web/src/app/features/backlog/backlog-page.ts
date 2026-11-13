@@ -556,6 +556,46 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     return '#0052CC';
   }
 
+  isDoneStatus(statusName?: string | null): boolean {
+    const normalized = (statusName || '').trim().toLowerCase();
+    if (!normalized) return false;
+    const matched = this.projectService.projectStatuses().find(s => s.name.trim().toLowerCase() === normalized);
+    if (matched) return !!matched.isDone || (matched.category || '').toLowerCase() === 'done';
+    return normalized === 'done' || normalized === 'released' || normalized === 'closed' || normalized === 'completed';
+  }
+
+  getStatusPillClass(statusName?: string | null): string {
+    const normalized = (statusName || '').trim().toLowerCase();
+    const matched = this.projectService.projectStatuses().find(s => s.name.trim().toLowerCase() === normalized);
+    const category = (matched?.category || '').toLowerCase();
+    if (matched?.isDone || category === 'done' || normalized === 'done' || normalized === 'released' || normalized === 'closed') {
+      return 'status-done';
+    }
+    if (normalized.includes('review') || normalized.includes('qa') || normalized.includes('test')) {
+      return 'status-review';
+    }
+    if (matched?.isActiveWork || category === 'in progress' || normalized === 'in progress' || normalized.includes('dev')) {
+      return 'status-progress';
+    }
+    return 'status-todo';
+  }
+
+  isUrgentPriority(priority?: string | null): boolean {
+    const normalized = (priority || '').trim().toLowerCase();
+    if (!normalized) return false;
+    const matched = this.projectService.projectPriorities().find(p => p.name.trim().toLowerCase() === normalized);
+    if (matched) return matched.level <= 1;
+    return normalized === 'urgent' || normalized === 'highest' || normalized === 'blocker' || normalized === 'critical';
+  }
+
+  isHighPriority(priority?: string | null): boolean {
+    const normalized = (priority || '').trim().toLowerCase();
+    if (!normalized || this.isUrgentPriority(priority)) return false;
+    const matched = this.projectService.projectPriorities().find(p => p.name.trim().toLowerCase() === normalized);
+    if (matched) return matched.level === 2;
+    return normalized === 'high' || normalized === 'major';
+  }
+
   isItemReady(item: WorkItem): boolean {
     return (item.storyPoints > 0) && !!item.description?.trim() && !item.isBlocked;
   }

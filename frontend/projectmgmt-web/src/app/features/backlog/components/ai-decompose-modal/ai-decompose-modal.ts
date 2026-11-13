@@ -157,6 +157,37 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
   readonly inlineEditingSpId = signal<string | null>(null);
   readonly isSprintGoalInfoExpanded = signal<boolean>(false);
 
+  // Applied project workflow & priority options (sourced from DB / active config)
+  readonly availableWorkflowStatuses = computed<string[]>(() => {
+    const svc = this.projectManagementService.projectStatuses().map((s) => s.name);
+    if (svc.length > 0) return svc;
+    const applied = this.proposal()?.appliedWorkflowStatuses ?? [];
+    if (applied.length > 0) return applied;
+    return ['To Do', 'In Progress', 'Code Review', 'Done'];
+  });
+
+  readonly defaultInitialStatus = computed<string>(() => {
+    const svcInitial = this.projectManagementService.projectStatuses().find((s) => s.isInitial)?.name;
+    return svcInitial || this.proposal()?.initialStatus || this.availableWorkflowStatuses()[0] || 'To Do';
+  });
+
+  readonly availablePriorities = computed<string[]>(() => {
+    const svc = this.projectManagementService.projectPriorities().map((p) => p.name);
+    if (svc.length > 0) return svc;
+    const applied = this.proposal()?.appliedPriorities ?? [];
+    if (applied.length > 0) return applied;
+    return ['Urgent', 'High', 'Medium', 'Low'];
+  });
+
+  readonly defaultPriorityName = computed<string>(() => {
+    const list = this.availablePriorities();
+    return (
+      list.find((p) => ['medium', 'normal', 'major'].includes(p.toLowerCase())) ??
+      list[Math.floor(list.length / 2)] ??
+      'Medium'
+    );
+  });
+
   // Session History State (Image & Summary requirement)
   readonly isSessionHistoryOpen = signal<boolean>(false);
   readonly projectSessions = signal<any[]>([]);
@@ -1103,9 +1134,12 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
 
   private normalizeProposal(prop: AiSprintProposalDto): void {
     if (!prop.tasks) prop.tasks = [];
+    const fallbackStatus = prop.initialStatus || this.defaultInitialStatus();
+    const fallbackPriority = this.defaultPriorityName();
     prop.tasks.forEach((t, idx) => {
       if (!t.id) t.id = `task_${idx + 1}`;
-      if (!t.status) t.status = 'To Do';
+      if (!t.status) t.status = fallbackStatus;
+      if (!t.priority) t.priority = fallbackPriority;
       if (t.isReady === undefined) t.isReady = true;
       if (!t.remainingHours || t.remainingHours <= 0) t.remainingHours = t.estimatedHours || 8;
       if (!t.acceptanceCriteria) t.acceptanceCriteria = [];
@@ -1115,8 +1149,8 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
       // Normalize each subtask as a full task entity
       t.subtasks.forEach((sub, sIdx) => {
         if (!sub.id) sub.id = `${t.id}_sub_${sIdx + 1}`;
-        if (!sub.priority) sub.priority = t.priority || 'Medium';
-        if (!sub.status) sub.status = 'To Do';
+        if (!sub.priority) sub.priority = t.priority || fallbackPriority;
+        if (!sub.status) sub.status = t.status || fallbackStatus;
         if (!sub.storyPoints || sub.storyPoints <= 0) sub.storyPoints = 1;
         if (!sub.estimatedHours || sub.estimatedHours <= 0) sub.estimatedHours = 4;
         if (!sub.role) sub.role = 'Kỹ thuật';
@@ -1222,8 +1256,8 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
 
   cycleSubtaskPriority(subtask: ProposedSubTaskDto, event: Event): void {
     event.stopPropagation();
-    const scale = ['Low', 'Medium', 'High', 'Highest'];
-    const curIdx = scale.indexOf(subtask.priority || 'Medium');
+    const scale = this.availablePriorities();
+    const curIdx = scale.findIndex((p) => p.toLowerCase() === (subtask.priority || '').toLowerCase());
     subtask.priority = scale[(curIdx + 1) % scale.length];
     this.onTaskFieldChanged();
     this.persistProposalEdits();
@@ -1328,8 +1362,8 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
 
   cyclePriority(task: ProposedTaskDto, event: Event): void {
     event.stopPropagation();
-    const order = ['Low', 'Medium', 'High', 'Highest'];
-    const idx = order.indexOf(task.priority || 'Medium');
+    const order = this.availablePriorities();
+    const idx = order.findIndex((p) => p.toLowerCase() === (task.priority || '').toLowerCase());
     task.priority = order[(idx + 1) % order.length];
     this.onTaskFieldChanged();
     this.persistProposalEdits();
@@ -1345,8 +1379,8 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
         role: 'Backend',
         estimatedHours: 4,
         storyPoints: 1,
-        priority: 'Medium',
-        status: 'To Do',
+        priority: this.defaultPriorityName(),
+        status: this.defaultInitialStatus(),
         description: `Triển khai các yêu cầu kỹ thuật chi tiết cho ${task.title}.`,
         acceptanceCriteria: ['Hoàn tất triển khai mã nguồn', 'Kiểm thử đạt 100% không phát sinh lỗi'],
         documentCitations: task.documentCitations && task.documentCitations.length > 0

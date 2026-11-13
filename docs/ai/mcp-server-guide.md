@@ -29,7 +29,8 @@ Máy chủ này đóng vai trò cầu nối dữ liệu chuyên dụng giữa h�
 | `spec_hub_list_documents` | `projectId` (string) | Liệt kê toàn bộ cây thư mục và danh mục tài liệu đặc tả (.pdf, .docx, .xlsx, .txt, .md) trong Spec Hub. |
 | `spec_hub_read_document` | `documentId` (string) | Đọc và trích xuất nội dung toàn văn của tài liệu (hỗ trợ đọc sâu file Word .docx, bảng tính Excel .xlsx, PDF và Text). |
 | `spec_hub_search` | `projectId` (string), `keyword` (string) | Tìm kiếm từ khóa, thuật ngữ kỹ thuật hoặc quy tắc nghiệp vụ trong toàn bộ tài liệu Spec Hub. |
-| `backlog_get_stories` | `projectId` (string) | Lấy danh sách User Stories trong Product Backlog kèm Tiêu chí nghiệm thu (Acceptance Criteria - AC) và Story Points. |
+| `project_get_active_config` | `projectId` (string) | Truy xuất cấu hình thực tế đang áp dụng của dự án: Quy trình Workflow (Board, các cột Statuses, cờ khởi tạo/hoàn thành, luồng chuyển tiếp), Mức ưu tiên đang dùng, Loại công việc (IssueTypes) và Nhãn (Labels). |
+| `backlog_get_stories` | `projectId` (string) | Lấy danh sách toàn bộ hạng mục trong Product Backlog (Story, Task, Bug) kèm loại việc, mức ưu tiên, nhãn, Story Points, việc con sẵn có và Tiêu chí nghiệm thu (AC). |
 | `sprint_get_history_and_velocity`| `projectId` (string) | Truy xuất Vận tốc (Velocity) trung bình các Sprint trước, các Story dở dang rollover và Bug kỹ thuật còn tồn đọng. |
 | `team_get_dev_capacities` | `projectId` (string) | Lấy danh sách thành viên kỹ thuật, chức danh, kỹ năng và số giờ làm việc khả dụng (Capacity). |
 | `ai_sprint_plan_propose` | `projectId` (string), `meetingNotes` (string), `targetStoryIds` (array) | Phân tích tóm tắt cuộc họp + Tiêu chí nghiệm thu Spec Hub để sinh cấu trúc Sub-tasks (BE, FE, QA), gán người và ước lượng giờ. |

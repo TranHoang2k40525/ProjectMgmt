@@ -176,34 +176,26 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
         sw.Stop();
         await onToolCall("team_get_dev_capacities", new { projectId = scope.ProjectId }, "Phân tích kỹ năng và số giờ khả dụng của thành viên đội Scrum", sw.ElapsedMilliseconds);
 
-        // Fetch project-specific workflow rules, issue types and priorities from DB
-        var workflowStatuses = await _planningDb.WorkflowStatuses.AsNoTracking()
-            .Where(s => s.ProjectId == scope.ProjectId)
-            .OrderBy(s => s.OrderIndex)
-            .Select(s => s.Name)
-            .ToListAsync(cancellationToken);
-        var issueTypes = await _planningDb.IssueTypes.AsNoTracking()
-            .Where(t => t.ProjectId == scope.ProjectId)
-            .OrderBy(t => t.OrderIndex)
-            .Select(t => t.Name)
-            .ToListAsync(cancellationToken);
-        var priorities = await _planningDb.Priorities.AsNoTracking()
-            .Where(p => p.ProjectId == null || p.ProjectId == scope.ProjectId)
-            .OrderBy(p => p.Level)
-            .Select(p => p.Name)
-            .ToListAsync(cancellationToken);
+        // Truy xuất cấu hình đang được ÁP DỤNG THỰC TẾ của dự án (Workflow, Priorities, IssueTypes, Labels)
+        sw.Restart();
+        var activeConfig = await _backlogTools.ResolveActiveConfigAsync(scope.ProjectId, cancellationToken);
+        await _backlogTools.GetActiveConfigAsync(scope.ProjectId, scope, cancellationToken);
+        sw.Stop();
+        await onToolCall(
+            "project_get_active_config",
+            new { projectId = scope.ProjectId },
+            $"Truy xuất cấu hình áp dụng thực tế ({activeConfig.WorkflowName}: {activeConfig.Statuses.Count} trạng thái, {activeConfig.Priorities.Count} mức ưu tiên, {activeConfig.Labels.Count} nhãn)",
+            sw.ElapsedMilliseconds);
 
         // =========================================================================
         // STEP 4: Phân rã Sprint Goal, Epics & Tasks (75%)
         // =========================================================================
         await onStepProgress(4, "DECOMPOSE_SPRINT", "Phân rã Sprint Goal, Epics & Tasks", 75, "Mô hình AI đang suy luận cấu trúc Sprint, chia nhỏ Epic và Task...");
 
-        // Load dynamic prompts from external Markdown templates (hot-reloadable without recompilation)
-        var systemPrompt = await _promptTemplates.GetTemplateAsync("SprintDecompositionSystemPrompt", cancellationToken);
-        if (string.IsNullOrWhiteSpace(systemPrompt))
-        {
-            systemPrompt = "Bạn là Chuyên gia Scrum Master giàu kinh nghiệm. Hãy phân tích tài liệu và năng lực nhóm để lập kế hoạch Sprint. Định cỡ Story Points đa dạng (1, 2, 3, 5, 8). Phân chia đều việc cho các thành viên theo chuyên môn (Frontend, Backend, QA). Trả về đúng JSON SprintProposal.";
-        }
+        var workflowStatusesList = activeConfig.Statuses.Select(s => s.Name).ToList();
+        var issueTypesList = activeConfig.ParentWorkItemTypes.Select(t => t.Name).ToList();
+        var prioritiesList = activeConfig.Priorities.Select(p => p.Name).ToList();
+        var labelsList = activeConfig.Labels.Select(l => l.Name).ToList();
 
         var userVariables = new Dictionary<string, string>
         {
@@ -214,11 +206,26 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
             ["SPRINT_HISTORY"] = sprintHistory,
             ["TEAM_CAPACITIES"] = teamCapacities,
             ["BACKLOG_STORIES"] = backlogStories,
-            ["PROJECT_WORKFLOW_STATUSES"] = workflowStatuses.Count > 0 ? string.Join(", ", workflowStatuses) : "To Do, In Progress, Code Review, Done",
-            ["PROJECT_ISSUE_TYPES"] = issueTypes.Count > 0 ? string.Join(", ", issueTypes) : "Story, Task, Bug, Epic",
-            ["PROJECT_PRIORITIES"] = priorities.Count > 0 ? string.Join(", ", priorities) : "Urgent, High, Medium, Low",
+            ["PROJECT_WORKFLOW_NAME"] = activeConfig.WorkflowName,
+            ["PROJECT_WORKFLOW_TYPE"] = activeConfig.WorkflowType,
+            ["PROJECT_INITIAL_STATUS"] = activeConfig.InitialStatusName,
+            ["PROJECT_WORKFLOW_STATUSES"] = workflowStatusesList.Count > 0 ? string.Join(", ", workflowStatusesList) : activeConfig.InitialStatusName,
+            ["PROJECT_WORKFLOW_SUMMARY"] = activeConfig.FormatWorkflowPromptSection(),
+            ["PROJECT_ISSUE_TYPES"] = activeConfig.FormatIssueTypesPromptSection(),
+            ["PROJECT_PARENT_ISSUE_TYPES"] = issueTypesList.Count > 0 ? string.Join(", ", issueTypesList) : "Story, Task, Bug",
+            ["PROJECT_PRIORITIES"] = activeConfig.FormatPrioritiesPromptSection(),
+            ["PROJECT_PRIORITY_NAMES"] = prioritiesList.Count > 0 ? string.Join(", ", prioritiesList) : "Urgent, High, Medium, Low",
+            ["PROJECT_DEFAULT_PRIORITY"] = activeConfig.GetDefaultPriorityName(),
+            ["PROJECT_LABELS"] = activeConfig.FormatLabelsPromptSection(),
             ["SPEC_HUB_FILE_NAMES"] = projectDocsList.Count > 0 ? string.Join(", ", projectDocsList.Select(d => d.Name)) : "Cam-nang-ky-thuat.md"
         };
+
+        // Load and render dynamic prompts from external Markdown templates (hot-reloadable without recompilation)
+        var systemPrompt = await _promptTemplates.RenderTemplateAsync("SprintDecompositionSystemPrompt", userVariables, cancellationToken);
+        if (string.IsNullOrWhiteSpace(systemPrompt))
+        {
+            systemPrompt = $"Bạn là Chuyên gia Scrum Master giàu kinh nghiệm. Chỉ dùng đúng trạng thái ({userVariables["PROJECT_WORKFLOW_STATUSES"]}), mức ưu tiên ({userVariables["PROJECT_PRIORITY_NAMES"]}), loại công việc ({userVariables["PROJECT_PARENT_ISSUE_TYPES"]}) và nhãn ({userVariables["PROJECT_LABELS"]}) của dự án. Phân biệt User Story và Task kỹ thuật. Định cỡ Story Points đa dạng (1, 2, 3, 5, 8). Trả về đúng JSON SprintProposal.";
+        }
 
         var userPromptContent = await _promptTemplates.RenderTemplateAsync("SprintDecompositionUserPrompt", userVariables, cancellationToken);
         if (string.IsNullOrWhiteSpace(userPromptContent))
@@ -226,17 +233,18 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
             var validDocNames = projectDocsList.Count > 0 ? string.Join(", ", projectDocsList.Select(d => d.Name)) : "Cam-nang-ky-thuat.md";
             userPromptContent = $@"Dữ liệu đầu vào:
 ### 1. Tài liệu/Ghi chú: {sanitizedDoc}
-### 2. Danh sách tệp Spec Hub thực tế trong dự án (BẮT BUỘC trích dẫn chính xác tên tệp từ danh sách này kèm mục cụ thể, ví dụ: 'Cam-nang-ky-thuat.md - Mục Phần II'): {validDocNames}
+### 2. Danh sách tệp Spec Hub thực tế trong dự án: {validDocNames}
 ### 3. Trích đoạn tài liệu: {relevantDocs} {specHubExcerpts}
 ### 4. Yêu cầu của bạn: {sanitizedPrompt}
-### 5. Vận tốc: {sprintHistory}
+### 5. Vận tốc & Lịch sử: {sprintHistory}
 ### 6. Năng lực nhóm: {teamCapacities}
 ### 7. Backlog: {backlogStories}
-### 8. Quy chuẩn dự án:
-- Trạng thái: {string.Join(", ", workflowStatuses)}
-- Loại việc: {string.Join(", ", issueTypes)}
-- Ưu tiên: {string.Join(", ", priorities)}
-Quy tắc: Bắt buộc thuộc tính documentCitations của mỗi Task và Subtask phải trích dẫn đúng tên tệp thực tế từ danh sách Spec Hub trên (hoặc 'Ghi chú cuộc họp đã nạp - Mục X' nếu dựa vào tài liệu người dùng dán). Tuyệt đối không sinh tên tài liệu chung chung.
+### 8. Cấu hình đang áp dụng của dự án:
+- Quy trình Workflow: {activeConfig.FormatWorkflowPromptSection()}
+- Trạng thái khởi tạo mặc định: {activeConfig.InitialStatusName}
+- Loại việc: {activeConfig.FormatIssueTypesPromptSection()}
+- Ưu tiên: {activeConfig.FormatPrioritiesPromptSection()}
+- Nhãn (Labels): {activeConfig.FormatLabelsPromptSection()}
 Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         }
 
@@ -292,7 +300,7 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
 
         var rawAiOutput = responseContentBuilder.ToString();
         _logger.LogInformation("[AiSprintDecomposition] Phản hồi thô từ LLM đạt {Length} ký tự. Bắt đầu phân tích cấu trúc.", rawAiOutput.Length);
-        var proposal = ParseAiOutputToProposal(rawAiOutput, sessionId, scope.ProjectId, targetSprintId, sanitizedDoc, sanitizedPrompt, projectDocsList);
+        var proposal = ParseAiOutputToProposal(rawAiOutput, sessionId, scope.ProjectId, targetSprintId, sanitizedDoc, sanitizedPrompt, projectDocsList, activeConfig);
         _logger.LogInformation("[AiSprintDecomposition] Phân tích hoàn tất: {TaskCount} tasks, {StoryPoints} SP.", proposal.Tasks.Count, proposal.TotalStoryPoints);
         EnrichProposalWithTeamMembers(proposal, teamCapacities);
 
@@ -308,24 +316,30 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         var sanitizedFeedback = InputGuardrail.Sanitize(userFeedback ?? string.Empty).SanitizedText;
         var currentTasksJson = JsonSerializer.Serialize(proposal.Tasks);
         var teamCapacities = await _teamTools.GetDevCapacitiesAsync(scope, cancellationToken);
+        var activeConfig = await _backlogTools.ResolveActiveConfigAsync(scope.ProjectId, cancellationToken);
 
         var fullVariables = new Dictionary<string, string>
         {
             ["SPRINT_GOAL"] = proposal.SprintGoal,
             ["CURRENT_TASKS_JSON"] = currentTasksJson,
             ["TEAM_CAPACITIES"] = teamCapacities,
-            ["USER_FEEDBACK"] = sanitizedFeedback
+            ["USER_FEEDBACK"] = sanitizedFeedback,
+            ["PROJECT_WORKFLOW_SUMMARY"] = activeConfig.FormatWorkflowPromptSection(),
+            ["PROJECT_INITIAL_STATUS"] = activeConfig.InitialStatusName,
+            ["PROJECT_ISSUE_TYPES"] = activeConfig.FormatIssueTypesPromptSection(),
+            ["PROJECT_PRIORITIES"] = activeConfig.FormatPrioritiesPromptSection(),
+            ["PROJECT_LABELS"] = activeConfig.FormatLabelsPromptSection()
         };
 
         var userPromptContent = await _promptTemplates.RenderTemplateAsync("FullProposalRegenerationPrompt", fullVariables, cancellationToken);
         if (string.IsNullOrWhiteSpace(userPromptContent))
         {
-            userPromptContent = $"Đề xuất Sprint: {proposal.SprintGoal}\nTasks: {currentTasksJson}\nNăng lực: {teamCapacities}\nYêu cầu làm lại: {sanitizedFeedback}";
+            userPromptContent = $"Đề xuất Sprint: {proposal.SprintGoal}\nTasks: {currentTasksJson}\nNăng lực: {teamCapacities}\nQuy chuẩn áp dụng: {activeConfig.FormatWorkflowPromptSection()} | {activeConfig.FormatPrioritiesPromptSection()} | {activeConfig.FormatIssueTypesPromptSection()}\nYêu cầu làm lại: {sanitizedFeedback}";
         }
 
         var prompt = new AiPrompt
         {
-            SystemInstruction = "Bạn là Chuyên gia Scrum Master. Hãy làm lại toàn bộ đề xuất Sprint (Sprint Goal và danh sách Tasks/Subtasks) dựa trên yêu cầu điều chỉnh mới của người dùng. Trả về đúng JSON hợp lệ theo schema SprintProposal.",
+            SystemInstruction = $"Bạn là Chuyên gia Scrum Master. Hãy làm lại toàn bộ đề xuất Sprint dựa trên phản hồi người dùng, tuân thủ cấu hình thực tế của dự án ({activeConfig.WorkflowName}; trạng thái: {string.Join(", ", activeConfig.Statuses.Select(s => s.Name))}; ưu tiên: {string.Join(", ", activeConfig.Priorities.Select(p => p.Name))}; nhãn: {activeConfig.FormatLabelsPromptSection()}). Trả về đúng JSON hợp lệ theo schema SprintProposal.",
             Messages = new List<AiMessage>
             {
                 AiMessage.CreateUser(userPromptContent)
@@ -338,7 +352,7 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
             var result = await _aiClient.GenerateAsync(prompt, scope, cancellationToken);
             if (result.IsSuccess && !string.IsNullOrWhiteSpace(result.Content))
             {
-                var updated = ParseAiOutputToProposal(result.Content, proposal.SessionId, proposal.ProjectId, proposal.TargetSprintId, sanitizedFeedback);
+                var updated = ParseAiOutputToProposal(result.Content, proposal.SessionId, proposal.ProjectId, proposal.TargetSprintId, sanitizedFeedback, null, null, activeConfig);
                 EnrichProposalWithTeamMembers(updated, teamCapacities);
                 return updated;
             }
@@ -370,28 +384,35 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         }
 
         var teamCapacities = await _teamTools.GetDevCapacitiesAsync(scope, cancellationToken);
+        var activeConfig = await _backlogTools.ResolveActiveConfigAsync(scope.ProjectId, cancellationToken);
         var singleVariables = new Dictionary<string, string>
         {
             ["SPRINT_GOAL"] = proposal.SprintGoal,
             ["TASK_TITLE"] = existingTask.Title,
+            ["TASK_TYPE"] = existingTask.Type,
             ["TASK_DESCRIPTION"] = existingTask.Description,
             ["TASK_AC"] = string.Join("; ", existingTask.AcceptanceCriteria),
             ["TASK_SP"] = existingTask.StoryPoints.ToString(),
             ["TASK_HOURS"] = existingTask.EstimatedHours.ToString(),
             ["TASK_ASSIGNEE"] = existingTask.AssigneeName ?? "Chưa gán",
             ["TEAM_CAPACITIES"] = teamCapacities,
+            ["PROJECT_WORKFLOW_SUMMARY"] = activeConfig.FormatWorkflowPromptSection(),
+            ["PROJECT_INITIAL_STATUS"] = activeConfig.InitialStatusName,
+            ["PROJECT_ISSUE_TYPES"] = activeConfig.FormatIssueTypesPromptSection(),
+            ["PROJECT_PRIORITIES"] = activeConfig.FormatPrioritiesPromptSection(),
+            ["PROJECT_LABELS"] = activeConfig.FormatLabelsPromptSection(),
             ["USER_FEEDBACK"] = userFeedback ?? string.Empty
         };
 
         var userPromptContent = await _promptTemplates.RenderTemplateAsync("SingleTaskRegenerationPrompt", singleVariables, cancellationToken);
         if (string.IsNullOrWhiteSpace(userPromptContent))
         {
-            userPromptContent = $"Sprint Goal: {proposal.SprintGoal}\nTask: {existingTask.Title}\nFeedback: {userFeedback}";
+            userPromptContent = $"Sprint Goal: {proposal.SprintGoal}\nTask: {existingTask.Title}\nCấu hình dự án: {activeConfig.FormatWorkflowPromptSection()} | {activeConfig.FormatPrioritiesPromptSection()}\nFeedback: {userFeedback}";
         }
 
         var prompt = new AiPrompt
         {
-            SystemInstruction = "Bạn là trợ lý Scrum Master. Tinh chỉnh lại một Task cụ thể theo phản hồi của người dùng. Trả về đúng JSON của một đối tượng Task.",
+            SystemInstruction = $"Bạn là trợ lý Scrum Master. Tinh chỉnh lại một Task cụ thể theo phản hồi người dùng, tuân thủ trạng thái ({activeConfig.InitialStatusName}, ...), ưu tiên ({string.Join(", ", activeConfig.Priorities.Select(p => p.Name))}) và loại việc ({string.Join(", ", activeConfig.ParentWorkItemTypes.Select(t => t.Name))}). Trả về đúng JSON của một đối tượng Task.",
             Messages = new List<AiMessage>
             {
                 AiMessage.CreateUser(userPromptContent)
@@ -404,7 +425,7 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
             var result = await _aiClient.GenerateAsync(prompt, scope, cancellationToken);
             if (result.IsSuccess && !string.IsNullOrWhiteSpace(result.Content))
             {
-                var revisedTask = ParseSingleTask(result.Content, existingTask);
+                var revisedTask = ParseSingleTask(result.Content, existingTask, activeConfig);
                 var index = proposal.Tasks.IndexOf(existingTask);
                 proposal.Tasks[index] = revisedTask;
                 return revisedTask;
@@ -426,7 +447,8 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         Guid? targetSprintId,
         string sourceDoc,
         string? userPrompt = null,
-        IReadOnlyList<(Guid Id, string Name)>? availableDocs = null)
+        IReadOnlyList<(Guid Id, string Name)>? availableDocs = null,
+        ProjectActiveConfig? activeConfig = null)
     {
         try
         {
@@ -446,6 +468,7 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                         Rationale = obj["rationale"]?.GetValue<string>() ?? "Phân rã công việc theo chuẩn Scrum và năng lực đội ngũ.",
                         Tags = new List<string> { "#SprintPlan", "#Scrum", "#SpecHub" }
                     };
+                    ApplyConfigMetadata(proposal, activeConfig);
 
                     var tagsArray = obj["tags"]?.AsArray();
                     if (tagsArray != null && tagsArray.Count > 0)
@@ -491,15 +514,30 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                             }
                             if (hours <= 0) hours = sp * 4;
 
+                            Guid? sourceBacklogIssueId = null;
+                            var rawBacklogId = tObj["sourceBacklogIssueId"]?.GetValue<string>();
+                            if (!string.IsNullOrWhiteSpace(rawBacklogId) && Guid.TryParse(rawBacklogId.Trim(), out var parsedBacklogId))
+                            {
+                                sourceBacklogIssueId = parsedBacklogId;
+                            }
+                            var sourceBacklogIssueKey = tObj["sourceBacklogIssueKey"]?.GetValue<string>()?.Trim();
+                            if (string.IsNullOrWhiteSpace(sourceBacklogIssueKey)) sourceBacklogIssueKey = null;
+
+                            var rawType = tObj["type"]?.GetValue<string>() ?? "Story";
+                            var rawPriority = tObj["priority"]?.GetValue<string>() ?? activeConfig?.GetDefaultPriorityName() ?? "High";
+                            var rawStatus = tObj["status"]?.GetValue<string>() ?? activeConfig?.InitialStatusName ?? "To Do";
+
                             var taskDto = new ProposedTaskDto
                             {
                                 Id = tObj["id"]?.GetValue<string>() ?? $"task_{taskIndex:D2}",
+                                SourceBacklogIssueId = sourceBacklogIssueId,
+                                SourceBacklogIssueKey = sourceBacklogIssueKey,
                                 EpicTitle = tObj["epicTitle"]?.GetValue<string>() ?? tObj["epic"]?.GetValue<string>() ?? "Core Development",
                                 Title = taskTitle,
                                 Description = taskDesc,
-                                Type = tObj["type"]?.GetValue<string>() ?? "Story",
-                                Priority = tObj["priority"]?.GetValue<string>() ?? "High",
-                                Status = tObj["status"]?.GetValue<string>() ?? "To Do",
+                                Type = activeConfig != null ? activeConfig.ResolveIssueTypeName(rawType) : rawType,
+                                Priority = activeConfig != null ? activeConfig.ResolvePriorityName(rawPriority) : rawPriority,
+                                Status = activeConfig != null ? activeConfig.ResolveStatusName(rawStatus) : rawStatus,
                                 StoryPoints = sp,
                                 EstimatedHours = hours,
                                 RemainingHours = hours,
@@ -507,15 +545,19 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                                 AiRationale = tObj["aiRationale"]?.GetValue<string>() ?? "Phân rã theo kiến trúc và khả năng hoàn thành trong Sprint."
                             };
 
-                            // Tags của Task
-                            var tTags = tObj["tags"]?.AsArray();
-                            if (tTags != null && tTags.Count > 0)
+                            // Labels/Tags của Task (hỗ trợ cả labels và tags)
+                            var labelsNode = (tObj["labels"] ?? tObj["tags"])?.AsArray();
+                            if (labelsNode != null && labelsNode.Count > 0)
                             {
-                                taskDto.Tags = tTags.Select(x => x?.GetValue<string>()?.Trim()).Where(x => !string.IsNullOrEmpty(x)).Select(x => x!.StartsWith('#') ? x! : $"#{x}").ToList()!;
+                                taskDto.Tags = labelsNode.Select(x => x?.GetValue<string>()?.Trim()).Where(x => !string.IsNullOrEmpty(x)).Select(x => x!.TrimStart('#')).Distinct(StringComparer.OrdinalIgnoreCase).ToList()!;
+                            }
+                            else if (activeConfig != null && activeConfig.Labels.Count > 0)
+                            {
+                                taskDto.Tags = [];
                             }
                             else
                             {
-                                taskDto.Tags = new List<string> { $"#{taskDto.Type}", "#SprintTask" };
+                                taskDto.Tags = new List<string> { taskDto.Type, "SprintTask" };
                             }
 
                             // Acceptance Criteria
@@ -584,6 +626,9 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                                         var subHours = 4m;
                                         if (sObj["estimatedHours"] != null && sObj["estimatedHours"]!.AsValue().TryGetValue<decimal>(out var sh)) subHours = sh;
 
+                                        var subRawPriority = sObj["priority"]?.GetValue<string>() ?? taskDto.Priority;
+                                        var subRawStatus = sObj["status"]?.GetValue<string>() ?? taskDto.Status;
+
                                         var subDto = new ProposedSubTaskDto
                                         {
                                             Id = sObj["id"]?.GetValue<string>() ?? $"{taskDto.Id}_{subIdx}",
@@ -591,8 +636,8 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                                             Role = sObj["role"]?.GetValue<string>() ?? "Backend",
                                             EstimatedHours = subHours > 0 ? subHours : 4m,
                                             StoryPoints = (sObj["storyPoints"]?.GetValue<int>() ?? 1),
-                                            Priority = sObj["priority"]?.GetValue<string>() ?? taskDto.Priority,
-                                            Status = sObj["status"]?.GetValue<string>() ?? "To Do",
+                                            Priority = activeConfig != null ? activeConfig.ResolvePriorityName(subRawPriority) : subRawPriority,
+                                            Status = activeConfig != null ? activeConfig.ResolveStatusName(subRawStatus) : subRawStatus,
                                             AssigneeName = sObj["assigneeName"]?.GetValue<string>() ?? taskDto.AssigneeName,
                                             Description = sObj["description"]?.GetValue<string>()?.Trim() ?? $"Triển khai {subTitle} theo đặc tả kỹ thuật.",
                                             DocumentId = taskDto.DocumentId,
@@ -626,7 +671,7 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                                                 EstimatedHours = 4,
                                                 StoryPoints = 1,
                                                 Priority = taskDto.Priority,
-                                                Status = "To Do",
+                                                Status = taskDto.Status,
                                                 Description = $"Triển khai '{strTitle}' theo kiến trúc giải pháp và đặc tả tài liệu.",
                                                 AssigneeName = taskDto.AssigneeName,
                                                 DocumentId = taskDto.DocumentId,
@@ -656,7 +701,18 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
             Console.WriteLine($"[AiSprintDecomposition] Lỗi bóc tách JSON đề xuất: {ex.Message}");
         }
 
-        return CreateFallbackProposal(sessionId, projectId, targetSprintId, sourceDoc, userPrompt, availableDocs);
+        return CreateFallbackProposal(sessionId, projectId, targetSprintId, sourceDoc, userPrompt, availableDocs, activeConfig);
+    }
+
+    private static void ApplyConfigMetadata(AiSprintProposalDto proposal, ProjectActiveConfig? activeConfig)
+    {
+        if (activeConfig == null) return;
+        proposal.WorkflowName = activeConfig.WorkflowName;
+        proposal.InitialStatus = activeConfig.InitialStatusName;
+        proposal.AppliedWorkflowStatuses = activeConfig.Statuses.Select(s => s.Name).ToList();
+        proposal.AppliedPriorities = activeConfig.Priorities.Select(p => p.Name).ToList();
+        proposal.AppliedIssueTypes = activeConfig.ParentWorkItemTypes.Select(t => t.Name).ToList();
+        proposal.AppliedLabels = activeConfig.Labels.Select(l => l.Name).ToList();
     }
 
     private static AiSprintProposalDto CreateFallbackProposal(
@@ -665,8 +721,14 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         Guid? targetSprintId,
         string sourceDoc,
         string? userPrompt = null,
-        IReadOnlyList<(Guid Id, string Name)>? availableDocs = null)
+        IReadOnlyList<(Guid Id, string Name)>? availableDocs = null,
+        ProjectActiveConfig? activeConfig = null)
     {
+        var initialStatus = activeConfig?.InitialStatusName ?? "To Do";
+        var highPrio = activeConfig?.ResolvePriorityName("High") ?? "High";
+        var defaultPrio = activeConfig?.GetDefaultPriorityName() ?? "Medium";
+        var storyType = activeConfig?.ResolveIssueTypeName("Story") ?? "Story";
+        var taskType = activeConfig?.ResolveIssueTypeName("Task") ?? "Task";
         var cleanDoc = (sourceDoc ?? string.Empty).Trim();
         var lines = cleanDoc.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
@@ -715,11 +777,12 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                     EpicTitle = "Core Feature Implementation",
                     Title = task1Title,
                     Description = $"Thiết kế kiến trúc giải pháp, cấu hình dữ liệu và xây dựng các luồng xử lý nghiệp vụ cho '{featureName}'.",
-                    Type = "Story",
-                    Priority = "High",
+                    Type = storyType,
+                    Priority = highPrio,
+                    Status = initialStatus,
                     StoryPoints = 5,
                     EstimatedHours = 16,
-                    Tags = new List<string> { "#Backend", "#API" },
+                    Tags = new List<string> { "Backend", "API" },
                     AcceptanceCriteria = new List<string>
                     {
                         "API phản hồi đúng định dạng JSON",
@@ -738,8 +801,8 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                             Role = "Backend",
                             EstimatedHours = 8,
                             StoryPoints = 1,
-                            Priority = "High",
-                            Status = "To Do",
+                            Priority = highPrio,
+                            Status = initialStatus,
                             Description = "Thiết kế các API Endpoints và cấu hình Entity Framework Core DbContext mapping theo tài liệu kiến trúc.",
                             AcceptanceCriteria = new List<string>
                             {
@@ -756,8 +819,8 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                             Role = "QA",
                             EstimatedHours = 8,
                             StoryPoints = 1,
-                            Priority = "Medium",
-                            Status = "To Do",
+                            Priority = defaultPrio,
+                            Status = initialStatus,
                             Description = "Viết kịch bản kiểm thử đơn vị xUnit và kiểm thử tích hợp cho luồng xử lý Backend.",
                             AcceptanceCriteria = new List<string>
                             {
@@ -775,11 +838,12 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                     EpicTitle = "User Interface & Experience",
                     Title = "Xây dựng giao diện tương tác người dùng",
                     Description = "Phát triển component giao diện Angular tương thích đa màn hình.",
-                    Type = "Story",
-                    Priority = "High",
+                    Type = storyType,
+                    Priority = highPrio,
+                    Status = initialStatus,
                     StoryPoints = 5,
                     EstimatedHours = 16,
-                    Tags = new List<string> { "#Frontend", "#Angular" },
+                    Tags = new List<string> { "Frontend", "Angular" },
                     AcceptanceCriteria = new List<string>
                     {
                         "Giao diện responsive không bị tràn lề",
@@ -798,8 +862,8 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                             Role = "Frontend",
                             EstimatedHours = 10,
                             StoryPoints = 1,
-                            Priority = "High",
-                            Status = "To Do",
+                            Priority = highPrio,
+                            Status = initialStatus,
                             Description = "Triển khai Angular standalone component và quản lý trạng thái bằng Signal state phản ứng linh hoạt.",
                             AcceptanceCriteria = new List<string>
                             {
@@ -816,8 +880,8 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                             Role = "QA",
                             EstimatedHours = 6,
                             StoryPoints = 1,
-                            Priority = "Medium",
-                            Status = "To Do",
+                            Priority = defaultPrio,
+                            Status = initialStatus,
                             Description = "Viết kịch bản kiểm thử đầu cuối E2E với Playwright kiểm tra luồng người dùng và độ phản hồi.",
                             AcceptanceCriteria = new List<string>
                             {
@@ -835,11 +899,12 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                     EpicTitle = "Quality Assurance & Security",
                     Title = "Kiểm thử bảo mật và rà soát Zero-Secret-Leakage",
                     Description = "Audit bảo mật và chạy toàn bộ test suite.",
-                    Type = "Task",
-                    Priority = "Medium",
+                    Type = taskType,
+                    Priority = defaultPrio,
+                    Status = initialStatus,
                     StoryPoints = 3,
                     EstimatedHours = 8,
-                    Tags = new List<string> { "#Security", "#QA" },
+                    Tags = new List<string> { "Security", "QA" },
                     AcceptanceCriteria = new List<string>
                     {
                         "Không có secret/key/URL/IP hardcode trong repo",
@@ -857,8 +922,8 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                             Role = "DevOps",
                             EstimatedHours = 4,
                             StoryPoints = 1,
-                            Priority = "High",
-                            Status = "To Do",
+                            Priority = highPrio,
+                            Status = initialStatus,
                             Description = "Quét tự động toàn bộ source code kiểm tra leak secret và kiểm tra cấu hình an toàn.",
                             AcceptanceCriteria = new List<string>
                             {
@@ -875,8 +940,8 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                             Role = "QA",
                             EstimatedHours = 4,
                             StoryPoints = 1,
-                            Priority = "Medium",
-                            Status = "To Do",
+                            Priority = defaultPrio,
+                            Status = initialStatus,
                             Description = "Chạy kiểm thử hồi quy toàn diện các tính năng đã phát hành của Sprint.",
                             AcceptanceCriteria = new List<string>
                             {
@@ -891,6 +956,7 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
             }
         };
 
+        ApplyConfigMetadata(proposal, activeConfig);
         proposal.TotalStoryPoints = proposal.Tasks.Sum(t => t.StoryPoints);
         proposal.TotalEstimatedHours = proposal.Tasks.Sum(t => t.EstimatedHours);
         return proposal;
@@ -1151,7 +1217,7 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         return pool[0];
     }
 
-    private static ProposedTaskDto ParseSingleTask(string rawJson, ProposedTaskDto existing)
+    private static ProposedTaskDto ParseSingleTask(string rawJson, ProposedTaskDto existing, ProjectActiveConfig? activeConfig = null)
     {
         try
         {
@@ -1163,6 +1229,19 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
             if (parsed != null)
             {
                 parsed.Id = existing.Id;
+                parsed.SourceBacklogIssueId ??= existing.SourceBacklogIssueId;
+                parsed.SourceBacklogIssueKey ??= existing.SourceBacklogIssueKey;
+                if (activeConfig != null)
+                {
+                    parsed.Type = activeConfig.ResolveIssueTypeName(parsed.Type);
+                    parsed.Priority = activeConfig.ResolvePriorityName(parsed.Priority);
+                    parsed.Status = activeConfig.ResolveStatusName(parsed.Status);
+                    foreach (var sub in parsed.Subtasks)
+                    {
+                        sub.Priority = activeConfig.ResolvePriorityName(sub.Priority);
+                        sub.Status = activeConfig.ResolveStatusName(sub.Status);
+                    }
+                }
                 return parsed;
             }
         }

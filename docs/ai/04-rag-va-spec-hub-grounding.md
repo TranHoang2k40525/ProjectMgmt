@@ -134,7 +134,8 @@ sequenceDiagram
 Khi AI bắt đầu suy luận, giao diện hiển thị danh sách các hành động với biểu tượng `check_circle` xanh lục chuẩn xác và thời gian thực thi (latency ms):
 - `Tìm kiếm tài liệu đặc tả liên quan trong Spec Hub · 7ms`
 - `Đọc phân đoạn tài liệu đặc tả: Cam-nang-ky-thuat.md · 14ms`
-- `Lấy danh sách các User Story đang có trong Backlog · 13ms`
+- `Đọc cấu hình Workflow, Độ ưu tiên, Loại việc và Nhãn đang áp dụng của dự án · 9ms`
+- `Lấy danh sách các User Story và công việc đang có trong Backlog · 13ms`
 - `Truy xuất vận tốc Scrum và các hạng mục dở dang · 37ms`
 - `Phân tích kỹ năng và số giờ khả dụng của thành viên đội Scrum · 25ms`
 
@@ -150,8 +151,8 @@ Khi AI bắt đầu suy luận, giao diện hiển thị danh sách các hành �
 ### 5.3. Cô lập Tri thức Phạm vi Dự án & Cơ chế Tự suy luận Phi khuôn mẫu (Project Isolation & Organic Reasoning)
 1. **Cô lập Tri thức 100% theo ProjectId**:
    - Tất cả các công cụ MCP Spec Hub (`SearchRelevantSpecsAsync`, `ReadDocumentAsync`, `GetDocumentTree`) đều thực thi xác thực phạm vi dự án `ProjectScopeGuard.Validate(scope, project.OrgId, projectId)` và chỉ truy vấn các bản ghi `ProjectDocuments.Where(d => d.ProjectId == scope.ProjectId)`. Tuyệt đối không đọc hoặc trích xuất tài liệu từ các dự án khác.
-2. **Nạp dữ liệu động từ Database dự án vào Ngữ cảnh LLM**:
-   - Khác với các giải pháp ép khuôn code cứng, hệ thống nạp động danh sách trạng thái quy trình làm việc (`WorkflowStatuses`), các loại công việc (`IssueTypes`), cấp độ ưu tiên (`Priorities`) và danh sách tệp tài liệu thực tế từ cơ sở dữ liệu dự án trực tiếp vào Prompt người dùng (`SprintDecompositionUserPrompt.md`).
+2. **Nạp Cấu hình Thực tế Đang Áp dụng của Dự án vào Ngữ cảnh LLM (`ProjectActiveConfigResolver`)**:
+   - Thay vì dùng giá trị mặc định cố định hoặc lấy trộn lẫn dữ liệu toàn cục, hệ thống gọi công cụ MCP `project_get_active_config` để nạp chính xác cấu hình đang áp dụng của dự án: quy trình `WorkflowStatuses` theo thứ tự cột `BoardColumns` kèm trạng thái khởi tạo (`IsInitial`), trạng thái hoàn tất (`IsDone`) và ma trận chuyển trạng thái `WorkflowTransitions`; bộ mức độ ưu tiên đang áp dụng (`Priorities` riêng của dự án nếu có, không trộn lẫn cấu hình mặc định `ProjectId == null`); phân loại `IssueTypes` (`Story`, `Task`, `Bug`, `Sub-task`, `Epic`) và danh sách nhãn `Labels`. Toàn bộ thông tin này được tiêm trực tiếp vào cả `SprintDecompositionSystemPrompt.md` và `SprintDecompositionUserPrompt.md`.
 3. **Bộ giải mã Resilient JSON Parser**:
    - Hệ thống sử dụng bộ bóc tách JSON linh hoạt, chấp nhận cả mảng chuỗi lẫn mảng đối tượng của việc con (`subtasks`), chuẩn hóa Story Points theo chuỗi Fibonacci và gán thành viên theo hồ sơ kỹ năng thực tế, loại bỏ hoàn toàn việc ép khuôn mẫu hay nhét văn bản thô vào mô tả công việc.
 4. **Cơ chế Dự phòng Không Gián đoạn (Zero-Downtime Fallback)**:

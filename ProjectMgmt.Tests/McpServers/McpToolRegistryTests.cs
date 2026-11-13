@@ -27,17 +27,18 @@ public class McpToolRegistryTests
     }
 
     [Fact]
-    public void GetToolDefinitions_ReturnsAllSevenToolsWithValidSchemas()
+    public void GetToolDefinitions_ReturnsAllEightToolsWithValidSchemas()
     {
         var tools = _registry.GetToolDefinitions();
 
-        Assert.Equal(7, tools.Count);
+        Assert.Equal(8, tools.Count);
 
         var toolNames = tools.Select(t => t.Name).ToHashSet();
         Assert.Contains("spec_hub_list_documents", toolNames);
         Assert.Contains("spec_hub_read_document", toolNames);
         Assert.Contains("spec_hub_search", toolNames);
         Assert.Contains("backlog_get_stories", toolNames);
+        Assert.Contains("project_get_active_config", toolNames);
         Assert.Contains("sprint_get_history_and_velocity", toolNames);
         Assert.Contains("team_get_dev_capacities", toolNames);
         Assert.Contains("ai_sprint_plan_propose", toolNames);
@@ -58,6 +59,7 @@ public class McpToolRegistryTests
     [InlineData("spec_hub_read_document", true)]
     [InlineData("spec_hub_search", true)]
     [InlineData("backlog_get_stories", true)]
+    [InlineData("project_get_active_config", true)]
     [InlineData("sprint_get_history_and_velocity", true)]
     [InlineData("team_get_dev_capacities", true)]
     [InlineData("ai_sprint_plan_propose", true)]

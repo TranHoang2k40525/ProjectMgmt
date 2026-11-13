@@ -545,6 +545,12 @@
                     }
 
                     <div class="task-metadata-pills">
+                      @if (task.sourceBacklogIssueKey) {
+                        <span class="subtask-role-badge" title="Kế thừa từ Product Backlog (sẽ được chuyển sang Sprint này)">
+                          <span class="material-symbols-outlined text-[12px] align-middle" aria-hidden="true">inbox</span>
+                          Từ Backlog: {{ task.sourceBacklogIssueKey }}
+                        </span>
+                      }
                       @if (task.documentCitations && task.documentCitations.length > 0) {
                         @for (cite of task.documentCitations; track $index) {
                           <button
@@ -583,11 +589,11 @@
                   <div class="cell-priority" (click)="cyclePriority(task, $event)">
                     <span
                       class="priority-badge"
-                      [class.prio-high]="task.priority === 'High' || task.priority === 'Highest'"
-                      [class.prio-low]="task.priority === 'Low'"
+                      [class.prio-high]="['high', 'highest', 'urgent', 'blocker', 'critical'].includes((task.priority || '').toLowerCase())"
+                      [class.prio-low]="['low', 'lowest', 'minor'].includes((task.priority || '').toLowerCase())"
                       title="Nhấn để đổi độ ưu tiên"
                     >
-                      {{ task.priority || 'Medium' }}
+                      {{ task.priority || defaultPriorityName() }}
                     </span>
                   </div>
 
@@ -609,10 +615,19 @@
 
                   <!-- Status Pill -->
                   <div class="cell-status" (click)="$event.stopPropagation()">
-                    <span class="status-badge">
-                      <span>{{ task.status || 'To Do' }}</span>
-                      <span class="material-symbols-outlined" aria-hidden="true">expand_more</span>
-                    </span>
+                    <select
+                      class="status-select-pill"
+                      [(ngModel)]="task.status"
+                      (ngModelChange)="onTaskFieldChanged()"
+                      aria-label="Trạng thái công việc"
+                    >
+                      @if (task.status && !availableWorkflowStatuses().includes(task.status)) {
+                        <option [value]="task.status">{{ task.status }}</option>
+                      }
+                      @for (st of availableWorkflowStatuses(); track st) {
+                        <option [value]="st">{{ st }}</option>
+                      }
+                    </select>
                   </div>
 
                   <!-- Assignee Selector -->
@@ -737,11 +752,11 @@
                         <div class="cell-priority" (click)="cycleSubtaskPriority(sub, $event)">
                           <span
                             class="priority-badge"
-                            [class.prio-high]="sub.priority === 'High' || sub.priority === 'Highest'"
-                            [class.prio-low]="sub.priority === 'Low'"
+                            [class.prio-high]="['high', 'highest', 'urgent', 'blocker', 'critical'].includes((sub.priority || '').toLowerCase())"
+                            [class.prio-low]="['low', 'lowest', 'minor'].includes((sub.priority || '').toLowerCase())"
                             title="Nhấn để đổi độ ưu tiên việc con"
                           >
-                            {{ sub.priority || 'Medium' }}
+                            {{ sub.priority || defaultPriorityName() }}
                           </span>
                         </div>
 
@@ -769,9 +784,12 @@
                             (ngModelChange)="onTaskFieldChanged()"
                             aria-label="Trạng thái việc con"
                           >
-                            <option value="To Do">To Do</option>
-                            <option value="In Progress">In Progress</option>
-                            <option value="Done">Done</option>
+                            @if (sub.status && !availableWorkflowStatuses().includes(sub.status)) {
+                              <option [value]="sub.status">{{ sub.status }}</option>
+                            }
+                            @for (st of availableWorkflowStatuses(); track st) {
+                              <option [value]="st">{{ st }}</option>
+                            }
                           </select>
                         </div>
 
@@ -1000,19 +1018,24 @@
             <label class="meta-field">
               <span>TRẠNG THÁI</span>
               <select [(ngModel)]="detailTask.status" (ngModelChange)="onTaskFieldChanged()">
-                <option value="To Do">Chưa làm (To Do)</option>
-                <option value="In Progress">Đang làm (In Progress)</option>
-                <option value="Done">Hoàn thành (Done)</option>
+                @if (detailTask.status && !availableWorkflowStatuses().includes(detailTask.status)) {
+                  <option [value]="detailTask.status">{{ detailTask.status }}</option>
+                }
+                @for (st of availableWorkflowStatuses(); track st) {
+                  <option [value]="st">{{ st }}</option>
+                }
               </select>
             </label>
 
             <label class="meta-field">
               <span>ĐỘ ƯU TIÊN</span>
               <select [(ngModel)]="detailTask.priority" (ngModelChange)="onTaskFieldChanged()">
-                <option value="Highest">Highest</option>
-                <option value="High">High</option>
-                <option value="Medium">Medium</option>
-                <option value="Low">Low</option>
+                @if (detailTask.priority && !availablePriorities().includes(detailTask.priority)) {
+                  <option [value]="detailTask.priority">{{ detailTask.priority }}</option>
+                }
+                @for (pr of availablePriorities(); track pr) {
+                  <option [value]="pr">{{ pr }}</option>
+                }
               </select>
             </label>
 
@@ -1371,19 +1394,24 @@
             <label class="meta-field">
               <span>TRẠNG THÁI</span>
               <select [(ngModel)]="subDetail.subtask.status" (ngModelChange)="onTaskFieldChanged()">
-                <option value="To Do">Chưa làm (To Do)</option>
-                <option value="In Progress">Đang làm (In Progress)</option>
-                <option value="Done">Hoàn thành (Done)</option>
+                @if (subDetail.subtask.status && !availableWorkflowStatuses().includes(subDetail.subtask.status)) {
+                  <option [value]="subDetail.subtask.status">{{ subDetail.subtask.status }}</option>
+                }
+                @for (st of availableWorkflowStatuses(); track st) {
+                  <option [value]="st">{{ st }}</option>
+                }
               </select>
             </label>
 
             <label class="meta-field">
               <span>ĐỘ ƯU TIÊN</span>
               <select [(ngModel)]="subDetail.subtask.priority" (ngModelChange)="onTaskFieldChanged()">
-                <option value="Highest">Highest</option>
-                <option value="High">High</option>
-                <option value="Medium">Medium</option>
-                <option value="Low">Low</option>
+                @if (subDetail.subtask.priority && !availablePriorities().includes(subDetail.subtask.priority)) {
+                  <option [value]="subDetail.subtask.priority">{{ subDetail.subtask.priority }}</option>
+                }
+                @for (pr of availablePriorities(); track pr) {
+                  <option [value]="pr">{{ pr }}</option>
+                }
               </select>
             </label>
 

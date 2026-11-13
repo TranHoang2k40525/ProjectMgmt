@@ -223,7 +223,21 @@ public static class Program
             new JsonObject
             {
                 ["name"] = "backlog_get_stories",
-                ["description"] = "Lấy danh sách các User Story đang có trong Product Backlog kèm theo mô tả, độ phức tạp (Story Points), Tiêu chí nghiệm thu (Acceptance Criteria) và liên kết tài liệu đặc tả gốc.",
+                ["description"] = "Lấy danh sách toàn bộ hạng mục trong Product Backlog (User Story, Task, Bug) kèm loại công việc, mức ưu tiên, nhãn, Story Points và Tiêu chí nghiệm thu (AC).",
+                ["inputSchema"] = new JsonObject
+                {
+                    ["type"] = "object",
+                    ["properties"] = new JsonObject
+                    {
+                        ["projectId"] = new JsonObject { ["type"] = "string", ["description"] = "GUID của dự án" }
+                    },
+                    ["required"] = new JsonArray { "projectId" }
+                }
+            },
+            new JsonObject
+            {
+                ["name"] = "project_get_active_config",
+                ["description"] = "Truy xuất cấu hình đang được ÁP DỤNG THỰC TẾ của dự án: Quy trình Workflow (Board, trạng thái, cờ khởi tạo/hoàn thành, luồng chuyển tiếp), Mức độ ưu tiên đang dùng, Loại công việc (Issue Types) và danh sách Nhãn (Labels).",
                 ["inputSchema"] = new JsonObject
                 {
                     ["type"] = "object",
@@ -453,9 +467,64 @@ public static class Program
                     s.Title,
                     s.Description,
                     s.StoryPoints,
+                    s.EstimatedHours,
                     s.StatusId,
                     AcceptanceCriteria = criteriaDict.GetValueOrDefault(s.Id, [])
                 });
+
+                return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+            }
+
+            case "project_get_active_config":
+            {
+                var projectIdStr = args["projectId"]?.GetValue<string>();
+                if (!Guid.TryParse(projectIdStr, out var projectId)) return "Lỗi: projectId không hợp lệ.";
+
+                await using var planning = CreatePlanningDbContext();
+                await using var delivery = CreateDeliveryDbContext();
+
+                var customPriorities = await planning.Priorities.AsNoTracking()
+                    .Where(p => p.ProjectId == projectId)
+                    .OrderBy(p => p.Level)
+                    .ToListAsync();
+                var priorities = customPriorities.Count > 0
+                    ? customPriorities
+                    : await planning.Priorities.AsNoTracking().Where(p => p.ProjectId == null).OrderBy(p => p.Level).ToListAsync();
+
+                var statuses = await planning.WorkflowStatuses.AsNoTracking()
+                    .Where(s => s.ProjectId == projectId)
+                    .OrderBy(s => s.OrderIndex)
+                    .ToListAsync();
+                var transitions = await planning.WorkflowTransitions.AsNoTracking()
+                    .Where(t => t.ProjectId == projectId)
+                    .ToListAsync();
+                var board = await planning.Boards.AsNoTracking()
+                    .Where(b => b.ProjectId == projectId)
+                    .OrderByDescending(b => b.IsDefault)
+                    .FirstOrDefaultAsync();
+                var issueTypes = await planning.IssueTypes.AsNoTracking()
+                    .Where(t => t.ProjectId == projectId)
+                    .OrderBy(t => t.OrderIndex)
+                    .ToListAsync();
+                var labels = await delivery.Labels.AsNoTracking()
+                    .Where(l => l.ProjectId == projectId)
+                    .OrderBy(l => l.Name)
+                    .ToListAsync();
+
+                var statusMap = statuses.ToDictionary(s => s.Id, s => s.Name);
+                var result = new
+                {
+                    WorkflowName = board?.Name,
+                    WorkflowType = board?.Type ?? "Scrum",
+                    InitialStatus = statuses.FirstOrDefault(s => s.IsInitial)?.Name ?? statuses.FirstOrDefault()?.Name ?? "To Do",
+                    Statuses = statuses.Select(s => new { s.Id, s.Name, s.Category, s.OrderIndex, s.IsInitial, s.IsActiveWork, s.IsDone, s.IsCanceled }),
+                    Transitions = transitions.Where(t => statusMap.ContainsKey(t.FromStatusId) && statusMap.ContainsKey(t.ToStatusId))
+                        .Select(t => new { From = statusMap[t.FromStatusId], To = statusMap[t.ToStatusId], t.Name }),
+                    IsCustomPriorities = customPriorities.Count > 0,
+                    Priorities = priorities.Select(p => new { p.Id, p.Name, p.Level, p.ColorHex }),
+                    IssueTypes = issueTypes.Select(t => new { t.Id, t.Name, t.IsSubtask, t.OrderIndex }),
+                    Labels = labels.Select(l => new { l.Id, l.Name, l.ColorHex })
+                };
 
                 return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
             }

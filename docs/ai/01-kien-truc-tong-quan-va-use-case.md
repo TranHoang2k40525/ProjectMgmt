@@ -15,13 +15,16 @@ Trong quy trình phát triển phần mềm theo khung Scrum (Scrum Framework), 
 Module AI Agent của dự án được xây dựng theo mô hình **Agentic Workflow có kiểm soát (Human-in-the-loop AI Agent)**:
 - **Tiếp nhận đa kênh**: Hỗ trợ đính kèm file Word, Excel, PDF, Text hoặc dán trực tiếp ghi chú cuộc họp vào ô nhập liệu tự co giãn.
 - **RAG & MCP Grounding**: Tự động truy xuất kho tài liệu đặc tả dự án (**Spec Hub**) qua giao thức MCP, đối chiếu số liệu Backlog, vận tốc Sprint trước và kỹ năng của từng thành viên trong nhóm.
-- **Phân tách thực tế & Không giới hạn quy mô**: Bóc tách tự nhiên theo cấu trúc sản phẩm và biên bản họp, hoàn toàn không bị gò bó bởi các giới hạn cứng về số lượng task hay subtask. Đa dạng hóa loại công việc (Story, Task, Bug, Technical Debt, Improvement).
+- **Phân tách thực tế & Không giới hạn quy mô**: Bóc tách tự nhiên theo cấu trúc sản phẩm và biên bản họp, hoàn toàn không bị gò bó bởi các giới hạn cứng về số lượng task hay subtask. Phân biệt chuẩn xác bản chất Scrum giữa **User Story (`Story`)** (nhu cầu/giá trị dưới góc nhìn người dùng, được phân rã thành các đầu việc kỹ thuật khả thi), **Task** (công việc kỹ thuật độc lập) và **Bug** (lỗi cần khắc phục).
+- **Khai thác Kho Product Backlog & Di chuyển Không Trùng lặp (Backlog Sourcing & Move Semantics)**:
+  - AI đọc toàn bộ các hạng mục đang chờ trong Product Backlog (`SprintId = null`) kèm loại việc, mức ưu tiên, nhãn và việc con hiện có.
+  - Khi AI chọn đưa một User Story hoặc Task có sẵn từ kho Backlog vào Sprint (`sourceBacklogIssueId` / `sourceBacklogIssueKey`), hệ thống thực hiện **di chuyển trực tiếp (Move)** bản ghi gốc từ Backlog vào Sprint mục tiêu (cập nhật `SprintId`, trạng thái, mức ưu tiên, nhãn `IssueLabels`, tiêu chí nghiệm thu và kéo theo các việc con hiện có), tuyệt đối không sinh bản sao gây trùng lặp trong kho Backlog.
 - **Kế thừa Sprint cũ & Xử lý việc quá hạn (Sprint Rollover & Overdue Intelligence)**:
-  - Tự động truy xuất các hạng mục dở dang từ Sprint liền kề để kế thừa sang Sprint mới.
+  - Tự động truy xuất các hạng mục dở dang từ Sprint liền kề dựa trên cấu hình trạng thái hoàn tất thực tế (`IsDone` / `Category = Done`) của dự án để kế thừa sang Sprint mới.
   - Phân loại thông minh các việc quá hạn theo chuẩn Scrum:
-    - *Bug/Blocker dở dang*: Bắt buộc chuyển sang Sprint mới dưới dạng Hotfix với mức ưu tiên cao nhất (`Highest`), gắn cảnh báo gia hạn deadline.
-    - *Task đang làm dở dang (`In Progress`)*: Chuyển tiếp vào Sprint mới để hoàn thiện (bảo vệ công sức WIP).
-    - *Task thường chưa bắt đầu (`To Do`) nhưng đã quá hạn*: Tự động hoàn trả về Product Backlog (`SprintId = null`) để Product Owner thẩm định lại giá trị và độ ưu tiên, tránh làm loãng cam kết Sprint Goal.
+    - *Bug/Blocker dở dang*: Bắt buộc chuyển sang Sprint mới dưới dạng Hotfix với mức ưu tiên khẩn cấp cao nhất đang áp dụng của dự án (`Level = 1`, ví dụ `Urgent`, `Highest` hoặc `Blocker`), gắn cảnh báo gia hạn deadline.
+    - *Task đang làm dở dang (`IsActiveWork`)*: Chuyển tiếp vào Sprint mới để hoàn thiện (bảo vệ công sức WIP).
+    - *Task thường chưa bắt đầu (`IsInitial`) nhưng đã quá hạn*: Tự động hoàn trả về Product Backlog (`SprintId = null`) để Product Owner thẩm định lại giá trị và độ ưu tiên, tránh làm loãng cam kết Sprint Goal.
 - **Trích dẫn minh bạch 100%**: Mọi công việc sinh ra đều đính kèm trích dẫn tài liệu cụ thể (`documentCitations`), có thể nhấp vào để mở ngăn kéo xem tài liệu ngay lập tức mà không làm mất đoạn chat.
 - **Phê duyệt Staging**: Đề xuất được lưu tạm trên bộ nhớ đệm phân tán **Redis** để người dùng thoải mái chỉnh sửa, yêu cầu AI làm lại từng task trước khi bấm nút áp dụng chính thức vào Sprint.
 
@@ -79,6 +82,8 @@ flowchart TD
 ### Các tệp mã nguồn tương ứng:
 - Controller tiếp nhận: [`AiAgentController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/AiAgentController.cs#L25-L160)
 - Dịch vụ phân rã nghiệp vụ: [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs#L50-L150)
+- Bộ phân giải cấu hình thực tế đang áp dụng của dự án: [`ProjectActiveConfigResolver.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/ProjectActiveConfigResolver.cs)
+- Bộ điều phối ghi nhận Sprint, di chuyển Backlog & Rollover: [`AiSprintCommitCoordinator.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintCommitCoordinator.cs)
 - Bộ theo dõi Token & Lịch sử phiên: [`AiTokenUsageTracker.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiTokenUsageTracker.cs)
 - Router đa mô hình AI: [`MultiProviderAiModelClient.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/MultiProviderAiModelClient.cs#L30-L130)
 - Trích xuất tài liệu đa định dạng: [`AiDocumentTextExtractor.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiDocumentTextExtractor.cs#L20-L80)
@@ -227,8 +232,10 @@ Dịch vụ [`PromptTemplateService`](file:///c:/Users/hoang/Downloads/ProjectMg
 - **Tự động kiểm tra thời gian ghi tệp**: Mỗi khi có yêu cầu, hệ thống đối chiếu `File.GetLastWriteTimeUtc(fullPath)` với timestamp cache. Nếu tệp `.md` trên đĩa vừa được sửa, hệ thống tự động đọc lại phiên bản mới nhất **ngay lập tức mà không cần biên dịch lại mã nguồn hay khởi động lại ứng dụng**.
 
 ### 6.3. Cây Phân Nhánh Việc Con & Thang Điểm Fibonacci
-- **Cấu trúc Việc con (Subtasks) đầy đủ**: Mỗi việc con đều mang đầy đủ các trường nghiệp vụ như một công việc chính (checkbox, mã phụ `QLDA-AI1.1`, tiêu đề, vai trò kỹ thuật, độ ưu tiên, SP, trạng thái, người xử lý, ước lượng giờ, mô tả kỹ thuật, và ngăn kéo chi tiết Drawer độc lập).
-- **Dây nối Cây trực quan (Tree Wire Connector)**: Dưới cụm chấm kéo thả 6 chấm (`drag_indicator`), nhánh nối cây dạng góc vuông (`└──`) dẫn xuống từng dòng việc con, giúp giao diện trực quan và phân biệt rõ thứ bậc công việc.
+- **Cấu trúc Việc con (Subtasks) đầy đủ & Đồng bộ giữa Modal AI và Trang Backlog**:
+  - Trên cả giao diện Modal AI lẫn bảng **Kế hoạch Sprint & Backlog** ([`backlog-page.html`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/backlog-page.html)), mỗi dòng việc con khi mở rộng đều hiển thị đầy đủ 9 cột thông tin thẳng hàng tuyệt đối với công việc cha: đường nhánh cây nối góc vuông kèm ô tích chọn, biểu tượng loại việc + mã định danh, tiêu đề + nút sửa nhanh, cột Epic, nút mức độ ưu tiên, điểm ước lượng Story Points + nút Planning Poker, menu chọn trạng thái theo Workflow dự án, ảnh đại diện (Avatar) + tên người phụ trách, và menu thao tác nhanh.
+  - Loại bỏ hoàn toàn nhãn đếm phụ rườm rà (`0/2 Sub-task`) dưới tiêu đề công việc cha để giao diện tinh gọn, đồng thời hiển thị huy hiệu `Từ Backlog: QLDA-XX` đối với các hạng mục được AI kéo từ kho Product Backlog.
+- **Dây nối Cây trực quan (Tree Branch Connector)**: Nhánh nối cây góc vuông dẫn xuống từng dòng việc con ngay trong cột chọn đầu tiên mà không làm lệch lề các cột dữ liệu phía sau.
 - **Phân bổ năng lực thông minh (Skill & Capacity Matching)**: Thay vì gán một người duy nhất hoặc cho tất cả các task cùng 5 điểm, hệ thống tự động phân tích từ khóa công việc:
   - Frontend / UI / Giao diện / SCSS $\rightarrow$ Kỹ sư Frontend (Vũ Hoàng Nam).
   - Backend / API / DbContext / Redis $\rightarrow$ Kỹ sư Backend (Phạm Đức Anh).
@@ -238,33 +245,23 @@ Dịch vụ [`PromptTemplateService`](file:///c:/Users/hoang/Downloads/ProjectMg
 
 ---
 
-## 7. Tiêm Quy Chuẩn Quản Trị Dự Án Động (Dynamic Project Governance Grounding)
+## 7. Tiêm Cấu Hình Thực Tế Đang Áp Dụng Của Dự Án (Project Active Config Grounding)
 
-Để đảm bảo AI không "ảo giác" hoặc gán bừa các trạng thái (Status), loại việc (IssueType) và độ ưu tiên (Priority) không tồn tại trong dự án, hệ thống áp dụng cơ chế **Truy vấn Động từ Cơ sở Dữ liệu MySQL** trước khi gửi prompt cho mô hình:
+Để đảm bảo AI nắm bắt chính xác 100% quy trình làm việc (Workflow), mức độ ưu tiên (Priorities), loại công việc (IssueTypes) và nhãn (Labels) **đang thực sự được áp dụng** cho dự án thay vì đoán mò hoặc lấy nhầm cấu hình lưu trữ chung, hệ thống xây dựng bộ phân giải tập trung [`ProjectActiveConfigResolver.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/ProjectActiveConfigResolver.cs) và công cụ MCP `project_get_active_config`:
 
-- **Nạp trực tiếp từ `PlanningDbContext`**:
-  ```csharp
-  var workflowStatuses = await _planningDb.WorkflowStatuses
-      .AsNoTracking()
-      .Where(s => s.ProjectId == scope.ProjectId)
-      .OrderBy(s => s.OrderIndex)
-      .Select(s => s.Name)
-      .ToListAsync(cancellationToken);
-
-  var issueTypes = await _planningDb.IssueTypes
-      .AsNoTracking()
-      .Where(t => t.ProjectId == scope.ProjectId)
-      .Select(t => t.Name)
-      .ToListAsync(cancellationToken);
-
-  var priorities = await _planningDb.Priorities
-      .AsNoTracking()
-      .Where(p => p.ProjectId == scope.ProjectId)
-      .OrderBy(p => p.Level)
-      .Select(p => p.Name)
-      .ToListAsync(cancellationToken);
-  ```
-- **Ràng buộc vào System & User Prompt**: Danh sách này được đưa vào mục `### 7. Quy chuẩn dự án` trong prompt. Nhờ đó, AI luôn chỉ gán các trạng thái thực tế của dự án (`To Do`, `In Progress`, `Code Review`, `Done`), không sinh ra các trạng thái lạ như "Pending", "Testing".
+1. **Quy trình Workflow, Cột Bảng & Chuyển đổi Trạng thái (`Boards`, `BoardColumns`, `WorkflowStatuses`, `WorkflowTransitions`)**:
+   - Đọc bảng mặc định đang kích hoạt của dự án (`Boards.IsDefault`), sắp xếp thứ tự các trạng thái theo đúng cột trên bảng (`BoardColumns.OrderIndex` kèm giới hạn `WipLimit`).
+   - Xác định rõ trạng thái khởi tạo (`IsInitial`), trạng thái đang thực thi (`IsActiveWork`), trạng thái hoàn tất (`IsDone` / `Category = Done`) và danh sách các luồng chuyển tiếp hợp lệ (`WorkflowTransitions`: `FromStatus -> ToStatus`).
+   - Toàn bộ các công việc mới hoặc kéo từ Backlog vào Sprint được gán đúng trạng thái khởi tạo thực tế (`InitialStatusName`) của quy trình đang áp dụng (kể cả khi dự án áp dụng quy trình tùy chỉnh không theo mẫu chung như `Open -> In Dev -> QA Testing -> Released`, tuyệt đối không gán cứng `"To Do"`).
+2. **Mức độ Ưu tiên Đang Áp dụng (`Priorities`)**:
+   - Tuân thủ quy tắc cô lập cấu hình: nếu dự án đã thiết lập bộ mức ưu tiên riêng (`ProjectId == scope.ProjectId`), hệ thống **chỉ sử dụng duy nhất bộ mức ưu tiên riêng của dự án đó** (sắp xếp theo `Level` từ cao nhất `Level = 1` trở xuống, ví dụ `Urgent, High, Normal, Low` hoặc `Blocker, Major, Normal, Minor`), tuyệt đối không trộn lẫn với các dòng mặc định hệ thống (`ProjectId == null`).
+   - Chỉ khi dự án chưa tạo cấu hình riêng (`customPriorities.Count == 0`), hệ thống mới lấy bộ mức ưu tiên mặc định (`ProjectId == null`).
+   - Khi áp dụng đề xuất vào Sprint, hệ thống giữ nguyên tên mức ưu tiên của dự án (như `Urgent`, `Blocker`), không tự ý ép đổi về `"Highest"`.
+3. **Loại Công việc (`IssueTypes`) & Ngữ nghĩa Scrum (`Story` vs `Task` vs `Bug`)**:
+   - Tách biệt rõ nhóm hạng mục cấp 1 (`ParentWorkItemTypes`), nhóm việc con (`SubtaskTypes`, `IsSubtask = true`) và `Epic`.
+   - Hướng dẫn AI phân biệt rõ: `Story` là nhu cầu mang lại giá trị cho người dùng (cần được làm rõ hoặc bóc tách thành các đầu việc kỹ thuật cụ thể), `Task` là công việc kỹ thuật độc lập, và `Bug` là lỗi cần sửa.
+4. **Nhãn Dự án (`Labels` & `IssueLabels`)**:
+   - Truy vấn danh mục nhãn đang áp dụng của dự án từ `DeliveryIntelligenceDbContext.Labels` (`ProjectId == scope.ProjectId`), tiêm vào cả System Prompt và User Prompt để AI gắn nhãn chuẩn xác, đồng thời tự động liên kết vào bảng `IssueLabels` khi lưu Sprint.
 
 ---
 

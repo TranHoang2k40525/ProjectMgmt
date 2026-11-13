@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Planning.Infrastructure;
 using ProjectMgmt.Core.Ai;
 using ProjectMgmt.Core.Security;
+using ProjectMgmt.Solution.Services.Ai;
 
 public class SprintTools
 {
@@ -88,18 +89,21 @@ public class SprintTools
             sprintIds.Add(activeSprint.Id);
         }
 
+        ProjectActiveConfig? activeConfig = null;
         var doneStatusIds = new HashSet<Guid>();
+        var activeWorkStatusIds = new HashSet<Guid>();
         try
         {
-            var statuses = await _planning.WorkflowStatuses.AsNoTracking()
-                .Where(ws => ws.Category == "done" || ws.Name == "Done" || ws.Name == "Hoàn thành")
-                .Select(ws => ws.Id)
-                .ToListAsync(ct);
-            doneStatusIds = statuses.ToHashSet();
+            activeConfig = await ProjectActiveConfigResolver.ResolveAsync(_planning, _delivery, projectId, ct);
+            doneStatusIds = activeConfig.DoneStatusIds;
+            activeWorkStatusIds = activeConfig.Statuses
+                .Where(s => s.IsActiveWork || s.Category.Equals("InProgress", StringComparison.OrdinalIgnoreCase))
+                .Select(s => s.Id)
+                .ToHashSet();
         }
         catch
         {
-            // Ignore if WorkflowStatuses not available
+            // Ignore if active workflow metadata is unavailable
         }
 
         var sprintIssues = sprintIds.Count > 0
@@ -158,18 +162,35 @@ public class SprintTools
         var projectKey = project.ProjectKey ?? "QLDA";
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
-        // Nạp danh mục loại công việc, trạng thái, mức độ ưu tiên để enrich dữ liệu cho AI
-        var issueTypeById = await _planning.IssueTypes.AsNoTracking()
-            .Where(t => t.ProjectId == projectId)
-            .ToDictionaryAsync(t => t.Id, t => t.Name, ct);
+        // Nạp danh mục loại công việc, trạng thái, mức độ ưu tiên ĐANG ÁP DỤNG để enrich dữ liệu cho AI
+        var issueTypeById = activeConfig != null
+            ? activeConfig.IssueTypes.ToDictionary(t => t.Id, t => t.Name)
+            : await _planning.IssueTypes.AsNoTracking()
+                .Where(t => t.ProjectId == projectId)
+                .ToDictionaryAsync(t => t.Id, t => t.Name, ct);
 
-        var statusById = await _planning.WorkflowStatuses.AsNoTracking()
-            .Where(s => s.ProjectId == projectId)
-            .ToDictionaryAsync(s => s.Id, s => s.Name, ct);
+        var statusById = activeConfig != null
+            ? activeConfig.Statuses.ToDictionary(s => s.Id, s => s.Name)
+            : await _planning.WorkflowStatuses.AsNoTracking()
+                .Where(s => s.ProjectId == projectId)
+                .ToDictionaryAsync(s => s.Id, s => s.Name, ct);
 
-        var priorityById = await _planning.Priorities.AsNoTracking()
-            .Where(p => p.ProjectId == projectId || p.ProjectId == null)
-            .ToDictionaryAsync(p => p.Id, p => p.Name, ct);
+        Dictionary<Guid, string> priorityById;
+        if (activeConfig != null)
+        {
+            priorityById = activeConfig.Priorities.ToDictionary(p => p.Id, p => p.Name);
+        }
+        else
+        {
+            var customPrios = await _planning.Priorities.AsNoTracking()
+                .Where(p => p.ProjectId == projectId)
+                .ToListAsync(ct);
+            priorityById = customPrios.Count > 0
+                ? customPrios.ToDictionary(p => p.Id, p => p.Name)
+                : await _planning.Priorities.AsNoTracking()
+                    .Where(p => p.ProjectId == null)
+                    .ToDictionaryAsync(p => p.Id, p => p.Name, ct);
+        }
 
         var recentSprintDetails = pastSprints.Select(s =>
         {
@@ -208,8 +229,8 @@ public class SprintTools
             .Select(i =>
             {
                 var typeName = issueTypeById.TryGetValue(i.IssueTypeId, out var tName) ? tName : "Story";
-                var statusName = statusById.TryGetValue(i.StatusId, out var sName) ? sName : "To Do";
-                var prioName = "Medium";
+                var statusName = statusById.TryGetValue(i.StatusId, out var sName) ? sName : (activeConfig?.InitialStatusName ?? "To Do");
+                var prioName = activeConfig?.GetDefaultPriorityName() ?? "Medium";
                 if (i.PriorityId.HasValue && priorityById.TryGetValue(i.PriorityId.Value, out var foundPrio))
                 {
                     prioName = foundPrio;
@@ -217,7 +238,8 @@ public class SprintTools
 
                 var isOverdue = i.DueDate.HasValue && i.DueDate.Value < today;
                 var isBug = typeName.Contains("Bug", StringComparison.OrdinalIgnoreCase);
-                var isInProgress = statusName.Contains("Progress", StringComparison.OrdinalIgnoreCase) ||
+                var isInProgress = activeWorkStatusIds.Contains(i.StatusId) ||
+                                   statusName.Contains("Progress", StringComparison.OrdinalIgnoreCase) ||
                                    statusName.Contains("Review", StringComparison.OrdinalIgnoreCase) ||
                                    i.TimeSpentMinutes > 0;
 

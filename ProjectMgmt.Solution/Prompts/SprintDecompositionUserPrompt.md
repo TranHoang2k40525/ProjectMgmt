@@ -10,10 +10,15 @@ Dữ liệu đầu vào thực tế của dự án:
 {{SPEC_HUB_DOCS}}
 {{SPEC_HUB_EXCERPTS}}
 
-### 4. Quy chuẩn dự án động từ cơ sở dữ liệu:
-- Trạng thái công việc theo Workflow: {{PROJECT_WORKFLOW_STATUSES}}
-- Loại công việc áp dụng (Issue Types): {{PROJECT_ISSUE_TYPES}}
-- Mức độ ưu tiên áp dụng (Priorities): {{PROJECT_PRIORITIES}}
+### 4. Cấu hình ĐANG ÁP DỤNG THỰC TẾ của dự án (trích từ cơ sở dữ liệu):
+- **Workflow hiện hành ({{PROJECT_WORKFLOW_NAME}} - {{PROJECT_WORKFLOW_TYPE}})**: {{PROJECT_WORKFLOW_SUMMARY}}
+  * Trạng thái khởi tạo mặc định: `{{PROJECT_INITIAL_STATUS}}`
+  * Danh sách trạng thái hợp lệ: `{{PROJECT_WORKFLOW_STATUSES}}`
+- **Loại công việc (Issue Types)**: {{PROJECT_ISSUE_TYPES}}
+  * Loại cấp 1 được phép gán cho field `type`: `{{PROJECT_PARENT_ISSUE_TYPES}}`
+- **Mức độ ưu tiên đang áp dụng (Priorities)**: {{PROJECT_PRIORITIES}}
+  * Chỉ chọn `priority` trong: `{{PROJECT_PRIORITY_NAMES}}` (mặc định: `{{PROJECT_DEFAULT_PRIORITY}}`)
+- **Nhãn dự án (Labels)**: {{PROJECT_LABELS}}
 
 ### 5. Yêu cầu định hướng từ Quản lý Dự án (PM / PO / Scrum Master):
 {{PM_DIRECTION}}
@@ -24,15 +29,19 @@ Dữ liệu đầu vào thực tế của dự án:
 ### 7. Năng lực, kỹ năng chuyên môn và số giờ khả dụng của thành viên nhóm:
 {{TEAM_CAPACITIES}}
 
-### 8. Backlog hiện tại của dự án:
+### 8. Kho Product Backlog hiện tại của dự án (User Story, Task, Bug chưa đưa vào Sprint):
 {{BACKLOG_STORIES}}
 
 CHỈ ĐẠO THỰC THI CHO AGENT:
-1. Đọc kỹ biên bản họp và tài liệu đặc tả để nắm bắt trọn vẹn mục tiêu Sprint (Sprint Goal).
-2. Tự do quyết định số lượng công việc (Story, Task, Bug, Technical Debt) và số lượng việc con (Subtasks) phù hợp với quy mô thực tế, KHÔNG bị gò bó bởi bất kỳ giới hạn cứng nào.
-3. Xem xét kỹ mục 6 (Các hạng mục dở dang từ Sprint trước):
-   - Kế thừa (Rollover) các Bug nghiêm trọng hoặc Task đang làm dở sang Sprint mới với tag ["#Rollover"], phân công người tiếp tục xử lý.
-   - Đối với các Task thường quá hạn chưa từng được bắt đầu, đánh giá hợp lý: nếu không cấp bách, không tự động đưa vào Sprint mới để tránh làm quá tải nhóm.
-4. Định cỡ Story Points đa dạng theo dãy Fibonacci (1, 2, 3, 5, 8). Phân công chính xác họ tên thành viên có trong danh sách theo kỹ năng Frontend, Backend, QA.
-5. Tuyệt đối không sao chép nguyên văn các tiêu đề thô hoặc ghi chú người dùng vào `title` của Task. Tiêu đề phải là câu hành động kỹ thuật chuẩn mực.
-6. Trả về đúng duy nhất đối tượng JSON SprintProposal theo quy chuẩn.
+1. Đọc kỹ biên bản họp, tài liệu đặc tả Spec Hub và kho Product Backlog ở Mục 8.
+2. **Xử lý Product Backlog & phân biệt User Story vs Task**:
+   - Xem xét các hạng mục trong kho Backlog liên quan tới Sprint Goal. Khi lấy một User Story hoặc Task/Bug từ kho Backlog đưa vào Sprint, BẮT BUỘC gắn `"sourceBacklogIssueId"` và `"sourceBacklogIssueKey"` để di chuyển hạng mục đó khỏi kho Backlog vào Sprint (tránh trùng lặp).
+   - Phân biệt chuẩn xác `Story` (nhu cầu nghiệp vụ của người dùng -> bóc tách thành các `subtasks` kỹ thuật hoặc `Task` cụ thể) và `Task` (đầu việc kỹ thuật triển khai trực tiếp) và `Bug` (sửa lỗi).
+3. **Tuân thủ tuyệt đối cấu hình áp dụng ở Mục 4**:
+   - `status`: CHỈ dùng tên trạng thái nằm trong `{{PROJECT_WORKFLOW_STATUSES}}` (mặc định `{{PROJECT_INITIAL_STATUS}}`).
+   - `priority`: CHỈ dùng tên mức ưu tiên nằm trong `{{PROJECT_PRIORITY_NAMES}}`.
+   - `type`: CHỈ dùng tên loại công việc nằm trong `{{PROJECT_PARENT_ISSUE_TYPES}}`.
+   - `tags`: Ưu tiên dùng nhãn từ `{{PROJECT_LABELS}}` khi phù hợp.
+4. **Kế thừa Sprint Rollover (Mục 6)**: Kế thừa Bug tồn đọng (ưu tiên cao nhất theo cấu hình dự án) và việc đang làm dở (WIP); không tự đưa việc thường quá hạn chưa làm vào Sprint nếu không cấp thiết.
+5. Định cỡ Story Points đa dạng (1, 2, 3, 5, 8) cân đối với năng lực thành viên (Mục 7), phân công đúng họ tên thành viên theo chuyên môn Backend, Frontend, QA.
+6. Trả về đúng duy nhất đối tượng JSON SprintProposal hợp lệ.

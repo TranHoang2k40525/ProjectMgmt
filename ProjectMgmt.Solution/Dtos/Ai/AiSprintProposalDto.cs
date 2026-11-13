@@ -13,6 +13,12 @@ public sealed class AiSprintProposalDto
     public List<string> Tags { get; set; } = [];
     public decimal TotalEstimatedHours { get; set; }
     public decimal TotalStoryPoints { get; set; }
+    public string? WorkflowName { get; set; }
+    public string? InitialStatus { get; set; }
+    public List<string> AppliedWorkflowStatuses { get; set; } = [];
+    public List<string> AppliedPriorities { get; set; } = [];
+    public List<string> AppliedIssueTypes { get; set; } = [];
+    public List<string> AppliedLabels { get; set; } = [];
     public List<ProposedTaskDto> Tasks { get; set; } = [];
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 }
@@ -20,6 +26,8 @@ public sealed class AiSprintProposalDto
 public sealed class ProposedTaskDto
 {
     public string Id { get; set; } = string.Empty; // e.g. "task_01" or GUID string
+    public Guid? SourceBacklogIssueId { get; set; }
+    public string? SourceBacklogIssueKey { get; set; }
     public Guid? EpicId { get; set; }
     public string? EpicTitle { get; set; }
     public string Title { get; set; } = string.Empty;

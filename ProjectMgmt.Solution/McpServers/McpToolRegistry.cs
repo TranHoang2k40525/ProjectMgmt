@@ -60,6 +60,7 @@ public class McpToolRegistry : IMcpToolRegistry
             "spec_hub_read_document" or
             "spec_hub_search" or
             "backlog_get_stories" or
+            "project_get_active_config" or
             "sprint_get_history_and_velocity" or
             "team_get_dev_capacities" or
             "ai_sprint_plan_propose" => true,
@@ -113,6 +114,12 @@ public class McpToolRegistry : IMcpToolRegistry
                 {
                     var projectId = ParseGuid(args["projectId"]);
                     return await _backlog.GetStoriesAsync(projectId, scope, cancellationToken);
+                }
+
+                case "project_get_active_config":
+                {
+                    var projectId = ParseGuid(args["projectId"]);
+                    return await _backlog.GetActiveConfigAsync(projectId, scope, cancellationToken);
                 }
 
                 case "sprint_get_history_and_velocity":

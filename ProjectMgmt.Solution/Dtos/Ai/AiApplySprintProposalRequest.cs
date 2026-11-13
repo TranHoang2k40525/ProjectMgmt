@@ -49,6 +49,7 @@ public sealed class AiApplySprintProposalResponse
     public int CreatedIssueCount { get; set; }
     public int CreatedTaskCount { get; set; }
     public int CreatedSubtaskCount { get; set; }
+    public int MovedFromBacklogCount { get; set; }
     public int RolloverTaskCount { get; set; }
     public int BacklogReturnedCount { get; set; }
     public decimal TotalStoryPoints { get; set; }

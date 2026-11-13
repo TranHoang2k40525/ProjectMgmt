@@ -216,9 +216,14 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
     - `ChunkType == AiStreamChunkType.Content`: Chỉ gom vào bộ đệm JSON nội bộ để phân tích cú pháp, không đẩy vào ô tư duy.
     - Nếu mô hình không hỗ trợ luồng suy nghĩ độc lập, hệ thống phát luồng suy luận tổng hợp (Synthesized Thought Milestones) bằng tiếng Việt mạch lạc.
 
-### Câu hỏi 8.4: Làm thế nào để AI tuân thủ đúng quy chuẩn trạng thái, loại công việc và mức ưu tiên của từng dự án mà không bị gán bừa?
+### Câu hỏi 8.4: Làm thế nào để AI tuân thủ đúng quy chuẩn Workflow, mức ưu tiên, loại công việc, nhãn đang áp dụng của từng dự án và lấy việc từ kho Backlog vào Sprint mà không bị trùng lặp?
 - **Trả lời**:
-  Hệ thống áp dụng kỹ thuật **Dynamic Project Governance Grounding**: Trước khi gửi prompt cho AI, hệ thống đọc trực tiếp các bảng `WorkflowStatuses`, `IssueTypes`, `Priorities` từ MySQL theo đúng `ProjectId`. Sau đó tiêm trực tiếp vào prompt, ép buộc AI chỉ được phân bổ các trạng thái thực tế đang có trong dự án (`To Do`, `In Progress`, `Code Review`, `Done`).
+  1. **Đọc cấu hình thực tế đang áp dụng (`ProjectActiveConfigResolver` & `project_get_active_config`)**:
+     - **Workflow**: Đọc bảng mặc định (`Boards`), thứ tự cột (`BoardColumns`), trạng thái (`WorkflowStatuses` kèm cờ `IsInitial`, `IsActiveWork`, `IsDone`, `IsCanceled`) và luồng chuyển tiếp (`WorkflowTransitions`). Kể cả khi dự án áp dụng quy trình tùy chỉnh không theo mẫu chung (ví dụ: `Open -> In Dev -> QA Testing -> Released`), AI và hệ thống tự động nhận diện trạng thái khởi tạo là `Open` và trạng thái hoàn tất là `Released`, tuyệt đối không đoán mò hay gán cứng `"To Do"`.
+     - **Mức độ ưu tiên (`Priorities`)**: Nếu dự án có bộ mức ưu tiên riêng (`ProjectId == projectId`), hệ thống **chỉ lấy bộ mức ưu tiên đang áp dụng của dự án đó**, không trộn lẫn với các dòng mặc định toàn cục (`ProjectId == null`). Khi lưu vào Sprint, hệ thống giữ nguyên mức ưu tiên của dự án (như `Urgent`, `Blocker`).
+     - **Loại công việc (`IssueTypes`) & Nhãn (`Labels`)**: Tách rõ `Story` (nhu cầu người dùng cần bóc tách thành các đầu việc kỹ thuật), `Task` (đầu việc kỹ thuật thực thi), `Bug` và `Sub-task`, đồng thời nạp danh mục `Labels` của dự án và lưu liên kết `IssueLabels`.
+  2. **Di chuyển hạng mục từ kho Backlog vào Sprint không trùng lặp (`AiSprintCommitCoordinator`)**:
+     - Khi AI chọn hạng mục từ Product Backlog (`sourceBacklogIssueId` / `sourceBacklogIssueKey`), bộ điều phối thực hiện **di chuyển trực tiếp (Move)** bản ghi từ kho Backlog (`SprintId = null`) sang `TargetSprintId` (kéo theo các việc con sẵn có), tuyệt đối không tạo bản ghi mới trùng lặp trong kho Backlog.
 
 ---
 
@@ -228,6 +233,8 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
 | :--- | :--- | :--- |
 | **API Endpoints & SSE** | `AiAgentController` | [`AiAgentController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/AiAgentController.cs) |
 | **Agent Pipeline 5 Bước** | `AiSprintDecompositionService` | [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs) |
+| **Phân Giải Cấu Hình Dự Án** | `ProjectActiveConfigResolver` | [`ProjectActiveConfigResolver.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/ProjectActiveConfigResolver.cs) |
+| **Ghi Nhận Sprint & Di Chuyển Backlog** | `AiSprintCommitCoordinator` | [`AiSprintCommitCoordinator.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintCommitCoordinator.cs) |
 | **Theo Dõi Token & Phiên** | `AiTokenUsageTracker` | [`AiTokenUsageTracker.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiTokenUsageTracker.cs) |
 | **Hợp Đồng Đo Lường Token** | `IAiTokenUsageTracker` | [`IAiTokenUsageTracker.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/IAiTokenUsageTracker.cs) |
 | **Quản Lý Prompt Động** | `PromptTemplateService` | [`PromptTemplateService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/PromptTemplateService.cs) |

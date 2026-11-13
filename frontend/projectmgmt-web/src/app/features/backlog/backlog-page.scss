@@ -866,37 +866,52 @@ select:focus-visible {
 }
 
 .subtask-list {
-  margin: 0 8px 8px 36px;
-  border-left: 2px solid #e2e8f0;
-  padding-left: 4px;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
 }
 
-.subtask-row {
-  width: 100%;
-  display: grid;
-  grid-template-columns: 24px 84px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border: 0;
-  border-top: 1px solid #f1f5f9;
-  color: #334155;
+.work-item-row.is-subtask-row {
   background: #f8fafc;
-  text-align: left;
-  cursor: pointer;
-  border-radius: 4px;
-  margin-bottom: 2px;
-  transition: background-color 0.15s ease;
+  border-left-color: #cbd5e1;
 
   &:hover {
     background: #f1f5f9;
+    border-left-color: #4c9aff;
   }
 
-  .subtask-tree-wire {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 600;
+  &.is-selected {
+    background: #deebff;
+    border-left-color: #0052cc;
+  }
+
+  & + .work-item-row.is-subtask-row {
+    border-top: 1px solid #eef2f6;
+  }
+}
+
+.cell-select.is-subtask-select {
+  padding-left: 12px;
+}
+
+.subtask-branch-connector {
+  position: relative;
+  display: inline-block;
+  width: 14px;
+  height: 18px;
+  flex-shrink: 0;
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 2px;
+    top: -10px;
+    width: 10px;
+    height: 19px;
+    border-left: 1.5px solid #cbd5e1;
+    border-bottom: 1.5px solid #cbd5e1;
+    border-bottom-left-radius: 4px;
   }
 }
 
@@ -1229,6 +1244,15 @@ select:focus-visible {
   .subtask-create {
     margin-left: 0;
   }
+
+  .subtask-list {
+    border-top: 0;
+    background: transparent;
+  }
+
+  .work-item-row.is-subtask-row {
+    margin-left: 16px;
+  }
 }
 
 @media (max-width: 767px) {
@@ -1300,15 +1324,6 @@ select:focus-visible {
 
   .bulk-toolbar select {
     flex: 1 1 150px;
-  }
-
-  .subtask-row {
-    grid-template-columns: 22px 82px minmax(0, 1fr);
-  }
-
-  .subtask-row .status-pill {
-    grid-column: 2 / -1;
-    justify-self: start;
   }
 
   .modal-panel {
