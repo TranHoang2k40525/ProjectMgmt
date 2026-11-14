@@ -79,7 +79,7 @@ flowchart TD
    - Khái niệm RAG (Retrieval-Augmented Generation) & Giải quyết triệt để Hallucination.
    - Bộ trích xuất văn bản vạn năng `AiDocumentTextExtractor` (.docx, .pdf, .xlsx, .md, .txt).
    - Vector Search, Embedding (`gemini-embedding-001`, Qdrant) và Fallback Keyword Search.
-   - Trích dẫn chính xác nguồn gốc (`documentCitations`) & Ngăn kéo xem tài liệu không làm mất đoạn chat.
+   - Trích dẫn chính xác nguồn gốc (`documentCitations`) hiển thị trong Ngăn kéo Chi tiết, tự động đồng bộ `SpecStoryLinks` / `AcceptanceCriteria` / `Labels` / `RequiredSkills` khi áp dụng xuống Backlog & ngăn kéo xem tài liệu không làm mất đoạn chat.
 
 5. [**Chuyên đề 5: Kiến trúc MCP Server & Hệ thống MCP Tools**](file:///c:/Users/hoang/Downloads/ProjectMgmt/docs/ai/05-mcp-server-va-tools.md)
    - Khái niệm chuẩn Model Context Protocol (MCP) JSON-RPC 2.0 & **Cơ chế Gọi MCP Có Chọn Lọc (Selective MCP Invocation)**.
@@ -105,7 +105,7 @@ flowchart TD
 | **AiConversationSessionStore** | Kho lưu trữ phiên hội thoại bền vững trên MySQL + khóa chặt `(OrganizationId, ProjectId, UserId)` + bù lạnh Redis | [`AiConversationSessionStore.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiConversationSessionStore.cs) |
 | **AiConversationSession & MemoryEntry** | Thực thể miền lưu trữ phiên chat hoàn chỉnh và các mảnh trí nhớ đánh chỉ mục trong MySQL | [`AiConversationSession.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Modules.DeliveryIntelligence/Domain/Entities/AiConversationSession.cs) |
 | **ProjectActiveConfigResolver** | Phân giải cấu hình thực tế đang áp dụng của dự án (Workflow, Priorities, IssueTypes, Labels) | [`ProjectActiveConfigResolver.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/ProjectActiveConfigResolver.cs) |
-| **AiSprintCommitCoordinator** | Ghi nhận Sprint, **đẩy trực tiếp vào Kho Backlog (`SprintId = null`)**, di chuyển Backlog không trùng lặp & xử lý Rollover | [`AiSprintCommitCoordinator.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintCommitCoordinator.cs) |
+| **AiSprintCommitCoordinator** | Ghi nhận Sprint, **đẩy trực tiếp vào Kho Backlog (`SprintId = null`)**, lưu `SpecStoryLinks`, `AcceptanceCriteria`, `IssueRequiredSkills`, nhãn & vai trò việc con | [`AiSprintCommitCoordinator.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintCommitCoordinator.cs) |
 | **AiTokenUsageTracker** | Theo dõi tiêu thụ Token AI, thống kê chi phí & lịch sử phiên | [`AiTokenUsageTracker.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiTokenUsageTracker.cs) |
 | **MultiProviderAiModelClient** | Router gọi đa mô hình (Gemini, Claude, OpenAI, Ollama) | [`MultiProviderAiModelClient.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/MultiProviderAiModelClient.cs) |
 | **AiDocumentTextExtractor** | Trích xuất văn bản từ file Word, Excel, PDF, Markdown, Text | [`AiDocumentTextExtractor.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiDocumentTextExtractor.cs) |
@@ -122,6 +122,8 @@ flowchart TD
 | **ai-decompose-modal.html** | Template đoạn hội thoại Trợ Lý AI (trái) & Tôi (phải) liền mạch, khối Thinking tông sáng tối giản & danh sách lịch sử có nút xóa | [`ai-decompose-modal.html`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.html) |
 | **profile-page.html** | Dashboard quản lý mức tiêu thụ Token AI và chi phí vận hành | [`profile-page.html`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/identity/profile-page.html) |
 | **spec-hub-page.ts** | Giao diện Spec Hub hỗ trợ mở đúng vị trí phân đoạn trích dẫn | [`spec-hub-page.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/spec-hub/spec-hub-page.ts) |
+| **task-detail-drawer.ts** | Ngăn kéo chi tiết Backlog/Board hiển thị & chỉnh sửa đầy đủ các trường AI cho cả việc cha lẫn việc con | [`task-detail-drawer.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/shared/components/task-detail-drawer/task-detail-drawer.ts) |
+| **spec-citation.util.ts** | Chuẩn hóa tên tài liệu & khử trùng lặp liên kết Spec Hub với trích dẫn thô | [`spec-citation.util.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/core/utils/spec-citation.util.ts) |
 
 
 
@@ -391,9 +393,9 @@ Dịch vụ [`PromptTemplateService`](file:///c:/Users/hoang/Downloads/ProjectMg
   - Điểm Story Points Fibonacci tương thích (1 hoặc 2 SP).
   - **Mô tả kỹ thuật chuyên sâu (Description)**: Làm rõ phạm vi kỹ thuật chi tiết của việc con, không để trống hay mô tả chung chung.
   - **Tiêu chí nghiệm thu độc lập (Acceptance Criteria)**: Tối thiểu 1-2 tiêu chí đo lường được để lập trình viên và kiểm thử biết chính xác điều kiện hoàn tất.
-  - **Trích dẫn đặc tả liên kết (Document Citations)**: Trích dẫn phân đoạn tài liệu kỹ thuật gốc hoặc thừa hưởng từ công việc cha, có thể nhấp vào để mở xem tài liệu trong Spec Hub ngay lập tức.
+  - **Trích dẫn đặc tả liên kết (Document Citations)**: Trích dẫn phân đoạn tài liệu kỹ thuật gốc hoặc thừa hưởng từ công việc cha, được hiển thị gọn trong Ngăn kéo Chi tiết công việc (lược bỏ các thẻ trích dẫn xanh trùng lặp trên danh sách đề xuất bên ngoài) và nhấp mở xem tài liệu trong Spec Hub ngay lập tức.
   - **Giao diện Avatar & Danh sách Người thực hiện**: Hiển thị avatar tròn chuẩn doanh nghiệp (ảnh chân dung hoặc huy hiệu chữ cái đầu trên nền màu chủ đạo) nằm thẳng hàng với dropdown chọn người làm, không bị ngắt dòng hay vỡ giao diện.
-  - **Ngăn kéo chi tiết Drawer độc lập**: Cho phép người dùng chỉnh sửa tiêu đề, mô tả, thêm/xóa tiêu chí nghiệm thu và điều chỉnh người làm cho từng việc con một cách độc lập.
+  - **Ngăn kéo chi tiết Drawer độc lập & Đồng bộ Xuống Backlog**: Cho phép người dùng chỉnh sửa tiêu đề, mô tả, thêm/xóa tiêu chí nghiệm thu và điều chỉnh người làm cho từng việc con một cách độc lập; khi áp dụng vào Sprint/Backlog, `AiSprintCommitCoordinator` tự động ghi bền vững toàn bộ `Labels`, `IssueRequiredSkills`, `AcceptanceCriteria`, `SpecStoryLinks`, vai trò việc con và lý do AI vào CSDL để Ngăn kéo Chi tiết Backlog hiển thị đầy đủ đồng nhất cho cả công việc cha lẫn việc con.
 - **Dây nối Cây trực quan (Tree Wire Connector)**: Dưới cụm chấm kéo thả 6 chấm (`drag_indicator`), nhánh nối cây dạng góc vuông (`└──`) dẫn xuống từng dòng việc con, giúp giao diện trực quan và phân biệt rõ thứ bậc công việc.
 - **Phân bổ năng lực thông minh (Skill & Capacity Matching)**: Thay vì gán một người duy nhất hoặc cho tất cả các task cùng 5 điểm, hệ thống tự động phân tích từ khóa công việc:
   - Frontend / UI / Giao diện / SCSS $\rightarrow$ Kỹ sư Frontend (Vũ Hoàng Nam).
@@ -429,7 +431,7 @@ Dịch vụ [`PromptTemplateService`](file:///c:/Users/hoang/Downloads/ProjectMg
    - Hướng dẫn AI phân biệt rõ: `Story` là nhu cầu mang lại giá trị cho người dùng (cần được làm rõ hoặc bóc tách thành các đầu việc kỹ thuật cụ thể), `Task` là công việc kỹ thuật độc lập, và `Bug` là lỗi cần sửa.
 4. **Nhãn Dự án (`Labels` & `IssueLabels`) & Hiển thị Việc Con Đầy đủ**:
    - Truy vấn danh mục nhãn đang áp dụng của dự án từ `DeliveryIntelligenceDbContext.Labels` (`ProjectId == scope.ProjectId`), tiêm vào cả System Prompt và User Prompt để AI gắn nhãn chuẩn xác, đồng thời tự động liên kết vào bảng `IssueLabels` khi lưu Sprint.
-   - Trên cả Modal AI và trang Kế hoạch Sprint & Backlog, mỗi dòng việc con (Sub-task) đều hiển thị đầy đủ 9 cột thông tin thẳng hàng với công việc cha và loại bỏ nhãn đếm phụ `0/2 Sub-task`.
+   - Trên cả Modal AI và trang Kế hoạch Sprint & Backlog, mỗi dòng việc con (Sub-task) đều hiển thị đầy đủ 9 cột thông tin thẳng hàng với công việc cha, loại bỏ nhãn đếm phụ `0/2 Sub-task`, lược bỏ thẻ trích dẫn xanh trùng lặp bên ngoài danh sách đề xuất và tiêu đề Sprint ngoài Backlog, đồng thời hiển thị đầy đủ toàn bộ dữ liệu AI bên trong Ngăn kéo Chi tiết của cả công việc cha lẫn việc con.
 
 ---
 
@@ -1172,7 +1174,7 @@ sequenceDiagram
     participant Drawer as Ngăn kéo Xem trước Tài liệu
     participant Hub as Trang Quản trị Tài liệu Đặc tả
 
-    User->>UI: Nhấp vào nguồn trích dẫn tài liệu kỹ thuật
+    User->>UI: Nhấp vào nguồn trích dẫn bên trong ngăn kéo chi tiết công việc
     UI->>Drawer: Mở ngăn kéo nội tuyến từ cạnh phải màn hình
     Drawer->>Drawer: Tìm kiếm chính xác tệp tin và dòng đề mục được trích dẫn
     Drawer->>Drawer: Tự động cuộn mượt và đánh dấu nổi bật phân đoạn trích dẫn
@@ -1218,10 +1220,11 @@ Khi AI bắt đầu suy luận, giao diện hiển thị danh sách các hành �
 1. Tải lên hoặc tạo một tệp tài liệu đặc tả trong Spec Hub (ví dụ: `Cam-nang-ky-thuat.md` chứa đề mục `Phần II: Xử lý ngữ cảnh AI Engine`).
 2. Gõ yêu cầu phân rã Sprint hoặc phân tích kế hoạch.
 3. Quan sát kết quả đề xuất:
-   - Các task sinh ra có nhãn tài liệu trích dẫn đúng định dạng `Tài liệu Spec Hub: Cam-nang-ky-thuat.md - Phần II`.
+   - Danh sách đề xuất bên ngoài giữ giao diện gọn sạch (lược bỏ thẻ trích dẫn xanh trùng lặp trên dòng cha và việc con); khi bấm vào công việc cha hoặc việc con, ngăn kéo chi tiết hiển thị đầy đủ mục **Tài liệu căn cứ & Trích dẫn đặc tả** (việc con tự động thừa hưởng trích dẫn từ cha nếu chưa tách riêng).
    - Nhấp vào nhãn trích dẫn: Drawer nội tuyến mở ra, hiển thị tiêu đề, vị trí trích dẫn và nội dung đặc tả.
    - Nhấp vào nút "Mở trang Spec Hub": Trình duyệt mở tab Spec Hub với đầy đủ tham số `?docId=...&docName=...&section=...`. Hệ thống tự động mở tab tài liệu, cuộn mượt đến đề mục `Phần II` và kích hoạt hiệu ứng viền vàng nổi bật.
    - Nhấp "Quay lại đoạn chat": Hệ thống quay trở lại giao diện phân rã Sprint nguyên vẹn.
+   - Khi nhấn **Áp dụng vào Sprint** hoặc **Đẩy vào Kho Backlog**, `AiSprintCommitCoordinator` tự động gắn liên kết `SpecStoryLinks`, `AcceptanceCriteria`, `IssueRequiredSkills`, `IssueLabels`, vai trò việc con và lý do AI vào CSDL để ngăn kéo chi tiết trên **Backlog / Board** và trang chi tiết issue hiển thị đồng bộ y hệt (khử trùng lặp liên kết Spec và trích dẫn thô qua `spec-citation.util.ts`).
 
 ### 5.3. Cô lập Tri thức Phạm vi Dự án & Cơ chế Tự suy luận Phi khuôn mẫu (Project Isolation & Organic Reasoning)
 1. **Cô lập Tri thức 100% theo ProjectId**:
@@ -1243,6 +1246,10 @@ Khi AI bắt đầu suy luận, giao diện hiển thị danh sách các hành �
 | **SpecHubTools** | Các MCP tool tra cứu tài liệu đặc tả trong Spec Hub | [`SpecHubTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SpecHubTools.cs#L45-L100) |
 | **ai-decompose-modal.html** | Template giao diện Drawer nội tuyến xem trước tài liệu trích dẫn | [`ai-decompose-modal.html`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.html#L380-L450) |
 | **ai-decompose-modal.ts** | Điều khiển mở/đóng drawer xem tài liệu, deep link sang Spec Hub | [`ai-decompose-modal.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.ts#L450-L520) |
+| **AiSprintCommitCoordinator** | Lưu bền vững `SpecStoryLinks`, `AcceptanceCriteria`, `IssueLabels`, `IssueRequiredSkills`, vai trò việc con & lý do AI | [`AiSprintCommitCoordinator.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintCommitCoordinator.cs) |
+| **WorkItemsController** | Trả về `SpecLinks`, `RequiredSkills`, `DocumentCitations`, `SubtaskRole`, `AiRationale` cho Backlog/Detail UI | [`WorkItemsController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/WorkItemsController.cs) |
+| **task-detail-drawer.ts** | Ngăn kéo chi tiết Backlog/Board đầy đủ thông tin công việc cha & việc con đồng bộ với đề xuất AI | [`task-detail-drawer.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/shared/components/task-detail-drawer/task-detail-drawer.ts) |
+| **spec-citation.util.ts** | Tiện ích tách tên tài liệu & khử trùng lặp liên kết Spec Hub với trích dẫn thô | [`spec-citation.util.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/core/utils/spec-citation.util.ts) |
 | **spec-hub-page.ts** | Đón nhận queryParams (docId, section) để cuộn đến đúng vị trí | [`spec-hub-page.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/spec-hub/spec-hub-page.ts#L35-L65) |
 
 
@@ -1759,6 +1766,16 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
   3. **Bám sát Mạch Hội thoại Đa lượt Thực thụ (`BuildNativeConversationMessages`)**:
      - Cả luồng Q&A và luồng lập/tinh chỉnh đề xuất đều gửi chuỗi `AiMessage` luân phiên thực thụ (`User` $\leftrightarrow$ `Assistant` $\leftrightarrow$ `User`) cùng danh mục **Ràng buộc & Thỏa thuận xuyên suốt phiên**, cửa sổ 8 lượt hội thoại gần nhất và chi tiết công việc đang staging (mô tả, tiêu chí nghiệm thu, trích dẫn). Đồng thời bộ phân loại hiểu đúng câu hỏi nối tiếp/mệnh lệnh không dấu `?` mà vẫn chặn triệt để yêu cầu ngoài luồng và giữ nguyên liên kết `sourceBacklogIssueId` qua các lần chỉnh sửa.
 
+### Câu hỏi 8.7: Khi áp dụng đề xuất từ Trợ Lý AI vào Sprint/Backlog, toàn bộ thông tin chi tiết của công việc cha và việc con được đồng bộ và hiển thị thế nào?
+- **Trả lời**:
+  1. **Ghi nhận Đầy đủ Toàn bộ Trường AI sang CSDL Chính (`AiSprintCommitCoordinator`)**:
+     - Khi người dùng bấm **Áp dụng vào Sprint** hoặc **Đẩy vào Kho Backlog**, `AiSprintCommitCoordinator` tự động lưu toàn bộ dữ liệu đề xuất cho cả công việc cha lẫn từng việc con (`Sub-task`): phân giải người phụ trách không phân biệt dấu/ký tự vai trò (`ResolveAssigneeId`), gắn nhãn dự án + nhãn vai trò việc con (`IssueLabels`), gán kỹ năng yêu cầu (`IssueRequiredSkills`), tạo các mục tiêu chí nghiệm thu (`AcceptanceCriteria`), gắn liên kết tài liệu Spec Hub (`SpecStoryLinks` — việc con tự động thừa hưởng từ cha nếu chưa tách riêng), ghi metadata AI (`AiRationale`, `SubtaskRole`, `DocumentCitations`, `SuggestedSkills`) vào `ActivityLog` JSON từng issue, và giữ nguyên Sprint Goal hiện hữu nếu form gửi lên bỏ trống.
+  2. **Đồng bộ Trực tiếp lên Giao diện Backlog & Ngăn kéo Chi tiết Công việc cha/Việc con**:
+     - API `WorkItemsController` trả về đầy đủ `specLinks`, `requiredSkills`, `documentCitations`, `subtaskRole`, `aiRationale`, cùng chuẩn hóa mức ưu tiên/trạng thái; ngay khi commit xong, [`backlog-page.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/backlog-page.ts) gọi `loadWorkspace` + `loadProjectLabels` để làm mới dữ liệu ngay lập tức.
+     - [`TaskDetailDrawerComponent`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/shared/components/task-detail-drawer/task-detail-drawer.ts) và [`IssueDetailPageComponent`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/issue-detail/issue-detail-page.ts) nâng cấp ngang hàng với Modal AI cho cả **công việc cha** và **việc con**: hiển thị huy hiệu `subtaskRole`, nút quay về việc cha / nhấn mở từng việc con, quản lý thêm/sửa/xóa Tiêu chí nghiệm thu (AC), gán/gỡ Thẻ nhãn, Kỹ năng yêu cầu, liên kết Spec Hub khử trùng lặp, chọn Sprint, sửa Story Points (`min=0`) và thẻ **Lý do AI đề xuất**.
+  3. **Tinh gọn Giao diện Bên ngoài, Giữ Đầy đủ Trong Chi tiết**:
+     - Bảng danh sách đề xuất AI lược bỏ các thẻ trích dẫn xanh trên từng dòng cha/con; tiêu đề Sprint ngoài Backlog lược bỏ mục tiêu Sprint/nhãn trạng thái/bộ đếm việc trùng lặp (do đã có đầy đủ trong modal **Chi tiết Sprint**); toàn bộ không gian ngoài được thu gọn hợp lý để ưu tiên nội dung công việc.
+
 ---
 
 ## 9. Bảng Tổng Hợp Tham Chiếu Mã Nguồn Toàn Bộ Module AI
@@ -1791,4 +1808,8 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
 | **Angular Modal Component** | `AiDecomposeModalComponent` | [`ai-decompose-modal.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.ts) |
 | **Angular Modal Template** | `AiDecomposeModal Template` | [`ai-decompose-modal.html`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.html) |
 | **Dashboard Token Profile** | `ProfilePageComponent` | [`profile-page.html`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/identity/profile-page.html) |
+| **API Issue & AI Metadata** | `WorkItemsController` | [`WorkItemsController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/WorkItemsController.cs) |
+| **Ngăn Kéo Chi Tiết Công Việc** | `TaskDetailDrawerComponent` | [`task-detail-drawer.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/shared/components/task-detail-drawer/task-detail-drawer.ts) |
+| **Trang Chi Tiết Công Việc** | `IssueDetailPageComponent` | [`issue-detail-page.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/issue-detail/issue-detail-page.ts) |
+| **Tiện Ích Trích Dẫn Spec Hub** | `SpecCitationUtil` | [`spec-citation.util.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/core/utils/spec-citation.util.ts) |
 | **Deep Link Spec Hub** | `SpecHubPageComponent` | [`spec-hub-page.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/spec-hub/spec-hub-page.ts) |

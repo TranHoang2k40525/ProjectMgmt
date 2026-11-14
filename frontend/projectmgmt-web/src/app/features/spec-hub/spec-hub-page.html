@@ -1,52 +1,14 @@
 <div class="spec-hub-root flex flex-col h-[calc(100vh-3.5rem)] bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 overflow-hidden font-body">
 
-  <!-- Spec Hub Top Command Bar -->
-  <header class="h-12 px-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0 z-20">
-    <div class="flex items-center gap-2.5 min-w-0">
-      <div class="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-        <span class="material-symbols-outlined text-[18px]">topic</span>
+  <!-- Spec Hub Top Command Bar (slimmed, creation tools live cleanly in Explorer toolbar below) -->
+  <header class="h-10 px-3 sm:px-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0 z-20">
+    <div class="flex items-center gap-2 min-w-0">
+      <div class="w-6 h-6 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
+        <span class="material-symbols-outlined text-[16px]">topic</span>
       </div>
-      <div class="flex items-center gap-2 min-w-0">
-        <h1 class="text-sm font-bold text-slate-900 dark:text-white truncate">Spec Hub - Kho Đặc Tả Kỹ Thuật</h1>
-        <span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-primary/10 text-primary border border-primary/20 shrink-0">Phase 0 Spec-First</span>
-      </div>
-      <span class="text-xs text-slate-400 hidden sm:inline truncate">
-        / Spec_Hub / {{ activeProject() ? activeProject()!.name : 'Project' }}
-      </span>
-    </div>
-
-    <!-- Right Header Actions -->
-    <div class="flex items-center gap-1.5 shrink-0">
-      @if (isManager()) {
-        <button
-          type="button"
-          (click)="openCreateFolderModal(null)"
-          class="h-7 px-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-medium text-slate-700 dark:text-slate-200 flex items-center gap-1 cursor-pointer transition-colors"
-          title="Tạo thư mục mới ở gốc"
-        >
-          <span class="material-symbols-outlined text-[16px]">create_new_folder</span>
-          <span class="hidden md:inline">Thư mục</span>
-        </button>
-
-        <button
-          type="button"
-          (click)="openCreateTextFileModal(null)"
-          class="h-7 px-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-medium text-slate-700 dark:text-slate-200 flex items-center gap-1 cursor-pointer transition-colors"
-          title="Tạo tệp văn bản .txt mới ở gốc"
-        >
-          <span class="material-symbols-outlined text-[16px]">note_add</span>
-          <span class="hidden md:inline">Tệp .txt</span>
-        </button>
-
-        <button
-          type="button"
-          (click)="triggerFileUpload(null)"
-          class="h-7 px-2.5 rounded-lg bg-primary hover:bg-primary-container text-white text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-xs"
-          title="Tải tệp tin lên (.txt, .pdf, .docx, .xlsx, .md)"
-        >
-          <span class="material-symbols-outlined text-[16px]">upload_file</span>
-          <span class="hidden sm:inline">Tải tệp lên</span>
-        </button>
+      <h1 class="text-sm font-bold text-slate-900 dark:text-white truncate">Spec Hub - Kho Đặc Tả Kỹ Thuật</h1>
+      @if (activeProject(); as proj) {
+        <span class="text-xs text-slate-400 hidden sm:inline truncate">/ {{ proj.name }}</span>
       }
     </div>
   </header>

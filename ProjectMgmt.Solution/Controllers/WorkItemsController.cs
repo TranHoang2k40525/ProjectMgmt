@@ -1,4 +1,7 @@
 using System.ComponentModel.DataAnnotations;
+using System.Globalization;
+using System.Text;
+using System.Text.Json;
 using DeliveryIntelligence.Application.Dto;
 using DeliveryIntelligence.Application.IServices;
 using DeliveryIntelligence.Application.Services;
@@ -57,7 +60,8 @@ public sealed class WorkItemsController(
     IUserLookupService userLookup,
     IssueHistoryRecorder historyRecorder,
     IPermissionEvaluator permissionEvaluator,
-    ProjectAccess access) : ApiControllerBase
+    ProjectAccess access,
+    ISkillCatalogReader? skillCatalog = null) : ApiControllerBase
 {
     private ObjectResult Denied() => StatusCode(403, new { message = "Bạn không có quyền thực hiện thao tác này.", code = "PROJECT_PERMISSION_DENIED" });
     private BadRequestObjectResult Invalid(string message) => BadRequest(new { message });
@@ -149,11 +153,16 @@ public sealed class WorkItemsController(
         if (!string.IsNullOrWhiteSpace(request.AssigneeName))
         {
             var allUsers = await userLookup.GetAllActiveDisplayInfoAsync();
+            var userById = allUsers.ToDictionary(u => u.UserId);
             if (!assignee.HasValue || !allUsers.Any(p => p.UserId == assignee && p.DisplayName == request.AssigneeName))
             {
-                var matches = allUsers.Where(p => p.DisplayName.Equals(request.AssigneeName, StringComparison.OrdinalIgnoreCase)).Select(p => p.UserId).Take(2).ToList();
-                if (matches.Count != 1) return Invalid("Chọn người xử lý bằng tài khoản thành viên hợp lệ.");
-                assignee = matches[0];
+                var resolved = Services.Ai.AiSprintCommitCoordinator.ResolveAssigneeId(
+                    assignee,
+                    request.AssigneeName,
+                    userById,
+                    allUsers);
+                if (!resolved.HasValue) return Invalid("Chọn người xử lý bằng tài khoản thành viên hợp lệ.");
+                assignee = resolved.Value;
             }
         }
         else assignee = null;
@@ -502,34 +511,190 @@ public sealed class WorkItemsController(
         var attachments = await delivery.Attachments.AsNoTracking().Where(a => ids.Contains(a.IssueId)).ToListAsync();
         var criteria = await delivery.AcceptanceCriteria.AsNoTracking().Where(c => ids.Contains(c.IssueId)).OrderBy(c => c.OrderIndex).ToListAsync();
         var labels = await (from link in delivery.IssueLabels join label in delivery.Labels on link.LabelId equals label.Id where ids.Contains(link.IssueId) select new { link.IssueId, label.Name }).ToListAsync();
+        var specLinks = await (
+            from link in planning.SpecStoryLinks.AsNoTracking()
+            join doc in planning.ProjectDocuments.AsNoTracking() on link.DocumentId equals doc.Id
+            where ids.Contains(link.IssueId)
+            select new
+            {
+                link.IssueId,
+                link.DocumentId,
+                DocumentTitle = !string.IsNullOrWhiteSpace(doc.Title) ? doc.Title : doc.Name,
+                FileName = doc.Name,
+                link.Excerpt
+            }).ToListAsync();
+        var issueSkillLinks = await delivery.IssueRequiredSkills.AsNoTracking()
+            .Where(rs => ids.Contains(rs.IssueId))
+            .ToListAsync();
+        var skillNamesById = skillCatalog is not null
+            ? (await skillCatalog.GetSkillsAsync()).ToDictionary(s => s.Id, s => s.Name)
+            : new Dictionary<Guid, string>();
+        var aiMetaByIssue = ParseAiIssueMetadataByIssue(activities);
         var epicIds = issues.Where(i => i.EpicId.HasValue).Select(i => i.EpicId!.Value).Distinct().ToList();
         var epics = await delivery.Issues.AsNoTracking().Where(i => epicIds.Contains(i.Id)).ToDictionaryAsync(i => i.Id);
         string Name(Guid? userId) => userId.HasValue && profiles.TryGetValue(userId.Value, out var p) ? p.DisplayName : "";
         string? Avatar(Guid? userId) => userId.HasValue && profiles.TryGetValue(userId.Value, out var p) ? p.AvatarUrl : null;
-        return issues.Select(i => new WorkItemView {
-            Id = i.Id, ProjectId = i.ProjectId, IssueKey = $"{projects[i.ProjectId].ProjectKey}-{i.IssueNumber}", Title = i.Title, Description = i.Description,
-            StatusId = i.StatusId, StatusName = statuses.TryGetValue(i.StatusId, out var st) ? st.Name : "",
-            StatusColor = statuses.TryGetValue(i.StatusId, out var sc) ? sc.ColorHex : "#3B82F6",
-            IsDone = statuses.TryGetValue(i.StatusId, out var sd) && (sd.IsDone || string.Equals(sd.Category, "Done", StringComparison.OrdinalIgnoreCase)),
-            IssueTypeId = i.IssueTypeId,
-            IssueType = types.TryGetValue(i.IssueTypeId, out var it) ? (it.IsSubtask ? "Sub-task" : it.Name) : "Task",
-            IssueTypeIcon = types.TryGetValue(i.IssueTypeId, out var iti)
-                ? (!string.IsNullOrWhiteSpace(iti.IconKey) && iti.IconKey != "task" ? iti.IconKey : DefaultIconForIssueType(iti.Name, iti.IsSubtask))
-                : "task_alt",
-            IssueTypeColor = types.TryGetValue(i.IssueTypeId, out var itc) ? itc.ColorHex : "#6366F1",
-            Priority = i.PriorityId.HasValue && priorities.TryGetValue(i.PriorityId.Value, out var p) ? (p.Name == "Highest" ? "Urgent" : p.Name) : "Medium",
-            StoryPoints = i.StoryPoints ?? 0,
-            EstimatedHours = i.EstimatedHours, RemainingHours = i.RemainingHours,
-            IsBlocked = i.IsBlocked, BlockReason = i.BlockReason, BlockedAt = i.BlockedAt,
-            ParentId = i.ParentId, AssigneeId = i.AssigneeId, AssigneeName = Name(i.AssigneeId), AssigneeAvatar = Avatar(i.AssigneeId), ReporterName = Name(i.ReporterId),
-            SprintId = i.SprintId, SprintName = i.SprintId.HasValue && sprints.TryGetValue(i.SprintId.Value, out var sp) ? sp.Name : "",
-            EpicId = i.EpicId, EpicName = i.EpicId.HasValue && epics.TryGetValue(i.EpicId.Value, out var e) ? e.Title : "", EpicColor = "indigo", CreatedAt = i.CreatedAt, UpdatedAt = i.UpdatedAt,
-            Labels = labels.Where(l => l.IssueId == i.Id).Select(l => l.Name).ToList(),
-            Comments = comments.Where(c => c.IssueId == i.Id).Select(c => new { c.Id, authorName = Name(c.UserId), authorAvatar = Avatar(c.UserId), c.Content, c.CreatedAt }).ToList(),
-            Activities = activities.Where(a => a.IssueId == i.Id).Select(a => new { a.Id, actorName = Name(a.UserId), actorAvatar = Avatar(a.UserId), action = a.Action + (a.NewValue is null ? "" : ": " + a.NewValue), timestamp = a.CreatedAt }).ToList(),
-            Attachments = attachments.Where(a => a.IssueId == i.Id).Select(a => new { a.Id, a.FileName, a.FileSizeBytes, a.CreatedAt }).ToList(),
-            Criteria = criteria.Where(c => c.IssueId == i.Id).Select(c => new { c.Id, c.Content, c.IsMet }).ToList()
+        return issues.Select(i =>
+        {
+            var aiMeta = aiMetaByIssue.GetValueOrDefault(i.Id);
+            var issueSpecLinks = specLinks.Where(l => l.IssueId == i.Id).ToList();
+            var mergedCitations = new List<string>();
+            var seenCitations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var cite in aiMeta?.DocumentCitations ?? [])
+            {
+                if (seenCitations.Add(cite)) mergedCitations.Add(cite);
+            }
+            foreach (var specLink in issueSpecLinks)
+            {
+                var labelText = !string.IsNullOrWhiteSpace(specLink.Excerpt)
+                    ? specLink.Excerpt!
+                    : specLink.DocumentTitle;
+                if (!string.IsNullOrWhiteSpace(labelText) && seenCitations.Add(labelText))
+                {
+                    mergedCitations.Add(labelText);
+                }
+            }
+
+            var mergedSkills = new List<string>();
+            var seenSkills = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var link in issueSkillLinks.Where(rs => rs.IssueId == i.Id))
+            {
+                if (skillNamesById.TryGetValue(link.SkillId, out var skillName) && seenSkills.Add(skillName))
+                {
+                    mergedSkills.Add(skillName);
+                }
+            }
+            foreach (var suggested in aiMeta?.SuggestedSkills ?? [])
+            {
+                if (seenSkills.Add(suggested)) mergedSkills.Add(suggested);
+            }
+
+            var isSubtask = types.TryGetValue(i.IssueTypeId, out var typeEntity) && typeEntity.IsSubtask;
+            var subtaskRole = aiMeta?.SubtaskRole;
+            if (string.IsNullOrWhiteSpace(subtaskRole) && isSubtask && !string.IsNullOrWhiteSpace(i.Title) && i.Title.StartsWith('['))
+            {
+                var closeIdx = i.Title.IndexOf(']');
+                if (closeIdx > 1 && closeIdx < 32)
+                {
+                    subtaskRole = i.Title[1..closeIdx].Trim();
+                }
+            }
+
+            return new WorkItemView
+            {
+                Id = i.Id, ProjectId = i.ProjectId, IssueKey = $"{projects[i.ProjectId].ProjectKey}-{i.IssueNumber}", Title = i.Title, Description = i.Description,
+                StatusId = i.StatusId, StatusName = statuses.TryGetValue(i.StatusId, out var st) ? st.Name : "",
+                StatusColor = statuses.TryGetValue(i.StatusId, out var sc) ? sc.ColorHex : "#3B82F6",
+                IsDone = statuses.TryGetValue(i.StatusId, out var sd) && (sd.IsDone || string.Equals(sd.Category, "Done", StringComparison.OrdinalIgnoreCase)),
+                IssueTypeId = i.IssueTypeId,
+                IssueType = types.TryGetValue(i.IssueTypeId, out var it) ? (it.IsSubtask ? "Sub-task" : it.Name) : "Task",
+                IssueTypeIcon = types.TryGetValue(i.IssueTypeId, out var iti)
+                    ? (!string.IsNullOrWhiteSpace(iti.IconKey) && iti.IconKey != "task" ? iti.IconKey : DefaultIconForIssueType(iti.Name, iti.IsSubtask))
+                    : "task_alt",
+                IssueTypeColor = types.TryGetValue(i.IssueTypeId, out var itc) ? itc.ColorHex : "#6366F1",
+                Priority = i.PriorityId.HasValue && priorities.TryGetValue(i.PriorityId.Value, out var p) ? (p.Name == "Highest" ? "Urgent" : p.Name) : "Medium",
+                StoryPoints = i.StoryPoints ?? 0,
+                EstimatedHours = i.EstimatedHours, RemainingHours = i.RemainingHours,
+                IsBlocked = i.IsBlocked, BlockReason = i.BlockReason, BlockedAt = i.BlockedAt,
+                ParentId = i.ParentId, AssigneeId = i.AssigneeId, AssigneeName = Name(i.AssigneeId), AssigneeAvatar = Avatar(i.AssigneeId), ReporterName = Name(i.ReporterId),
+                SprintId = i.SprintId, SprintName = i.SprintId.HasValue && sprints.TryGetValue(i.SprintId.Value, out var sp) ? sp.Name : "",
+                EpicId = i.EpicId, EpicName = i.EpicId.HasValue && epics.TryGetValue(i.EpicId.Value, out var e) ? e.Title : "", EpicColor = "indigo", CreatedAt = i.CreatedAt, UpdatedAt = i.UpdatedAt,
+                Labels = labels.Where(l => l.IssueId == i.Id).Select(l => l.Name).ToList(),
+                Comments = comments.Where(c => c.IssueId == i.Id).Select(c => new { c.Id, authorName = Name(c.UserId), authorAvatar = Avatar(c.UserId), c.Content, c.CreatedAt }).ToList(),
+                Activities = activities.Where(a => a.IssueId == i.Id).Select(a => new { a.Id, actorName = Name(a.UserId), actorAvatar = Avatar(a.UserId), action = a.Action + (a.NewValue is null ? "" : ": " + a.NewValue), timestamp = a.CreatedAt }).ToList(),
+                Attachments = attachments.Where(a => a.IssueId == i.Id).Select(a => new { a.Id, a.FileName, a.FileSizeBytes, a.CreatedAt }).ToList(),
+                Criteria = criteria.Where(c => c.IssueId == i.Id).Select(c => new { c.Id, c.Content, c.IsMet }).ToList(),
+                AiRationale = aiMeta?.AiRationale,
+                SubtaskRole = subtaskRole,
+                DocumentCitations = mergedCitations,
+                SpecLinks = issueSpecLinks.Select(l => new { documentId = l.DocumentId, documentTitle = l.DocumentTitle, fileName = l.FileName, excerpt = l.Excerpt }).ToList(),
+                RequiredSkills = mergedSkills
+            };
         }).ToList();
+    }
+
+    private sealed class ParsedAiIssueMetadata
+    {
+        public string? AiRationale { get; set; }
+        public string? SubtaskRole { get; set; }
+        public List<string> DocumentCitations { get; } = [];
+        public List<string> SuggestedSkills { get; } = [];
+    }
+
+    private static Dictionary<Guid, ParsedAiIssueMetadata> ParseAiIssueMetadataByIssue(List<ActivityLog> activities)
+    {
+        var result = new Dictionary<Guid, ParsedAiIssueMetadata>();
+        foreach (var log in activities)
+        {
+            if (!string.Equals(log.Source, "AI", StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(log.Detail) ||
+                !log.Detail.TrimStart().StartsWith('{'))
+            {
+                continue;
+            }
+
+            try
+            {
+                using var doc = JsonDocument.Parse(log.Detail);
+                var root = doc.RootElement;
+                if (!result.TryGetValue(log.IssueId, out var meta))
+                {
+                    meta = new ParsedAiIssueMetadata();
+                    result[log.IssueId] = meta;
+                }
+
+                if (string.IsNullOrWhiteSpace(meta.AiRationale) &&
+                    root.TryGetProperty("aiRationale", out var rationaleEl) &&
+                    rationaleEl.ValueKind == JsonValueKind.String)
+                {
+                    meta.AiRationale = rationaleEl.GetString();
+                }
+
+                if (string.IsNullOrWhiteSpace(meta.SubtaskRole) &&
+                    root.TryGetProperty("subtaskRole", out var roleEl) &&
+                    roleEl.ValueKind == JsonValueKind.String)
+                {
+                    meta.SubtaskRole = roleEl.GetString();
+                }
+
+                if (root.TryGetProperty("documentCitations", out var citeEl) &&
+                    citeEl.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in citeEl.EnumerateArray())
+                    {
+                        if (item.ValueKind == JsonValueKind.String)
+                        {
+                            var val = item.GetString()?.Trim();
+                            if (!string.IsNullOrWhiteSpace(val) && !meta.DocumentCitations.Contains(val, StringComparer.OrdinalIgnoreCase))
+                            {
+                                meta.DocumentCitations.Add(val);
+                            }
+                        }
+                    }
+                }
+
+                if (root.TryGetProperty("suggestedSkills", out var skillEl) &&
+                    skillEl.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in skillEl.EnumerateArray())
+                    {
+                        if (item.ValueKind == JsonValueKind.String)
+                        {
+                            var val = item.GetString()?.Trim();
+                            if (!string.IsNullOrWhiteSpace(val) && !meta.SuggestedSkills.Contains(val, StringComparer.OrdinalIgnoreCase))
+                            {
+                                meta.SuggestedSkills.Add(val);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+                // Skip non-metadata ActivityLog JSON payloads safely
+            }
+        }
+        return result;
     }
 
     private static string DefaultIconForIssueType(string? name, bool isSubtask = false)
@@ -561,4 +726,8 @@ public sealed class WorkItemView
     public DateTime CreatedAt { get; set; } public DateTime? UpdatedAt { get; set; }
     public List<string> Labels { get; set; } = []; public object Comments { get; set; } = Array.Empty<object>(); public object Activities { get; set; } = Array.Empty<object>();
     public object Attachments { get; set; } = Array.Empty<object>(); public object Criteria { get; set; } = Array.Empty<object>();
+    public string? AiRationale { get; set; } public string? SubtaskRole { get; set; }
+    public List<string> DocumentCitations { get; set; } = [];
+    public object SpecLinks { get; set; } = Array.Empty<object>();
+    public List<string> RequiredSkills { get; set; } = [];
 }

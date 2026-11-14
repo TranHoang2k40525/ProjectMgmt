@@ -56,10 +56,10 @@ export interface RoadmapGroupProgress {
     @if (!projectService.hasActiveProject()) {
       <app-no-project-state featureName="Lộ Trình Dự Án (Roadmap)"></app-no-project-state>
     } @else {
-      <div class="roadmap-page flex flex-col gap-5 animate-fade-in font-body text-slate-900 dark:text-slate-100">
+      <div class="roadmap-page flex flex-col gap-3.5 animate-fade-in font-body text-slate-900 dark:text-slate-100">
 
         <!-- Top Header & Actions -->
-        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-3 border-b border-slate-200 dark:border-slate-800">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 pb-2 border-b border-slate-200 dark:border-slate-800">
           <div class="flex flex-col gap-1">
             <div class="flex items-center gap-2.5 flex-wrap">
               <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">

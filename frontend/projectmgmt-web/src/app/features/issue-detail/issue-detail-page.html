@@ -24,6 +24,12 @@
       <div class="title-block">
         <p class="meta"><span class="type">{{ task.issueType }}</span><strong>{{ task.issueKey }}</strong>
           <span class="status" [attr.data-category]="statusCategory()">{{ task.statusName }}</span>
+          @if (task.subtaskRole) {
+            <span class="type">{{ task.subtaskRole }}</span>
+          }
+          @if (task.parentId) {
+            <a [routerLink]="['/issues', task.parentId]" class="muted">← Việc cha</a>
+          }
           @if (task.isBlocked) {
             <span class="status" style="background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5;">BỊ CHẶN</span>
           }
@@ -64,6 +70,31 @@
             @if (task.description) { <p class="preserve">{{ task.description }}</p> }
             @else { <p class="muted">Chưa có mô tả.@if (perms().canUpdate) { Bấm "Sửa" để thêm. }</p> }
           </section>
+          @if ((task.specLinks && task.specLinks.length > 0) || (task.documentCitations && task.documentCitations.length > 0)) {
+            <section class="card">
+              <h2>Tài liệu căn cứ &amp; Trích dẫn đặc tả</h2>
+              <div style="display:flex; flex-wrap:wrap; gap:0.5rem;">
+                @for (link of task.specLinks || []; track link.documentId) {
+                  <a [routerLink]="['/spec-hub']" [queryParams]="{ docId: link.documentId, docName: link.documentTitle || link.fileName }"
+                     style="display:inline-flex; align-items:center; gap:0.35rem; padding:0.25rem 0.6rem; border-radius:6px; background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; font-size:0.8rem;">
+                    <span>{{ link.excerpt || link.documentTitle || link.fileName }}</span>
+                  </a>
+                }
+                @for (cite of unlinkedCitations(); track $index) {
+                  <a [routerLink]="['/spec-hub']" [queryParams]="{ docName: extractCiteDocName(cite) }"
+                     style="display:inline-flex; align-items:center; gap:0.35rem; padding:0.25rem 0.6rem; border-radius:6px; background:#f8fafc; color:#334155; border:1px solid #cbd5e1; font-size:0.8rem;">
+                    <span>{{ cite }}</span>
+                  </a>
+                }
+              </div>
+            </section>
+          }
+          @if (task.aiRationale) {
+            <section class="card">
+              <h2>Lập luận phân tích AI</h2>
+              <p class="preserve">{{ task.aiRationale }}</p>
+            </section>
+          }
           <section class="card"><app-issue-criteria [issueId]="task.id" [canWrite]="perms().canUpdate" (changed)="refreshHistory()" /></section>
           <section class="card">
             <h2>Công việc con <span class="muted">({{ subtasks().length }})</span></h2>

@@ -96,7 +96,7 @@ sequenceDiagram
     participant Drawer as Ngăn kéo Xem trước Tài liệu
     participant Hub as Trang Quản trị Tài liệu Đặc tả
 
-    User->>UI: Nhấp vào nguồn trích dẫn tài liệu kỹ thuật
+    User->>UI: Nhấp vào nguồn trích dẫn bên trong ngăn kéo chi tiết công việc
     UI->>Drawer: Mở ngăn kéo nội tuyến từ cạnh phải màn hình
     Drawer->>Drawer: Tìm kiếm chính xác tệp tin và dòng đề mục được trích dẫn
     Drawer->>Drawer: Tự động cuộn mượt và đánh dấu nổi bật phân đoạn trích dẫn
@@ -143,10 +143,11 @@ Khi AI bắt đầu suy luận, giao diện hiển thị danh sách các hành �
 1. Tải lên hoặc tạo một tệp tài liệu đặc tả trong Spec Hub (ví dụ: `Cam-nang-ky-thuat.md` chứa đề mục `Phần II: Xử lý ngữ cảnh AI Engine`).
 2. Gõ yêu cầu phân rã Sprint hoặc phân tích kế hoạch.
 3. Quan sát kết quả đề xuất:
-   - Các task sinh ra có nhãn tài liệu trích dẫn đúng định dạng `Tài liệu Spec Hub: Cam-nang-ky-thuat.md - Phần II`.
+   - Danh sách đề xuất bên ngoài giữ giao diện gọn sạch (lược bỏ thẻ trích dẫn xanh trùng lặp trên dòng cha và việc con); khi bấm vào công việc cha hoặc việc con, ngăn kéo chi tiết hiển thị đầy đủ mục **Tài liệu căn cứ & Trích dẫn đặc tả** (việc con tự động thừa hưởng trích dẫn từ cha nếu chưa tách riêng).
    - Nhấp vào nhãn trích dẫn: Drawer nội tuyến mở ra, hiển thị tiêu đề, vị trí trích dẫn và nội dung đặc tả.
    - Nhấp vào nút "Mở trang Spec Hub": Trình duyệt mở tab Spec Hub với đầy đủ tham số `?docId=...&docName=...&section=...`. Hệ thống tự động mở tab tài liệu, cuộn mượt đến đề mục `Phần II` và kích hoạt hiệu ứng viền vàng nổi bật.
    - Nhấp "Quay lại đoạn chat": Hệ thống quay trở lại giao diện phân rã Sprint nguyên vẹn.
+   - Khi nhấn **Áp dụng vào Sprint** hoặc **Đẩy vào Kho Backlog**, `AiSprintCommitCoordinator` tự động gắn liên kết `SpecStoryLinks`, `AcceptanceCriteria`, `IssueRequiredSkills`, `IssueLabels`, vai trò việc con và lý do AI vào CSDL để ngăn kéo chi tiết trên **Backlog / Board** và trang chi tiết issue hiển thị đồng bộ y hệt (khử trùng lặp liên kết Spec và trích dẫn thô qua `spec-citation.util.ts`).
 
 ### 5.3. Cô lập Tri thức Phạm vi Dự án & Cơ chế Tự suy luận Phi khuôn mẫu (Project Isolation & Organic Reasoning)
 1. **Cô lập Tri thức 100% theo ProjectId**:
@@ -168,5 +169,9 @@ Khi AI bắt đầu suy luận, giao diện hiển thị danh sách các hành �
 | **SpecHubTools** | Các MCP tool tra cứu tài liệu đặc tả trong Spec Hub | [`SpecHubTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SpecHubTools.cs#L45-L100) |
 | **ai-decompose-modal.html** | Template giao diện Drawer nội tuyến xem trước tài liệu trích dẫn | [`ai-decompose-modal.html`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.html#L380-L450) |
 | **ai-decompose-modal.ts** | Điều khiển mở/đóng drawer xem tài liệu, deep link sang Spec Hub | [`ai-decompose-modal.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.ts#L450-L520) |
+| **AiSprintCommitCoordinator** | Lưu bền vững `SpecStoryLinks`, `AcceptanceCriteria`, `IssueLabels`, `IssueRequiredSkills`, vai trò việc con & lý do AI | [`AiSprintCommitCoordinator.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintCommitCoordinator.cs) |
+| **WorkItemsController** | Trả về `SpecLinks`, `RequiredSkills`, `DocumentCitations`, `SubtaskRole`, `AiRationale` cho Backlog/Detail UI | [`WorkItemsController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/WorkItemsController.cs) |
+| **task-detail-drawer.ts** | Ngăn kéo chi tiết Backlog/Board đầy đủ thông tin công việc cha & việc con đồng bộ với đề xuất AI | [`task-detail-drawer.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/shared/components/task-detail-drawer/task-detail-drawer.ts) |
+| **spec-citation.util.ts** | Tiện ích tách tên tài liệu & khử trùng lặp liên kết Spec Hub với trích dẫn thô | [`spec-citation.util.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/core/utils/spec-citation.util.ts) |
 | **spec-hub-page.ts** | Đón nhận queryParams (docId, section) để cuộn đến đúng vị trí | [`spec-hub-page.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/spec-hub/spec-hub-page.ts#L35-L65) |
 

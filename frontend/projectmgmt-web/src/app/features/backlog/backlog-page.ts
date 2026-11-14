@@ -102,7 +102,8 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   onAiDataChanged(): void {
     const proj = this.projectService.currentProject();
     if (proj?.id) {
-      this.projectService.selectProject(proj);
+      this.projectService.loadWorkspace(proj.id);
+      this.projectService.loadProjectLabels(proj.id);
     }
   }
 

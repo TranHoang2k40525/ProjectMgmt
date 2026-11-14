@@ -14,10 +14,10 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
     @if (!projectService.hasActiveProject()) {
       <app-no-project-state featureName="Danh Sách Công Việc"></app-no-project-state>
     } @else {
-    <div class="task-list-page flex flex-col gap-4 md:gap-5 animate-fade-in font-body text-slate-900 dark:text-slate-100">
+    <div class="task-list-page flex flex-col gap-3 md:gap-3.5 animate-fade-in font-body text-slate-900 dark:text-slate-100">
       
       <!-- Top Action Bar (Cố định phía trên khi cuộn bảng nội bộ) -->
-      <div class="task-list-header shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200 dark:border-slate-800">
+      <div class="task-list-header shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2 border-b border-slate-200 dark:border-slate-800">
         <div class="flex flex-col">
           <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <span class="material-symbols-outlined text-[24px] text-primary">table_rows</span>
@@ -35,7 +35,7 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
       </div>
 
       <!-- Main Layout: Left Group Filter + Right Work Items Table -->
-      <div class="task-list-layout flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-4 gap-5">
+      <div class="task-list-layout flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-4 gap-3.5">
         
         <!-- Left Filter Panel -->
         <div class="task-list-filters min-h-0 p-3.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-col gap-3 select-none">

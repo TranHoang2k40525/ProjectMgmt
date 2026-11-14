@@ -14,10 +14,10 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
     @if (!projectService.hasActiveProject()) {
       <app-no-project-state featureName="Tổng quan Dự án"></app-no-project-state>
     } @else {
-    <div class="project-summary-page flex flex-col gap-6 animate-fade-in">
+    <div class="project-summary-page flex flex-col gap-4 animate-fade-in">
       
       <!-- Top Banner Header -->
-      <div class="summary-hero flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-2xl bg-[#0f172a] text-white border border-slate-800 shadow-lg relative overflow-hidden">
+      <div class="summary-hero flex flex-col md:flex-row md:items-center justify-between gap-3 p-4 sm:p-5 rounded-2xl bg-[#0f172a] text-white border border-slate-800 shadow-lg relative overflow-hidden">
         <div class="summary-hero-copy flex items-center gap-4 z-10">
           <div class="w-14 h-14 rounded-2xl bg-white/10 ring-1 ring-white/20 shrink-0 flex items-center justify-center text-xl font-bold font-mono text-white shadow-inner">
             {{ currentProject().projectKey ? currentProject().projectKey.slice(0, 2) : 'PJ' }}
@@ -47,10 +47,10 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
       </div>
 
       <!-- Bento Grid Layout Container with 3D Tilt Feedback -->
-      <div class="summary-kpi-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="summary-kpi-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         
         <!-- KPI Tile 1: Done -->
-        <div appCardTilt class="animate-ui-card p-5 flex flex-col justify-between cursor-default">
+        <div appCardTilt class="animate-ui-card p-4 flex flex-col justify-between cursor-default">
           <div class="flex items-center justify-between text-emerald-600 dark:text-emerald-400">
             <span class="text-xs font-bold uppercase tracking-wider">Đã hoàn thành</span>
             <div class="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 flex items-center justify-center border border-emerald-200/60 dark:border-emerald-800/40">
@@ -64,7 +64,7 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
         </div>
 
         <!-- KPI Tile 2: In Progress -->
-        <div appCardTilt class="animate-ui-card p-5 flex flex-col justify-between cursor-default">
+        <div appCardTilt class="animate-ui-card p-4 flex flex-col justify-between cursor-default">
           <div class="flex items-center justify-between text-blue-600 dark:text-blue-400">
             <span class="text-xs font-bold uppercase tracking-wider">Đang thực hiện</span>
             <div class="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/60 flex items-center justify-center border border-blue-200/60 dark:border-blue-800/40">
@@ -78,7 +78,7 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
         </div>
 
         <!-- KPI Tile 3: Active Sprint -->
-        <div appCardTilt class="animate-ui-card p-5 flex flex-col justify-between cursor-default">
+        <div appCardTilt class="animate-ui-card p-4 flex flex-col justify-between cursor-default">
           <div class="flex items-center justify-between text-slate-700 dark:text-slate-300">
             <span class="text-xs font-bold uppercase tracking-wider">Sprint Hiện Tại</span>
             <div class="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-200 dark:border-slate-700">
@@ -97,7 +97,7 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
         </div>
 
         <!-- KPI Tile 4: Scope Progress -->
-        <div appCardTilt class="animate-ui-card p-5 flex flex-col justify-between cursor-default">
+        <div appCardTilt class="animate-ui-card p-4 flex flex-col justify-between cursor-default">
           <div class="flex items-center justify-between text-teal-600 dark:text-teal-400">
             <span class="text-xs font-bold uppercase tracking-wider">Tiến Độ Dự Án</span>
             <div class="w-9 h-9 rounded-xl bg-teal-50 dark:bg-teal-950/60 flex items-center justify-center border border-teal-200/60 dark:border-teal-800/40">
@@ -115,10 +115,10 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
       </div>
 
       <!-- Bento Big Tiles: Status Donut Breakdown & Activity Stream -->
-      <div class="summary-main-grid grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="summary-main-grid grid grid-cols-1 lg:grid-cols-3 gap-4">
         
         <!-- Tile Left: Status Overview Donut Visual -->
-        <div class="lg:col-span-2 animate-ui-card p-6 flex flex-col gap-6">
+        <div class="lg:col-span-2 animate-ui-card p-4 sm:p-5 flex flex-col gap-4">
           <div class="summary-status-header flex items-center justify-between">
             <div class="flex flex-col">
               <h3 class="text-base font-bold text-slate-900 dark:text-white">Tổng Quan Trạng Thái Công Việc</h3>
@@ -130,7 +130,7 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
             </a>
           </div>
 
-          <div class="flex flex-col md:flex-row items-center justify-around gap-8 py-4">
+          <div class="flex flex-col md:flex-row items-center justify-around gap-6 py-2">
             <!-- Dynamic Donut Ring Chart -->
             <div class="relative w-44 h-44 flex items-center justify-center">
               <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">

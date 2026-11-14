@@ -16,10 +16,10 @@
 @if (!projectService.hasActiveProject()) {
   <app-no-project-state featureName="Bảng công việc"></app-no-project-state>
 } @else {
-<div class="board-page p-6 max-w-[1650px] mx-auto font-body text-slate-900 dark:text-slate-100 space-y-5">
+<div class="board-page max-w-[1650px] mx-auto font-body text-slate-900 dark:text-slate-100 space-y-3">
 
   <!-- Clean Header & Page Context -->
-  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-200 dark:border-slate-800">
     <div class="flex items-center gap-2.5 flex-wrap">
       <h1 class="text-xl font-headline font-semibold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
         <span class="material-symbols-outlined text-primary text-[22px]">view_kanban</span>

@@ -97,10 +97,7 @@
                 <div class="sprint-edit-row" (click)="$event.stopPropagation()"><input type="text" [(ngModel)]="editingSprintName" aria-label="Tên Sprint" /><input type="text" [(ngModel)]="editingSprintGoal" placeholder="Mục tiêu Sprint..." aria-label="Mục tiêu Sprint" /><input type="date" [(ngModel)]="editingStartDate" aria-label="Ngày bắt đầu" /><input type="date" [(ngModel)]="editingEndDate" aria-label="Ngày kết thúc" /><button type="button" class="button button-primary" (click)="saveEditingSprint(sprint.id)">Lưu</button><button type="button" class="button button-secondary" (click)="editingSprintId.set(null)">Hủy</button></div>
               } @else {
                 <div class="sprint-title cursor-pointer select-none" (click)="openSprintDetail(sprint, $event)" title="Nhấp để xem chi tiết Sprint"><strong>{{ sprint.name }}</strong><span>{{ sprint.startDate || 'Chưa có ngày' }} – {{ sprint.endDate || 'Chưa có ngày' }}</span><span class="material-symbols-outlined" aria-hidden="true">edit</span></div>
-                <span class="sprint-goal text-xs text-slate-500" data-testid="sprint-goal">{{ sprint.goal || 'Mục tiêu: Hoàn thành hạng mục cam kết' }}</span>
               }
-              <span class="sprint-state" [class.state-active]="sprint.status === 'active'" [class.state-completed]="sprint.status === 'completed'" [class.state-future]="sprint.status === 'future'">{{ sprint.status === 'active' ? 'Đang chạy' : (sprint.status === 'completed' ? 'Hoàn thành' : 'Kế hoạch') }}</span>
-              <span class="muted-count">{{ sprintTasks.length }} việc</span>
             </div>
             <div class="sprint-actions" (click)="$event.stopPropagation()">
               <div class="avatar-stack" [title]="sprintAssignees.join(', ')" aria-label="Thành viên Sprint">

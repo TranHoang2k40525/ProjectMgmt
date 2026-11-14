@@ -7,6 +7,7 @@ import { Observable } from 'rxjs';
 import { ISSUE_PRIORITIES, IssueCoreDto, IssuePermissionsDto, NO_ISSUE_PERMISSIONS } from '../../core/api/issue-api.models';
 import { IssueApi } from '../../core/api/issue.api';
 import { apiErrorMessage } from '../../core/http/api-error-message';
+import { extractCiteDocName, filterUnlinkedCitations } from '../../core/utils/spec-citation.util';
 import { ConfirmDialogService } from '../../core/services/confirm-dialog.service';
 import { ProjectManagementService, WorkItem } from '../../core/services/project-management.service';
 import { IssueFormComponent } from '../../shared/components/issue-form/issue-form';
@@ -65,11 +66,22 @@ export class IssueDetailPage implements OnInit {
   private readonly pendingKey = signal<string | null>(null);
 
   readonly subtasks = computed(() => this.service.workItems().filter(child => child.parentId === this.item()?.id));
-  readonly priorityName = computed(() => ISSUE_PRIORITIES.find(p => p.id === this.core()?.priorityId)?.name ?? this.item()?.priority ?? '—');
+  readonly priorityName = computed(() => {
+    const raw = ISSUE_PRIORITIES.find(p => p.id === this.core()?.priorityId)?.name ?? this.item()?.priority ?? '—';
+    return raw === 'Highest' ? 'Urgent' : raw;
+  });
   readonly estimateHours = computed(() => {
     const minutes = this.core()?.originalEstimateMinutes;
     return minutes == null ? null : Math.round(minutes / 6) / 10;
   });
+  readonly unlinkedCitations = computed(() => {
+    const t = this.item();
+    return filterUnlinkedCitations(t?.documentCitations, t?.specLinks);
+  });
+
+  extractCiteDocName(cite: string): string {
+    return extractCiteDocName(cite);
+  }
   subtaskTitle = '';
   readonly showBlockInput = signal(false);
   blockReasonText = '';

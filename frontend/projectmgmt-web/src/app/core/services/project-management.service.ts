@@ -441,6 +441,11 @@ export interface WorkItem {
   activities?: TaskActivity[];
   attachments?: { id: string; fileName: string; fileSizeBytes: number }[];
   criteria?: { id: string; content: string; isMet: boolean }[];
+  aiRationale?: string | null;
+  subtaskRole?: string | null;
+  documentCitations?: string[];
+  specLinks?: { documentId: string; documentTitle: string; fileName?: string; excerpt?: string | null }[];
+  requiredSkills?: string[];
 }
 
 @Injectable({ providedIn: 'root' })
@@ -834,6 +839,18 @@ export class ProjectManagementService {
   deleteAttachment(id: string): Observable<void> { return this.http.delete<void>(`${this.baseUrl}/attachments/${id}`); }
   addCriterion(id: string, content: string): Observable<unknown> { return this.http.post(`${this.baseUrl}/issues/${id}/criteria`, { content }); }
   updateCriterion(id: string, content: string, isMet: boolean): Observable<unknown> { return this.http.put(`${this.baseUrl}/criteria/${id}`, { content, isMet }); }
+  deleteCriterion(id: string): Observable<void> { return this.http.delete<void>(`${this.baseUrl}/acceptance-criteria/${id}`); }
+  refreshWorkItem(id: string): Observable<WorkItem> {
+    return this.getIssue(id).pipe(
+      tap(updated => {
+        if (!updated) return;
+        this.workItems.update(items => items.map(i => String(i.id).toLowerCase() === String(updated.id).toLowerCase() ? updated : i));
+        if (this.activeDrawerTask() && String(this.activeDrawerTask()!.id).toLowerCase() === String(updated.id).toLowerCase()) {
+          this.activeDrawerTask.set(updated);
+        }
+      })
+    );
+  }
 
   // HTTP API Operations
   getOrganizations(): Observable<Organization[]> {

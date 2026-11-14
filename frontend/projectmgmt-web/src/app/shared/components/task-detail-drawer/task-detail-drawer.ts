@@ -9,6 +9,7 @@ import { ToastService } from '../../../core/services/toast.service';
 import { ConfirmDialogService } from '../../../core/services/confirm-dialog.service';
 import { RealtimeService } from '../../../core/realtime/realtime.service';
 import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
+import { extractCiteDocName, filterUnlinkedCitations } from '../../../core/utils/spec-citation.util';
 
 @Component({
   selector: 'app-task-detail-drawer',
@@ -40,8 +41,8 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
           }
           
           <!-- Drawer Top Navigation Header -->
-          <div class="task-drawer-header flex items-center justify-between px-4 sm:px-6 py-3 sm:py-3.5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
-            <div class="flex items-center gap-2.5 min-w-0">
+          <div class="task-drawer-header flex items-center justify-between px-4 sm:px-5 py-2.5 sm:py-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
+            <div class="flex items-center gap-2 min-w-0 flex-wrap">
               <span
                 class="w-6 h-6 rounded-md inline-flex items-center justify-center text-white shrink-0 shadow-2xs"
                 [style.backgroundColor]="getIssueTypeColor(task)"
@@ -49,10 +50,27 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
               >
                 <span class="material-symbols-outlined text-[15px]">{{ getIssueTypeIcon(task) }}</span>
               </span>
-              <span class="px-2.5 py-0.5 rounded text-xs font-mono font-bold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shrink-0" [style.color]="getIssueTypeColor(task)">
+              <span class="px-2 py-0.5 rounded text-xs font-mono font-bold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shrink-0" [style.color]="getIssueTypeColor(task)">
                 {{ task.issueKey }}
               </span>
-              <span class="text-xs text-slate-500 font-medium truncate">{{ task.sprintName ? ('Sprint: ' + task.sprintName) : (projectService.currentProject().name || 'Dự án') }}</span>
+              @if (task.parentId) {
+                <span class="px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shrink-0">
+                  {{ task.subtaskRole ? ('Việc con · ' + task.subtaskRole) : 'Việc con' }}
+                </span>
+                @if (parentTask(); as parent) {
+                  <button
+                    type="button"
+                    (click)="openRelatedTask(parent)"
+                    class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 max-w-[240px] truncate cursor-pointer transition-colors"
+                    [title]="'Quay lại việc cha: ' + parent.issueKey + ' - ' + parent.title"
+                  >
+                    <span class="material-symbols-outlined text-[13px]">arrow_back</span>
+                    <span class="truncate">{{ parent.issueKey }} · {{ parent.title }}</span>
+                  </button>
+                }
+              } @else {
+                <span class="text-xs text-slate-500 font-medium truncate">{{ task.sprintName ? ('Sprint: ' + task.sprintName) : (projectService.currentProject().name || 'Dự án') }}</span>
+              }
             </div>
 
             <div class="flex items-center gap-1 shrink-0">
@@ -70,7 +88,7 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
           </div>
 
           <!-- Drawer Main Content Body -->
-          <div class="task-drawer-body flex-1 overflow-y-auto p-6 flex flex-col gap-5 bg-white dark:bg-slate-900">
+          <div class="task-drawer-body flex-1 overflow-y-auto p-4 sm:p-5 flex flex-col gap-4 bg-white dark:bg-slate-900">
             
             <!-- Issue Title & Type Bar -->
             <div class="flex flex-col gap-2">
@@ -81,6 +99,9 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
                   (ngModelChange)="onFieldChange()"
                   class="h-7 px-2.5 rounded text-xs font-semibold bg-white text-slate-700 dark:bg-slate-900 dark:text-slate-200 border border-slate-200 dark:border-slate-700 focus:outline-none focus:border-slate-900 cursor-pointer transition-colors"
                 >
+                  @if (task.issueType && !availableIssueTypes().includes(task.issueType)) {
+                    <option [value]="task.issueType">{{ task.issueType }}</option>
+                  }
                   @for (t of availableIssueTypes(); track t) {
                     <option [value]="t">{{ t }}</option>
                   }
@@ -88,11 +109,14 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
 
                 <!-- Epic Selector -->
                 <select
-                  [(ngModel)]="task.epicName"
-                  (ngModelChange)="onFieldChange()"
+                  [ngModel]="task.epicName || ''"
+                  (ngModelChange)="task.epicName = $event; onFieldChange()"
                   class="h-7 px-2.5 rounded text-xs font-medium bg-white text-slate-600 dark:bg-slate-900 dark:text-slate-300 border border-slate-200 dark:border-slate-700 focus:outline-none focus:border-slate-900 cursor-pointer transition-colors"
                 >
                   <option value="">Gán Epic</option>
+                  @if (task.epicName && !hasEpicName(task.epicName)) {
+                    <option [value]="task.epicName">{{ task.epicName }}</option>
+                  }
                   @for (epic of epics(); track epic.id) {
                     <option [value]="epic.name">{{ epic.name }}</option>
                   }
@@ -109,6 +133,44 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
                 class="text-lg font-semibold text-slate-900 dark:text-white bg-transparent border-b border-transparent hover:border-slate-200 focus:border-slate-900 focus:outline-none py-1 transition-all"
               />
             </div>
+
+            <!-- Spec Links & Document Citations Card (for both Parent & Subtask) -->
+            @if ((task.specLinks && task.specLinks.length > 0) || (task.documentCitations && task.documentCitations.length > 0)) {
+              <div class="p-3 rounded-lg bg-slate-50/90 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/80 flex flex-col gap-2">
+                <div class="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                  <span class="material-symbols-outlined text-[15px] text-primary">description</span>
+                  <span>Tài liệu căn cứ &amp; Trích dẫn đặc tả</span>
+                </div>
+                <div class="flex flex-wrap gap-1.5">
+                  @for (link of task.specLinks || []; track link.documentId) {
+                    <a
+                      [routerLink]="['/spec-hub']"
+                      [queryParams]="{ docId: link.documentId, docName: link.documentTitle || link.fileName }"
+                      (click)="dismissed.emit()"
+                      class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 transition-colors"
+                      [title]="link.excerpt || link.documentTitle"
+                    >
+                      <span class="material-symbols-outlined text-[14px]">description</span>
+                      <span class="truncate max-w-[280px]">{{ link.excerpt || link.documentTitle || link.fileName }}</span>
+                      <span class="material-symbols-outlined text-[13px]">open_in_new</span>
+                    </a>
+                  }
+                  @for (cite of unlinkedCitations(); track $index) {
+                    <a
+                      [routerLink]="['/spec-hub']"
+                      [queryParams]="{ docName: extractCiteDocName(cite) }"
+                      (click)="dismissed.emit()"
+                      class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-700 transition-colors"
+                      [title]="'Mở trong Spec Hub: ' + cite"
+                    >
+                      <span class="material-symbols-outlined text-[14px] text-primary">article</span>
+                      <span class="truncate max-w-[280px]">{{ cite }}</span>
+                      <span class="material-symbols-outlined text-[13px]">open_in_new</span>
+                    </a>
+                  }
+                </div>
+              </div>
+            }
 
             <!-- Blocker Status Bar -->
             @if (task.isBlocked) {
@@ -130,7 +192,7 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
                 </button>
               </div>
             } @else {
-              <div class="flex items-center justify-between py-1">
+              <div class="flex items-center justify-between py-0.5">
                 <span class="text-xs text-slate-500 flex items-center gap-1.5">
                   <span class="material-symbols-outlined text-[15px] text-emerald-600">check_circle</span>
                   <span>Thông suốt</span>
@@ -147,7 +209,7 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
             }
 
             <!-- Metadata Properties Grid (Responsive 1/2/3 cols for half-screen & mobile) -->
-            <div class="task-meta-grid grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 p-3.5 sm:p-4 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
+            <div class="task-meta-grid grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 p-3.5 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
               <!-- Status Dropdown -->
               <div class="flex flex-col gap-1 min-w-0">
                 <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Trạng thái</span>
@@ -156,6 +218,9 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
                   (ngModelChange)="onFieldChange()"
                   class="h-8 px-2.5 rounded-lg text-xs font-semibold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary shadow-2xs cursor-pointer w-full"
                 >
+                  @if (task.statusName && !availableStatusNames().includes(task.statusName)) {
+                    <option [value]="task.statusName">{{ task.statusName }}</option>
+                  }
                   @for (st of availableStatusNames(); track st) {
                     <option [value]="st">{{ st }}</option>
                   }
@@ -170,8 +235,11 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
                   (ngModelChange)="onFieldChange()"
                   class="h-8 px-2.5 rounded-lg text-xs font-semibold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary shadow-2xs cursor-pointer w-full"
                 >
-                  @for (p of availablePriorities(); track p.id) {
-                    <option [value]="p.name">{{ p.name }}</option>
+                  @if (task.priority && !hasPriorityOption(task.priority)) {
+                    <option [value]="task.priority">{{ task.priority }}</option>
+                  }
+                  @for (p of priorityOptions(); track p.value) {
+                    <option [value]="p.value">{{ p.label }}</option>
                   }
                 </select>
               </div>
@@ -188,11 +256,11 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
                     </span>
                   }
                   <select
-                    [(ngModel)]="task.assigneeName"
-                    (ngModelChange)="onFieldChange()"
+                    [ngModel]="task.assigneeName || ''"
+                    (ngModelChange)="task.assigneeName = $event; onFieldChange()"
                     class="h-8 px-2 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary flex-1 min-w-0 shadow-2xs cursor-pointer"
                   >
-                    <option [value]="undefined">Chưa chỉ định</option>
+                    <option value="">Chưa chỉ định</option>
                     @for (m of projectMembers(); track m.id) {
                       <option [value]="m.displayName">{{ m.displayName }}</option>
                     }
@@ -200,13 +268,28 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
                 </div>
               </div>
 
+              <!-- Sprint Selector -->
+              <div class="flex flex-col gap-1 min-w-0">
+                <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Chu kỳ Sprint</span>
+                <select
+                  [ngModel]="task.sprintId || ''"
+                  (ngModelChange)="onSprintChange($event)"
+                  class="h-8 px-2.5 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary shadow-2xs cursor-pointer w-full"
+                >
+                  <option value="">Product Backlog</option>
+                  @for (sp of availableSprints(); track sp.id) {
+                    <option [value]="sp.id">{{ sp.name }}</option>
+                  }
+                </select>
+              </div>
+
               <!-- Story Points -->
               <div class="flex flex-col gap-1 min-w-0">
                 <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Story Points</span>
                 <input
                   type="number"
-                  min="1"
-                  max="21"
+                  min="0"
+                  max="100"
                   [(ngModel)]="task.storyPoints"
                   (ngModelChange)="onFieldChange()"
                   class="h-8 w-full px-2.5 rounded-lg text-xs font-mono font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary shadow-2xs"
@@ -246,7 +329,7 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
             <div class="flex flex-col gap-1.5">
               <span class="text-xs font-medium text-slate-500">Mô tả chi tiết</span>
               <textarea
-                rows="4"
+                rows="3"
                 [(ngModel)]="task.description"
                 (ngModelChange)="onFieldChange()"
                 placeholder="Mô tả công việc..."
@@ -254,55 +337,199 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
               ></textarea>
             </div>
 
-            <!-- Sub-tasks Section -->
-            <div class="flex flex-col gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
-              <div class="flex items-center justify-between">
+            <!-- Labels & Required Skills (Full parity with AI Proposal for both Parent & Subtask) -->
+            <div class="flex flex-col gap-2.5 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <div class="flex items-center justify-between gap-2">
                 <span class="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                  <span class="material-symbols-outlined text-[15px] text-slate-500">subdirectory_arrow_right</span>
-                  <span>Công việc con ({{ drawerSubtasks.length }})</span>
+                  <span class="material-symbols-outlined text-[15px] text-slate-500">sell</span>
+                  <span>Nhãn phân loại &amp; Kỹ năng</span>
                 </span>
-                <button (click)="isSubtaskComposerOpen.set(!isSubtaskComposerOpen())" class="text-xs font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 flex items-center gap-1">
+                <button
+                  type="button"
+                  (click)="isTagEditorOpen.set(!isTagEditorOpen())"
+                  class="text-xs font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 flex items-center gap-0.5 cursor-pointer"
+                >
                   <span class="material-symbols-outlined text-[13px]">add</span>
-                  <span>Thêm việc con</span>
+                  <span>Thêm nhãn</span>
                 </button>
               </div>
 
-              @if (isSubtaskComposerOpen()) {
-                <div class="flex flex-col sm:flex-row gap-2 p-2 rounded bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
+              @if (isTagEditorOpen()) {
+                <div class="flex flex-wrap gap-1.5 p-2 rounded bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
                   <input
                     type="text"
-                    [ngModel]="newSubtaskTitle()"
-                    (ngModelChange)="newSubtaskTitle.set($event)"
-                    (keyup.enter)="addSubtaskFromDrawer()"
-                    placeholder="Tên việc con..."
-                    class="flex-1 h-7 px-2.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs focus:outline-none focus:border-slate-900"
+                    [ngModel]="newTagText()"
+                    (ngModelChange)="newTagText.set($event)"
+                    (keyup.enter)="addLabelFromDrawer()"
+                    placeholder="Nhập nhãn mới (VD: backend, realtime)..."
+                    class="flex-1 min-w-[160px] h-7 px-2.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs focus:outline-none focus:border-slate-900"
                   />
-                  <div class="flex gap-1">
-                    <button (click)="addSubtaskFromDrawer()" class="h-7 px-2.5 rounded bg-slate-900 text-white text-xs font-medium hover:bg-slate-800">Thêm</button>
-                    <button (click)="cancelSubtaskComposer()" class="h-7 px-2 rounded bg-white border border-slate-200 text-slate-600 text-xs font-medium hover:bg-slate-50">Hủy</button>
-                  </div>
+                  <button type="button" (click)="addLabelFromDrawer()" class="h-7 px-2.5 rounded bg-slate-900 text-white text-xs font-medium hover:bg-slate-800 cursor-pointer">Thêm</button>
                 </div>
               }
 
-              <div class="space-y-1">
-                @for (sub of drawerSubtasks; track sub.id) {
-                  <div class="drawer-subtask-row flex items-center justify-between p-2 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs">
-                    <div class="flex items-center gap-2 min-w-0">
-                      <span class="font-mono text-slate-500 text-[11px]">{{ sub.issueKey }}</span>
-                      <span class="font-medium text-slate-800 dark:text-slate-200 truncate">{{ sub.title }}</span>
-                    </div>
-                    <div class="flex items-center gap-2 shrink-0">
-                      <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700">{{ sub.statusName }}</span>
-                      <span class="text-xs text-slate-500">{{ sub.assigneeName || '—' }}</span>
+              <div class="flex flex-wrap items-center gap-1.5">
+                @for (lbl of task.labels || []; track lbl) {
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
+                    <span>#{{ lbl }}</span>
+                    <button type="button" (click)="removeLabelFromDrawer(lbl)" class="text-slate-400 hover:text-rose-600 leading-none cursor-pointer" [attr.aria-label]="'Bỏ nhãn ' + lbl">
+                      <span class="material-symbols-outlined text-[12px]">close</span>
+                    </button>
+                  </span>
+                }
+                @for (skill of task.requiredSkills || []; track skill) {
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-violet-50 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300 border border-violet-200 dark:border-violet-800">
+                    <span class="material-symbols-outlined text-[12px]">psychology</span>
+                    <span>{{ skill }}</span>
+                  </span>
+                }
+                @if ((task.labels?.length || 0) === 0 && (task.requiredSkills?.length || 0) === 0) {
+                  <span class="text-xs text-slate-400 italic">Chưa gắn nhãn hoặc kỹ năng yêu cầu.</span>
+                }
+              </div>
+            </div>
+
+            <!-- Acceptance Criteria Checklist (Interactive for both Parent & Subtask) -->
+            <div class="flex flex-col gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[15px] text-emerald-600">fact_check</span>
+                  <span>Tiêu chí nghiệm thu ({{ (task.criteria || []).length }})</span>
+                </span>
+              </div>
+
+              <div class="space-y-1.5">
+                @for (c of task.criteria || []; track c.id) {
+                  <div class="flex items-center gap-2 p-2 rounded bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 text-xs">
+                    <input
+                      type="checkbox"
+                      [checked]="c.isMet"
+                      (change)="toggleCriterion(c)"
+                      [disabled]="isCriterionBusy()"
+                      class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer shrink-0"
+                    />
+                    <input
+                      type="text"
+                      [value]="c.content"
+                      (blur)="updateCriterionText(c, $any($event.target).value)"
+                      [disabled]="isCriterionBusy()"
+                      [class.line-through]="c.isMet"
+                      [class.text-slate-400]="c.isMet"
+                      class="flex-1 min-w-0 bg-transparent border-0 text-xs text-slate-800 dark:text-slate-200 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      (click)="deleteCriterionFromDrawer(c.id)"
+                      [disabled]="isCriterionBusy()"
+                      class="text-slate-400 hover:text-rose-600 p-0.5 cursor-pointer shrink-0"
+                      title="Xóa tiêu chí"
+                    >
+                      <span class="material-symbols-outlined text-[14px]">close</span>
+                    </button>
+                  </div>
+                } @empty {
+                  <p class="text-xs text-slate-400 italic">Chưa có tiêu chí nghiệm thu.</p>
+                }
+              </div>
+
+              <div class="flex gap-1.5">
+                <input
+                  type="text"
+                  [ngModel]="newCriterionText()"
+                  (ngModelChange)="newCriterionText.set($event)"
+                  (keyup.enter)="addCriterionFromDrawer()"
+                  [disabled]="isCriterionBusy()"
+                  placeholder="Thêm tiêu chí nghiệm thu mới..."
+                  class="flex-1 h-7 px-2.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs focus:outline-none focus:border-slate-900"
+                />
+                <button
+                  type="button"
+                  (click)="addCriterionFromDrawer()"
+                  [disabled]="isCriterionBusy() || !newCriterionText().trim()"
+                  class="h-7 px-2.5 rounded bg-slate-900 disabled:opacity-40 text-white text-xs font-medium hover:bg-slate-800 cursor-pointer"
+                >
+                  Thêm
+                </button>
+              </div>
+            </div>
+
+            <!-- AI Rationale Card (when item was enriched by AI) -->
+            @if (task.aiRationale) {
+              <div class="p-3 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/80 flex flex-col gap-1">
+                <div class="flex items-center gap-1.5 text-xs font-semibold text-emerald-800 dark:text-emerald-300">
+                  <span class="material-symbols-outlined text-[15px]">auto_awesome</span>
+                  <span>Lập luận phân tích AI</span>
+                </div>
+                <p class="text-xs text-emerald-900/90 dark:text-emerald-200/90 leading-relaxed m-0">{{ task.aiRationale }}</p>
+              </div>
+            }
+
+            <!-- Sub-tasks Section -->
+            @if (!task.parentId || drawerSubtasks.length > 0) {
+              <div class="flex flex-col gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-[15px] text-slate-500">subdirectory_arrow_right</span>
+                    <span>Công việc con ({{ drawerSubtasks.length }})</span>
+                  </span>
+                  <button (click)="isSubtaskComposerOpen.set(!isSubtaskComposerOpen())" class="text-xs font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 flex items-center gap-1 cursor-pointer">
+                    <span class="material-symbols-outlined text-[13px]">add</span>
+                    <span>Thêm việc con</span>
+                  </button>
+                </div>
+
+                @if (isSubtaskComposerOpen()) {
+                  <div class="flex flex-col sm:flex-row gap-2 p-2 rounded bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
+                    <input
+                      type="text"
+                      [ngModel]="newSubtaskTitle()"
+                      (ngModelChange)="newSubtaskTitle.set($event)"
+                      (keyup.enter)="addSubtaskFromDrawer()"
+                      placeholder="Tên việc con..."
+                      class="flex-1 h-7 px-2.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs focus:outline-none focus:border-slate-900"
+                    />
+                    <div class="flex gap-1">
+                      <button (click)="addSubtaskFromDrawer()" class="h-7 px-2.5 rounded bg-slate-900 text-white text-xs font-medium hover:bg-slate-800 cursor-pointer">Thêm</button>
+                      <button (click)="cancelSubtaskComposer()" class="h-7 px-2 rounded bg-white border border-slate-200 text-slate-600 text-xs font-medium hover:bg-slate-50 cursor-pointer">Hủy</button>
                     </div>
                   </div>
                 }
 
-                @if (drawerSubtasks.length === 0) {
-                  <p class="text-xs text-slate-400 italic py-1">Chưa có công việc con.</p>
-                }
+                <div class="space-y-1.5">
+                  @for (sub of drawerSubtasks; track sub.id) {
+                    <div
+                      (click)="openRelatedTask(sub)"
+                      title="Nhấp để xem &amp; chỉnh sửa chi tiết việc con"
+                      class="drawer-subtask-row flex items-center justify-between gap-2 p-2 rounded-lg bg-white hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800/70 border border-slate-200 hover:border-slate-300 dark:border-slate-800 text-xs cursor-pointer transition-colors"
+                    >
+                      <div class="flex items-center gap-2 min-w-0 flex-1">
+                        <span class="font-mono text-slate-500 text-[11px] shrink-0">{{ sub.issueKey }}</span>
+                        @if (sub.subtaskRole) {
+                          <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 shrink-0">{{ sub.subtaskRole }}</span>
+                        }
+                        <span class="font-medium text-slate-800 dark:text-slate-200 truncate">{{ sub.title }}</span>
+                      </div>
+                      <div class="flex items-center gap-1.5 shrink-0">
+                        @if (sub.priority) {
+                          <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/80">{{ sub.priority }}</span>
+                        }
+                        <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">{{ sub.storyPoints }} SP</span>
+                        @if (sub.estimatedHours) {
+                          <span class="text-[10px] font-mono text-slate-500">{{ sub.estimatedHours }}h</span>
+                        }
+                        <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700">{{ sub.statusName }}</span>
+                        <span class="text-xs text-slate-500 max-w-[110px] truncate">{{ sub.assigneeName || 'Chưa gán' }}</span>
+                        <span class="material-symbols-outlined text-[15px] text-slate-400">chevron_right</span>
+                      </div>
+                    </div>
+                  }
+
+                  @if (drawerSubtasks.length === 0) {
+                    <p class="text-xs text-slate-400 italic py-1">Chưa có công việc con.</p>
+                  }
+                </div>
               </div>
-            </div>
+            }
 
             <!-- Comments Section -->
             <div class="flex flex-col gap-2.5 pt-3 border-t border-slate-200 dark:border-slate-800">
@@ -526,15 +753,25 @@ import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
   `]
 })
 export class TaskDetailDrawerComponent implements OnDestroy {
+  readonly currentTask = signal<WorkItem | null>(null);
   @Input() set task(val: WorkItem | null) {
     this._task = val;
+    this.currentTask.set(val);
     this.localComments.set(val?.comments ? [...val.comments] : []);
+    this.newCriterionText.set('');
+    this.newTagText.set('');
+    this.isTagEditorOpen.set(false);
   }
   get task(): WorkItem | null {
     return this._task;
   }
   private _task: WorkItem | null = null;
   readonly localComments = signal<any[]>([]);
+
+  readonly isTagEditorOpen = signal(false);
+  readonly newTagText = signal('');
+  readonly newCriterionText = signal('');
+  readonly isCriterionBusy = signal(false);
 
   @Output() dismissed = new EventEmitter<void>();
 
@@ -660,6 +897,34 @@ export class TaskDetailDrawerComponent implements OnDestroy {
       { id: '4', name: 'Low', level: 4, colorHex: '#2A8735' },
       { id: '5', name: 'Lowest', level: 5, colorHex: '#57A55A' }
     ];
+  });
+
+  readonly parentTask = computed(() => {
+    const parentId = this.currentTask()?.parentId;
+    if (!parentId) return null;
+    return this.projectService.workItems().find(w => w.id === parentId) ?? null;
+  });
+
+  readonly availableSprints = computed(() => {
+    const curSprintId = this.currentTask()?.sprintId;
+    return this.projectService.sprints().filter(s => s.status !== 'completed' || s.id === curSprintId);
+  });
+
+  readonly priorityOptions = computed(() => {
+    const seen = new Set<string>();
+    const options: Array<{ value: string; label: string; colorHex?: string }> = [];
+    for (const p of this.availablePriorities()) {
+      const value = p.name === 'Highest' ? 'Urgent' : p.name;
+      if (seen.has(value)) continue;
+      seen.add(value);
+      options.push({ value, label: value, colorHex: p.colorHex });
+    }
+    return options;
+  });
+
+  readonly unlinkedCitations = computed(() => {
+    const t = this.currentTask();
+    return filterUnlinkedCitations(t?.documentCitations, t?.specLinks);
   });
 
 
@@ -877,18 +1142,174 @@ export class TaskDetailDrawerComponent implements OnDestroy {
     return this.projectService.workItems().filter(w => w.parentId === this.task?.id);
   }
 
+  openRelatedTask(item: WorkItem): void {
+    this.task = item;
+    this.projectService.activeDrawerTask.set(item);
+    this.cdr.markForCheck();
+  }
+
+  hasEpicName(name: string): boolean {
+    return this.epics().some(e => e.name === name);
+  }
+
+  hasPriorityOption(priority: string): boolean {
+    return this.priorityOptions().some(p => p.value === priority);
+  }
+
+  extractCiteDocName(cite: string): string {
+    return extractCiteDocName(cite);
+  }
+
+  onSprintChange(sprintId: string): void {
+    if (!this.task) return;
+    const cleanId = sprintId || '';
+    this.task.sprintId = cleanId;
+    this.task.sprintName = cleanId
+      ? (this.projectService.sprints().find(s => s.id === cleanId)?.name ?? '')
+      : 'Backlog';
+    this.onFieldChange();
+  }
+
+  addLabelFromDrawer(): void {
+    if (!this.task) return;
+    const clean = this.newTagText().trim().replace(/^#+/, '');
+    if (!clean) return;
+    const current = [...(this.task.labels ?? [])];
+    if (!current.some(l => l.toLowerCase() === clean.toLowerCase())) {
+      current.push(clean);
+      this.task.labels = current;
+      this.onFieldChange();
+    }
+    this.newTagText.set('');
+  }
+
+  removeLabelFromDrawer(lbl: string): void {
+    if (!this.task) return;
+    this.task.labels = (this.task.labels ?? []).filter(l => l !== lbl);
+    this.onFieldChange();
+  }
+
+  addCriterionFromDrawer(): void {
+    if (!this.task || this.isCriterionBusy()) return;
+    const content = this.newCriterionText().trim();
+    if (!content) return;
+    const taskId = this.task.id;
+    this.isCriterionBusy.set(true);
+    this.projectService.addCriterion(taskId, content).subscribe({
+      next: () => {
+        this.newCriterionText.set('');
+        this.projectService.refreshWorkItem(taskId).subscribe({
+          next: updated => {
+            this.syncRefreshedTask(updated);
+            this.isCriterionBusy.set(false);
+          },
+          error: () => this.isCriterionBusy.set(false)
+        });
+      },
+      error: () => {
+        this.isCriterionBusy.set(false);
+        this.toastService.error('Tiêu chí nghiệm thu', 'Không thể thêm tiêu chí nghiệm thu.');
+      }
+    });
+  }
+
+  toggleCriterion(criterion: { id: string; content: string; isMet: boolean }): void {
+    if (!this.task || this.isCriterionBusy()) return;
+    const taskId = this.task.id;
+    const nextMet = !criterion.isMet;
+    criterion.isMet = nextMet;
+    this.isCriterionBusy.set(true);
+    this.projectService.updateCriterion(criterion.id, criterion.content, nextMet).subscribe({
+      next: () => {
+        this.projectService.refreshWorkItem(taskId).subscribe({
+          next: updated => {
+            this.syncRefreshedTask(updated);
+            this.isCriterionBusy.set(false);
+          },
+          error: () => this.isCriterionBusy.set(false)
+        });
+      },
+      error: () => {
+        criterion.isMet = !nextMet;
+        this.isCriterionBusy.set(false);
+        this.toastService.error('Tiêu chí nghiệm thu', 'Không thể cập nhật trạng thái tiêu chí.');
+      }
+    });
+  }
+
+  updateCriterionText(criterion: { id: string; content: string; isMet: boolean }, nextValue: string): void {
+    if (!this.task || this.isCriterionBusy()) return;
+    const trimmed = nextValue.trim();
+    if (!trimmed || trimmed === criterion.content) return;
+    const taskId = this.task.id;
+    this.isCriterionBusy.set(true);
+    this.projectService.updateCriterion(criterion.id, trimmed, criterion.isMet).subscribe({
+      next: () => {
+        criterion.content = trimmed;
+        this.projectService.refreshWorkItem(taskId).subscribe({
+          next: updated => {
+            this.syncRefreshedTask(updated);
+            this.isCriterionBusy.set(false);
+          },
+          error: () => this.isCriterionBusy.set(false)
+        });
+      },
+      error: () => {
+        this.isCriterionBusy.set(false);
+        this.toastService.error('Tiêu chí nghiệm thu', 'Không thể cập nhật nội dung tiêu chí.');
+      }
+    });
+  }
+
+  deleteCriterionFromDrawer(criterionId: string): void {
+    if (!this.task || this.isCriterionBusy()) return;
+    const taskId = this.task.id;
+    this.isCriterionBusy.set(true);
+    this.projectService.deleteCriterion(criterionId).subscribe({
+      next: () => {
+        this.projectService.refreshWorkItem(taskId).subscribe({
+          next: updated => {
+            this.syncRefreshedTask(updated);
+            this.isCriterionBusy.set(false);
+          },
+          error: () => this.isCriterionBusy.set(false)
+        });
+      },
+      error: () => {
+        this.isCriterionBusy.set(false);
+        this.toastService.error('Tiêu chí nghiệm thu', 'Không thể xóa tiêu chí nghiệm thu.');
+      }
+    });
+  }
+
+  private syncRefreshedTask(updated: WorkItem): void {
+    if (!updated) return;
+    if (this.task && String(this.task.id).toLowerCase() === String(updated.id).toLowerCase()) {
+      this._task = updated;
+      this.currentTask.set(updated);
+      this.localComments.set(updated.comments ? [...updated.comments] : []);
+      this.cdr.markForCheck();
+    }
+  }
+
   onFieldChange(): void {
     if (this.task) {
       if (this.task.assigneeName) {
         const m = this.projectMembers().find(x => x.displayName === this.task?.assigneeName);
-        if (m) this.task.assigneeId = m.userId;
+        if (m) {
+          this.task.assigneeId = m.userId;
+          this.task.assigneeAvatar = m.avatarUrl;
+        }
       } else {
+        this.task.assigneeName = '';
         this.task.assigneeId = undefined;
+        this.task.assigneeAvatar = undefined;
       }
       if (this.task.epicName) {
         const e = this.epics().find(x => x.name === this.task?.epicName);
         if (e) this.task.epicId = e.id;
       } else {
+        this.task.epicName = '';
         this.task.epicId = undefined;
       }
       this.projectService.updateWorkItem(this.task);

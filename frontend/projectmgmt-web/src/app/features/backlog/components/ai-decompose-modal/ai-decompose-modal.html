@@ -673,27 +673,14 @@
                       </button>
                     }
 
-                    <div class="task-metadata-pills">
-                      @if (task.sourceBacklogIssueKey) {
+                    @if (task.sourceBacklogIssueKey) {
+                      <div class="task-metadata-pills">
                         <span class="subtask-role-badge" title="Kế thừa từ Product Backlog (sẽ được chuyển sang Sprint này)">
                           <span class="material-symbols-outlined text-[12px] align-middle" aria-hidden="true">inbox</span>
                           Từ Backlog: {{ task.sourceBacklogIssueKey }}
                         </span>
-                      }
-                      @if (task.documentCitations && task.documentCitations.length > 0) {
-                        @for (cite of task.documentCitations; track $index) {
-                          <button
-                            type="button"
-                            class="task-cite-pill"
-                            (click)="openSpecDoc(cite, task.documentId); $event.stopPropagation()"
-                            title="Xem trích dẫn tài liệu trong Spec Hub"
-                          >
-                            <span class="material-symbols-outlined" aria-hidden="true">description</span>
-                            <span>{{ cite }}</span>
-                          </button>
-                        }
-                      }
-                    </div>
+                      </div>
+                    }
                   </div>
 
                   <!-- Epic Selector -->
@@ -853,20 +840,6 @@
                           <div class="task-metadata-pills">
                             <span class="subtask-role-badge">{{ sub.role || 'Kỹ thuật' }}</span>
                             <span class="subtask-hours-pill">{{ sub.estimatedHours || 4 }}h</span>
-                            @let subRowCites = (sub.documentCitations && sub.documentCitations.length > 0) ? sub.documentCitations : (task.documentCitations || []);
-                            @if (subRowCites.length > 0) {
-                              @for (cite of subRowCites; track $index) {
-                                <button
-                                  type="button"
-                                  class="task-cite-pill"
-                                  (click)="openSpecDoc(cite, task.documentId); $event.stopPropagation()"
-                                  title="Xem trích dẫn tài liệu trong Spec Hub"
-                                >
-                                  <span class="material-symbols-outlined" aria-hidden="true">description</span>
-                                  <span>{{ cite }}</span>
-                                </button>
-                              }
-                            }
                           </div>
                         </div>
 

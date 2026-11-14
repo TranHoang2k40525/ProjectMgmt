@@ -1,6 +1,9 @@
 namespace ProjectMgmt.Solution.Services.Ai;
 
+using System.Globalization;
+using System.Text;
 using System.Text.Json;
+using DeliveryIntelligence.Application.IServices;
 using DeliveryIntelligence.Domain.Entities;
 using DeliveryIntelligence.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -26,6 +29,7 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
     private readonly DeliveryIntelligenceDbContext _deliveryDb;
     private readonly IStateStagingService _stagingService;
     private readonly IUserLookupService _userLookup;
+    private readonly ISkillCatalogReader? _skillCatalog;
     private readonly ILogger<AiSprintCommitCoordinator> _logger;
 
     public AiSprintCommitCoordinator(
@@ -33,12 +37,14 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
         DeliveryIntelligenceDbContext deliveryDb,
         IStateStagingService stagingService,
         IUserLookupService userLookup,
-        ILogger<AiSprintCommitCoordinator> logger)
+        ILogger<AiSprintCommitCoordinator> logger,
+        ISkillCatalogReader? skillCatalog = null)
     {
         _planningDb = planningDb;
         _deliveryDb = deliveryDb;
         _stagingService = stagingService;
         _userLookup = userLookup;
+        _skillCatalog = skillCatalog;
         _logger = logger;
     }
 
@@ -49,7 +55,7 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
     {
         ProjectScopeGuard.EnsureValidScope(scope);
 
-        if (!request.PushToBacklog && string.IsNullOrWhiteSpace(request.SprintGoal))
+        if (!request.PushToBacklog && string.IsNullOrWhiteSpace(request.SprintGoal) && (!request.TargetSprintId.HasValue || request.TargetSprintId.Value == Guid.Empty))
         {
             return Failure("INVALID_SPRINT_GOAL", "Sprint Goal không được để trống.");
         }
@@ -118,6 +124,11 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
 
                 if (targetSprint == null)
                 {
+                    if (string.IsNullOrWhiteSpace(request.SprintGoal))
+                    {
+                        return Failure("INVALID_SPRINT_GOAL", "Sprint Goal không được để trống.");
+                    }
+
                     var sprintCount = await _planningDb.Sprints.CountAsync(s => s.ProjectId == project.Id, ct);
                     targetSprint = new Sprint
                     {
@@ -136,7 +147,14 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                 }
                 else
                 {
-                    targetSprint.Goal = effectiveGoal;
+                    if (!string.IsNullOrWhiteSpace(request.SprintGoal))
+                    {
+                        targetSprint.Goal = request.SprintGoal.Trim();
+                    }
+                    else if (string.IsNullOrWhiteSpace(targetSprint.Goal))
+                    {
+                        return Failure("INVALID_SPRINT_GOAL", "Sprint Goal không được để trống.");
+                    }
                     targetSprint.UpdatedAt = now;
                 }
             }
@@ -144,9 +162,18 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
             Guid? targetSprintIdForIssues = request.PushToBacklog ? null : targetSprint?.Id;
             string destinationLabel = request.PushToBacklog ? "Product Backlog" : (targetSprint?.Name ?? "Sprint");
 
-            // 2. Load active users for assignee resolution
+            // 2. Load active users, docs, and skill catalog for assignee/spec/skill enrichment
             var allUsers = await _userLookup.GetAllActiveDisplayInfoAsync();
             var userById = allUsers.ToDictionary(u => u.UserId);
+            var projectDocs = await _planningDb.ProjectDocuments.AsNoTracking()
+                .Where(d => d.ProjectId == project.Id && !d.IsDirectory)
+                .Select(d => new ProjectDocMeta(d.Id, d.Name, d.Title, d.RelativePath))
+                .ToListAsync(ct);
+            var docById = projectDocs.ToDictionary(d => d.Id);
+            var skillCatalogItems = _skillCatalog != null
+                ? await _skillCatalog.GetSkillsAsync()
+                : [];
+            var skillByNormalizedName = BuildSkillLookup(skillCatalogItems);
 
             // 3. Load existing Epics in project
             var existingEpics = epicIssueType != null
@@ -201,6 +228,20 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                     .GroupBy(il => il.IssueId)
                     .ToDictionary(g => g.Key, g => g.Select(il => il.LabelId).ToHashSet())
                 : new Dictionary<Guid, HashSet<Guid>>();
+            var existingSpecLinksByIssue = backlogParentIds.Count > 0
+                ? (await _planningDb.SpecStoryLinks.AsNoTracking()
+                    .Where(sl => backlogParentIds.Contains(sl.IssueId))
+                    .ToListAsync(ct))
+                    .GroupBy(sl => sl.IssueId)
+                    .ToDictionary(g => g.Key, g => g.Select(sl => sl.DocumentId).ToHashSet())
+                : new Dictionary<Guid, HashSet<Guid>>();
+            var existingSkillIdsByIssue = backlogParentIds.Count > 0
+                ? (await _deliveryDb.IssueRequiredSkills.AsNoTracking()
+                    .Where(rs => backlogParentIds.Contains(rs.IssueId))
+                    .ToListAsync(ct))
+                    .GroupBy(rs => rs.IssueId)
+                    .ToDictionary(g => g.Key, g => g.Select(rs => rs.SkillId).ToHashSet())
+                : new Dictionary<Guid, HashSet<Guid>>();
 
             var existingLabels = await _deliveryDb.Labels
                 .Where(l => l.ProjectId == project.Id)
@@ -213,6 +254,8 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
             var newLabels = new List<Label>();
             var newIssueLabels = new List<IssueLabel>();
             var newCriteria = new List<AcceptanceCriteria>();
+            var newSpecLinks = new List<SpecStoryLink>();
+            var newRequiredSkills = new List<IssueRequiredSkill>();
             var newLogs = new List<ActivityLog>();
             var createdSummaries = new List<AiCreatedIssueItemDto>();
             var createdTaskCount = 0;
@@ -285,18 +328,7 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                     s.Name.Equals(resolvedStatusName, StringComparison.OrdinalIgnoreCase)) ?? initialStatus;
 
                 // Resolve Assignee
-                Guid? resolvedAssigneeId = null;
-                if (taskDto.AssigneeUserId.HasValue && userById.ContainsKey(taskDto.AssigneeUserId.Value))
-                {
-                    resolvedAssigneeId = taskDto.AssigneeUserId.Value;
-                }
-                else if (!string.IsNullOrWhiteSpace(taskDto.AssigneeName))
-                {
-                    var matchedUser = allUsers.FirstOrDefault(u =>
-                        u.DisplayName.Equals(taskDto.AssigneeName.Trim(), StringComparison.OrdinalIgnoreCase) ||
-                        u.Email.Equals(taskDto.AssigneeName.Trim(), StringComparison.OrdinalIgnoreCase));
-                    resolvedAssigneeId = matchedUser?.UserId;
-                }
+                var resolvedAssigneeId = ResolveAssigneeId(taskDto.AssigneeUserId, taskDto.AssigneeName, userById, allUsers);
 
                 // Match existing Product Backlog item so it is MOVED into Sprint instead of duplicated
                 Issue? matchedBacklogIssue = null;
@@ -431,61 +463,39 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                     });
                 }
 
-                // Persist project Labels (reusing existing project labels first)
-                if (taskDto.Tags != null && taskDto.Tags.Count > 0)
-                {
-                    var alreadyLinkedLabels = existingIssueLabelsByIssue.GetValueOrDefault(parentIssueId) ?? new HashSet<Guid>();
-                    foreach (var rawTag in taskDto.Tags)
-                    {
-                        var cleanTag = rawTag?.Trim().TrimStart('#').Trim();
-                        if (string.IsNullOrWhiteSpace(cleanTag) || cleanTag.Length > 100) continue;
+                // Persist project Labels, Spec links, Suggested Skills, Acceptance Criteria & AI Rationale Log
+                AttachLabels(
+                    taskDto.Tags,
+                    project.Id,
+                    parentIssueId,
+                    existingIssueLabelsByIssue,
+                    labelByName,
+                    newLabels,
+                    newIssueLabels);
 
-                        if (!labelByName.TryGetValue(cleanTag, out var targetLabel))
-                        {
-                            targetLabel = new Label
-                            {
-                                Id = Guid.NewGuid(),
-                                ProjectId = project.Id,
-                                Name = cleanTag,
-                                ColorHex = "#DFE1E6"
-                            };
-                            labelByName[cleanTag] = targetLabel;
-                            newLabels.Add(targetLabel);
-                        }
+                AttachSpecLinks(
+                    taskDto.DocumentId,
+                    taskDto.DocumentCitations,
+                    projectDocs,
+                    docById,
+                    parentIssueId,
+                    existingSpecLinksByIssue,
+                    newSpecLinks,
+                    now);
 
-                        if (alreadyLinkedLabels.Add(targetLabel.Id))
-                        {
-                            newIssueLabels.Add(new IssueLabel
-                            {
-                                IssueId = parentIssueId,
-                                LabelId = targetLabel.Id
-                            });
-                        }
-                    }
-                }
+                AttachRequiredSkills(
+                    taskDto.SuggestedSkills,
+                    skillByNormalizedName,
+                    parentIssueId,
+                    existingSkillIdsByIssue,
+                    newRequiredSkills);
 
-                // Add Acceptance Criteria (skipping duplicates on moved backlog items)
-                if (taskDto.AcceptanceCriteria != null)
-                {
-                    var existingAcSet = existingCriteriaByIssue.GetValueOrDefault(parentIssueId) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    for (var idx = 0; idx < taskDto.AcceptanceCriteria.Count; idx++)
-                    {
-                        var criterionText = taskDto.AcceptanceCriteria[idx]?.Trim();
-                        if (string.IsNullOrWhiteSpace(criterionText) || existingAcSet.Contains(criterionText)) continue;
-
-                        existingAcSet.Add(criterionText);
-                        newCriteria.Add(new AcceptanceCriteria
-                        {
-                            Id = Guid.NewGuid(),
-                            IssueId = parentIssueId,
-                            Content = criterionText.Length > 2000 ? criterionText[..2000] : criterionText,
-                            IsMet = false,
-                            OrderIndex = existingAcSet.Count + idx,
-                            Source = "AI",
-                            CreatedAt = now
-                        });
-                    }
-                }
+                AppendAcceptanceCriteria(
+                    taskDto.AcceptanceCriteria,
+                    parentIssueId,
+                    existingCriteriaByIssue,
+                    newCriteria,
+                    now);
 
                 newLogs.Add(new ActivityLog
                 {
@@ -495,14 +505,16 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                     Action = request.PushToBacklog
                         ? "AiBacklogTaskPushed"
                         : (matchedBacklogIssue != null ? "AiSprintBacklogItemMovedToSprint" : "AiSprintTaskCommitted"),
-                    Detail = JsonSerializer.Serialize(new
-                    {
-                        sessionId = request.SessionId,
-                        sprintId = targetSprintIdForIssues,
-                        sprintName = destinationLabel,
-                        pushedToBacklog = request.PushToBacklog,
-                        movedFromBacklog = !request.PushToBacklog && matchedBacklogIssue != null
-                    }),
+                    Detail = BuildAiActivityDetail(
+                        request.SessionId,
+                        targetSprintIdForIssues,
+                        destinationLabel,
+                        request.PushToBacklog,
+                        movedFromBacklog: !request.PushToBacklog && matchedBacklogIssue != null,
+                        aiRationale: taskDto.AiRationale,
+                        subtaskRole: null,
+                        documentCitations: taskDto.DocumentCitations,
+                        suggestedSkills: taskDto.SuggestedSkills),
                     Source = "AI",
                     CreatedAt = now
                 });
@@ -534,18 +546,8 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                         var subId = Guid.NewGuid();
                         var subHours = Math.Max(0m, subDto.EstimatedHours);
 
-                        Guid? subAssigneeId = resolvedAssigneeId;
-                        if (subDto.AssigneeUserId.HasValue && userById.ContainsKey(subDto.AssigneeUserId.Value))
-                        {
-                            subAssigneeId = subDto.AssigneeUserId.Value;
-                        }
-                        else if (!string.IsNullOrWhiteSpace(subDto.AssigneeName))
-                        {
-                            var matchedSubUser = allUsers.FirstOrDefault(u =>
-                                u.DisplayName.Equals(subDto.AssigneeName.Trim(), StringComparison.OrdinalIgnoreCase) ||
-                                u.Email.Equals(subDto.AssigneeName.Trim(), StringComparison.OrdinalIgnoreCase));
-                            if (matchedSubUser != null) subAssigneeId = matchedSubUser.UserId;
-                        }
+                        var subAssigneeId = ResolveAssigneeId(subDto.AssigneeUserId, subDto.AssigneeName, userById, allUsers)
+                            ?? resolvedAssigneeId;
 
                         var subStatusName = activeConfig.ResolveStatusName(subDto.Status);
                         var subStatus = activeConfig.Statuses.FirstOrDefault(s =>
@@ -586,24 +588,59 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                         newIssues.Add(subIssue);
                         createdSubtaskCount++;
 
-                        if (subDto.AcceptanceCriteria != null)
+                        var subDocId = subDto.DocumentId ?? taskDto.DocumentId;
+                        var subCitations = subDto.DocumentCitations is { Count: > 0 }
+                            ? subDto.DocumentCitations
+                            : taskDto.DocumentCitations;
+
+                        if (!string.IsNullOrWhiteSpace(subDto.Role))
                         {
-                            for (var acIdx = 0; acIdx < subDto.AcceptanceCriteria.Count; acIdx++)
-                            {
-                                var subAc = subDto.AcceptanceCriteria[acIdx]?.Trim();
-                                if (string.IsNullOrWhiteSpace(subAc)) continue;
-                                newCriteria.Add(new AcceptanceCriteria
-                                {
-                                    Id = Guid.NewGuid(),
-                                    IssueId = subId,
-                                    Content = subAc.Length > 2000 ? subAc[..2000] : subAc,
-                                    IsMet = false,
-                                    OrderIndex = acIdx,
-                                    Source = "AI",
-                                    CreatedAt = now
-                                });
-                            }
+                            AttachLabels(
+                                [subDto.Role.Trim()],
+                                project.Id,
+                                subId,
+                                existingIssueLabelsByIssue,
+                                labelByName,
+                                newLabels,
+                                newIssueLabels);
                         }
+
+                        AttachSpecLinks(
+                            subDocId,
+                            subCitations,
+                            projectDocs,
+                            docById,
+                            subId,
+                            existingSpecLinksByIssue,
+                            newSpecLinks,
+                            now);
+
+                        AppendAcceptanceCriteria(
+                            subDto.AcceptanceCriteria,
+                            subId,
+                            existingCriteriaByIssue,
+                            newCriteria,
+                            now);
+
+                        newLogs.Add(new ActivityLog
+                        {
+                            Id = Guid.NewGuid(),
+                            IssueId = subId,
+                            UserId = scope.UserId,
+                            Action = request.PushToBacklog ? "AiBacklogSubtaskPushed" : "AiSprintSubtaskCommitted",
+                            Detail = BuildAiActivityDetail(
+                                request.SessionId,
+                                targetSprintIdForIssues,
+                                destinationLabel,
+                                request.PushToBacklog,
+                                movedFromBacklog: false,
+                                aiRationale: taskDto.AiRationale,
+                                subtaskRole: subDto.Role,
+                                documentCitations: subCitations,
+                                suggestedSkills: null),
+                            Source = "AI",
+                            CreatedAt = now
+                        });
 
                         createdSummaries.Add(new AiCreatedIssueItemDto
                         {
@@ -736,6 +773,14 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
             {
                 await _deliveryDb.AcceptanceCriteria.AddRangeAsync(newCriteria, ct);
             }
+            if (newSpecLinks.Count > 0)
+            {
+                await _planningDb.SpecStoryLinks.AddRangeAsync(newSpecLinks, ct);
+            }
+            if (newRequiredSkills.Count > 0)
+            {
+                await _deliveryDb.IssueRequiredSkills.AddRangeAsync(newRequiredSkills, ct);
+            }
             if (newLogs.Count > 0)
             {
                 await _deliveryDb.ActivityLogs.AddRangeAsync(newLogs, ct);
@@ -817,4 +862,366 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
         ErrorCode = code,
         Message = message
     };
+
+    private sealed record ProjectDocMeta(Guid Id, string Name, string Title, string RelativePath);
+
+    private static Dictionary<string, SkillCatalogItem> BuildSkillLookup(IReadOnlyList<SkillCatalogItem> skills)
+    {
+        var map = new Dictionary<string, SkillCatalogItem>(StringComparer.Ordinal);
+        foreach (var skill in skills)
+        {
+            if (string.IsNullOrWhiteSpace(skill.Name)) continue;
+            var key = NormalizeLookupToken(skill.Name);
+            if (!string.IsNullOrEmpty(key) && !map.ContainsKey(key))
+            {
+                map[key] = skill;
+            }
+        }
+        return map;
+    }
+
+    internal static Guid? ResolveAssigneeId(
+        Guid? explicitUserId,
+        string? assigneeName,
+        IReadOnlyDictionary<Guid, UserDisplayInfo> userById,
+        IReadOnlyList<UserDisplayInfo> allUsers)
+    {
+        if (explicitUserId.HasValue && userById.ContainsKey(explicitUserId.Value))
+        {
+            return explicitUserId.Value;
+        }
+
+        if (string.IsNullOrWhiteSpace(assigneeName))
+        {
+            return null;
+        }
+
+        var trimmed = assigneeName.Trim();
+
+        // Preserve exact matches first (e.g. "Hoàng Team 04 (Backend Dev)").
+        var exact = allUsers.FirstOrDefault(u =>
+            u.DisplayName.Equals(trimmed, StringComparison.OrdinalIgnoreCase) ||
+            u.Email.Equals(trimmed, StringComparison.OrdinalIgnoreCase));
+        if (exact != null) return exact.UserId;
+
+        var strippedTarget = StripTrailingParenthetical(trimmed);
+        var strippedMatches = allUsers
+            .Where(u => StripTrailingParenthetical(u.DisplayName).Equals(strippedTarget, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (strippedMatches.Count > 0) return strippedMatches[0].UserId;
+
+        var foldedTarget = NormalizeLookupToken(strippedTarget);
+        if (string.IsNullOrEmpty(foldedTarget)) return null;
+
+        var foldedMatches = allUsers
+            .Where(u => NormalizeLookupToken(StripTrailingParenthetical(u.DisplayName)) == foldedTarget)
+            .ToList();
+        if (foldedMatches.Count > 0) return foldedMatches[0].UserId;
+
+        var uniquePartial = allUsers
+            .Where(u =>
+            {
+                var foldedName = NormalizeLookupToken(StripTrailingParenthetical(u.DisplayName));
+                var emailLocal = u.Email.Split('@')[0];
+                return (!string.IsNullOrEmpty(foldedName) &&
+                        (foldedName.Contains(foldedTarget, StringComparison.Ordinal) ||
+                         foldedTarget.Contains(foldedName, StringComparison.Ordinal))) ||
+                       emailLocal.Equals(trimmed, StringComparison.OrdinalIgnoreCase);
+            })
+            .ToList();
+
+        return uniquePartial.Count == 1 ? uniquePartial[0].UserId : null;
+    }
+
+    private static string StripTrailingParenthetical(string value)
+    {
+        var trimmed = value.Trim();
+        var openIdx = trimmed.LastIndexOf('(');
+        if (openIdx > 0 && trimmed.EndsWith(')'))
+        {
+            return trimmed[..openIdx].Trim();
+        }
+        return trimmed;
+    }
+
+    internal static string NormalizeLookupToken(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return string.Empty;
+        var decomposed = input.Trim().Normalize(NormalizationForm.FormD);
+        var sb = new StringBuilder(decomposed.Length);
+        foreach (var ch in decomposed)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(ch) == UnicodeCategory.NonSpacingMark) continue;
+            var mapped = ch switch
+            {
+                'đ' or 'Đ' => 'd',
+                _ => char.ToLowerInvariant(ch)
+            };
+            if (char.IsLetterOrDigit(mapped) || char.IsWhiteSpace(mapped))
+            {
+                sb.Append(mapped);
+            }
+        }
+        return string.Join(' ', sb.ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    private static void AttachLabels(
+        IReadOnlyList<string>? tags,
+        Guid projectId,
+        Guid issueId,
+        Dictionary<Guid, HashSet<Guid>> existingIssueLabelsByIssue,
+        Dictionary<string, Label> labelByName,
+        List<Label> newLabels,
+        List<IssueLabel> newIssueLabels)
+    {
+        if (tags == null || tags.Count == 0) return;
+        if (!existingIssueLabelsByIssue.TryGetValue(issueId, out var alreadyLinkedLabels))
+        {
+            alreadyLinkedLabels = new HashSet<Guid>();
+            existingIssueLabelsByIssue[issueId] = alreadyLinkedLabels;
+        }
+
+        foreach (var rawTag in tags)
+        {
+            var cleanTag = rawTag?.Trim().TrimStart('#').Trim();
+            if (string.IsNullOrWhiteSpace(cleanTag) || cleanTag.Length > 100) continue;
+
+            if (!labelByName.TryGetValue(cleanTag, out var targetLabel))
+            {
+                targetLabel = new Label
+                {
+                    Id = Guid.NewGuid(),
+                    ProjectId = projectId,
+                    Name = cleanTag,
+                    ColorHex = "#DFE1E6"
+                };
+                labelByName[cleanTag] = targetLabel;
+                newLabels.Add(targetLabel);
+            }
+
+            if (alreadyLinkedLabels.Add(targetLabel.Id))
+            {
+                newIssueLabels.Add(new IssueLabel
+                {
+                    IssueId = issueId,
+                    LabelId = targetLabel.Id
+                });
+            }
+        }
+    }
+
+    private static void AttachSpecLinks(
+        Guid? explicitDocId,
+        IReadOnlyList<string>? citations,
+        IReadOnlyList<ProjectDocMeta> projectDocs,
+        IReadOnlyDictionary<Guid, ProjectDocMeta> docById,
+        Guid issueId,
+        Dictionary<Guid, HashSet<Guid>> existingSpecLinksByIssue,
+        List<SpecStoryLink> newSpecLinks,
+        DateTime now)
+    {
+        if (!existingSpecLinksByIssue.TryGetValue(issueId, out var alreadyLinkedDocs))
+        {
+            alreadyLinkedDocs = new HashSet<Guid>();
+            existingSpecLinksByIssue[issueId] = alreadyLinkedDocs;
+        }
+
+        var batchLinksByDoc = new Dictionary<Guid, SpecStoryLink>();
+
+        void UpsertDocLink(Guid docId, string? excerptText)
+        {
+            var cleanExcerpt = string.IsNullOrWhiteSpace(excerptText) ? null : excerptText.Trim();
+            if (cleanExcerpt != null && cleanExcerpt.Length > 500) cleanExcerpt = cleanExcerpt[..500];
+
+            if (batchLinksByDoc.TryGetValue(docId, out var existingNew))
+            {
+                if (!string.IsNullOrWhiteSpace(cleanExcerpt) &&
+                    (existingNew.Excerpt == null || !existingNew.Excerpt.Contains(cleanExcerpt, StringComparison.OrdinalIgnoreCase)))
+                {
+                    var combined = string.IsNullOrWhiteSpace(existingNew.Excerpt)
+                        ? cleanExcerpt
+                        : $"{existingNew.Excerpt} | {cleanExcerpt}";
+                    existingNew.Excerpt = combined.Length > 500 ? combined[..500] : combined;
+                }
+                return;
+            }
+
+            if (!alreadyLinkedDocs.Add(docId)) return;
+
+            var link = new SpecStoryLink
+            {
+                Id = Guid.NewGuid(),
+                DocumentId = docId,
+                IssueId = issueId,
+                Excerpt = cleanExcerpt,
+                CreatedAt = now
+            };
+            batchLinksByDoc[docId] = link;
+            newSpecLinks.Add(link);
+        }
+
+        if (citations != null)
+        {
+            foreach (var rawCite in citations)
+            {
+                var cleanCite = rawCite?.Trim();
+                if (string.IsNullOrWhiteSpace(cleanCite)) continue;
+
+                var matchedDoc = MatchProjectDocument(cleanCite, projectDocs);
+                if (matchedDoc != null)
+                {
+                    UpsertDocLink(matchedDoc.Id, cleanCite);
+                }
+            }
+        }
+
+        if (explicitDocId.HasValue && docById.ContainsKey(explicitDocId.Value) &&
+            !batchLinksByDoc.ContainsKey(explicitDocId.Value))
+        {
+            var fallbackExcerpt = citations is { Count: > 0 }
+                ? string.Join(" | ", citations.Where(c => !string.IsNullOrWhiteSpace(c)).Take(3))
+                : null;
+            UpsertDocLink(explicitDocId.Value, fallbackExcerpt);
+        }
+    }
+
+    private static ProjectDocMeta? MatchProjectDocument(string citation, IReadOnlyList<ProjectDocMeta> projectDocs)
+    {
+        if (projectDocs.Count == 0) return null;
+
+        var docCandidate = citation.Split([" - ", " | ", "#"], 2, StringSplitOptions.TrimEntries)[0];
+        var exact = projectDocs.FirstOrDefault(d =>
+            d.Name.Equals(docCandidate, StringComparison.OrdinalIgnoreCase) ||
+            d.Title.Equals(docCandidate, StringComparison.OrdinalIgnoreCase) ||
+            d.RelativePath.Equals(docCandidate, StringComparison.OrdinalIgnoreCase) ||
+            Path.GetFileNameWithoutExtension(d.Name).Equals(docCandidate, StringComparison.OrdinalIgnoreCase));
+        if (exact != null) return exact;
+
+        var normalizedCite = NormalizeLookupToken(citation);
+        if (string.IsNullOrEmpty(normalizedCite)) return null;
+
+        return projectDocs.FirstOrDefault(d =>
+        {
+            var nameToken = NormalizeLookupToken(Path.GetFileNameWithoutExtension(d.Name));
+            var titleToken = NormalizeLookupToken(d.Title);
+            return (nameToken.Length >= 4 && normalizedCite.Contains(nameToken, StringComparison.Ordinal)) ||
+                   (titleToken.Length >= 4 && normalizedCite.Contains(titleToken, StringComparison.Ordinal));
+        });
+    }
+
+    private static void AttachRequiredSkills(
+        IReadOnlyList<string>? suggestedSkills,
+        IReadOnlyDictionary<string, SkillCatalogItem> skillByNormalizedName,
+        Guid issueId,
+        Dictionary<Guid, HashSet<Guid>> existingSkillIdsByIssue,
+        List<IssueRequiredSkill> newRequiredSkills)
+    {
+        if (suggestedSkills == null || suggestedSkills.Count == 0 || skillByNormalizedName.Count == 0) return;
+        if (!existingSkillIdsByIssue.TryGetValue(issueId, out var alreadyLinkedSkills))
+        {
+            alreadyLinkedSkills = new HashSet<Guid>();
+            existingSkillIdsByIssue[issueId] = alreadyLinkedSkills;
+        }
+
+        foreach (var rawSkill in suggestedSkills)
+        {
+            var normalized = NormalizeLookupToken(rawSkill);
+            if (string.IsNullOrEmpty(normalized)) continue;
+
+            if (!skillByNormalizedName.TryGetValue(normalized, out var matched))
+            {
+                var candidates = skillByNormalizedName
+                    .Where(kv => kv.Key.Contains(normalized, StringComparison.Ordinal) ||
+                                 (kv.Key.Length >= 2 && normalized.Contains(kv.Key, StringComparison.Ordinal)))
+                    .Select(kv => kv.Value)
+                    .ToList();
+                if (candidates.Count == 1)
+                {
+                    matched = candidates[0];
+                }
+            }
+
+            if (matched != null && alreadyLinkedSkills.Add(matched.Id))
+            {
+                newRequiredSkills.Add(new IssueRequiredSkill
+                {
+                    Id = Guid.NewGuid(),
+                    IssueId = issueId,
+                    SkillId = matched.Id,
+                    MinLevel = 3,
+                    Weight = 1.000m,
+                    Source = "AI"
+                });
+            }
+        }
+    }
+
+    private static void AppendAcceptanceCriteria(
+        IReadOnlyList<string>? criteriaList,
+        Guid issueId,
+        Dictionary<Guid, HashSet<string>> existingCriteriaByIssue,
+        List<AcceptanceCriteria> newCriteria,
+        DateTime now)
+    {
+        if (criteriaList == null || criteriaList.Count == 0) return;
+        if (!existingCriteriaByIssue.TryGetValue(issueId, out var existingAcSet))
+        {
+            existingAcSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            existingCriteriaByIssue[issueId] = existingAcSet;
+        }
+
+        for (var idx = 0; idx < criteriaList.Count; idx++)
+        {
+            var criterionText = criteriaList[idx]?.Trim();
+            if (string.IsNullOrWhiteSpace(criterionText) || !existingAcSet.Add(criterionText)) continue;
+
+            newCriteria.Add(new AcceptanceCriteria
+            {
+                Id = Guid.NewGuid(),
+                IssueId = issueId,
+                Content = criterionText.Length > 2000 ? criterionText[..2000] : criterionText,
+                IsMet = false,
+                OrderIndex = existingAcSet.Count - 1,
+                Source = "AI",
+                CreatedAt = now
+            });
+        }
+    }
+
+    private static string BuildAiActivityDetail(
+        string? sessionId,
+        Guid? sprintId,
+        string sprintName,
+        bool pushedToBacklog,
+        bool movedFromBacklog,
+        string? aiRationale,
+        string? subtaskRole,
+        IReadOnlyList<string>? documentCitations,
+        IReadOnlyList<string>? suggestedSkills)
+    {
+        var cleanCitations = documentCitations?
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? [];
+
+        var cleanSkills = suggestedSkills?
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(s => s.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? [];
+
+        return JsonSerializer.Serialize(new
+        {
+            sessionId,
+            sprintId,
+            sprintName,
+            pushedToBacklog,
+            movedFromBacklog,
+            aiRationale = string.IsNullOrWhiteSpace(aiRationale) ? null : aiRationale.Trim(),
+            subtaskRole = string.IsNullOrWhiteSpace(subtaskRole) ? null : subtaskRole.Trim(),
+            documentCitations = cleanCitations,
+            suggestedSkills = cleanSkills
+        });
+    }
 }
