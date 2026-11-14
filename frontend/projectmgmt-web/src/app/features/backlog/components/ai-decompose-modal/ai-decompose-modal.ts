@@ -216,6 +216,11 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
   readonly inlineEditingTitleId = signal<string | null>(null);
   readonly inlineEditingSpId = signal<string | null>(null);
   readonly isSprintGoalInfoExpanded = signal<boolean>(false);
+  readonly isFullscreen = signal<boolean>(false);
+
+  toggleFullscreen(): void {
+    this.isFullscreen.update((v) => !v);
+  }
 
   // Applied project workflow & priority options (sourced from DB / active config)
   readonly availableWorkflowStatuses = computed<string[]>(() => {
