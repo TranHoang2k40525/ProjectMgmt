@@ -381,7 +381,7 @@ export interface EpicItem {
   key: string;
   color: string;
   description?: string;
-  status: 'In Progress' | 'Done' | 'To Do';
+  status: string;
 }
 
 export interface CustomIssueType {
@@ -474,13 +474,29 @@ export class ProjectManagementService {
   // Project Labels Signal
   readonly projectLabels = signal<ProjectLabel[]>([]);
 
-  // Active Project Statuses Signal (Default Scrum workflow)
+  // Active Project Statuses Signal (loaded & ordered dynamically from project workflow)
   readonly projectStatuses = signal<ProjectStatus[]>([
     { id: 'st-1', name: 'To Do', category: 'To Do', isInitial: true, orderIndex: 1 },
     { id: 'st-2', name: 'In Progress', category: 'In Progress', isInitial: false, orderIndex: 2 },
     { id: 'st-3', name: 'Code Review', category: 'In Progress', isInitial: false, orderIndex: 3 },
     { id: 'st-4', name: 'Done', category: 'Done', isInitial: false, orderIndex: 4 }
   ]);
+
+  /** Danh sách trạng thái của workflow đang áp dụng theo đúng thứ tự orderIndex */
+  readonly orderedStatuses = computed(() => this.sortStatuses(this.projectStatuses()));
+
+  private sortStatuses(statuses: ProjectStatus[] | null | undefined): ProjectStatus[] {
+    return [...(statuses ?? [])].sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
+  }
+
+  /** Kiểm tra trạng thái đã hoàn thành theo metadata của workflow hiện tại */
+  isDoneStatusName(statusName?: string | null): boolean {
+    const normalized = (statusName || '').trim().toLowerCase();
+    if (!normalized) return false;
+    const matched = this.projectStatuses().find(s => s.name.trim().toLowerCase() === normalized);
+    if (matched) return !!matched.isDone || (matched.category || '').trim().toLowerCase() === 'done';
+    return normalized === 'done' || normalized === 'released' || normalized === 'closed' || normalized === 'completed' || normalized === 'hoàn thành';
+  }
 
   // Project Priorities Signal (load from DB templates)
   readonly projectPriorities = signal<ProjectPriority[]>([
@@ -640,7 +656,7 @@ export class ProjectManagementService {
           this.workItems.set(normalizedItems);
           this.sprints.set(data.sprints);
           this.epics.set(data.epics);
-          this.projectStatuses.set(data.statuses);
+          this.projectStatuses.set(this.sortStatuses(data.statuses));
           if (priorities && priorities.length > 0) {
             this.projectPriorities.set(priorities);
           }
@@ -718,7 +734,7 @@ export class ProjectManagementService {
 
   addEpic(name: string, color = 'indigo', description = ''): EpicItem {
     const item = this.addWorkItem({ title: name, issueType: 'Epic', description });
-    const epic: EpicItem = { id: item.id, key: item.issueKey, name, color, description, status: 'To Do' };
+    const epic: EpicItem = { id: item.id, key: item.issueKey, name, color, description, status: item.statusName };
     this.epics.update(items => [...items, epic]); return epic;
   }
   createSubTask(parentId: string, title: string): WorkItem {
@@ -1213,7 +1229,7 @@ export class ProjectManagementService {
     }).pipe(
       tap(status => {
         if (this.currentProject().id === projectId) {
-          this.projectStatuses.update(statuses => [...statuses, status]);
+          this.projectStatuses.update(statuses => this.sortStatuses([...statuses, status]));
         }
       })
     );
@@ -1231,7 +1247,7 @@ export class ProjectManagementService {
     }).pipe(
       tap(updated => {
         if (this.currentProject().id === projectId) {
-          this.projectStatuses.update(statuses => statuses.map(s => s.id === id ? updated : s));
+          this.projectStatuses.update(statuses => this.sortStatuses(statuses.map(s => s.id === id ? updated : s)));
         }
       })
     );
@@ -1547,7 +1563,7 @@ export class ProjectManagementService {
           workflowTemplateId: templateId
         } : item));
 
-        this.projectStatuses.set(statuses);
+        this.projectStatuses.set(this.sortStatuses(statuses));
         this.loadWorkspace(projectId);
       })
     );

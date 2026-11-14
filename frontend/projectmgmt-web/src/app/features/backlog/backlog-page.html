@@ -4,6 +4,9 @@
   [x]="contextMenuX()"
   [y]="contextMenuY()"
   [itemKey]="contextMenuItem()?.issueKey || ''"
+  [statuses]="workflowStatuses()"
+  [currentStatus]="contextMenuItem()?.statusName || ''"
+  [workflowName]="projectService.currentProject().workflowName || projectService.currentProject().boardTabTitle || ''"
   (action)="onContextMenuAction($event)"
   (menuClose)="closeAllPopups()"
 ></app-context-menu>

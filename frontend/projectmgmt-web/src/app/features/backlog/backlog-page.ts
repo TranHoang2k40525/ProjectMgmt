@@ -210,8 +210,9 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   readonly sprints = this.projectService.sprints;
   readonly workItems = this.projectService.workItems;
   readonly epics = this.projectService.epics;
+  readonly workflowStatuses = this.projectService.orderedStatuses;
   readonly statusNames = computed(() => {
-    const s = this.projectService.projectStatuses().map(st => st.name);
+    const s = this.workflowStatuses().map(st => st.name);
     return s.length > 0 ? s : ['To Do', 'In Progress', 'Code Review', 'Done'];
   });
   readonly issueTypes = computed(() => {
@@ -367,15 +368,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     switch (event.action) {
       case 'status':
         if (event.value) {
-          const val = event.value;
-          const statusMap: Record<string, string> = {
-            'TO_DO': 'To Do',
-            'IN_PROGRESS': 'In Progress',
-            'CODE_REVIEW': 'Code Review',
-            'DONE': 'Done'
-          };
-          const targetStatus = statusMap[val] || val;
-          this.projectService.updateWorkItemStatus(item.id, targetStatus);
+          this.projectService.updateWorkItemStatus(item.id, event.value);
         }
         break;
 
@@ -578,11 +571,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   isDoneStatus(statusName?: string | null): boolean {
-    const normalized = (statusName || '').trim().toLowerCase();
-    if (!normalized) return false;
-    const matched = this.projectService.projectStatuses().find(s => s.name.trim().toLowerCase() === normalized);
-    if (matched) return !!matched.isDone || (matched.category || '').toLowerCase() === 'done';
-    return normalized === 'done' || normalized === 'released' || normalized === 'closed' || normalized === 'completed';
+    return this.projectService.isDoneStatusName(statusName);
   }
 
   getStatusPillClass(statusName?: string | null): string {

@@ -125,8 +125,10 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
     return list;
   });
 
+  readonly workflowStatuses = this.projectService.orderedStatuses;
+
   readonly boardColumns = computed(() => {
-    const statuses = this.projectService.projectStatuses();
+    const statuses = this.workflowStatuses();
     if (statuses.length === 0) {
       return [
         { id: 'st-1', name: 'To Do', colorHex: '#64748B' },
@@ -291,14 +293,7 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
     switch (event.action) {
       case 'status':
         if (event.value) {
-          const val = event.value;
-          const statusMap: Record<string, string> = {
-            'TO_DO': 'To Do',
-            'IN_PROGRESS': 'In Progress',
-            'CODE_REVIEW': 'Code Review',
-            'DONE': 'Done'
-          };
-          const targetStatus = statusMap[val] || val;
+          const targetStatus = event.value;
           this.animateBoardChange(() => this.projectService.updateWorkItemStatus(item.id, targetStatus));
         }
         break;
@@ -397,9 +392,13 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
     this.toastService.info('Đổi Mức Ưu Tiên', `Độ ưu tiên: ${priority}`);
   }
 
+  isDoneStatus(statusName?: string | null): boolean {
+    return this.projectService.isDoneStatusName(statusName);
+  }
+
   getSubtaskCount(parentId: string): { total: number; done: number } {
     const subs = this.items().filter(i => i.parentId === parentId);
-    const done = subs.filter(i => i.statusName === 'Done').length;
+    const done = subs.filter(i => i.isDone || this.isDoneStatus(i.statusName)).length;
     return { total: subs.length, done };
   }
 

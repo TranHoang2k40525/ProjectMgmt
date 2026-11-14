@@ -890,7 +890,7 @@ export class TaskDetailDrawerComponent implements OnDestroy {
     return custom.length > 0 ? custom : ['Story', 'Task', 'Bug', 'Epic', 'Sub-task'];
   });
   readonly availableStatusNames = computed(() => {
-    const dynamic = this.projectService.projectStatuses().map(s => s.name);
+    const dynamic = this.projectService.orderedStatuses().map(s => s.name);
     return dynamic.length > 0 ? dynamic : ['To Do', 'In Progress', 'Code Review', 'Done'];
   });
   readonly availablePriorities = computed(() => {
@@ -1075,7 +1075,7 @@ export class TaskDetailDrawerComponent implements OnDestroy {
       const members = this.projectMembers();
       const allWorkItems = this.projectService.workItems();
       const scores = members.map(m => {
-        const activeTasks = allWorkItems.filter(w => (w.assigneeName === m.displayName || w.assigneeId === m.userId) && w.statusName !== 'Done').length;
+        const activeTasks = allWorkItems.filter(w => (w.assigneeName === m.displayName || w.assigneeId === m.userId) && !this.projectService.isDoneStatusName(w.statusName)).length;
         const workloadScore = Math.max(30, Math.min(100, 100 - activeTasks * 15));
         const skillScore = m.role === 'Developer' ? 90 : m.role === 'QA Engineer' ? 85 : 80;
         const historyScore = 85;

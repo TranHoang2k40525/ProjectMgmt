@@ -151,24 +151,14 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
               </div>
             </div>
 
-            <!-- Legend Items -->
+            <!-- Dynamic Workflow Status Legend Items -->
             <div class="flex flex-col gap-3">
-              <div class="flex items-center gap-3">
-                <span class="w-3.5 h-3.5 rounded-md bg-slate-400"></span>
-                <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">To Do (Cần làm): {{ toDoCount() }}</span>
-              </div>
-              <div class="flex items-center gap-3">
-                <span class="w-3.5 h-3.5 rounded-md bg-blue-500"></span>
-                <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">In Progress (Đang làm): {{ inProgressCount() }}</span>
-              </div>
-              <div class="flex items-center gap-3">
-                <span class="w-3.5 h-3.5 rounded-md bg-teal-500"></span>
-                <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">Code Review (Duyệt): {{ codeReviewCount() }}</span>
-              </div>
-              <div class="flex items-center gap-3">
-                <span class="w-3.5 h-3.5 rounded-md bg-emerald-500"></span>
-                <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">Done (Hoàn thành): {{ completedCount() }}</span>
-              </div>
+              @for (st of statusBreakdown(); track st.id) {
+                <div class="flex items-center gap-3">
+                  <span class="w-3.5 h-3.5 rounded-md shrink-0" [style.backgroundColor]="st.colorHex"></span>
+                  <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">{{ st.name }}: {{ st.count }}</span>
+                </div>
+              }
             </div>
           </div>
 
@@ -259,18 +249,29 @@ export class ProjectSummaryPageComponent implements AfterViewInit, OnDestroy {
   readonly activeSprint = computed(() => this.projectService.sprints().find(s => s.status === 'active') ?? null);
 
   readonly totalCount = computed(() => this.items().length);
-  readonly completedCount = computed(() => {
-    const doneNames = new Set(this.projectService.projectStatuses().filter(s => s.category === 'Done').map(s => s.name));
-    return this.items().filter(i => i.statusName === 'Done' || doneNames.has(i.statusName)).length;
-  });
+  readonly completedCount = computed(() => this.items().filter(i => i.isDone || this.projectService.isDoneStatusName(i.statusName)).length);
   readonly inProgressCount = computed(() => {
-    const inProgNames = new Set(this.projectService.projectStatuses().filter(s => s.category === 'InProgress' && s.name !== 'Code Review').map(s => s.name));
-    return this.items().filter(i => i.statusName === 'In Progress' || inProgNames.has(i.statusName)).length;
+    const activeNames = new Set(
+      this.projectService.orderedStatuses()
+        .filter(s => {
+          const cat = (s.category || '').trim().toLowerCase();
+          return !s.isDone && !s.isCanceled && (!!s.isActiveWork || cat === 'inprogress' || cat === 'in progress');
+        })
+        .map(s => s.name.trim().toLowerCase())
+    );
+    return this.items().filter(i => activeNames.has((i.statusName || '').trim().toLowerCase())).length;
   });
-  readonly codeReviewCount = computed(() => this.items().filter(i => i.statusName === 'Code Review').length);
-  readonly toDoCount = computed(() => {
-    const todoNames = new Set(this.projectService.projectStatuses().filter(s => s.category === 'ToDo').map(s => s.name));
-    return this.items().filter(i => i.statusName === 'To Do' || todoNames.has(i.statusName)).length;
+  readonly statusBreakdown = computed(() => {
+    const statuses = this.projectService.orderedStatuses();
+    const items = this.items();
+    return statuses.map(s => {
+      const normalized = s.name.trim().toLowerCase();
+      const cat = (s.category || '').trim().toLowerCase();
+      const colorHex = s.colorHex?.trim()
+        || (s.isDone || cat === 'done' ? '#10B981' : s.isCanceled || cat === 'canceled' ? '#EF4444' : s.isActiveWork || cat.includes('progress') ? '#3B82F6' : '#94A3B8');
+      const count = items.filter(i => (i.statusName || '').trim().toLowerCase() === normalized).length;
+      return { id: s.id, name: s.name, colorHex, count };
+    });
   });
 
   readonly donePercent = computed(() => this.totalCount() > 0 ? Math.round((this.completedCount() / this.totalCount()) * 100) : 0);
