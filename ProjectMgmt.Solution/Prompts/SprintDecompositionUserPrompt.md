@@ -1,6 +1,6 @@
 Dữ liệu đầu vào thực tế của dự án:
 
-### 1. Tài liệu / Biên bản cuộc họp hoạch định Sprint:
+### 1. Tài liệu / Biên bản cuộc họp & Lịch sử hội thoại trong phiên:
 {{DOC_CONTENT}}
 
 ### 2. Danh sách tệp tài liệu thực tế trong Spec Hub của dự án (BẮT BUỘC chỉ trích dẫn từ danh sách này):
@@ -44,4 +44,5 @@ CHỈ ĐẠO THỰC THI CHO AGENT:
    - `tags`: Ưu tiên dùng nhãn từ `{{PROJECT_LABELS}}` khi phù hợp.
 4. **Kế thừa Sprint Rollover (Mục 6)**: Kế thừa Bug tồn đọng (ưu tiên cao nhất theo cấu hình dự án) và việc đang làm dở (WIP); không tự đưa việc thường quá hạn chưa làm vào Sprint nếu không cấp thiết.
 5. Định cỡ Story Points đa dạng (1, 2, 3, 5, 8) cân đối với năng lực thành viên (Mục 7), phân công đúng họ tên thành viên theo chuyên môn Backend, Frontend, QA.
-6. Trả về đúng duy nhất đối tượng JSON SprintProposal hợp lệ.
+6. Nếu có lịch sử hội thoại trước đó ở Mục 1, bảo toàn ngữ cảnh và cập nhật theo đúng yêu cầu nối tiếp ở Mục 5; đặt `recommendedTarget` là `"backlog"` nếu người dùng chuẩn bị việc cho kho Backlog hoặc `"sprint"` nếu lập Sprint, đồng thời viết `assistantReply` tự nhiên, rành mạch.
+7. Trả về đúng duy nhất đối tượng JSON hợp lệ.

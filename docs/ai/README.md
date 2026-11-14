@@ -32,23 +32,23 @@ flowchart TD
 ### Danh mục các chuyên đề chi tiết:
 
 1. [**Chuyên đề 1: Kiến trúc Tổng quan & Sơ đồ Use Case**](file:///c:/Users/hoang/Downloads/ProjectMgmt/docs/ai/01-kien-truc-tong-quan-va-use-case.md)
-   - Khái niệm & Bài toán cốt lõi trong Scrum Agile.
-   - Clean Architecture & Modular Monolith kết hợp Module AI.
-   - Sơ đồ Use Case tổng quát (Mermaid).
+   - Khái niệm & Bài toán cốt lõi trong Scrum Agile; nâng cấp thành **Trợ Lý AI** hội thoại có trạng thái (Stateful Multi-turn Agent).
+   - Clean Architecture & Modular Monolith kết hợp Module AI; **Rào chắn Phạm vi Nghiệp vụ** (từ chối yêu cầu ngoài luồng).
+   - Sơ đồ Use Case tổng quát (Mermaid) gồm lập kế hoạch Sprint/Backlog, hỏi đáp dự án, xuất Excel qua hội thoại và đẩy trực tiếp vào Kho Backlog.
    - Kiến trúc Đa nhà cung cấp (Multi-Provider Model Client): Gemini 3.6/3.5 Flash, Claude 3.7 Sonnet, OpenAI GPT-4o, Local Ollama.
    - Quy chuẩn Bảo mật Tuyệt đối: Zero-Secret-Leakage & Project Scope Guard.
 
 2. [**Chuyên đề 2: Sơ đồ Tuần tự & Sơ đồ Hoạt động**](file:///c:/Users/hoang/Downloads/ProjectMgmt/docs/ai/02-so-do-tuan-tu-va-hoat-dong.md)
-   - Sơ đồ Tuần tự (Sequence Diagram) 5 bước từ lúc gửi yêu cầu đến khi tạo Sprint.
-   - Sơ đồ Hoạt động (Activity Diagram) từng bước của Agent Pipeline.
-   - Luồng truyền dữ liệu thời gian thực Server-Sent Events (SSE).
+   - Bộ định tuyến Ý định Hội thoại (Intent Classification): Phân tách Sprint/Backlog, Tinh chỉnh Đề xuất, Hỏi đáp Dự án, Xuất Excel, Đẩy Backlog/Sprint và Từ chối Ngoài luồng.
+   - Sơ đồ Tuần tự (Sequence Diagram) & Sơ đồ Hoạt động (Activity Diagram) quy trình Agentic Workflow 5 bước đa lượt.
+   - Luồng truyền dữ liệu thời gian thực Server-Sent Events (SSE) kèm `sessionId` phiên hội thoại.
    - Cơ chế tự động làm mới JWT Access Token khi phiên làm việc hết hạn (HTTP 401).
 
 3. [**Chuyên đề 3: Cơ chế Trí nhớ & Bộ nhớ đệm phân tán Redis**](file:///c:/Users/hoang/Downloads/ProjectMgmt/docs/ai/03-co-che-tri-nho-redis-memory.md)
-   - Phân loại Trí nhớ AI: Working Memory, Short-term Session Memory, Long-term Grounding Memory.
-   - Sơ đồ hoạt động của Chức năng Trí nhớ Redis (Memory Context Flowchart).
+   - Phân loại Trí nhớ AI: Working Memory, Stateful Conversational & Staging Session Memory, Long-term Grounding Memory.
+   - Sơ đồ hoạt động của Chức năng Trí nhớ Redis (Memory Context Flowchart) hỗ trợ hội thoại nhiều lượt (`ConversationHistory`) trên cùng `sessionId`.
    - State Staging phân tán (`ResilientStateStagingService` + `StackExchangeRedisStagingProvider`).
-   - Cấu trúc khóa Redis (`ProjectMgmt:Ai:...`), TTL, nén dữ liệu và cơ chế In-Memory Fallback an toàn.
+   - Cấu trúc khóa Redis (`ProjectMgmt:Ai:...`), TTL, cập nhật sau commit Backlog/Sprint và cơ chế In-Memory Fallback an toàn.
    - Hướng dẫn kiểm tra và chứng minh thực tế trên Redis CLI.
 
 4. [**Chuyên đề 4: Cơ chế RAG & Grounding với Spec Hub**](file:///c:/Users/hoang/Downloads/ProjectMgmt/docs/ai/04-rag-va-spec-hub-grounding.md)
@@ -76,14 +76,14 @@ flowchart TD
 
 | Tên Thành Phần | Vai Trò Chuyên Trách | Đường Dẫn Mã Nguồn |
 | :--- | :--- | :--- |
-| **AiAgentController** | API Controller phục vụ SSE stream, staging, tái tạo và commit | [`AiAgentController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/AiAgentController.cs) |
-| **AiSprintDecompositionService** | Dịch vụ phân rã Sprint 5 bước, điều phối RAG & MCP tools | [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs) |
+| **AiAgentController** | API Controller phục vụ SSE stream theo `sessionId`, staging, tái tạo và commit Sprint/Backlog | [`AiAgentController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/AiAgentController.cs) |
+| **AiSprintDecompositionService** | Trợ Lý AI hội thoại có trạng thái Redis: phân loại ý định, rào chắn ngoài luồng, pipeline 5 bước & RAG/MCP | [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs) |
 | **ProjectActiveConfigResolver** | Phân giải cấu hình thực tế đang áp dụng của dự án (Workflow, Priorities, IssueTypes, Labels) | [`ProjectActiveConfigResolver.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/ProjectActiveConfigResolver.cs) |
-| **AiSprintCommitCoordinator** | Ghi nhận Sprint, di chuyển hạng mục Backlog không trùng lặp & xử lý Rollover | [`AiSprintCommitCoordinator.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintCommitCoordinator.cs) |
+| **AiSprintCommitCoordinator** | Ghi nhận Sprint, **đẩy trực tiếp vào Kho Backlog (`SprintId = null`)**, di chuyển Backlog không trùng lặp & xử lý Rollover | [`AiSprintCommitCoordinator.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintCommitCoordinator.cs) |
 | **AiTokenUsageTracker** | Theo dõi tiêu thụ Token AI, thống kê chi phí & lịch sử phiên | [`AiTokenUsageTracker.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiTokenUsageTracker.cs) |
 | **MultiProviderAiModelClient** | Router gọi đa mô hình (Gemini, Claude, OpenAI, Ollama) | [`MultiProviderAiModelClient.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/MultiProviderAiModelClient.cs) |
 | **AiDocumentTextExtractor** | Trích xuất văn bản từ file Word, Excel, PDF, Markdown, Text | [`AiDocumentTextExtractor.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiDocumentTextExtractor.cs) |
-| **StackExchangeRedisStagingProvider** | Bộ nhớ đệm phân tán Redis lưu trạng thái đề xuất staging | [`StackExchangeRedisStagingProvider.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/Adapters/StackExchangeRedisStagingProvider.cs) |
+| **StackExchangeRedisStagingProvider** | Bộ nhớ đệm phân tán Redis lưu trạng thái đề xuất staging & lịch sử hội thoại đa lượt | [`StackExchangeRedisStagingProvider.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/Adapters/StackExchangeRedisStagingProvider.cs) |
 | **ResilientStateStagingService** | Cơ chế bọc chống sập bộ nhớ: ưu tiên Redis, fallback In-Memory | [`ResilientStateStagingService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Core/Staging/ResilientStateStagingService.cs) |
 | **ProjectScopeGuard** | Rào chắn bảo mật cách ly dữ liệu giữa các Project & Org | [`ProjectScopeGuard.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Core/Security/ProjectScopeGuard.cs) |
 | **SpecHubTools** | MCP Tool truy xuất kho tài liệu đặc tả Spec Hub | [`SpecHubTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SpecHubTools.cs) |
@@ -91,9 +91,9 @@ flowchart TD
 | **SprintTools** | MCP Tool tính toán vận tốc (Velocity) và rollover items | [`SprintTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SprintTools.cs) |
 | **TeamTools** | MCP Tool thống kê kỹ năng và giờ làm việc khả dụng | [`TeamTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/TeamTools.cs) |
 | **ProjectMgmt.McpServer** | Ứng dụng Console Stdio JSON-RPC phục vụ Agent ngoài | [`Program.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.McpServer/Program.cs) |
-| **ai-agent.service.ts** | Service Angular kết nối SSE stream, xử lý 401 refresh token | [`ai-agent.service.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/core/services/ai-agent.service.ts) |
-| **ai-decompose-modal.ts** | Component giao diện hội thoại AI, xem trước tài liệu, review dán | [`ai-decompose-modal.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.ts) |
-| **ai-decompose-modal.html** | Giao diện Angular template: Textarea auto-expand, Drawer preview | [`ai-decompose-modal.html`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.html) |
+| **ai-agent.service.ts** | Service Angular kết nối SSE stream (truyền `sessionId`), áp dụng Sprint / đẩy Backlog & 401 refresh | [`ai-agent.service.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/core/services/ai-agent.service.ts) |
+| **ai-decompose-modal.ts** | Component giao diện **Trợ Lý AI** hội thoại 2 phía có trạng thái, xuất Excel, đẩy Kho Backlog & xem tài liệu | [`ai-decompose-modal.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.ts) |
+| **ai-decompose-modal.html** | Template đoạn hội thoại Trợ Lý AI (trái) & Tôi (phải) liền mạch, bảng đề xuất tích hợp & các ngăn kéo | [`ai-decompose-modal.html`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.html) |
 | **profile-page.html** | Dashboard quản lý mức tiêu thụ Token AI và chi phí vận hành | [`profile-page.html`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/identity/profile-page.html) |
 | **spec-hub-page.ts** | Giao diện Spec Hub hỗ trợ mở đúng vị trí phân đoạn trích dẫn | [`spec-hub-page.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/spec-hub/spec-hub-page.ts) |
 

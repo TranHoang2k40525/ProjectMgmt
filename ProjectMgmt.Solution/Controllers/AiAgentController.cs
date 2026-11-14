@@ -119,7 +119,12 @@ public class AiAgentController : ControllerBase
             }
         }
 
-        var sessionId = $"sprint_ai_{Guid.NewGuid():N}";
+        // Hội thoại có trạng thái: tái sử dụng phiên Redis cũ nếu client gửi kèm SessionId hợp lệ
+        var requestedSessionId = request.SessionId?.Trim();
+        var sessionId = !string.IsNullOrWhiteSpace(requestedSessionId) && requestedSessionId.StartsWith("sprint_ai_", StringComparison.Ordinal)
+            ? requestedSessionId
+            : $"sprint_ai_{Guid.NewGuid():N}";
+        AiSprintProposalDto? existingProposal = null;
 
         try
         {
@@ -146,6 +151,17 @@ public class AiAgentController : ControllerBase
 
             var scope = new ProjectScopeContext(project.OrgId, request.ProjectId, userId.Value);
             ProjectScopeGuard.Validate(scope, project.OrgId, request.ProjectId);
+
+            if (!string.IsNullOrWhiteSpace(requestedSessionId))
+            {
+                existingProposal = await _stagingService.GetProposalAsync<AiSprintProposalDto>(sessionId, ct);
+                // Chống đọc chéo phiên của dự án khác (Project Scope Isolation)
+                if (existingProposal != null && existingProposal.ProjectId != Guid.Empty && existingProposal.ProjectId != request.ProjectId)
+                {
+                    existingProposal = null;
+                    sessionId = $"sprint_ai_{Guid.NewGuid():N}";
+                }
+            }
 
             var userDisplay = await _userLookup.GetDisplayInfoAsync(userId.Value);
             var actorName = userDisplay?.DisplayName ?? "Thành viên Scrum";
@@ -204,7 +220,8 @@ public class AiAgentController : ControllerBase
                     await EmitEventAsync(AiSseEventTypes.ProposalReady, proposal);
                 },
                 model: request.Model,
-                cancellationToken: ct);
+                cancellationToken: ct,
+                existingProposal: existingProposal);
 
             stopwatch.Stop();
             var stagedProposal = await _stagingService.GetProposalAsync<AiSprintProposalDto>(sessionId, ct);
@@ -432,7 +449,7 @@ public class AiAgentController : ControllerBase
         proposal.SprintGoal = request.SprintGoal?.Trim() ?? proposal.SprintGoal;
         if (request.Rationale != null) proposal.Rationale = request.Rationale.Trim();
         if (request.TargetSprintId.HasValue) proposal.TargetSprintId = request.TargetSprintId;
-        if (request.Tasks != null && request.Tasks.Count > 0)
+        if (request.Tasks != null)
         {
             proposal.Tasks = request.Tasks;
             proposal.TotalStoryPoints = proposal.Tasks.Sum(t => t.StoryPoints);
@@ -479,12 +496,16 @@ public class AiAgentController : ControllerBase
             || await _projectAccess.AllowsAsync(projectId, "project.update")
             || project.LeadUserId == userId.Value;
 
-        if (!canCommitSprint)
+        var canPushBacklog = canCommitSprint || await _projectAccess.AllowsAsync(projectId, "issue.create");
+
+        if (request.PushToBacklog ? !canPushBacklog : !canCommitSprint)
         {
             return StatusCode(StatusCodes.Status403Forbidden, new
             {
-                code = "FORBIDDEN_SPRINT_COMMIT",
-                message = "Chỉ Giám đốc dự án, Chủ tổ chức hoặc Scrum Master mới có quyền áp dụng kế hoạch vào Sprint."
+                code = request.PushToBacklog ? "FORBIDDEN_BACKLOG_PUSH" : "FORBIDDEN_SPRINT_COMMIT",
+                message = request.PushToBacklog
+                    ? "Bạn không có quyền tạo công việc trong kho Backlog của dự án này."
+                    : "Chỉ Giám đốc dự án, Chủ tổ chức hoặc Scrum Master mới có quyền áp dụng kế hoạch vào Sprint."
             });
         }
 
@@ -514,6 +535,28 @@ public class AiAgentController : ControllerBase
         if (!result.Success)
         {
             return BadRequest(new { code = result.ErrorCode ?? "COMMIT_FAILED", message = result.Message });
+        }
+
+        // Đồng bộ lại trạng thái phiên hội thoại trên Redis để không lưu trùng nếu người dùng tiếp tục trò chuyện hoặc mở lại phiên
+        if (stagedProposal != null && !string.IsNullOrWhiteSpace(request.SessionId))
+        {
+            stagedProposal.Tasks = [];
+            stagedProposal.TotalStoryPoints = 0;
+            stagedProposal.TotalEstimatedHours = 0;
+            stagedProposal.TriggerAction = "none";
+            stagedProposal.ConversationHistory ??= [];
+            stagedProposal.ConversationHistory.Add(new AiConversationTurnDto
+            {
+                Id = $"assistant_commit_{DateTime.UtcNow.Ticks}",
+                Role = "assistant",
+                Content = result.Message,
+                Intent = request.PushToBacklog ? "push_backlog" : "apply_sprint",
+                ActionType = request.PushToBacklog ? "push_backlog_done" : "apply_sprint_done",
+                TaskCount = result.CreatedTaskCount,
+                TotalStoryPoints = result.TotalStoryPoints,
+                TimestampUtc = DateTime.UtcNow
+            });
+            await _stagingService.SaveProposalAsync(request.SessionId, stagedProposal, TimeSpan.FromHours(2), ct);
         }
 
         return Ok(result);

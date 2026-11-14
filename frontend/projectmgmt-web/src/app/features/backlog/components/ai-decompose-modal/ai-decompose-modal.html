@@ -11,11 +11,11 @@
     <header class="ai-modal-header">
       <div class="header-title-group">
         <div class="header-icon-box">
-          <span class="material-symbols-outlined" aria-hidden="true">account_tree</span>
+          <span class="material-symbols-outlined" aria-hidden="true">support_agent</span>
         </div>
         <div>
-          <h2>AI Phân tách Kế hoạch Sprint &amp; Công việc</h2>
-          <p>{{ projectName }} ({{ projectKey }}) · Phân tích tài liệu đặc tả, biên bản họp &amp; đề xuất Sprint tự động</p>
+          <h2>Trợ Lý AI</h2>
+          <p>{{ projectName }} ({{ projectKey }}) · Trao đổi, lập kế hoạch Sprint, quản lý kho Backlog và báo cáo dự án</p>
         </div>
       </div>
 
@@ -93,191 +93,188 @@
     </header>
 
     <!-- Main Scrollable Body -->
-    <div class="ai-modal-body">
+    <div class="ai-modal-body" #chatScrollBody>
       <!-- Upper Workspace: Chat History & Realtime Agent Execution Pipeline -->
       <section class="ai-conversation-zone" aria-label="Nội dung tương tác và tiến trình thực thi">
         @if (chatHistory().length === 0 && !isStreaming() && !proposal()) {
           <div class="empty-prompt-guide">
             <div class="guide-icon">
-              <span class="material-symbols-outlined" aria-hidden="true">description</span>
+              <span class="material-symbols-outlined" aria-hidden="true">forum</span>
             </div>
-            <h3>Nhập nội dung cuộc họp, dán tài liệu hoặc đính kèm tệp đặc tả</h3>
+            <h3>Trao đổi với Trợ Lý AI về dự án {{ projectName }}</h3>
             <p>
-              Hỗ trợ đính kèm <strong>.docx, .pdf, .txt, .md, .xlsx</strong> hoặc nhấn <strong>Ctrl + V</strong> để dán trực tiếp nội dung từ bên ngoài.
-              Hệ thống Agent sẽ kiểm tra bảo mật, tra cứu MCP Spec Hub, đối chiếu năng lực thành viên và đề xuất Sprint tiếp theo kèm Sprint Goal.
+              Dán biên bản họp, đính kèm tài liệu (<strong>.docx, .pdf, .txt, .md, .xlsx</strong>) hoặc gõ yêu cầu như một cuộc trò chuyện.
+              Trợ Lý AI ghi nhớ toàn bộ ngữ cảnh trong phiên, đọc dữ liệu thật của dự án (Spec Hub, kho Backlog, Sprint, quy trình, thành viên)
+              để lập kế hoạch Sprint, đẩy việc vào kho Backlog, trả lời câu hỏi về dự án hoặc xuất tệp Excel.
             </p>
           </div>
         }
 
-        <!-- Conversation Turns -->
-        @if (chatHistory().length > 0) {
-          <div class="chat-turns-list">
+        <!-- Đoạn hội thoại: Trợ Lý AI bên trái, Tôi bên phải -->
+        @if (chatHistory().length > 0 || isStreaming()) {
+          <div class="chat-thread" data-testid="ai-chat-thread">
             @for (turn of chatHistory(); track turn.id) {
-              <div class="chat-turn" [class.turn-user]="turn.role === 'user'" [class.turn-agent]="turn.role === 'agent'">
-                <div class="turn-avatar">
-                  <span class="material-symbols-outlined" aria-hidden="true">
-                    {{ turn.role === 'user' ? 'person' : 'terminal' }}
-                  </span>
-                </div>
-                <div class="turn-content">
-                  <div class="turn-meta">
-                    <strong>{{ turn.role === 'user' ? 'Yêu cầu của bạn' : 'Hệ thống Agent Scrum' }}</strong>
-                    <span>{{ turn.timestamp }}</span>
+              @if (turn.role === 'user') {
+                <div class="msg-row msg-row-user" data-testid="ai-msg-user">
+                  <div class="msg-user-stack">
+                    <div class="msg-meta msg-meta-right">
+                      <span class="msg-time">{{ turn.timestamp }}</span>
+                      <strong>Tôi</strong>
+                    </div>
+                    <div class="msg-bubble-user">
+                      @if (turn.fileName) {
+                        <div class="attached-file-pill">
+                          <span class="material-symbols-outlined" aria-hidden="true">attach_file</span>
+                          <strong>{{ turn.fileName }}</strong>
+                          @if (turn.fileSizeLabel) {
+                            <span>({{ turn.fileSizeLabel }})</span>
+                          }
+                        </div>
+                      }
+                      <p class="msg-text">{{ turn.text }}</p>
+
+                      @if (turn.fullContent) {
+                        <div class="msg-user-expand">
+                          <button
+                            type="button"
+                            class="msg-link-btn"
+                            (click)="turn.isContentExpanded = !turn.isContentExpanded"
+                            title="Xem lại toàn bộ nội dung đã gửi"
+                          >
+                            <span class="material-symbols-outlined" aria-hidden="true">
+                              {{ turn.isContentExpanded ? 'expand_less' : 'expand_more' }}
+                            </span>
+                            <span>{{ turn.isContentExpanded ? 'Thu gọn' : 'Xem nội dung đã gửi (' + turn.fullContent.length + ' ký tự)' }}</span>
+                          </button>
+                          <button
+                            type="button"
+                            class="msg-link-btn"
+                            (click)="copyToClipboard(turn.fullContent)"
+                            title="Sao chép toàn bộ nội dung đã gửi"
+                          >
+                            <span class="material-symbols-outlined" aria-hidden="true">content_copy</span>
+                            <span>Sao chép</span>
+                          </button>
+                        </div>
+                        @if (turn.isContentExpanded) {
+                          <pre class="msg-user-fulltext animate-fade-in">{{ turn.fullContent }}</pre>
+                        }
+                      }
+                    </div>
                   </div>
-                  @if (turn.fileName) {
-                    <div class="attached-file-pill">
-                      <span class="material-symbols-outlined" aria-hidden="true">attach_file</span>
-                      <strong>{{ turn.fileName }}</strong>
-                      @if (turn.fileSizeLabel) {
-                        <span>({{ turn.fileSizeLabel }})</span>
+                </div>
+              } @else {
+                <div class="msg-row msg-row-assistant" data-testid="ai-msg-assistant">
+                  <div class="msg-avatar-assistant" aria-hidden="true">
+                    <span class="material-symbols-outlined">support_agent</span>
+                  </div>
+                  <div class="msg-assistant-stack">
+                    <div class="msg-meta">
+                      <strong>Trợ Lý AI</strong>
+                      <span class="msg-time">{{ turn.timestamp }}</span>
+                      @if (getIntentLabel(turn.intent); as intentLabel) {
+                        <span class="msg-intent">· {{ intentLabel }}</span>
                       }
                     </div>
-                  }
-                  <p class="turn-text-line">{{ turn.text }}</p>
 
-                  <!-- Expandable User Submitted Content Box (Review full prompt/meeting text) -->
-                  @if (turn.fullContent) {
-                    <div class="user-content-expand-wrapper">
-                      <div class="flex items-center gap-2">
+                    @if (turn.toolCalls; as calls) {
+                      @if (calls.length > 0) {
                         <button
                           type="button"
-                          class="btn-toggle-user-content"
-                          (click)="turn.isContentExpanded = !turn.isContentExpanded"
-                          title="Xem lại nội dung đầy đủ bạn đã dán hoặc gửi"
+                          class="msg-trace-toggle"
+                          data-testid="btn-toggle-thinking"
+                          [attr.aria-expanded]="!!expandedTurnTraces()[turn.id]"
+                          (click)="toggleTurnTrace(turn.id)"
                         >
-                          <span class="material-symbols-outlined text-[15px]" aria-hidden="true">
-                            {{ turn.isContentExpanded ? 'visibility_off' : 'visibility' }}
-                          </span>
-                          <span>{{ turn.isContentExpanded ? 'Thu gọn nội dung đã gửi' : 'Xem nội dung chi tiết (' + turn.fullContent.length + ' ký tự)' }}</span>
-                          <span class="material-symbols-outlined text-[15px]" aria-hidden="true">
-                            {{ turn.isContentExpanded ? 'expand_less' : 'expand_more' }}
+                          <span class="material-symbols-outlined" aria-hidden="true">manage_search</span>
+                          <span>Đã tra cứu {{ calls.length }} nguồn dữ liệu của dự án</span>
+                          <span class="material-symbols-outlined" aria-hidden="true">
+                            {{ expandedTurnTraces()[turn.id] ? 'expand_less' : 'expand_more' }}
                           </span>
                         </button>
-                        <button
-                          type="button"
-                          class="px-2 py-1 text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 flex items-center gap-1 cursor-pointer transition-colors"
-                          (click)="copyToClipboard(turn.fullContent)"
-                          title="Sao chép toàn bộ nội dung đã gửi"
-                        >
-                          <span class="material-symbols-outlined text-[14px]" aria-hidden="true">content_copy</span>
-                          <span>Sao chép</span>
-                        </button>
-                      </div>
-
-                      @if (turn.isContentExpanded) {
-                        <div class="user-submitted-preview-box animate-fade-in">
-                          <pre class="max-h-60 overflow-y-auto whitespace-pre-wrap font-sans text-xs leading-relaxed text-slate-700 dark:text-slate-300 p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 select-text">{{ turn.fullContent }}</pre>
-                        </div>
-                      }
-                    </div>
-                  }
-
-                  <!-- Agent Executive Summary Card (Image 2 & 7 Fix) -->
-                  @if (turn.executiveSummary; as summary) {
-                    <div class="agent-executive-card animate-fade-in">
-                      <div class="executive-sprint-goal">
-                        <span class="material-symbols-outlined text-primary text-[20px]" aria-hidden="true">flag</span>
-                        <div class="goal-text">
-                          <span class="goal-label">Mục tiêu Sprint (Sprint Goal):</span>
-                          <strong class="goal-value">"{{ summary.sprintGoal }}"</strong>
-                        </div>
-                      </div>
-
-                      <div class="executive-metrics-grid">
-                        <div class="metric-pill">
-                          <span class="metric-label">Tổng Story Points:</span>
-                          <strong class="metric-val text-primary">{{ summary.totalStoryPoints }} SP</strong>
-                        </div>
-                        <div class="metric-pill">
-                          <span class="metric-label">Tổng giờ ước tính:</span>
-                          <strong class="metric-val text-indigo-600">{{ summary.totalEstimatedHours }}h</strong>
-                        </div>
-                        <div class="metric-pill">
-                          <span class="metric-label">Cấu trúc công việc:</span>
-                          <strong class="metric-val text-slate-700 dark:text-slate-200">{{ summary.taskCount }} Task chính • {{ summary.subtaskCount }} Subtask</strong>
-                        </div>
-                        <div class="metric-pill">
-                          <span class="metric-label">Căn cứ đặc tả:</span>
-                          <strong class="metric-val text-emerald-700 truncate" [title]="summary.specGrounding">{{ summary.specGrounding }}</strong>
-                        </div>
-                      </div>
-
-                      @if (summary.roleBreakdown) {
-                        <div class="executive-roles-row">
-                          <span class="roles-label">Phân bổ chuyên môn:</span>
-                          <div class="roles-chips">
-                            @for (roleEntry of summary.roleBreakdown | keyvalue; track roleEntry.key) {
-                              <span class="role-chip">
-                                <strong>{{ roleEntry.key }}:</strong> {{ roleEntry.value }} việc
-                              </span>
+                        @if (expandedTurnTraces()[turn.id]) {
+                          <ul class="msg-trace-list animate-fade-in">
+                            @for (tool of calls; track $index; let tIdx = $index) {
+                              <li [attr.data-testid]="'ai-tool-item-' + tIdx">
+                                <span class="material-symbols-outlined" aria-hidden="true">check</span>
+                                <span class="trace-name">{{ tool.summaryVi || tool.toolName }}</span>
+                                @if (tool.durationMs !== undefined && tool.durationMs !== null) {
+                                  <span class="trace-ms">{{ tool.durationMs }}ms</span>
+                                }
+                              </li>
                             }
-                          </div>
-                        </div>
+                          </ul>
+                        }
                       }
-                    </div>
+                    }
+
+                    <div class="msg-assistant-text">{{ turn.text }}</div>
+
+                    @if (turn.actionType === 'export_excel') {
+                      <button
+                        type="button"
+                        class="msg-inline-action"
+                        data-testid="btn-ai-chat-export-excel"
+                        (click)="exportProjectExcelFromChat()"
+                      >
+                        <span class="material-symbols-outlined" aria-hidden="true">download</span>
+                        <span>Tải lại tệp Excel (.xlsx)</span>
+                      </button>
+                    }
+
+                    @if (turn.id === proposalAnchorTurnId() && (proposal()?.tasks?.length ?? 0) > 0) {
+                      <ng-container [ngTemplateOutlet]="proposalBlock"></ng-container>
+                    }
+                  </div>
+                </div>
+              }
+            }
+
+            <!-- Bảng đề xuất khôi phục từ phiên cũ chưa gắn với lượt trả lời nào -->
+            @if (!proposalAnchorTurnId() && (proposal()?.tasks?.length ?? 0) > 0 && !isStreaming()) {
+              <div class="msg-row msg-row-assistant" data-testid="ai-msg-assistant">
+                <div class="msg-avatar-assistant" aria-hidden="true">
+                  <span class="material-symbols-outlined">support_agent</span>
+                </div>
+                <div class="msg-assistant-stack">
+                  <div class="msg-meta"><strong>Trợ Lý AI</strong></div>
+                  <div class="msg-assistant-text">Đây là danh sách công việc đề xuất đang lưu trong phiên làm việc này.</div>
+                  <ng-container [ngTemplateOutlet]="proposalBlock"></ng-container>
+                </div>
+              </div>
+            }
+
+            <!-- Lượt trả lời đang được Trợ Lý AI soạn -->
+            @if (isStreaming()) {
+              <div class="msg-row msg-row-assistant" data-testid="ai-progress-panel">
+                <div class="msg-avatar-assistant" aria-hidden="true">
+                  <span class="material-symbols-outlined">support_agent</span>
+                </div>
+                <div class="msg-assistant-stack">
+                  <div class="msg-meta"><strong>Trợ Lý AI</strong></div>
+                  <div class="msg-live-status">
+                    <span class="material-symbols-outlined spinning-icon" aria-hidden="true">progress_activity</span>
+                    <span>{{ currentStepLabel() || 'Đang đọc dữ liệu dự án...' }}</span>
+                  </div>
+                  @if (currentStepDetail()) {
+                    <p class="msg-live-detail">{{ currentStepDetail() }}</p>
+                  }
+                  @if (toolCallsLog().length > 0) {
+                    <ul class="msg-trace-list">
+                      @for (tool of toolCallsLog(); track $index; let tIdx = $index) {
+                        <li [attr.data-testid]="'ai-tool-item-' + tIdx">
+                          <span class="material-symbols-outlined" aria-hidden="true">check</span>
+                          <span class="trace-name">{{ tool.summaryVi || tool.toolName }}</span>
+                          @if (tool.durationMs !== undefined && tool.durationMs !== null) {
+                            <span class="trace-ms">{{ tool.durationMs }}ms</span>
+                          }
+                        </li>
+                      }
+                    </ul>
                   }
                 </div>
               </div>
             }
-          </div>
-        }
-
-        <!-- Live Architecture Workflow Execution Center (Matching Attachment 4) -->
-        @if (isThinkingVisible()) {
-          <div class="workflow-execution-wrapper" data-testid="ai-progress-panel">
-            <div class="agent-activity-card">
-              <div class="activity-status-row">
-                <div class="activity-left">
-                  @if (isStreaming()) {
-                    <span class="material-symbols-outlined spinning-icon" aria-hidden="true">sync</span>
-                    <span class="activity-text">
-                      <strong>{{ currentStepLabel() || 'Mô hình AI đang suy luận cấu trúc Sprint, chia nhỏ Epic và Task...' }}</strong>
-                    </span>
-                  } @else {
-                    <span class="material-symbols-outlined done-icon" aria-hidden="true">check_circle</span>
-                    <span class="activity-text">
-                      <strong>Quy trình phân tích &amp; điều phối công việc hoàn tất</strong> ({{ toolCallsLog().length }} hành động)
-                    </span>
-                  }
-                </div>
-
-                <div class="activity-right">
-                  <div
-                    class="activity-toggle-link"
-                    (click)="toggleThinkingAccordion()"
-                    [attr.aria-expanded]="isThinkingExpanded()"
-                    data-testid="btn-toggle-thinking"
-                    role="button"
-                    tabindex="0"
-                    title="Bấm để thu gọn hoặc mở rộng quy trình"
-                  >
-                    <span>{{ isThinkingExpanded() ? 'Thu gọn' : 'Thu gọn quy trình' }}</span>
-                    <span class="material-symbols-outlined text-[16px]" aria-hidden="true">
-                      {{ isThinkingExpanded() ? 'expand_less' : 'expand_more' }}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Collapsible Tool Actions Timeline (Clean list matching Attachment 4) -->
-              @if (isThinkingExpanded()) {
-                <div class="activity-details-panel">
-                  @if (toolCallsLog().length > 0) {
-                    <div class="thinking-tools-timeline">
-                      @for (tool of toolCallsLog(); track $index; let tIdx = $index) {
-                        <div class="timeline-tool-item" [attr.data-testid]="'ai-tool-item-' + tIdx">
-                          <span class="material-symbols-outlined tool-check-icon" aria-hidden="true">check</span>
-                          <span class="tool-action-name">{{ tool.summaryVi || tool.toolName }}</span>
-                          @if (tool.durationMs !== undefined && tool.durationMs !== null) {
-                            <span class="tool-duration-pill">{{ tool.durationMs }}ms</span>
-                          }
-                        </div>
-                      }
-                    </div>
-                  }
-                </div>
-              }
-            </div>
           </div>
         }
 
@@ -289,15 +286,16 @@
         }
       </section>
 
-      <!-- Proposed Sprint & Tasks Section (Prioritized Content Layout) -->
+      <!-- Khối đề xuất công việc gắn liền mạch vào lượt trả lời của Trợ Lý AI -->
+      <ng-template #proposalBlock>
       @if (proposal(); as prop) {
-        <section class="proposal-workspace" data-testid="ai-proposal-section" aria-label="Đề xuất Sprint và danh sách công việc">
+        <div class="proposal-workspace is-inline" data-testid="ai-proposal-section" aria-label="Đề xuất Sprint và danh sách công việc">
           <!-- Sprint Goal & Summary Bar (Main Content Prioritized) -->
           <div class="sprint-goal-card">
             <div class="goal-top-row">
               <div class="goal-badge">
-                <span class="material-symbols-outlined" aria-hidden="true">flag</span>
-                <span>MỤC TIÊU SPRINT ĐỀ XUẤT (SPRINT GOAL)</span>
+                <span class="material-symbols-outlined" aria-hidden="true">{{ prop.recommendedTarget === 'backlog' ? 'inventory_2' : 'flag' }}</span>
+                <span>{{ prop.recommendedTarget === 'backlog' ? 'CHỦ ĐỀ CÔNG VIỆC ĐỀ XUẤT (KHO BACKLOG)' : 'MỤC TIÊU SPRINT ĐỀ XUẤT' }}</span>
               </div>
 
               <div class="sprint-metrics">
@@ -421,9 +419,23 @@
               <div class="toolbar-right">
                 <button
                   type="button"
+                  class="btn-outline-action btn-push-backlog"
+                  [class.is-recommended]="prop.recommendedTarget === 'backlog'"
+                  data-testid="btn-ai-push-backlog"
+                  [disabled]="isPushingBacklog() || isApplying() || prop.tasks.length === 0"
+                  (click)="commitToBacklogProposal()"
+                  title="Lưu toàn bộ đề xuất vào kho Product Backlog (không gán Sprint)"
+                >
+                  <span class="material-symbols-outlined" aria-hidden="true">
+                    {{ isPushingBacklog() ? 'sync' : 'inventory_2' }}
+                  </span>
+                  <span>{{ isPushingBacklog() ? 'Đang lưu vào Backlog...' : 'Đẩy vào Kho Backlog' }}</span>
+                </button>
+                <button
+                  type="button"
                   class="btn-commit-sprint"
                   data-testid="btn-ai-apply-sprint"
-                  [disabled]="isApplying() || prop.tasks.length === 0"
+                  [disabled]="isApplying() || isPushingBacklog() || prop.tasks.length === 0"
                   (click)="commitSprintProposal()"
                 >
                   <span class="material-symbols-outlined" aria-hidden="true">
@@ -833,8 +845,9 @@
               </div>
             }
           </div>
-        </section>
+        </div>
       }
+      </ng-template>
     </div>
 
     <!-- Bottom Input Bar (Reference Image 3 Style: Clean Minimal Pill Bar + Attachments + Paste) -->
@@ -898,7 +911,7 @@
           [placeholder]="
             selectedTasksCount() > 0
               ? 'Nhập mô tả để AI làm lại ' + selectedTasksCount() + ' công việc đã chọn (các việc khác giữ nguyên)...'
-              : 'Nhập yêu cầu phân tách Sprint, dán nội dung cuộc họp (Ctrl+V) hoặc đính kèm tài liệu...'
+              : 'Nhắn cho Trợ Lý AI: dán biên bản họp, yêu cầu lập kế hoạch, hỏi về dự án, xuất Excel...'
           "
         ></textarea>
 
@@ -932,7 +945,7 @@
           </button>
         </div>
       </div>
-      <p class="gemini-disclaimer">Gemini là một AI và có thể mắc sai sót. Vui lòng kiểm tra lại thông tin quan trọng.</p>
+      <p class="gemini-disclaimer">Trợ Lý AI chỉ hỗ trợ nghiệp vụ quản lý dự án và có thể mắc sai sót. Hãy rà soát trước khi lưu vào dự án.</p>
     </footer>
 
     <!-- Proposed Task Detail Drawer (Reference Image 5 Layout Adapted for AI Proposal) -->

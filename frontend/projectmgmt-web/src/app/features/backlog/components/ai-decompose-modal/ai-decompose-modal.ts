@@ -31,6 +31,7 @@ import {
   Sprint,
 } from '../../../../core/services/project-management.service';
 import { ToastService } from '../../../../core/services/toast.service';
+import { ExcelDataService } from '../../../../core/services/excel-data.service';
 import { firstValueFrom } from 'rxjs';
 
 export interface EpicOption {
@@ -59,6 +60,14 @@ export interface ChatTurn {
   fileSizeLabel?: string;
   timestamp: string;
   executiveSummary?: ExecutiveSummaryMetrics;
+  /** Ý định hội thoại do Trợ Lý AI phân loại ở backend (sprint_plan, project_qa, export_excel...) */
+  intent?: string | null;
+  /** Hành động được kích hoạt trong lượt trả lời (export_excel, push_backlog, apply_sprint) */
+  actionType?: string | null;
+  /** Danh sách công cụ dữ liệu thật đã gọi trong lượt trả lời này */
+  toolCalls?: AiToolCallEvent[];
+  /** Lượt trả lời này sinh ra / cập nhật bảng đề xuất công việc */
+  hasProposalTable?: boolean;
 }
 
 export interface SpecDocPreview {
@@ -84,8 +93,10 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly projectManagementService = inject(ProjectManagementService);
   private readonly sanitizer = inject(DomSanitizer);
+  private readonly excelDataService = inject(ExcelDataService);
 
   @ViewChild('promptTextarea') promptTextarea?: ElementRef<HTMLTextAreaElement>;
+  @ViewChild('chatScrollBody') chatScrollBody?: ElementRef<HTMLElement>;
 
   @Input({ required: true }) projectId = '';
   @Input() projectName = 'Dự án';
@@ -97,6 +108,8 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
 
   @Output() closed = new EventEmitter<void>();
   @Output() applied = new EventEmitter<{ sprintId: string; sprintName: string; createdCount: number }>();
+  /** Phát ra khi dữ liệu dự án thay đổi nhưng vẫn giữ nguyên đoạn hội thoại (ví dụ: đẩy vào kho Backlog) */
+  @Output() dataChanged = new EventEmitter<void>();
 
   // Chat & Input state
   readonly promptInput = signal<string>('');
@@ -104,6 +117,18 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
   readonly attachedFile = signal<File | null>(null);
   readonly isDragOver = signal<boolean>(false);
   readonly chatHistory = signal<ChatTurn[]>([]);
+  readonly expandedTurnTraces = signal<Record<string, boolean>>({});
+  readonly isPushingBacklog = signal<boolean>(false);
+
+  /** Lượt trả lời gần nhất của Trợ Lý AI có sinh/cập nhật bảng đề xuất, nơi bảng công việc được gắn liền mạch vào hội thoại */
+  readonly proposalAnchorTurnId = computed<string | null>(() => {
+    const list = this.chatHistory();
+    for (let i = list.length - 1; i >= 0; i--) {
+      const t = list[i];
+      if (t.role === 'agent' && (t.hasProposalTable || t.executiveSummary)) return t.id;
+    }
+    return null;
+  });
 
   // Inline Spec Document Preview state
   readonly activeSpecDocPreview = signal<SpecDocPreview | null>(null);
@@ -246,8 +271,6 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
     if (!prop) return [];
     if (prop.tags && prop.tags.length > 0) return prop.tags;
     const tagSet = new Set<string>();
-    tagSet.add('#ScrumSprint');
-    tagSet.add('#SpecHub');
     for (const t of prop.tasks) {
       if (t.tags && t.tags.length > 0) {
         for (const tg of t.tags) tagSet.add(tg.startsWith('#') ? tg : `#${tg}`);
@@ -270,7 +293,7 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
       }
     }
     if (citeSet.size === 0) {
-      citeSet.add('Tài liệu Đặc tả Kiến trúc Spec Hub');
+      return [];
     }
     return Array.from(citeSet);
   });
@@ -813,14 +836,6 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
         }
         if (Array.isArray(data.toolCallsLog) && data.toolCallsLog.length > 0) {
           this.toolCallsLog.set(data.toolCallsLog);
-        } else if (data.proposal) {
-          this.toolCallsLog.set([
-            { toolName: 'spec_hub_search', summaryVi: 'Tìm kiếm tài liệu đặc tả liên quan trong Spec Hub', durationMs: 7 },
-            { toolName: 'spec_hub_read_document', summaryVi: 'Đọc phân đoạn tài liệu đặc tả yêu cầu dự án', durationMs: 14 },
-            { toolName: 'backlog_get_stories', summaryVi: 'Lấy danh sách các User Story đang có trong Backlog', durationMs: 13 },
-            { toolName: 'sprint_get_history_and_velocity', summaryVi: 'Truy xuất vận tốc Scrum và các hạng mục dở dang', durationMs: 37 },
-            { toolName: 'team_get_dev_capacities', summaryVi: 'Phân tích kỹ năng và số giờ khả dụng của thành viên đội Scrum', durationMs: 25 },
-          ]);
         }
         if (data.streamedThoughts) {
           this.streamedThoughts.set(data.streamedThoughts);
@@ -990,8 +1005,10 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
       {
         id: `user_${Date.now()}`,
         role: 'user',
-        text: promptText || (docText ? `Đã dán nội dung tài liệu (${docText.length} ký tự)` : `Phân tích tệp đính kèm: ${file?.name}`),
-        fullContent: combinedText || promptText || docText,
+        text: promptText
+          ? (promptText.length > 1500 ? `${promptText.slice(0, 280).trim()}...` : promptText)
+          : (docText ? `Đã dán nội dung tài liệu (${docText.length} ký tự)` : `Phân tích tệp đính kèm: ${file?.name}`),
+        fullContent: combinedText && combinedText !== promptText ? combinedText : (promptText.length > 1500 ? promptText : undefined),
         isContentExpanded: false,
         fileName: file?.name,
         fileSizeLabel: file ? this.formatFileSize(file.size) : undefined,
@@ -1014,15 +1031,24 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
     this.isThinkingExpanded.set(true);
 
     this.abortController = new AbortController();
+    this.scrollChatToBottom();
+
+    // Nội dung gõ rất dài (biên bản họp dán thẳng vào ô chat) được coi là tài liệu, câu ngắn được coi là câu lệnh hội thoại
+    const promptIsDocument = promptText.length > 1500;
+    const effectiveDoc = [docText, promptIsDocument ? promptText : ''].filter(Boolean).join('\n\n');
+    const effectivePrompt = promptIsDocument ? '' : promptText;
 
     try {
       await this.aiService.streamDecomposeSprint(
         {
           projectId: this.projectId,
-          text: combinedText || 'Phân tích tài liệu dự án và lập kế hoạch Sprint tiếp theo.',
-          prompt: promptText || 'Tạo Sprint Goal, Tasks và Subtasks chuẩn Scrum.',
+          // Chỉ gửi nội dung tài liệu thật người dùng dán vào; không chèn câu mặc định để bộ phân loại ý định đọc đúng câu hỏi
+          text: effectiveDoc || undefined,
+          prompt: effectivePrompt || (effectiveDoc || file ? 'Phân tích tài liệu dự án và lập kế hoạch Sprint tiếp theo.' : undefined),
           file,
           model: this.selectedModel(),
+          // Hội thoại có trạng thái: tiếp tục cùng một phiên Redis để Trợ Lý AI nhớ toàn bộ ngữ cảnh trước đó
+          sessionId: this.activeSessionId() || undefined,
         },
         {
           onSessionInit: (init) => {
@@ -1061,56 +1087,7 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
             this.streamedThoughts.update((prev) => (prev + delta).slice(-2500));
           },
           onProposalReady: (prop) => {
-            this.normalizeProposal(prop);
-            this.proposal.set(prop);
-            this.activeSessionId.set(prop.sessionId);
-
-            // Auto-expand all subtasks so tree wire connectors are immediately visible
-            const autoExpand: Record<string, boolean> = {};
-            for (const t of prop.tasks) {
-              if (t.subtasks && t.subtasks.length > 0) {
-                autoExpand[t.id] = true;
-              }
-            }
-            this.expandedSubtasks.set(autoExpand);
-
-            const doneTime = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-
-            // Calculate role breakdown & subtask metrics for Executive Summary
-            const roleBreakdown: Record<string, number> = {};
-            let subCount = 0;
-            for (const t of prop.tasks) {
-              if (t.subtasks && t.subtasks.length > 0) {
-                subCount += t.subtasks.length;
-                for (const s of t.subtasks) {
-                  const r = s.role || 'Kỹ thuật';
-                  roleBreakdown[r] = (roleBreakdown[r] || 0) + 1;
-                }
-              } else {
-                const r = t.type === 'Bug' ? 'QA' : (t.tags?.find((tag) => tag.includes('Front') || tag.includes('Back')) || 'Chung');
-                roleBreakdown[r] = (roleBreakdown[r] || 0) + 1;
-              }
-            }
-
-            this.chatHistory.update((list) => [
-              ...list,
-              {
-                id: `agent_${Date.now()}`,
-                role: 'agent',
-                text: `Đã hoàn tất phân tách ${prop.tasks.length} công việc (${prop.totalStoryPoints} SP) với Sprint Goal: "${prop.sprintGoal}".`,
-                timestamp: doneTime,
-                executiveSummary: {
-                  sprintGoal: prop.sprintGoal,
-                  totalStoryPoints: prop.totalStoryPoints,
-                  totalEstimatedHours: prop.totalEstimatedHours,
-                  taskCount: prop.tasks.length,
-                  subtaskCount: subCount,
-                  roleBreakdown,
-                  specGrounding: prop.tasks[0]?.documentCitations?.[0] || 'Tài liệu Đặc tả Kiến trúc Spec Hub',
-                },
-              },
-            ]);
-            this.saveSession();
+            this.handleAssistantTurn(prop);
           },
           onCompleted: () => {
             this.isStreaming.set(false);
@@ -1129,6 +1106,160 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
         this.errorMessage.set('Kết nối luồng SSE bị gián đoạn. Vui lòng thử lại.');
       }
       this.isStreaming.set(false);
+    }
+  }
+
+  /**
+   * Xử lý một lượt trả lời của Trợ Lý AI trong hội thoại có trạng thái.
+   * - Các ý định sinh/cập nhật kế hoạch sẽ làm mới bảng đề xuất và gắn bảng vào lượt trả lời này.
+   * - Các ý định hỏi đáp, xuất Excel, từ chối ngoài phạm vi giữ nguyên bảng đề xuất đang có.
+   * - Các ý định hành động (đẩy Backlog / áp dụng Sprint) tự động thực thi trên đề xuất hiện có.
+   */
+  private handleAssistantTurn(prop: AiSprintProposalDto): void {
+    this.normalizeProposal(prop);
+    const intent = (prop.intent || 'sprint_plan').toString();
+    const action = (prop.triggerAction || 'none').toString();
+    const producesTable = ['sprint_plan', 'backlog_plan', 'refine_proposal'].includes(intent) && prop.tasks.length > 0;
+
+    // Backend luôn bảo toàn danh sách đề xuất của phiên (kể cả lượt hỏi đáp / xuất Excel) nên có thể gán trực tiếp
+    this.proposal.set(prop);
+    if (prop.sessionId) this.activeSessionId.set(prop.sessionId);
+
+    if (producesTable) {
+      const autoExpand: Record<string, boolean> = {};
+      for (const t of prop.tasks) {
+        if (t.subtasks && t.subtasks.length > 0) autoExpand[t.id] = true;
+      }
+      this.expandedSubtasks.set(autoExpand);
+      this.selectedTaskIds.set({});
+    }
+
+    const subCount = prop.tasks.reduce((sum, t) => sum + (t.subtasks?.length || 0), 0);
+    const fallbackReply = producesTable
+      ? `Tôi đã lập ${prop.tasks.length} hạng mục công việc chính và ${subCount} việc con (${prop.totalStoryPoints} SP) dựa trên dữ liệu thực của dự án. Bạn có thể chỉnh sửa trực tiếp trong bảng bên dưới, yêu cầu tôi điều chỉnh tiếp, đẩy vào kho Backlog hoặc áp dụng vào Sprint tiếp theo.`
+      : 'Tôi đã xử lý xong yêu cầu của bạn.';
+
+    const doneTime = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    const turnId = `agent_${Date.now()}`;
+    this.chatHistory.update((list) => [
+      ...list,
+      {
+        id: turnId,
+        role: 'agent',
+        text: (prop.assistantReply || '').trim() || fallbackReply,
+        timestamp: doneTime,
+        intent,
+        actionType: action,
+        toolCalls: [...this.toolCallsLog()],
+        hasProposalTable: producesTable,
+      },
+    ]);
+    this.saveSession();
+    this.scrollChatToBottom();
+
+    // Thực thi hành động hội thoại trên dữ liệu thật
+    if (action === 'export_excel') {
+      this.exportProjectExcelFromChat();
+    } else if (action === 'push_backlog') {
+      void this.commitToBacklogProposal();
+    } else if (action === 'apply_sprint') {
+      void this.commitSprintProposal();
+    }
+  }
+
+  toggleTurnTrace(turnId: string): void {
+    this.expandedTurnTraces.update((prev) => ({ ...prev, [turnId]: !prev[turnId] }));
+  }
+
+  getIntentLabel(intent?: string | null): string {
+    switch (intent) {
+      case 'sprint_plan':
+        return 'Lập kế hoạch Sprint';
+      case 'backlog_plan':
+        return 'Lập danh sách cho kho Backlog';
+      case 'refine_proposal':
+        return 'Điều chỉnh đề xuất';
+      case 'project_qa':
+        return 'Tra cứu dự án';
+      case 'export_excel':
+        return 'Xuất Excel';
+      case 'push_backlog':
+        return 'Đẩy vào kho Backlog';
+      case 'apply_sprint':
+        return 'Áp dụng vào Sprint';
+      case 'out_of_scope_refusal':
+        return 'Ngoài phạm vi';
+      default:
+        return '';
+    }
+  }
+
+  private scrollChatToBottom(): void {
+    setTimeout(() => {
+      const el = this.chatScrollBody?.nativeElement;
+      if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    }, 60);
+  }
+
+  private appendAssistantNote(text: string, actionType: string = 'none'): void {
+    const doneTime = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    this.chatHistory.update((list) => [
+      ...list,
+      { id: `agent_note_${Date.now()}`, role: 'agent', text, timestamp: doneTime, actionType },
+    ]);
+    this.saveSession();
+    this.scrollChatToBottom();
+  }
+
+  /** Xuất tệp Excel từ dữ liệu thật đang lưu trong dự án (Sprint + kho Backlog), không trộn dữ liệu đề xuất chưa lưu */
+  exportProjectExcelFromChat(): void {
+    try {
+      const items = this.projectManagementService.workItems();
+      const allSprints = this.sprints?.length ? this.sprints : this.projectManagementService.sprints();
+      const today = new Date().toISOString().slice(0, 10);
+      const safeKey = (this.projectKey || 'PRJ').replace(/[^\w\-]/g, '');
+      this.excelDataService.exportToExcel(items, `${safeKey}_Bao_Cao_Du_An_${today}.xlsx`, allSprints, this.projectName);
+    } catch {
+      this.errorMessage.set('Không thể tạo tệp Excel từ dữ liệu dự án. Vui lòng thử lại.');
+    }
+  }
+
+  /** Đẩy toàn bộ đề xuất hiện có vào kho Product Backlog (SprintId = null), chuyển hẳn các mục lấy từ Backlog cũ thay vì nhân bản */
+  async commitToBacklogProposal(): Promise<void> {
+    const prop = this.proposal();
+    if (!prop || prop.tasks.length === 0 || this.isPushingBacklog() || this.isApplying()) return;
+
+    this.isPushingBacklog.set(true);
+    this.errorMessage.set(null);
+    try {
+      const res = await firstValueFrom(
+        this.aiService.applyProposal({
+          sessionId: this.activeSessionId() || prop.sessionId,
+          projectId: this.projectId,
+          targetSprintId: null,
+          sprintGoal: prop.sprintGoal || '',
+          tasks: prop.tasks,
+          pushToBacklog: true,
+        })
+      );
+      const committedCount = prop.tasks.length;
+      this.appendAssistantNote(
+        res.message ||
+          `Đã lưu ${res.createdTaskCount} công việc và ${res.createdSubtaskCount} việc con vào kho Product Backlog của dự án.`,
+        'push_backlog_done'
+      );
+      // Các mục đã lưu thật vào dự án: dọn khỏi bảng đề xuất để không lưu trùng ở lượt sau
+      this.proposal.set({ ...prop, tasks: [], totalStoryPoints: 0, totalEstimatedHours: 0 });
+      this.persistProposalEdits();
+      this.saveSession();
+      this.dataChanged.emit();
+      this.toastService.show(`Đã đẩy ${committedCount} hạng mục vào kho Backlog.`, 'success');
+    } catch (err: any) {
+      const msg = err?.error?.message || 'Không thể đẩy đề xuất vào kho Backlog.';
+      this.errorMessage.set(msg);
+      this.appendAssistantNote(`Chưa thể lưu vào kho Backlog: ${msg}`);
+    } finally {
+      this.isPushingBacklog.set(false);
     }
   }
 
@@ -1156,19 +1287,10 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
         if (!sub.role) sub.role = 'Kỹ thuật';
         if (!sub.assigneeName) sub.assigneeName = t.assigneeName;
         if (!sub.assigneeUserId) sub.assigneeUserId = t.assigneeUserId;
-        if (!sub.description) {
-          sub.description = `Triển khai phân hệ kỹ thuật chuyên biệt cho "${sub.title}" theo đúng tiêu chuẩn kiến trúc và tài liệu đặc tả của dự án.`;
-        }
-        if (!sub.acceptanceCriteria || sub.acceptanceCriteria.length === 0) {
-          sub.acceptanceCriteria = [
-            `Hoàn tất các bước mã nguồn/kịch bản cho '${sub.title}' đúng yêu cầu kỹ thuật`,
-            `Thực hiện kiểm thử đơn vị hoặc kiểm thử hồi quy đạt 100% không phát sinh lỗi`
-          ];
-        }
+        // Không tự bịa mô tả / tiêu chí nghiệm thu / trích dẫn cho việc con: chỉ hiển thị đúng dữ liệu AI sinh ra từ nguồn thật
+        if (!sub.acceptanceCriteria) sub.acceptanceCriteria = [];
         if (!sub.documentCitations || sub.documentCitations.length === 0) {
-          sub.documentCitations = t.documentCitations && t.documentCitations.length > 0
-            ? [...t.documentCitations]
-            : ['Tài liệu kiến trúc & đặc tả kỹ thuật dự án'];
+          sub.documentCitations = t.documentCitations && t.documentCitations.length > 0 ? [...t.documentCitations] : [];
         }
       });
     });
@@ -1223,19 +1345,11 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
   openSubtaskDrawer(parentTask: ProposedTaskDto, subtask: ProposedSubTaskDto, event?: Event): void {
     event?.stopPropagation();
     this.activeDrawerTaskId.set(null);
-    if (!subtask.description) {
-      subtask.description = `Triển khai phân hệ kỹ thuật chuyên biệt cho "${subtask.title}" theo đúng tiêu chuẩn kiến trúc và tài liệu đặc tả của dự án.`;
-    }
-    if (!subtask.acceptanceCriteria || subtask.acceptanceCriteria.length === 0) {
-      subtask.acceptanceCriteria = [
-        `Hoàn tất các bước mã nguồn/kịch bản cho '${subtask.title}' đúng yêu cầu kỹ thuật`,
-        `Thực hiện kiểm thử đơn vị hoặc kiểm thử hồi quy đạt 100% không phát sinh lỗi`
-      ];
-    }
+    if (!subtask.acceptanceCriteria) subtask.acceptanceCriteria = [];
     if (!subtask.documentCitations || subtask.documentCitations.length === 0) {
       subtask.documentCitations = parentTask.documentCitations && parentTask.documentCitations.length > 0
         ? [...parentTask.documentCitations]
-        : ['Tài liệu kiến trúc & đặc tả kỹ thuật dự án'];
+        : [];
     }
     this.activeDrawerSubtask.set({ parentTask, subtask });
   }
@@ -1317,6 +1431,30 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
         this.normalizeProposal(prop);
         this.proposal.set(prop);
         this.activeSessionId.set(prop.sessionId);
+        // Khôi phục nguyên vẹn đoạn hội thoại từ trí nhớ phiên trên Redis
+        if (prop.conversationHistory && prop.conversationHistory.length > 0) {
+          const restored: ChatTurn[] = prop.conversationHistory.map((h, idx) => ({
+            id: h.id || `restored_${idx}_${Date.now()}`,
+            role: h.role === 'user' ? 'user' : 'agent',
+            text: h.content || '',
+            fullContent: h.role === 'user' && h.fullContent && h.fullContent !== h.content ? h.fullContent : undefined,
+            fileName: h.fileName || undefined,
+            timestamp: h.timestampUtc
+              ? new Date(h.timestampUtc).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+              : '',
+            intent: h.intent,
+            actionType: h.actionType,
+          }));
+          // Bảng đề xuất gắn vào lượt trả lời cuối cùng có sinh/cập nhật kế hoạch
+          for (let i = restored.length - 1; i >= 0; i--) {
+            if (restored[i].role === 'agent' && ['sprint_plan', 'backlog_plan', 'refine_proposal'].includes(restored[i].intent || '')) {
+              restored[i].hasProposalTable = prop.tasks.length > 0;
+              break;
+            }
+          }
+          this.chatHistory.set(restored);
+        }
+        this.scrollChatToBottom();
         const autoExpand: Record<string, boolean> = {};
         for (const t of prop.tasks) {
           if (t.subtasks && t.subtasks.length > 0) autoExpand[t.id] = true;
@@ -1381,11 +1519,11 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
         storyPoints: 1,
         priority: this.defaultPriorityName(),
         status: this.defaultInitialStatus(),
-        description: `Triển khai các yêu cầu kỹ thuật chi tiết cho ${task.title}.`,
-        acceptanceCriteria: ['Hoàn tất triển khai mã nguồn', 'Kiểm thử đạt 100% không phát sinh lỗi'],
+        description: '',
+        acceptanceCriteria: [],
         documentCitations: task.documentCitations && task.documentCitations.length > 0
           ? [...task.documentCitations]
-          : ['Tài liệu kiến trúc & đặc tả kỹ thuật dự án'],
+          : [],
         assigneeUserId: task.assigneeUserId,
         assigneeName: task.assigneeName,
       },
@@ -1542,6 +1680,14 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
         res.message || `Đã đưa ${res.createdTaskCount} việc vào ${res.sprintName}.`,
         'success'
       );
+      this.appendAssistantNote(
+        res.message || `Đã áp dụng ${res.createdTaskCount} công việc vào ${res.sprintName}.`,
+        'apply_sprint_done'
+      );
+      // Đề xuất đã được lưu thật vào Sprint: dọn khỏi bảng để mở lại phiên không bị lưu trùng
+      this.proposal.set({ ...prop, tasks: [], totalStoryPoints: 0, totalEstimatedHours: 0 });
+      this.persistProposalEdits();
+      this.saveSession();
       this.applied.emit({
         sprintId: res.sprintId,
         sprintName: res.sprintName,

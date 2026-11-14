@@ -11,7 +11,12 @@ public sealed class AiApplySprintProposalRequest
 
     public Guid? TargetSprintId { get; set; }
 
-    [Required]
+    /// <summary>
+    /// When true, pushes the proposed work items and subtasks directly into the Product Backlog (SprintId = null)
+    /// instead of assigning them to a Sprint.
+    /// </summary>
+    public bool PushToBacklog { get; set; }
+
     public string SprintGoal { get; set; } = string.Empty;
 
     public List<ProposedTaskDto> Tasks { get; set; } = [];

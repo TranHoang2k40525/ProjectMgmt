@@ -111,7 +111,8 @@ public class AiAgentControllerAdversarialTests
             Func<string, Task> onThoughtDelta,
             Func<AiSprintProposalDto, Task> onProposalReady,
             string? model = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            AiSprintProposalDto? existingProposal = null)
         {
             if (ShouldThrow)
             {

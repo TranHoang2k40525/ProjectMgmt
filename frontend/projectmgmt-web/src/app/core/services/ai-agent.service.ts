@@ -47,6 +47,29 @@ export interface ProposedTaskDto {
   subtasks: ProposedSubTaskDto[];
 }
 
+export interface AiConversationTurnDto {
+  id: string;
+  role: 'user' | 'assistant' | string;
+  content: string;
+  fullContent?: string | null;
+  fileName?: string | null;
+  intent?: string | null;
+  actionType?: string | null;
+  taskCount?: number;
+  totalStoryPoints?: number;
+  timestampUtc?: string;
+}
+
+export type AiConversationIntent =
+  | 'sprint_plan'
+  | 'backlog_plan'
+  | 'refine_proposal'
+  | 'project_qa'
+  | 'export_excel'
+  | 'push_backlog'
+  | 'apply_sprint'
+  | 'out_of_scope_refusal';
+
 export interface AiSprintProposalDto {
   sessionId: string;
   projectId: string;
@@ -64,6 +87,11 @@ export interface AiSprintProposalDto {
   appliedLabels?: string[];
   tasks: ProposedTaskDto[];
   createdAtUtc?: string;
+  intent?: AiConversationIntent | string | null;
+  assistantReply?: string | null;
+  recommendedTarget?: 'sprint' | 'backlog' | string | null;
+  triggerAction?: 'none' | 'export_excel' | 'push_backlog' | 'apply_sprint' | string | null;
+  conversationHistory?: AiConversationTurnDto[];
 }
 
 export interface AiStepProgressEvent {
@@ -192,12 +220,16 @@ export class AiAgentService {
       file?: File | null;
       targetSprintId?: string | null;
       model?: string;
+      sessionId?: string | null;
     },
     callbacks: AiStreamCallbacks,
     abortSignal?: AbortSignal
   ): Promise<void> {
     const formData = new FormData();
     formData.append('projectId', params.projectId);
+    if (params.sessionId) {
+      formData.append('sessionId', params.sessionId);
+    }
     if (params.text) {
       formData.append('text', params.text);
     }
@@ -362,6 +394,7 @@ export class AiAgentService {
     targetSprintId?: string | null;
     sprintGoal: string;
     tasks: ProposedTaskDto[];
+    pushToBacklog?: boolean;
   }): Observable<AiApplySprintProposalResponse> {
     return this.http.post<AiApplySprintProposalResponse>(`${this.baseUrl}/apply`, payload);
   }

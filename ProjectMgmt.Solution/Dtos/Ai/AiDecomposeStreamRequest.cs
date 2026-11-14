@@ -15,6 +15,12 @@ public sealed class AiDecomposeStreamRequest
     public Guid ProjectId { get; set; }
 
     /// <summary>
+    /// Optional existing session identifier to continue a stateful multi-turn conversation in Redis.
+    /// </summary>
+    [MaxLength(120)]
+    public string? SessionId { get; set; }
+
+    /// <summary>
     /// Optional target Sprint identifier. If null, plans for the next upcoming planned sprint.
     /// </summary>
     public Guid? TargetSprintId { get; set; }

@@ -24,7 +24,7 @@
 
       <div class="toolbar-actions" aria-label="Thao tác Backlog">
         <button type="button" class="button button-secondary" (click)="exportExcel()"><span class="material-symbols-outlined" aria-hidden="true">download</span><span>Xuất Excel</span></button>
-        <button type="button" class="button button-secondary" data-testid="btn-ai-decompose" (click)="openAiDecomposeModal()"><span class="material-symbols-outlined text-primary" aria-hidden="true">account_tree</span><span>AI Phân tách</span></button>
+        <button type="button" class="button button-secondary" data-testid="btn-ai-decompose" (click)="openAiDecomposeModal()"><span class="material-symbols-outlined text-primary" aria-hidden="true">support_agent</span><span>Trợ Lý AI</span></button>
         @if (canManageSprints()) {
           <button type="button" class="button button-primary" (click)="createSprint()"><span class="material-symbols-outlined" aria-hidden="true">add</span><span>Tạo Sprint</span></button>
         }
@@ -943,6 +943,7 @@
     [canCommitSprint]="canManageSprints()"
     (closed)="showAiDecomposeModal.set(false)"
     (applied)="onAiProposalApplied()"
+    (dataChanged)="onAiDataChanged()"
   ></app-ai-decompose-modal>
 }
 

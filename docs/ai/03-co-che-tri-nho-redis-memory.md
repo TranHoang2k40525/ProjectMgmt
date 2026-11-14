@@ -15,11 +15,11 @@ flowchart TD
         WM3["Thời gian tồn tại: Trong suốt tiến trình phân rã (vài giây đến vài chục giây)"]
     end
 
-    subgraph T2["TẦNG 2: TRÍ NHỚ PHIÊN TẠM THỜI (STAGING SESSION MEMORY)"]
+    subgraph T2["TẦNG 2: TRÍ NHỚ HỘI THOẠI & STAGING CÓ TRẠNG THÁI (STATEFUL CONVERSATION & STAGING MEMORY)"]
         SM1["Lưu trữ trên Hệ thống Bộ nhớ đệm Phân tán Đàn hồi"]
-        SM2["Chứa toàn bộ đề xuất: Mục tiêu, Epics, Tasks, Subtasks, Nghiệm thu & Trích dẫn"]
-        SM3["Thời gian tồn tại: Tự động giải phóng sau thời hạn an toàn quy định"]
-        SM4["Cho phép Người dùng Rà soát, Hiệu chỉnh hoặc Yêu cầu Tái tạo độc lập"]
+        SM2["Chứa bản đề xuất (Mục tiêu, Epics, Tasks, Subtasks) KÈM lịch sử hội thoại đa lượt"]
+        SM3["Hỗ trợ định tuyến đích đến (Sprint hoặc Kho Backlog), cờ hành động & ngữ cảnh nối tiếp"]
+        SM4["Cho phép Người dùng Trao đổi tiếp, Hiệu chỉnh, Xuất Excel hoặc Phê duyệt vào Backlog/Sprint"]
     end
 
     subgraph T3["TẦNG 3: BỘ NHỚ LỊCH SỬ PHIÊN DỰ ÁN (PROJECT SESSION MEMORY)"]
@@ -52,32 +52,32 @@ Sơ đồ dưới đây minh họa chi tiết cách dữ liệu đề xuất AI 
 
 ```mermaid
 flowchart TD
-    StartInput["Hoàn thành phân rã hoặc Người dùng yêu cầu sửa"] --> CheckConfig{"Kiểm tra Cấu hình Bộ nhớ đệm Phân tán"}
+    StartInput["Hoàn tất lượt hội thoại hoặc Người dùng gửi yêu cầu nối tiếp"] --> LoadPrior["Đọc trí nhớ hội thoại và bản đề xuất cũ theo mã phiên\n(nếu tiếp tục cuộc hội thoại trước đó)"]
+    LoadPrior --> CheckConfig{"Kiểm tra Cấu hình Bộ nhớ đệm Phân tán"}
 
     CheckConfig -- "Chưa bật" --> MemoryFallback["Chuyển hướng lưu vào Bộ nhớ đệm Nội bộ an toàn"]
     CheckConfig -- "Đã bật" --> CheckCircuit{"Kiểm tra Trạng thái Ngắt mạch Tự động"}
 
     CheckCircuit -- "Mạch Đang Mở (Hệ thống gặp sự cố)" --> MemoryFallback
-    CheckCircuit -- "Mạch Đang Đóng (Hoạt động bình thường)" --> TryDistributed["Ghi dữ liệu vào Bộ nhớ đệm Phân tán\nkèm thời hạn tồn tại an toàn"]
+    CheckCircuit -- "Mạch Đang Đóng (Hoạt động bình thường)" --> TryDistributed["Ghi cả lịch sử hội thoại & bản đề xuất vào Bộ nhớ đệm Phân tán\nkèm thời hạn tồn tại an toàn"]
 
     TryDistributed --> CheckResult{"Giao tiếp thành công?"}
     CheckResult -- "Thành công" --> ResetFailures["Khởi tạo lại bộ đếm lỗi ngắt mạch\nTrả về mã định danh phiên cho Client"]
     CheckResult -- "Gián đoạn / Timeout" --> RecordFailure["Ghi nhận lỗi vào bộ ngắt mạch\n(Đạt ngưỡng quy định -> Mở mạch tự động)"]
     RecordFailure --> MemoryFallback
 
-    MemoryFallback --> ReturnClient["Trả về mã định danh phiên cho Client\n(Đảm bảo trải nghiệm liền mạch không ngắt quãng)"]
+    MemoryFallback --> ReturnClient["Trả về mã định danh phiên cho Client\n(Đảm bảo trải nghiệm hội thoại liền mạch không ngắt quãng)"]
 
     ReturnClient --> UserAction{"Tương tác tiếp theo của Người điều phối"}
 
     UserAction -- "Hiệu chỉnh trực tiếp thông tin" --> PatchMemory["Gửi dữ liệu cập nhật trực tiếp vào bộ nhớ phiên"]
     PatchMemory --> ReturnClient
 
-    UserAction -- "Yêu cầu tái tạo riêng một việc" --> RegenTask["Gửi yêu cầu tái tạo đến Động cơ AI\n1. Đọc ngữ cảnh phiên hiện tại\n2. Tái cấu trúc công việc độc lập\n3. Cập nhật dữ liệu mới vào bộ nhớ phiên\n4. Phản hồi công việc mới về giao diện"]
-    RegenTask --> ReturnClient
+    UserAction -- "Nhắn tin tiếp / Yêu cầu sửa / Hỏi đáp / Xuất Excel" --> StartInput
 
-    UserAction -- "Phê duyệt áp dụng vào Sprint" --> CommitPhase["1. Đọc toàn bộ kế hoạch từ bộ nhớ phiên\n2. Mở giao dịch cơ sở dữ liệu: Ghi nhận danh mục công việc\n3. Dọn dẹp dữ liệu phiên tạm thời\n4. Xác nhận giao dịch thành công"]
+    UserAction -- "Đẩy Kho Backlog hoặc Áp dụng vào Sprint" --> CommitPhase["1. Đọc toàn bộ kế hoạch từ bộ nhớ phiên\n2. Mở giao dịch cơ sở dữ liệu: Ghi nhận vào Kho Backlog (Sprint rỗng) hoặc Sprint mới\n3. Xóa danh sách việc đã ghi và bổ sung tin nhắn xác nhận vào lịch sử hội thoại phiên\n4. Cho phép tiếp tục hội thoại trong cùng phiên"]
 
-    CommitPhase --> Done(["Hoàn tất: Kế hoạch chính thức được ghi nhận"])
+    CommitPhase --> Done(["Hoàn tất: Công việc đã ghi nhận & Phiên hội thoại vẫn liền mạch"])
 ```
 
 ---
@@ -94,17 +94,40 @@ ProjectMgmt:Ai:staging:{stagingGuid}
 `ProjectMgmt:Ai:staging:e7c4f1a2-8b3d-4e9a-9c12-3456789abcde`
 
 ### 3.2. Cấu trúc Payload JSON Lưu trữ
-Toàn bộ đề xuất phân rã được tuần tự hóa (serialize) thành chuỗi JSON tối ưu, chứa đầy đủ ngữ cảnh nghiệp vụ Scrum:
+Toàn bộ đề xuất phân rã kèm trạng thái đoạn hội thoại đa lượt được tuần tự hóa (serialize) thành chuỗi JSON tối ưu:
 
 ```json
 {
-  "stagingId": "e7c4f1a2-8b3d-4e9a-9c12-3456789abcde",
+  "stagingId": "sprint_ai_e7c4f1a28b3d4e9a9c123456789abcde",
   "projectId": 12,
   "sprintId": 5,
+  "intent": "sprint_plan",
+  "assistantReply": "Tôi đã phân tích tài liệu đặc tả cùng kho Backlog và đề xuất kế hoạch gồm 2 công việc chính (8 SP).",
+  "recommendedTarget": "sprint",
+  "triggerAction": null,
   "sprintGoal": "Xây dựng lõi xác thực đa yếu tố và đồng bộ dữ liệu thời gian thực cho hệ thống",
   "suggestedSprintName": "Sprint 5 - Bảo mật & Realtime Engine",
   "targetVelocity": 32,
   "totalStoryPoints": 28,
+  "conversationHistory": [
+    {
+      "id": "turn-1-u",
+      "role": "user",
+      "content": "Phân rã tính năng xác thực RBAC và realtime SSE",
+      "attachmentName": "Kien-truc-realtime.docx",
+      "intent": "sprint_plan",
+      "toolSteps": [],
+      "timestamp": "2026-11-14T08:15:20Z"
+    },
+    {
+      "id": "turn-1-a",
+      "role": "assistant",
+      "content": "Tôi đã phân tích tài liệu đặc tả cùng kho Backlog và đề xuất kế hoạch gồm 2 công việc chính.",
+      "intent": "sprint_plan",
+      "toolSteps": ["spec_hub_search: 7ms", "backlog_get_stories: 13ms"],
+      "timestamp": "2026-11-14T08:15:30Z"
+    }
+  ],
   "epics": [
     {
       "id": "epic-1",
@@ -205,10 +228,11 @@ Toàn bộ đề xuất phân rã được tuần tự hóa (serialize) thành c
 }
 ```
 
-### 3.3. Thời gian Sống (TTL) & Chính sách Giải phóng (Eviction Policy)
+### 3.3. Thời gian Sống (TTL) & Chính sách Cập nhật / Giải phóng (Eviction & Lifecycle Policy)
 - **TTL Mặc định**: `24 giờ` (`TimeSpan.FromHours(24)`).
-- **Lý do thiết kế**: Đủ dài để Scrum Master đóng laptop, trao đổi nội bộ với nhóm và quay lại duyệt vào ngày hôm sau mà không bị mất dữ liệu; đồng thời tự động biến mất sau 24h để giải phóng dung lượng RAM của Redis.
-- **Xóa chủ động (Explicit Invalidation)**: Khi người dùng bấm **"Áp dụng vào Sprint"** hoặc **"Hủy bỏ"**, phương thức `RemoveAsync(key)` được gọi để thu hồi bộ nhớ ngay lập tức.
+- **Lý do thiết kế**: Đủ dài để Scrum Master đóng laptop, trao đổi nội bộ với nhóm và quay lại tiếp tục đoạn hội thoại vào ngày hôm sau mà không bị mất ngữ cảnh; đồng thời tự động biến mất sau 24h để giải phóng dung lượng RAM của Redis.
+- **Bảo toàn Hội thoại Sau Khi Commit (`ApplyProposal` / `PushToBacklog`)**: Khi người dùng bấm **"Áp dụng vào Sprint"** hoặc **"Đẩy vào Kho Backlog"**, `AiAgentController.ApplyProposal` ghi nhận công việc vào MySQL, xóa danh sách `Tasks` đã commit trong bản Staging (tránh áp dụng trùng lặp nhiều lần), đồng thời **bổ sung tin nhắn xác nhận của Trợ Lý AI vào `ConversationHistory` và lưu lại vào Redis** để đoạn hội thoại được giữ nguyên mạch tiếp tục.
+- **Xóa sạch Chủ động (Explicit Full Reset)**: Khi người dùng bấm nút **"Làm mới & Phiên mới"** (`POST /api/ai/agent/clear-cache`), hệ thống gọi `RemoveAsync(key)` để thu hồi toàn bộ bộ nhớ phiên cũ trên Redis và tạo `sessionId` mới.
 
 ---
 
@@ -290,11 +314,12 @@ PONG
 "{\"stagingId\":\"e7c4f1a2...\",\"sprintGoal\":\"Xây dựng lõi xác thực...\"}"
 ```
 
-### 5.3. Chứng minh Tính Độc lập với Cơ sở Dữ liệu
-1. **Trước khi bấm "Áp dụng vào Sprint"**: Kiểm tra trong MySQL: bảng `Issues` chưa có bất kỳ bản ghi nào mới từ AI. Dữ liệu chỉ tồn tại duy nhất trên Redis (`ProjectMgmt:Ai:staging:*`).
-2. **Sau khi bấm "Áp dụng vào Sprint"**: 
-   - MySQL ghi nhận các Issue mới kèm SprintId tương ứng.
-   - Kiểm tra lại Redis CLI: Khóa `ProjectMgmt:Ai:staging:...` đã bị xóa tự động (`nil`).
+### 5.3. Chứng minh Tính Độc lập với Cơ sở Dữ liệu & Hội thoại Liên tục
+1. **Trước khi bấm "Đẩy vào Kho Backlog" hoặc "Áp dụng vào Sprint"**: Kiểm tra trong MySQL: bảng `Issues` chưa có bất kỳ bản ghi nào mới từ AI. Dữ liệu kế hoạch và `conversationHistory` chỉ tồn tại duy nhất trên Redis (`ProjectMgmt:Ai:staging:*`).
+2. **Sau khi bấm "Đẩy vào Kho Backlog" hoặc "Áp dụng vào Sprint"**:
+   - Nếu chọn **Đẩy vào Kho Backlog** (`PushToBacklog = true`): MySQL ghi nhận các Issue mới với `SprintId = null` (nằm trực tiếp trong kho Product Backlog) mà không tạo Sprint mới.
+   - Nếu chọn **Áp dụng vào Sprint**: MySQL ghi nhận Sprint mới cùng các Issue tương ứng và di chuyển các Story từ kho Backlog (nếu có) không trùng lặp.
+   - Kiểm tra lại Redis CLI: Trường `tasks` trong bản Staging đã được dọn sạch (`[]`) nhưng `conversationHistory` vẫn được cập nhật thêm tin nhắn xác nhận để tiếp tục cuộc hội thoại; khi bấm **"Làm mới & Phiên mới"**, khóa `ProjectMgmt:Ai:staging:...` được xóa hoàn toàn (`nil`).
 
 ---
 
@@ -318,7 +343,7 @@ Bên cạnh bộ nhớ đề xuất tức thời (Staging Session), hệ thống
 
 ### 6.3. Cơ chế Giải phóng Bộ nhớ đệm Cache & Làm mới Tri thức (Staging Cache Invalidation & Session Reset)
 - **Xóa sạch bộ đệm phân tán Redis**: Endpoint `POST /api/ai/agent/clear-cache` giải phóng tức thì các đối tượng đề xuất lưu tạm trong Redis (`ProjectMgmt:Ai:staging:...`), ngăn chặn tình trạng lưu vết kế hoạch cũ khi người dùng chuyển hướng hoặc thay đổi hoàn toàn yêu cầu.
-- **Khởi tạo phiên làm việc tươi mới 100%**: Trên thanh tiêu đề của Modal AI phân rã, nút **"Làm mới & Phiên mới"** cho phép người dùng chủ động xóa bỏ cache cục bộ (`localStorage`), hủy bỏ đề xuất cũ và giải phóng bộ nhớ đệm server chỉ với một thao tác duy nhất.
+- **Khởi tạo phiên làm việc tươi mới 100%**: Trên thanh tiêu đề của Modal **Trợ Lý AI**, nút **"Làm mới & Phiên mới"** cho phép người dùng chủ động xóa bỏ cache cục bộ (`localStorage`), hủy bỏ đề xuất/đoạn chat cũ và giải phóng bộ nhớ đệm server chỉ với một thao tác duy nhất.
 
 ---
 

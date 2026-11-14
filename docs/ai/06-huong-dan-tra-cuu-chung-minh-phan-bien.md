@@ -16,22 +16,22 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
 
 ## 2. Nhóm Câu Hỏi 1: Tổng Quan Kiến Trúc & Vị Trí Mã Nguồn
 
-### Câu hỏi 1.1: Module AI này là gì và giải quyết bài toán gì trong Scrum?
+### Câu hỏi 1.1: Trợ Lý AI trong hệ thống là gì và giải quyết bài toán gì trong Scrum?
 - **Trả lời**:
-  Module AI này là một **Hệ thống AI Agent hỗ trợ Phân rã và Lập kế hoạch Sprint (AI Sprint Decomposition Agent)**. Trong Scrum truyền thống, buổi họp Sprint Planning thường mất hàng giờ để đọc tài liệu đặc tả, bóc tách User Story thành các Task kỹ thuật, ước lượng điểm Story Points và phân chia công việc cho thành viên.
-  Module AI giải quyết triệt để 3 vấn đề:
-  1. Đọc và hiểu toàn bộ tài liệu đặc tả (Word, Excel, PDF, Text, Biên bản họp) qua cơ chế RAG.
-  2. Tự động đối chiếu năng lực thực tế của từng thành viên (Frontend, Backend, QA) và vận tốc Sprint trước.
-  3. Đề xuất bản kế hoạch Sprint cân bằng, kèm tiêu chí nghiệm thu và trích dẫn tài liệu minh bạch 100%.
+  **Trợ Lý AI** trong hệ thống là một **Trợ lý Hội thoại Có Trạng thái (Stateful Hermes Agentic Assistant)** hỗ trợ toàn diện quy trình Quản lý Dự án Scrum/Agile: từ lập kế hoạch Sprint, bóc tách công việc đẩy vào Kho Product Backlog, trả lời câu hỏi về số liệu/quy chuẩn dự án, xuất tệp Excel báo cáo cho tới điều chỉnh từng hạng mục qua đối thoại tự nhiên.
+  Trợ Lý AI giải quyết triệt để 4 vấn đề:
+  1. Đọc và hiểu toàn bộ tài liệu đặc tả (Word, Excel, PDF, Text, Biên bản họp) qua cơ chế RAG & Spec Hub.
+  2. Tự động đối chiếu năng lực thực tế của từng thành viên (Frontend, Backend, QA), vận tốc Sprint trước, Backlog và bộ Workflow/Priority/IssueType/Labels đang áp dụng của dự án.
+  3. Đề xuất bản kế hoạch cân bằng cho Sprint hoặc Kho Product Backlog kèm tiêu chí nghiệm thu và trích dẫn tài liệu minh bạch 100%.
+  4. Duy trì đoạn hội thoại liền mạch nhiều lượt trên Redis để người dùng tinh chỉnh nối tiếp, hỏi đáp dự án hoặc xuất báo cáo Excel bằng ngôn ngữ tự nhiên.
 
-### Câu hỏi 1.2: Tại sao gọi đây là một "AI Agent" mà không phải một "API Wrapper" thông thường?
+### Câu hỏi 1.2: Tại sao gọi đây là một "Hermes Agentic Workflow Có Trạng thái" mà không phải Chatbot Stateless hay API Wrapper?
 - **Trả lời**:
-  Một API Wrapper thông thường chỉ nhận prompt của người dùng rồi chuyển tiếp (forward) trực tiếp đến OpenAI/Gemini và trả kết quả về.
-  Trong khi đó, hệ thống này là một **Agentic Workflow 5 bước có quyền tự chủ công cụ (Tool-using Agent)**:
-  - Tự động gọi chuỗi công cụ MCP (`SpecHubTools`, `BacklogTools`, `SprintTools`, `TeamTools`) để tự thu thập dữ liệu dự án.
-  - Tự suy luận và phân rã theo nguyên tắc Scrum thực tế: Task 1-3 SP độc lập; chỉ $\ge 5$ SP mới chia việc con.
-  - Tự thực hiện bước kiểm tra (Self-Check) xem tổng Story Points có vượt quá vận tốc trung bình của nhóm không trước khi lưu Staging.
-  - Duy trì trạng thái phiên làm việc (Session Memory) trên Redis để người dùng tương tác chỉnh sửa hoặc yêu cầu làm lại từng phần.
+  Một Chatbot Stateless hay API Wrapper chỉ nhận từng câu hỏi độc lập, quên ngay lượt trao đổi trước đó và không có khả năng tương tác nghiệp vụ an toàn.
+  Ngược lại, Trợ Lý AI của hệ thống vận hành theo quy trình **Stateful Hermes Agentic Workflow**:
+  - **Định tuyến Ý định & Rào chắn Ngoài luồng**: Tự động phân loại 8 nhóm ý định (`sprint_plan`, `backlog_plan`, `refine_proposal`, `project_qa`, `export_excel`, `push_backlog`, `apply_sprint`, `out_of_scope_refusal`) và từ chối lịch sự mọi yêu cầu không thuộc phạm vi công cụ quản lý dự án.
+  - **Tự chủ Công cụ MCP**: Tự động gọi chuỗi công cụ (`SpecHubTools`, `BacklogTools`, `SprintTools`, `TeamTools`, `project_get_active_config`) để thu thập dữ liệu thật trước khi trả lời.
+  - **Trí nhớ Hội thoại & Staging trên Redis (`ConversationHistory`)**: Truyền `sessionId` qua từng lượt SSE (`POST /api/ai/agent/decompose/stream`), nạp lại toàn bộ lịch sử trò chuyện và bản đề xuất đang lưu để chỉnh sửa hoặc thực thi hành động (như xuất Excel, đẩy Kho Backlog) mà vẫn giữ nguyên ngữ cảnh.
 
 ### Câu hỏi 1.3: Cấu trúc mã nguồn của Module AI nằm ở đâu?
 - **Trả lời**:
@@ -224,6 +224,16 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
      - **Loại công việc (`IssueTypes`) & Nhãn (`Labels`)**: Tách rõ `Story` (nhu cầu người dùng cần bóc tách thành các đầu việc kỹ thuật), `Task` (đầu việc kỹ thuật thực thi), `Bug` và `Sub-task`, đồng thời nạp danh mục `Labels` của dự án và lưu liên kết `IssueLabels`.
   2. **Di chuyển hạng mục từ kho Backlog vào Sprint không trùng lặp (`AiSprintCommitCoordinator`)**:
      - Khi AI chọn hạng mục từ Product Backlog (`sourceBacklogIssueId` / `sourceBacklogIssueKey`), bộ điều phối thực hiện **di chuyển trực tiếp (Move)** bản ghi từ kho Backlog (`SprintId = null`) sang `TargetSprintId` (kéo theo các việc con sẵn có), tuyệt đối không tạo bản ghi mới trùng lặp trong kho Backlog.
+
+### Câu hỏi 8.5: Trợ Lý AI đẩy công việc trực tiếp vào Kho Product Backlog, xuất file Excel qua đoạn chat và chặn yêu cầu ngoài luồng như thế nào?
+- **Trả lời**:
+  1. **Đẩy trực tiếp vào Kho Product Backlog (`PushToBacklog = true`)**:
+     - Khi người dùng yêu cầu phân tách đưa vào Kho Backlog (`recommendedTarget = "backlog"`), bấm nút **"Đẩy vào Kho Backlog"**, hoặc nhắn lệnh trực tiếp trong chat (`triggerAction = "push_backlog"`), API `POST /api/ai/agent/apply` (chỉ yêu cầu quyền `issue.create`) chuyển qua `AiSprintCommitCoordinator.ApplySprintProposalAsync` tạo Epics/Tasks/Subtasks với `SprintId = null` mà không sinh Sprint mới, đồng thời xóa danh sách việc vừa đẩy khỏi Redis và bổ sung tin nhắn xác nhận vào `ConversationHistory` để đoạn chat vẫn liền mạch.
+  2. **Xuất tệp Excel ngay trong hội thoại (`triggerAction = "export_excel"`)**:
+     - Khi người dùng yêu cầu *"xuất file excel giúp tôi"* trong đoạn hội thoại (khác với yêu cầu *"tạo task xây dựng tính năng xuất excel"* được bộ phân loại phân biệt rõ), backend trả về `Intent = "export_excel"` và `TriggerAction = "export_excel"`; Angular [`AiDecomposeModalComponent`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.ts) tự động gọi `ExcelDataService` xuất toàn bộ dữ liệu dự án ra file Excel và hiển thị nút tải lại ngay trong tin nhắn Trợ Lý AI.
+  3. **Rào chắn Phạm vi Ngoài luồng (`out_of_scope_refusal`) & Giao diện Hội thoại 2 phía**:
+     - Mọi yêu cầu không liên quan đến công cụ quản lý dự án đều được `ClassifyConversationalIntent` chặn lại với phản hồi lịch sự mà không phá hỏng danh sách công việc đang chuẩn bị trong Redis.
+     - Trên giao diện [`ai-decompose-modal.html`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.html) & [`ai-decompose-modal.scss`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.scss), khung trả lời của **Trợ Lý AI** đặt bên trái (loại bỏ hoàn toàn đường viền màu cạnh trái và các thẻ lồng ghép đứt đoạn), tin nhắn của **Tôi** đặt bên phải, tích hợp thống nhất bảng công việc đề xuất ngay dưới phản hồi.
 
 ---
 

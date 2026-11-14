@@ -1,7 +1,24 @@
 namespace ProjectMgmt.Solution.Dtos.Ai;
 
 /// <summary>
-/// Full structured sprint proposal staged in IStateStagingService.
+/// Represents a single turn in the stateful multi-turn AI Assistant conversation stored in Redis.
+/// </summary>
+public sealed class AiConversationTurnDto
+{
+    public string Id { get; set; } = string.Empty;
+    public string Role { get; set; } = "user"; // "user" | "assistant"
+    public string Content { get; set; } = string.Empty;
+    public string? FullContent { get; set; }
+    public string? FileName { get; set; }
+    public string Intent { get; set; } = "sprint_plan"; // "sprint_plan" | "backlog_plan" | "refine_proposal" | "export_excel" | "push_backlog" | "apply_sprint" | "project_qa" | "out_of_scope_refusal"
+    public string? ActionType { get; set; } // "none" | "export_excel" | "push_backlog" | "apply_sprint"
+    public int? TaskCount { get; set; }
+    public decimal? TotalStoryPoints { get; set; }
+    public DateTime TimestampUtc { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// Full structured sprint/backlog proposal & stateful conversation session staged in IStateStagingService (Redis).
 /// </summary>
 public sealed class AiSprintProposalDto
 {
@@ -10,6 +27,11 @@ public sealed class AiSprintProposalDto
     public Guid? TargetSprintId { get; set; }
     public string SprintGoal { get; set; } = string.Empty;
     public string Rationale { get; set; } = string.Empty;
+    public string Intent { get; set; } = "sprint_plan";
+    public string? AssistantReply { get; set; }
+    public string RecommendedTarget { get; set; } = "sprint"; // "sprint" | "backlog"
+    public string? TriggerAction { get; set; } // "none" | "export_excel" | "push_backlog" | "apply_sprint"
+    public List<AiConversationTurnDto> ConversationHistory { get; set; } = [];
     public List<string> Tags { get; set; } = [];
     public decimal TotalEstimatedHours { get; set; }
     public decimal TotalStoryPoints { get; set; }

@@ -11,11 +11,15 @@ Trong quy trình phát triển phần mềm theo khung Scrum (Scrum Framework), 
 3. **Phân bổ năng lực thiếu cân bằng (Capacity Imbalance)**: Khó đối chiếu chính xác số giờ làm việc thực tế, kỹ năng chuyên sâu (Frontend, Backend, QA) và vận tốc lịch sử (Velocity) của các Sprint trước, dẫn đến việc người thì quá tải (burnout), người thì thiếu việc.
 4. **Mất truy vết nguồn gốc (Loss of Traceability)**: Khi giao task, thành viên không biết task này xuất phát từ tài liệu nào, chương nào trong đặc tả kỹ thuật, gây tranh cãi khi nghiệm thu.
 
-### 1.2. Giải pháp Module AI Agent trong hệ thống
-Module AI Agent của dự án được xây dựng theo mô hình **Agentic Workflow có kiểm soát (Human-in-the-loop AI Agent)**:
+### 1.2. Giải pháp Trợ Lý AI Hội thoại Có Trạng thái (Stateful Hermes Agentic Workflow)
+Module AI được nâng cấp từ công cụ phân rã đơn lượt thành **Trợ Lý AI** vận hành theo mô hình **Hội thoại Đa lượt Có Trạng thái (Stateful Conversational Agentic Workflow)** kết hợp kiểm soát con người (Human-in-the-loop):
+- **Giao diện Đoạn hội thoại Liền mạch 2 Phía (Trái/Phải)**: Khối tin nhắn của **Trợ Lý AI** nằm bên trái và phản hồi của **Tôi (Người dùng)** nằm bên phải với khung trắng thống nhất, loại bỏ hoàn toàn các đường viền màu cạnh trái và các thẻ lồng ghép đứt đoạn; tiến trình tra cứu công cụ gộp gọn trong danh sách đóng/mở ngay phía trên câu trả lời.
+- **Trí nhớ Hội thoại Liên tục trên Redis (`ConversationHistory` theo `sessionId`)**: Mọi lượt trao đổi và bản kế hoạch đề xuất đều được lưu bền vững theo `sessionId` trong Redis (hoặc RAM dự phòng), cho phép người dùng tiếp tục yêu cầu *"đổi ưu tiên task đầu thành Urgent"*, *"bỏ task thứ 3"*, *"hỏi về tiến độ backlog"*, *"xuất file excel"*, hoặc *"đẩy vào kho backlog giúp tôi"* mà AI vẫn nhớ đầy đủ ngữ cảnh trước đó.
+- **Rào chắn Phạm vi Nghiệp vụ (Out-of-Scope Domain Guardrail)**: Trợ Lý AI chỉ phục vụ nghiệp vụ quản lý dự án (lập kế hoạch Sprint/Backlog, phân rã Story/Task, hỏi đáp số liệu dự án, xuất Excel, điều phối thành viên & workflow). Mọi yêu cầu ngoài luồng (viết thơ, code bài tập rời rạc, tư vấn đời sống, hỏi đáp ngoài công cụ quản lý dự án) đều bị từ chối lịch sự ngay tức thì (`Intent = "out_of_scope_refusal"`) mà vẫn giữ nguyên bản đề xuất hiện có trong Redis.
+- **Hành động Hội thoại Trực tiếp (Xuất Excel & Đẩy Kho Backlog)**: Hỗ trợ xuất tệp Excel toàn bộ dữ liệu dự án (`TriggerAction = "export_excel"`) hoặc đẩy trực tiếp toàn bộ công việc đề xuất vào **Kho Product Backlog** (`PushToBacklog = true`, `SprintId = null`) ngay trong cuộc hội thoại hoặc qua nút thao tác trực tiếp cạnh nút **Áp dụng vào Sprint**.
 - **Tiếp nhận đa kênh**: Hỗ trợ đính kèm file Word, Excel, PDF, Text hoặc dán trực tiếp ghi chú cuộc họp vào ô nhập liệu tự co giãn.
-- **RAG & MCP Grounding**: Tự động truy xuất kho tài liệu đặc tả dự án (**Spec Hub**) qua giao thức MCP, đối chiếu số liệu Backlog, vận tốc Sprint trước và kỹ năng của từng thành viên trong nhóm.
-- **Phân tách thực tế & Không giới hạn quy mô**: Bóc tách tự nhiên theo cấu trúc sản phẩm và biên bản họp, hoàn toàn không bị gò bó bởi các giới hạn cứng về số lượng task hay subtask. Phân biệt chuẩn xác bản chất Scrum giữa **User Story (`Story`)** (nhu cầu/giá trị dưới góc nhìn người dùng, được phân rã thành các đầu việc kỹ thuật khả thi), **Task** (công việc kỹ thuật độc lập) và **Bug** (lỗi cần khắc phục).
+- **RAG & MCP Grounding**: Tự động truy xuất kho tài liệu đặc tả dự án (**Spec Hub**) qua giao thức MCP, đối chiếu số liệu Backlog, vận tốc Sprint trước, cấu hình Workflow/Priority/IssueType/Labels đang áp dụng và kỹ năng từng thành viên.
+- **Phân tách thực tế & Không giới hạn quy mô**: Bóc tách tự nhiên theo cấu trúc sản phẩm và biên bản họp, không bị gò bó bởi giới hạn cứng về số lượng task hay subtask. Phân biệt chuẩn xác bản chất Scrum giữa **User Story (`Story`)** (nhu cầu/giá trị dưới góc nhìn người dùng, được phân rã thành các đầu việc kỹ thuật khả thi), **Task** (công việc kỹ thuật độc lập) và **Bug** (lỗi cần khắc phục).
 - **Khai thác Kho Product Backlog & Di chuyển Không Trùng lặp (Backlog Sourcing & Move Semantics)**:
   - AI đọc toàn bộ các hạng mục đang chờ trong Product Backlog (`SprintId = null`) kèm loại việc, mức ưu tiên, nhãn và việc con hiện có.
   - Khi AI chọn đưa một User Story hoặc Task có sẵn từ kho Backlog vào Sprint (`sourceBacklogIssueId` / `sourceBacklogIssueKey`), hệ thống thực hiện **di chuyển trực tiếp (Move)** bản ghi gốc từ Backlog vào Sprint mục tiêu (cập nhật `SprintId`, trạng thái, mức ưu tiên, nhãn `IssueLabels`, tiêu chí nghiệm thu và kéo theo các việc con hiện có), tuyệt đối không sinh bản sao gây trùng lặp trong kho Backlog.
@@ -26,7 +30,7 @@ Module AI Agent của dự án được xây dựng theo mô hình **Agentic Wor
     - *Task đang làm dở dang (`IsActiveWork`)*: Chuyển tiếp vào Sprint mới để hoàn thiện (bảo vệ công sức WIP).
     - *Task thường chưa bắt đầu (`IsInitial`) nhưng đã quá hạn*: Tự động hoàn trả về Product Backlog (`SprintId = null`) để Product Owner thẩm định lại giá trị và độ ưu tiên, tránh làm loãng cam kết Sprint Goal.
 - **Trích dẫn minh bạch 100%**: Mọi công việc sinh ra đều đính kèm trích dẫn tài liệu cụ thể (`documentCitations`), có thể nhấp vào để mở ngăn kéo xem tài liệu ngay lập tức mà không làm mất đoạn chat.
-- **Phê duyệt Staging**: Đề xuất được lưu tạm trên bộ nhớ đệm phân tán **Redis** để người dùng thoải mái chỉnh sửa, yêu cầu AI làm lại từng task trước khi bấm nút áp dụng chính thức vào Sprint.
+- **Phê duyệt Staging**: Đề xuất được lưu tạm trên bộ nhớ đệm phân tán **Redis** để người dùng thoải mái chỉnh sửa, trao đổi bổ sung, hoặc làm lại từng task trước khi bấm nút **Áp dụng vào Sprint** hoặc **Đẩy vào Kho Backlog**.
 
 ---
 
@@ -37,14 +41,14 @@ Hệ thống tuân thủ nghiêm ngặt mô hình **Modular Monolith kết hợp
 ```mermaid
 flowchart TD
     subgraph UI["Tầng Giao Diện Người Dùng"]
-        Modal["Giao diện Hội thoại & Phân rã Kế hoạch\n(Điều khiển Lập kế hoạch & Khôi phục Lịch sử)"]
+        Modal["Giao diện Hội thoại Trợ Lý AI 2 Phía\n(Lập kế hoạch, Hỏi đáp, Xuất Excel & Khôi phục Lịch sử)"]
         Profile["Bảng Điều khiển Giám sát Tài nguyên\n(Chỉ số Tiêu thụ, Tỷ lệ Thành công & Lịch sử)"]
-        Service["Dịch vụ Kết nối Thời gian thực Phía Client\n(Kết nối Luồng Dữ liệu, Điều phối Trạng thái)"]
+        Service["Dịch vụ Kết nối Thời gian thực Phía Client\n(Kết nối Luồng Dữ liệu, Duy trì Phiên Hội thoại)"]
     end
 
     subgraph API["Tầng Điều Phối Ứng Dụng"]
-        Ctrl["Cổng Tiếp nhận & Điều phối API AI\n(Xác thực Phiên, Quản lý Luồng & Phiên làm việc)"]
-        DecompSvc["Động cơ Xử lý Phân rã Kế hoạch Sprint\n(Quy trình Đa bước, Tự kiểm tra Chất lượng)"]
+        Ctrl["Cổng Tiếp nhận & Điều phối API AI\n(Xác thực Phiên, Quản lý Luồng & Đẩy Kho Backlog)"]
+        DecompSvc["Động cơ Trợ Lý AI Đa lượt Có Trạng thái\n(Phân loại Ý định, Rào chắn Phạm vi & Phân rã 5 Bước)"]
         TokenTracker["Bộ Giám sát Tài nguyên & Lịch sử Phiên\n(Đo lường Tài nguyên, Thống kê Lịch sử Dự án)"]
     end
 
@@ -104,20 +108,24 @@ flowchart LR
     EXT["Nhà cung cấp Trí tuệ Nhân tạo Ngoại vi"]
     EXT_AGENT["Công cụ Lập trình Hỗ trợ Bên ngoài"]
 
-    subgraph UC["Phạm Vi Nghiệp Vụ Module AI"]
-        UC1["Mở Giao diện Phân rã Kế hoạch"]
+    subgraph UC["Phạm Vi Nghiệp Vụ Trợ Lý AI"]
+        UC1["Mở Giao diện Hội thoại Trợ Lý AI"]
         UC2["Nhập yêu cầu / Dán biên bản họp / Đính kèm tệp"]
         UC3["Xem & Chỉnh sửa trước nội dung văn bản đã dán"]
         UC4["Lựa chọn Cấu hình Mô hình Phù hợp"]
-        UC5["Theo dõi Tiến trình Suy luận & Căn cứ Tra cứu"]
+        UC5["Theo dõi Tiến trình Tra cứu & Căn cứ Tài liệu"]
         UC6["Xem đề xuất Mục tiêu, Công việc, Điểm ước lượng"]
-        UC7["Xem trước Tài liệu Đặc tả Không Mất Ngữ cảnh"]
-        UC8["Yêu cầu Tái tạo Riêng một Việc hoặc Toàn bộ"]
+        UC7["Xem trước Tài liệu Đặc tả Không Mất Đoạn Chat"]
+        UC8["Trao đổi Đa lượt / Tinh chỉnh Kế hoạch Đã Lưu"]
         UC9["Hiệu chỉnh trực tiếp Tiêu đề, Điểm số, Nhân sự"]
         UC10["Phê duyệt Áp dụng Kế hoạch vào Sprint"]
+        UC15["Đẩy Danh sách Công việc Vào Kho Product Backlog"]
+        UC16["Yêu cầu Xuất Tệp Excel Dự án Qua Hội thoại"]
+        UC17["Hỏi đáp Trực tiếp Về Số liệu & Quy chuẩn Dự án"]
+        UC18["Từ chối Tự động Yêu cầu Ngoài Phạm vi Dự án"]
         UC11["Truy vấn Dữ liệu Dự án qua Giao thức Mở rộng"]
         UC12["Theo dõi Tài nguyên Tiêu thụ & Thống kê Sử dụng"]
-        UC13["Khôi phục Phiên Phân rã từ Lịch sử"]
+        UC13["Khôi phục Phiên Hội thoại từ Lịch sử"]
         UC14["Tự Động Kế Thừa Việc Dở Dang & Xử Lý Việc Quá Hạn"]
     end
 
@@ -131,6 +139,9 @@ flowchart LR
     SM --> UC8
     SM --> UC9
     SM --> UC10
+    SM --> UC15
+    SM --> UC16
+    SM --> UC17
     SM --> UC12
     SM --> UC13
     SM --> UC14
@@ -138,11 +149,16 @@ flowchart LR
     DEV --> UC7
     DEV --> UC11
     DEV --> UC12
+    DEV --> UC17
 
     UC2 --> AI
     UC4 --> AI
     UC8 --> AI
     UC10 --> AI
+    UC15 --> AI
+    UC16 --> AI
+    UC17 --> AI
+    UC18 --> AI
     UC12 --> AI
     UC13 --> AI
     UC14 --> AI
@@ -265,13 +281,12 @@ Dịch vụ [`PromptTemplateService`](file:///c:/Users/hoang/Downloads/ProjectMg
 
 ---
 
-## 8. Quản Trị Tiêu Thụ Token & Thẻ Tóm Tắt Điều Hành (Executive Summary)
+## 8. Quản Trị Tiêu Thụ Token & Trình Bày Hội Thoại Liền Mạch
 
-### 8.1. Thẻ Tóm Tắt Điều Hành (Executive Summary Card)
-Phản hồi của AI không chỉ là một danh sách phẳng các dòng công việc, mà được tổ chức thành **Thẻ Tóm tắt Điều hành (Executive Summary)** gồm:
-- **Sprint Goal chuẩn hóa**: Mục tiêu chiến lược ngắn gọn của chu kỳ Sprint.
-- **Phân bổ theo Vai trò Kỹ thuật**: Thống kê số lượng task, Story Points và giờ dự kiến riêng cho từng bộ phận (Frontend, Backend, QA/DevOps, Quản lý).
-- **Căn cứ Tài liệu Spec Hub**: Trích dẫn cụ thể các chương, bảng biểu, file đặc tả đã dùng làm cơ sở phân rã.
+### 8.1. Giao Diện Đoạn Hội Thoại Liền Mạch (Cohesive Two-Sided Dialogue)
+Thay thế các thẻ khối rời rạc có viền màu cạnh trái trước đây, giao diện **Trợ Lý AI** áp dụng bố cục hội thoại rành mạch 2 phía:
+- **Bên trái — Trợ Lý AI**: Trình bày liền mạch phần giải thích tự nhiên (`assistantReply`), danh sách công cụ vừa tra cứu (có thể thu gọn), nút tải lại tệp Excel khi vừa xuất qua chat, và bảng công việc đề xuất tích hợp ngay bên dưới (chỉ rõ mục tiêu Sprint hoặc **Kho Product Backlog** kèm nút **Đẩy vào Kho Backlog** và **Áp dụng vào Sprint**).
+- **Bên phải — Tôi (Người dùng)**: Hiển thị tin nhắn yêu cầu, tệp đính kèm và liên kết mở xem nội dung văn bản đã gửi trong ngăn trượt riêng biệt.
 
 ### 8.2. Hệ Thống Đo Lường & Giám Sát Token AI (IAiTokenUsageTracker)
 - Toàn bộ các tương tác với LLM đều được đo lường chính xác và lưu trữ qua [`AiTokenUsageTracker.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiTokenUsageTracker.cs).

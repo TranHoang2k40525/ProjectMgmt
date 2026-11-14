@@ -56,23 +56,23 @@ flowchart TD
 ### Danh mục các chuyên đề chi tiết:
 
 1. [**Chuyên đề 1: Kiến trúc Tổng quan & Sơ đồ Use Case**](file:///c:/Users/hoang/Downloads/ProjectMgmt/docs/ai/01-kien-truc-tong-quan-va-use-case.md)
-   - Khái niệm & Bài toán cốt lõi trong Scrum Agile.
-   - Clean Architecture & Modular Monolith kết hợp Module AI.
-   - Sơ đồ Use Case tổng quát (Mermaid).
+   - Khái niệm & Bài toán cốt lõi trong Scrum Agile; nâng cấp thành **Trợ Lý AI** hội thoại có trạng thái (Stateful Multi-turn Agent).
+   - Clean Architecture & Modular Monolith kết hợp Module AI; **Rào chắn Phạm vi Nghiệp vụ** (từ chối yêu cầu ngoài luồng).
+   - Sơ đồ Use Case tổng quát (Mermaid) gồm lập kế hoạch Sprint/Backlog, hỏi đáp dự án, xuất Excel qua hội thoại và đẩy trực tiếp vào Kho Backlog.
    - Kiến trúc Đa nhà cung cấp (Multi-Provider Model Client): Gemini 3.6/3.5 Flash, Claude 3.7 Sonnet, OpenAI GPT-4o, Local Ollama.
    - Quy chuẩn Bảo mật Tuyệt đối: Zero-Secret-Leakage & Project Scope Guard.
 
 2. [**Chuyên đề 2: Sơ đồ Tuần tự & Sơ đồ Hoạt động**](file:///c:/Users/hoang/Downloads/ProjectMgmt/docs/ai/02-so-do-tuan-tu-va-hoat-dong.md)
-   - Sơ đồ Tuần tự (Sequence Diagram) 5 bước từ lúc gửi yêu cầu đến khi tạo Sprint.
-   - Sơ đồ Hoạt động (Activity Diagram) từng bước của Agent Pipeline.
-   - Luồng truyền dữ liệu thời gian thực Server-Sent Events (SSE).
+   - Bộ định tuyến Ý định Hội thoại (Intent Classification): Phân tách Sprint/Backlog, Tinh chỉnh Đề xuất, Hỏi đáp Dự án, Xuất Excel, Đẩy Backlog/Sprint và Từ chối Ngoài luồng.
+   - Sơ đồ Tuần tự (Sequence Diagram) & Sơ đồ Hoạt động (Activity Diagram) quy trình Agentic Workflow 5 bước đa lượt.
+   - Luồng truyền dữ liệu thời gian thực Server-Sent Events (SSE) kèm `sessionId` phiên hội thoại.
    - Cơ chế tự động làm mới JWT Access Token khi phiên làm việc hết hạn (HTTP 401).
 
 3. [**Chuyên đề 3: Cơ chế Trí nhớ & Bộ nhớ đệm phân tán Redis**](file:///c:/Users/hoang/Downloads/ProjectMgmt/docs/ai/03-co-che-tri-nho-redis-memory.md)
-   - Phân loại Trí nhớ AI: Working Memory, Short-term Session Memory, Long-term Grounding Memory.
-   - Sơ đồ hoạt động của Chức năng Trí nhớ Redis (Memory Context Flowchart).
+   - Phân loại Trí nhớ AI: Working Memory, Stateful Conversational & Staging Session Memory, Long-term Grounding Memory.
+   - Sơ đồ hoạt động của Chức năng Trí nhớ Redis (Memory Context Flowchart) hỗ trợ hội thoại nhiều lượt (`ConversationHistory`) trên cùng `sessionId`.
    - State Staging phân tán (`ResilientStateStagingService` + `StackExchangeRedisStagingProvider`).
-   - Cấu trúc khóa Redis (`ProjectMgmt:Ai:...`), TTL, nén dữ liệu và cơ chế In-Memory Fallback an toàn.
+   - Cấu trúc khóa Redis (`ProjectMgmt:Ai:...`), TTL, cập nhật sau commit Backlog/Sprint và cơ chế In-Memory Fallback an toàn.
    - Hướng dẫn kiểm tra và chứng minh thực tế trên Redis CLI.
 
 4. [**Chuyên đề 4: Cơ chế RAG & Grounding với Spec Hub**](file:///c:/Users/hoang/Downloads/ProjectMgmt/docs/ai/04-rag-va-spec-hub-grounding.md)
@@ -100,14 +100,14 @@ flowchart TD
 
 | Tên Thành Phần | Vai Trò Chuyên Trách | Đường Dẫn Mã Nguồn |
 | :--- | :--- | :--- |
-| **AiAgentController** | API Controller phục vụ SSE stream, staging, tái tạo và commit | [`AiAgentController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/AiAgentController.cs) |
-| **AiSprintDecompositionService** | Dịch vụ phân rã Sprint 5 bước, điều phối RAG & MCP tools | [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs) |
+| **AiAgentController** | API Controller phục vụ SSE stream theo `sessionId`, staging, tái tạo và commit Sprint/Backlog | [`AiAgentController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/AiAgentController.cs) |
+| **AiSprintDecompositionService** | Trợ Lý AI hội thoại có trạng thái Redis: phân loại ý định, rào chắn ngoài luồng, pipeline 5 bước & RAG/MCP | [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs) |
 | **ProjectActiveConfigResolver** | Phân giải cấu hình thực tế đang áp dụng của dự án (Workflow, Priorities, IssueTypes, Labels) | [`ProjectActiveConfigResolver.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/ProjectActiveConfigResolver.cs) |
-| **AiSprintCommitCoordinator** | Ghi nhận Sprint, di chuyển hạng mục Backlog không trùng lặp & xử lý Rollover | [`AiSprintCommitCoordinator.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintCommitCoordinator.cs) |
+| **AiSprintCommitCoordinator** | Ghi nhận Sprint, **đẩy trực tiếp vào Kho Backlog (`SprintId = null`)**, di chuyển Backlog không trùng lặp & xử lý Rollover | [`AiSprintCommitCoordinator.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintCommitCoordinator.cs) |
 | **AiTokenUsageTracker** | Theo dõi tiêu thụ Token AI, thống kê chi phí & lịch sử phiên | [`AiTokenUsageTracker.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiTokenUsageTracker.cs) |
 | **MultiProviderAiModelClient** | Router gọi đa mô hình (Gemini, Claude, OpenAI, Ollama) | [`MultiProviderAiModelClient.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/MultiProviderAiModelClient.cs) |
 | **AiDocumentTextExtractor** | Trích xuất văn bản từ file Word, Excel, PDF, Markdown, Text | [`AiDocumentTextExtractor.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiDocumentTextExtractor.cs) |
-| **StackExchangeRedisStagingProvider** | Bộ nhớ đệm phân tán Redis lưu trạng thái đề xuất staging | [`StackExchangeRedisStagingProvider.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/Adapters/StackExchangeRedisStagingProvider.cs) |
+| **StackExchangeRedisStagingProvider** | Bộ nhớ đệm phân tán Redis lưu trạng thái đề xuất staging & lịch sử hội thoại đa lượt | [`StackExchangeRedisStagingProvider.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/Adapters/StackExchangeRedisStagingProvider.cs) |
 | **ResilientStateStagingService** | Cơ chế bọc chống sập bộ nhớ: ưu tiên Redis, fallback In-Memory | [`ResilientStateStagingService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Core/Staging/ResilientStateStagingService.cs) |
 | **ProjectScopeGuard** | Rào chắn bảo mật cách ly dữ liệu giữa các Project & Org | [`ProjectScopeGuard.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Core/Security/ProjectScopeGuard.cs) |
 | **SpecHubTools** | MCP Tool truy xuất kho tài liệu đặc tả Spec Hub | [`SpecHubTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SpecHubTools.cs) |
@@ -115,9 +115,9 @@ flowchart TD
 | **SprintTools** | MCP Tool tính toán vận tốc (Velocity) và rollover items | [`SprintTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SprintTools.cs) |
 | **TeamTools** | MCP Tool thống kê kỹ năng và giờ làm việc khả dụng | [`TeamTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/TeamTools.cs) |
 | **ProjectMgmt.McpServer** | Ứng dụng Console Stdio JSON-RPC phục vụ Agent ngoài | [`Program.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.McpServer/Program.cs) |
-| **ai-agent.service.ts** | Service Angular kết nối SSE stream, xử lý 401 refresh token | [`ai-agent.service.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/core/services/ai-agent.service.ts) |
-| **ai-decompose-modal.ts** | Component giao diện hội thoại AI, xem trước tài liệu, review dán | [`ai-decompose-modal.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.ts) |
-| **ai-decompose-modal.html** | Giao diện Angular template: Textarea auto-expand, Drawer preview | [`ai-decompose-modal.html`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.html) |
+| **ai-agent.service.ts** | Service Angular kết nối SSE stream (truyền `sessionId`), đẩy Backlog / áp dụng Sprint & 401 refresh | [`ai-agent.service.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/core/services/ai-agent.service.ts) |
+| **ai-decompose-modal.ts** | Component giao diện **Trợ Lý AI** hội thoại 2 phía có trạng thái, xuất Excel, đẩy Kho Backlog & xem tài liệu | [`ai-decompose-modal.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.ts) |
+| **ai-decompose-modal.html** | Template đoạn hội thoại Trợ Lý AI (trái) & Tôi (phải) liền mạch, bảng đề xuất tích hợp & các ngăn kéo | [`ai-decompose-modal.html`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.html) |
 | **profile-page.html** | Dashboard quản lý mức tiêu thụ Token AI và chi phí vận hành | [`profile-page.html`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/identity/profile-page.html) |
 | **spec-hub-page.ts** | Giao diện Spec Hub hỗ trợ mở đúng vị trí phân đoạn trích dẫn | [`spec-hub-page.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/spec-hub/spec-hub-page.ts) |
 
@@ -138,11 +138,15 @@ Trong quy trình phát triển phần mềm theo khung Scrum (Scrum Framework), 
 3. **Phân bổ năng lực thiếu cân bằng (Capacity Imbalance)**: Khó đối chiếu chính xác số giờ làm việc thực tế, kỹ năng chuyên sâu (Frontend, Backend, QA) và vận tốc lịch sử (Velocity) của các Sprint trước, dẫn đến việc người thì quá tải (burnout), người thì thiếu việc.
 4. **Mất truy vết nguồn gốc (Loss of Traceability)**: Khi giao task, thành viên không biết task này xuất phát từ tài liệu nào, chương nào trong đặc tả kỹ thuật, gây tranh cãi khi nghiệm thu.
 
-### 1.2. Giải pháp Module AI Agent trong hệ thống
-Module AI Agent của dự án được xây dựng theo mô hình **Agentic Workflow có kiểm soát (Human-in-the-loop AI Agent)**:
+### 1.2. Giải pháp Trợ Lý AI Hội thoại Có Trạng thái (Stateful Hermes Agentic Workflow)
+Module AI được nâng cấp từ công cụ phân rã đơn lượt thành **Trợ Lý AI** vận hành theo mô hình **Hội thoại Đa lượt Có Trạng thái (Stateful Conversational Agentic Workflow)** kết hợp kiểm soát con người (Human-in-the-loop):
+- **Giao diện Đoạn hội thoại Liền mạch 2 Phía (Trái/Phải)**: Khối tin nhắn của **Trợ Lý AI** nằm bên trái và phản hồi của **Tôi (Người dùng)** nằm bên phải với khung trắng thống nhất, loại bỏ hoàn toàn các đường viền màu cạnh trái và các thẻ lồng ghép đứt đoạn; tiến trình tra cứu công cụ gộp gọn trong danh sách đóng/mở ngay phía trên câu trả lời.
+- **Trí nhớ Hội thoại Liên tục trên Redis (`ConversationHistory` theo `sessionId`)**: Mọi lượt trao đổi và bản kế hoạch đề xuất đều được lưu bền vững theo `sessionId` trong Redis (hoặc RAM dự phòng), cho phép người dùng tiếp tục yêu cầu *"đổi ưu tiên task đầu thành Urgent"*, *"bỏ task thứ 3"*, *"hỏi về tiến độ backlog"*, *"xuất file excel"*, hoặc *"đẩy vào kho backlog giúp tôi"* mà AI vẫn nhớ đầy đủ ngữ cảnh trước đó.
+- **Rào chắn Phạm vi Nghiệp vụ (Out-of-Scope Domain Guardrail)**: Trợ Lý AI chỉ phục vụ nghiệp vụ quản lý dự án (lập kế hoạch Sprint/Backlog, phân rã Story/Task, hỏi đáp số liệu dự án, xuất Excel, điều phối thành viên & workflow). Mọi yêu cầu ngoài luồng (viết thơ, code bài tập rời rạc, tư vấn đời sống, hỏi đáp ngoài công cụ quản lý dự án) đều bị từ chối lịch sự ngay tức thì (`Intent = "out_of_scope_refusal"`) mà vẫn giữ nguyên bản đề xuất hiện có trong Redis.
+- **Hành động Hội thoại Trực tiếp (Xuất Excel & Đẩy Kho Backlog)**: Hỗ trợ xuất tệp Excel toàn bộ dữ liệu dự án (`TriggerAction = "export_excel"`) hoặc đẩy trực tiếp toàn bộ công việc đề xuất vào **Kho Product Backlog** (`PushToBacklog = true`, `SprintId = null`) ngay trong cuộc hội thoại hoặc qua nút thao tác trực tiếp cạnh nút **Áp dụng vào Sprint**.
 - **Tiếp nhận đa kênh**: Hỗ trợ đính kèm file Word, Excel, PDF, Text hoặc dán trực tiếp ghi chú cuộc họp vào ô nhập liệu tự co giãn.
-- **RAG & MCP Grounding**: Tự động truy xuất kho tài liệu đặc tả dự án (**Spec Hub**) qua giao thức MCP, đối chiếu số liệu Backlog, vận tốc Sprint trước và kỹ năng của từng thành viên trong nhóm.
-- **Phân tách thực tế & Không giới hạn quy mô**: Bóc tách tự nhiên theo cấu trúc sản phẩm và biên bản họp, hoàn toàn không bị gò bó bởi các giới hạn cứng về số lượng task hay subtask. Phân biệt chuẩn xác bản chất Scrum giữa **User Story (`Story`)** (nhu cầu/giá trị dưới góc nhìn người dùng, được phân rã thành các đầu việc kỹ thuật khả thi), **Task** (công việc kỹ thuật độc lập) và **Bug** (lỗi cần khắc phục).
+- **RAG & MCP Grounding**: Tự động truy xuất kho tài liệu đặc tả dự án (**Spec Hub**) qua giao thức MCP, đối chiếu số liệu Backlog, vận tốc Sprint trước, cấu hình Workflow/Priority/IssueType/Labels đang áp dụng và kỹ năng từng thành viên.
+- **Phân tách thực tế & Không giới hạn quy mô**: Bóc tách tự nhiên theo cấu trúc sản phẩm và biên bản họp, không bị gò bó bởi giới hạn cứng về số lượng task hay subtask. Phân biệt chuẩn xác bản chất Scrum giữa **User Story (`Story`)** (nhu cầu/giá trị dưới góc nhìn người dùng, được phân rã thành các đầu việc kỹ thuật khả thi), **Task** (công việc kỹ thuật độc lập) và **Bug** (lỗi cần khắc phục).
 - **Khai thác Kho Product Backlog & Di chuyển Không Trùng lặp (Backlog Sourcing & Move Semantics)**:
   - AI đọc toàn bộ các hạng mục đang chờ trong Product Backlog (`SprintId = null`) kèm loại việc, mức ưu tiên, nhãn và việc con hiện có.
   - Khi AI chọn đưa một User Story hoặc Task có sẵn từ kho Backlog vào Sprint (`sourceBacklogIssueId` / `sourceBacklogIssueKey`), hệ thống thực hiện **di chuyển trực tiếp (Move)** bản ghi gốc từ Backlog vào Sprint mục tiêu (cập nhật `SprintId`, trạng thái, mức ưu tiên, nhãn `IssueLabels`, tiêu chí nghiệm thu và kéo theo các việc con hiện có), tuyệt đối không sinh bản sao gây trùng lặp trong kho Backlog.
@@ -153,7 +157,7 @@ Module AI Agent của dự án được xây dựng theo mô hình **Agentic Wor
     - *Task đang làm dở dang (`IsActiveWork`)*: Chuyển tiếp vào Sprint mới để hoàn thiện (bảo vệ công sức WIP).
     - *Task thường chưa bắt đầu (`IsInitial`) nhưng đã quá hạn*: Tự động hoàn trả về Product Backlog (`SprintId = null`) để Product Owner thẩm định lại giá trị và độ ưu tiên, tránh làm loãng cam kết Sprint Goal.
 - **Trích dẫn minh bạch 100%**: Mọi công việc sinh ra đều đính kèm trích dẫn tài liệu cụ thể (`documentCitations`), có thể nhấp vào để mở ngăn kéo xem tài liệu ngay lập tức mà không làm mất đoạn chat.
-- **Phê duyệt Staging**: Đề xuất được lưu tạm trên bộ nhớ đệm phân tán **Redis** để người dùng thoải mái chỉnh sửa, yêu cầu AI làm lại từng task trước khi bấm nút áp dụng chính thức vào Sprint.
+- **Phê duyệt Staging**: Đề xuất được lưu tạm trên bộ nhớ đệm phân tán **Redis** để người dùng thoải mái chỉnh sửa, trao đổi bổ sung, hoặc làm lại từng task trước khi bấm nút **Áp dụng vào Sprint** hoặc **Đẩy vào Kho Backlog**.
 
 ---
 
@@ -164,14 +168,14 @@ Hệ thống tuân thủ nghiêm ngặt mô hình **Modular Monolith kết hợp
 ```mermaid
 flowchart TD
     subgraph UI["Tầng Giao Diện Người Dùng"]
-        Modal["Giao diện Hội thoại & Phân rã Kế hoạch\n(Điều khiển Lập kế hoạch & Khôi phục Lịch sử)"]
+        Modal["Giao diện Hội thoại Trợ Lý AI 2 Phía\n(Lập kế hoạch, Hỏi đáp, Xuất Excel & Khôi phục Lịch sử)"]
         Profile["Bảng Điều khiển Giám sát Tài nguyên\n(Chỉ số Tiêu thụ, Tỷ lệ Thành công & Lịch sử)"]
-        Service["Dịch vụ Kết nối Thời gian thực Phía Client\n(Kết nối Luồng Dữ liệu, Điều phối Trạng thái)"]
+        Service["Dịch vụ Kết nối Thời gian thực Phía Client\n(Kết nối Luồng Dữ liệu, Duy trì Phiên Hội thoại)"]
     end
 
     subgraph API["Tầng Điều Phối Ứng Dụng"]
-        Ctrl["Cổng Tiếp nhận & Điều phối API AI\n(Xác thực Phiên, Quản lý Luồng & Phiên làm việc)"]
-        DecompSvc["Động cơ Xử lý Phân rã Kế hoạch Sprint\n(Quy trình Đa bước, Tự kiểm tra Chất lượng)"]
+        Ctrl["Cổng Tiếp nhận & Điều phối API AI\n(Xác thực Phiên, Quản lý Luồng & Đẩy Kho Backlog)"]
+        DecompSvc["Động cơ Trợ Lý AI Đa lượt Có Trạng thái\n(Phân loại Ý định, Rào chắn Phạm vi & Phân rã 5 Bước)"]
         TokenTracker["Bộ Giám sát Tài nguyên & Lịch sử Phiên\n(Đo lường Tài nguyên, Thống kê Lịch sử Dự án)"]
     end
 
@@ -229,20 +233,24 @@ flowchart LR
     EXT["Nhà cung cấp Trí tuệ Nhân tạo Ngoại vi"]
     EXT_AGENT["Công cụ Lập trình Hỗ trợ Bên ngoài"]
 
-    subgraph UC["Phạm Vi Nghiệp Vụ Module AI"]
-        UC1["Mở Giao diện Phân rã Kế hoạch"]
+    subgraph UC["Phạm Vi Nghiệp Vụ Trợ Lý AI"]
+        UC1["Mở Giao diện Hội thoại Trợ Lý AI"]
         UC2["Nhập yêu cầu / Dán biên bản họp / Đính kèm tệp"]
         UC3["Xem & Chỉnh sửa trước nội dung văn bản đã dán"]
         UC4["Lựa chọn Cấu hình Mô hình Phù hợp"]
-        UC5["Theo dõi Tiến trình Suy luận & Căn cứ Tra cứu"]
+        UC5["Theo dõi Tiến trình Tra cứu & Căn cứ Tài liệu"]
         UC6["Xem đề xuất Mục tiêu, Công việc, Điểm ước lượng"]
-        UC7["Xem trước Tài liệu Đặc tả Không Mất Ngữ cảnh"]
-        UC8["Yêu cầu Tái tạo Riêng một Việc hoặc Toàn bộ"]
+        UC7["Xem trước Tài liệu Đặc tả Không Mất Đoạn Chat"]
+        UC8["Trao đổi Đa lượt / Tinh chỉnh Kế hoạch Đã Lưu"]
         UC9["Hiệu chỉnh trực tiếp Tiêu đề, Điểm số, Nhân sự"]
         UC10["Phê duyệt Áp dụng Kế hoạch vào Sprint"]
+        UC15["Đẩy Danh sách Công việc Vào Kho Product Backlog"]
+        UC16["Yêu cầu Xuất Tệp Excel Dự án Qua Hội thoại"]
+        UC17["Hỏi đáp Trực tiếp Về Số liệu & Quy chuẩn Dự án"]
+        UC18["Từ chối Tự động Yêu cầu Ngoài Phạm vi Dự án"]
         UC11["Truy vấn Dữ liệu Dự án qua Giao thức Mở rộng"]
         UC12["Theo dõi Tài nguyên Tiêu thụ & Thống kê Sử dụng"]
-        UC13["Khôi phục Phiên Phân rã từ Lịch sử"]
+        UC13["Khôi phục Phiên Hội thoại từ Lịch sử"]
         UC14["Tự Động Kế Thừa Việc Dở Dang & Xử Lý Việc Quá Hạn"]
     end
 
@@ -256,6 +264,9 @@ flowchart LR
     SM --> UC8
     SM --> UC9
     SM --> UC10
+    SM --> UC15
+    SM --> UC16
+    SM --> UC17
     SM --> UC12
     SM --> UC13
     SM --> UC14
@@ -263,11 +274,16 @@ flowchart LR
     DEV --> UC7
     DEV --> UC11
     DEV --> UC12
+    DEV --> UC17
 
     UC2 --> AI
     UC4 --> AI
     UC8 --> AI
     UC10 --> AI
+    UC15 --> AI
+    UC16 --> AI
+    UC17 --> AI
+    UC18 --> AI
     UC12 --> AI
     UC13 --> AI
     UC14 --> AI
@@ -405,13 +421,12 @@ Dịch vụ [`PromptTemplateService`](file:///c:/Users/hoang/Downloads/ProjectMg
 
 ---
 
-## 8. Quản Trị Tiêu Thụ Token & Thẻ Tóm Tắt Điều Hành (Executive Summary)
+## 8. Quản Trị Tiêu Thụ Token & Trình Bày Hội Thoại Liền Mạch
 
-### 8.1. Thẻ Tóm Tắt Điều Hành (Executive Summary Card)
-Phản hồi của AI không chỉ là một danh sách phẳng các dòng công việc, mà được tổ chức thành **Thẻ Tóm tắt Điều hành (Executive Summary)** gồm:
-- **Sprint Goal chuẩn hóa**: Mục tiêu chiến lược ngắn gọn của chu kỳ Sprint.
-- **Phân bổ theo Vai trò Kỹ thuật**: Thống kê số lượng task, Story Points và giờ dự kiến riêng cho từng bộ phận (Frontend, Backend, QA/DevOps, Quản lý).
-- **Căn cứ Tài liệu Spec Hub**: Trích dẫn cụ thể các chương, bảng biểu, file đặc tả đã dùng làm cơ sở phân rã.
+### 8.1. Giao Diện Đoạn Hội Thoại Liền Mạch (Cohesive Two-Sided Dialogue)
+Thay thế các thẻ khối rời rạc có viền màu cạnh trái trước đây, giao diện **Trợ Lý AI** áp dụng bố cục hội thoại rành mạch 2 phía:
+- **Bên trái — Trợ Lý AI**: Trình bày liền mạch phần giải thích tự nhiên (`assistantReply`), danh sách công cụ vừa tra cứu (có thể thu gọn), nút tải lại tệp Excel khi vừa xuất qua chat, và bảng công việc đề xuất tích hợp ngay bên dưới (chỉ rõ mục tiêu Sprint hoặc **Kho Product Backlog** kèm nút **Đẩy vào Kho Backlog** và **Áp dụng vào Sprint**).
+- **Bên phải — Tôi (Người dùng)**: Hiển thị tin nhắn yêu cầu, tệp đính kèm và liên kết mở xem nội dung văn bản đã gửi trong ngăn trượt riêng biệt.
 
 ### 8.2. Hệ Thống Đo Lường & Giám Sát Token AI (IAiTokenUsageTracker)
 - Toàn bộ các tương tác với LLM đều được đo lường chính xác và lưu trữ qua [`AiTokenUsageTracker.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiTokenUsageTracker.cs).
@@ -431,12 +446,13 @@ Phản hồi của AI không chỉ là một danh sách phẳng các dòng công
 ---
 
 ## 1. Tổng quan Kiến trúc Vận hành & Luồng Dữ liệu
-Trong hệ thống Quản lý Dự án Scrum Agile, quá trình phân rã Sprint bằng trí tuệ nhân tạo không phải là một lệnh gọi API đơn lẻ, mà là một **Agentic Workflow tuần tự gồm 5 giai đoạn được kiểm soát chặt chẽ (Human-in-the-loop Pipeline)**.
+Trong hệ thống Quản lý Dự án Scrum Agile, **Trợ Lý AI** không chỉ chạy một lệnh phân rã đơn lẻ không trạng thái, mà vận hành theo mô hình **Đoạn Hội thoại Có Trạng thái kết hợp Định tuyến Ý định & Quy trình Agentic 5 Giai đoạn (Stateful Hermes Agentic Workflow)**:
 
-Module này đảm bảo 3 tiêu chí cốt lõi:
-1. **Phản hồi tức thì thời gian thực (Realtime Transparency)**: Người dùng nhìn thấy rõ ràng AI đang chạy công cụ nào, đọc tài liệu gì, mất bao nhiêu mili-giây, thay vì nhìn màn hình chờ thụ động.
-2. **Ngăn chặn triệt để ảo giác (Zero Hallucination Grounding)**: AI buộc phải truy vấn dữ liệu thực tế thông qua các MCP Tools trước khi suy luận.
-3. **Phê duyệt Staging an toàn trước khi ghi vào Database**: Kết quả sinh ra được lưu trên bộ nhớ đệm phân tán Redis để người dùng review, chỉnh sửa, yêu cầu sinh lại từng task độc lập.
+Module này đảm bảo 4 tiêu chí cốt lõi:
+1. **Phản hồi tức thì thời gian thực (Realtime Transparency)**: Người dùng nhìn thấy rõ ràng AI đang chạy công cụ nào, tra cứu tài liệu nào, mất bao nhiêu mili-giây thông qua bảng công cụ thu gọn ngay phía trên câu trả lời.
+2. **Định tuyến Ý định Thông minh & Rào chắn Ngoài luồng (Intent Classification & Domain Guardrail)**: Tự động phân biệt 8 nhóm ý định (*lập kế hoạch Sprint*, *lập kế hoạch kho Backlog*, *tinh chỉnh kế hoạch đang lưu*, *hỏi đáp số liệu dự án*, *xuất tệp Excel*, *đẩy vào Kho Backlog*, *áp dụng vào Sprint*, và *từ chối yêu cầu ngoài phạm vi quản lý dự án*).
+3. **Ngăn chặn triệt để ảo giác (Zero Hallucination Grounding)**: AI buộc phải truy vấn dữ liệu thực tế thông qua các MCP Tools trước khi suy luận.
+4. **Phê duyệt Staging Có Trạng thái (Stateful Redis Staging Memory)**: Cả bản đề xuất công việc lẫn toàn bộ lịch sử hội thoại nhiều lượt (`ConversationHistory`) được lưu bền vững theo `sessionId` trong Redis để người dùng thoải mái trao đổi tiếp, tinh chỉnh, xuất Excel, hoặc chọn **Đẩy vào Kho Backlog** / **Áp dụng vào Sprint**.
 
 ---
 
@@ -460,131 +476,162 @@ sequenceDiagram
     participant Tracker as Bộ Giám sát Tài nguyên & Lịch sử
     participant DB as Cơ sở Dữ liệu Dự án
 
-    %% Giai đoạn 1: Mở Modal & Tiếp nhận
-    Note over SM,UI: GIAI ĐOẠN 1: KHỞI TẠO VÀ GỬI YÊU CẦU
-    SM->>UI: Nhập mục tiêu / Dán biên bản họp / Đính kèm tài liệu đặc tả
-    SM->>UI: Xác nhận yêu cầu phân rã Sprint
-    UI->>ClientSvc: Khởi tạo luồng phân rã kế hoạch
-    ClientSvc->>Gateway: Gửi yêu cầu phân rã kèm chứng thực phiên
+    %% Giai đoạn 1: Mở Modal & Tiếp nhận Hội thoại Có Trạng thái
+    Note over SM,UI: GIAI ĐOẠN 1: KHỞI TẠO HOẶC TIẾP TỤC ĐOẠN HỘI THOẠI
+    SM->>UI: Nhập yêu cầu hội thoại / Dán biên bản họp / Đính kèm tài liệu đặc tả
+    SM->>UI: Gửi lượt trao đổi mới tới Trợ Lý AI
+    UI->>ClientSvc: Khởi tạo luồng sự kiện kèm mã phiên hiện tại (nếu có)
+    ClientSvc->>Gateway: Gửi yêu cầu hội thoại kèm mã phiên và chứng thực phiên
     
-    %% Giai đoạn 2: Guardrail & Khởi tạo luồng
-    Note over Gateway,Pipeline: GIAI ĐOẠN 2: BẢO MẬT & XÁC THỰC
+    %% Giai đoạn 2: Guardrail, Tải Trí nhớ Phiên & Định tuyến Ý định
+    Note over Gateway,Pipeline: GIAI ĐOẠN 2: BẢO MẬT, ĐỌC TRÍ NHỚ REDIS & ĐỊNH TUYẾN Ý ĐỊNH
     Gateway->>Guard: Kiểm tra phân quyền truy cập và ranh giới dự án
     Guard-->>Gateway: Xác thực hợp lệ
+    Gateway->>Staging: Tải lịch sử hội thoại và bản đề xuất cũ theo mã phiên
+    Staging-->>Gateway: Trả về ngữ cảnh phiên hội thoại (nếu đã tồn tại)
     Gateway-->>ClientSvc: Mở luồng dữ liệu thời gian thực
-    Gateway->>Pipeline: Bắt đầu tiến trình phân rã
+    Gateway->>Pipeline: Chuyển giao yêu cầu kèm trí nhớ phiên cho Trợ Lý AI
 
-    %% Giai đoạn 3: Tra cứu dữ liệu thực tế
-    Note over Pipeline,Tools: GIAI ĐOẠN 3: THU THẬP DỮ LIỆU THỰC TẾ
-    Pipeline-->>Gateway: Cập nhật bước 1: Tiếp nhận và chuẩn hóa tài liệu
-    Gateway-->>ClientSvc: Báo cáo tiến độ bước 1
-    ClientSvc-->>UI: Cập nhật trạng thái trên giao diện
+    alt Yêu cầu ngoài phạm vi Quản lý Dự án
+        Pipeline->>Staging: Bảo toàn bản đề xuất cũ và ghi nhận lượt từ chối
+        Pipeline-->>UI: Trả lời từ chối lịch sự ngoài phạm vi công cụ
+    else Yêu cầu Xuất tệp Excel Dự án
+        Pipeline->>Staging: Ghi nhận lượt yêu cầu và gắn cờ kích hoạt xuất tệp
+        Pipeline-->>UI: Trả lời xác nhận và kích hoạt tải tệp Excel dự án
+    else Yêu cầu Lập kế hoạch / Tinh chỉnh / Hỏi đáp Dự án
+        %% Giai đoạn 3: Tra cứu dữ liệu thực tế
+        Note over Pipeline,Tools: GIAI ĐOẠN 3: THU THẬP DỮ LIỆU THỰC TẾ & QUY CHUẨN
+        Pipeline-->>Gateway: Cập nhật bước 1: Tiếp nhận và phân loại ý định
+        Gateway-->>ClientSvc: Báo cáo tiến độ bước 1
+        ClientSvc-->>UI: Cập nhật trạng thái trên giao diện hội thoại
 
-    Pipeline-->>Gateway: Cập nhật bước 2: Tra cứu tài liệu đặc tả & lịch sử dự án
-    Gateway-->>ClientSvc: Báo cáo tiến độ bước 2
-    
-    Pipeline->>Tools: Tìm kiếm các phân đoạn đặc tả phù hợp
-    Tools-->>Pipeline: Trả về trích đoạn yêu cầu kỹ thuật
-    Pipeline-->>Gateway: Báo cáo kết quả tra cứu đặc tả
+        Pipeline-->>Gateway: Cập nhật bước 2: Tra cứu tài liệu đặc tả & lịch sử dự án
+        Gateway-->>ClientSvc: Báo cáo tiến độ bước 2
+        
+        Pipeline->>Tools: Tìm kiếm các phân đoạn đặc tả phù hợp
+        Tools-->>Pipeline: Trả về trích đoạn yêu cầu kỹ thuật
+        Pipeline-->>Gateway: Báo cáo kết quả tra cứu đặc tả
 
-    Pipeline->>Tools: Lấy danh sách hạng mục tồn đọng trong Backlog
-    Tools-->>Pipeline: Trả về danh sách hạng mục công việc
-    Pipeline-->>Gateway: Báo cáo kết quả tra cứu Backlog
+        Pipeline->>Tools: Lấy danh sách hạng mục tồn đọng trong Backlog
+        Tools-->>Pipeline: Trả về danh sách hạng mục công việc
+        Pipeline-->>Gateway: Báo cáo kết quả tra cứu Backlog
 
-    Pipeline->>Tools: Lấy dữ liệu vận tốc các chu kỳ trước
-    Tools-->>Pipeline: Trả về vận tốc trung bình của nhóm
-    Pipeline-->>Gateway: Báo cáo kết quả tính toán vận tốc
+        Pipeline->>Tools: Lấy dữ liệu vận tốc và cấu hình đang áp dụng của dự án
+        Tools-->>Pipeline: Trả về vận tốc nhóm, quy trình, mức ưu tiên, loại việc, nhãn
+        Pipeline-->>Gateway: Báo cáo kết quả tính toán vận tốc & quy chuẩn
 
-    %% Giai đoạn 4: Phân tích Năng lực Đội ngũ
-    Pipeline-->>Gateway: Cập nhật bước 3: Đánh giá năng lực đội ngũ
-    Gateway-->>ClientSvc: Báo cáo tiến độ bước 3
-    Pipeline->>Tools: Phân tích kỹ năng và số giờ làm việc khả dụng
-    Tools-->>Pipeline: Trả về cơ cấu chuyên môn và định mức giờ
-    Pipeline-->>Gateway: Báo cáo kết quả phân tích năng lực
+        %% Giai đoạn 4: Phân tích Năng lực Đội ngũ
+        Pipeline-->>Gateway: Cập nhật bước 3: Đánh giá năng lực đội ngũ
+        Gateway-->>ClientSvc: Báo cáo tiến độ bước 3
+        Pipeline->>Tools: Phân tích kỹ năng và số giờ làm việc khả dụng
+        Tools-->>Pipeline: Trả về cơ cấu chuyên môn và định mức giờ
+        Pipeline-->>Gateway: Báo cáo kết quả phân tích năng lực
 
-    %% Giai đoạn 5: Gọi Mô hình AI
-    Note over Pipeline,AI: GIAI ĐOẠN 4: SUY LUẬN VÀ PHÂN RÃ KẾ HOẠCH
-    Pipeline-->>Gateway: Cập nhật bước 4: Suy luận phân rã công việc
-    Gateway-->>ClientSvc: Báo cáo tiến độ bước 4
-    Pipeline->>ModelHub: Điều phối yêu cầu suy luận theo mô hình đã chọn
-    ModelHub->>AI: Gửi toàn bộ ngữ cảnh và quy chuẩn dự án
-    AI-->>ModelHub: Trả về luồng suy luận và cấu trúc đề xuất
-    ModelHub-->>Pipeline: Chuyển giao dữ liệu đề xuất đã chuẩn hóa
+        %% Giai đoạn 5: Gọi Mô hình AI kèm Lịch sử Hội thoại
+        Note over Pipeline,AI: GIAI ĐOẠN 4: SUY LUẬN ĐA LƯỢT VÀ PHÂN RÃ KẾ HOẠCH
+        Pipeline-->>Gateway: Cập nhật bước 4: Suy luận câu trả lời và công việc
+        Gateway-->>ClientSvc: Báo cáo tiến độ bước 4
+        Pipeline->>ModelHub: Gửi yêu cầu kèm lịch sử hội thoại và bản đề xuất cũ
+        ModelHub->>AI: Suy luận giữ nguyên ngữ cảnh hoặc phân rã công việc
+        AI-->>ModelHub: Trả về câu trả lời tự nhiên và cấu trúc đề xuất
+        ModelHub-->>Pipeline: Chuyển giao dữ liệu đề xuất đã chuẩn hóa
 
-    %% Giai đoạn 6: Self-Check Critique & Lưu Staging
-    Note over Pipeline,Staging: GIAI ĐOẠN 5: TỰ KIỂM TRA & LƯU BỘ NHỚ ĐỆM PHIÊN
-    Pipeline-->>Gateway: Cập nhật bước 5: Tự kiểm tra & Lưu trữ tạm thời
-    Gateway-->>ClientSvc: Báo cáo tiến độ bước 5
-    Pipeline->>Pipeline: Kiểm tra tiêu chuẩn nghiệm thu và cân bằng khối lượng
-    Pipeline->>Staging: Lưu trữ bản đề xuất vào bộ nhớ đệm phiên
-    Staging-->>Pipeline: Xác nhận lưu trữ tạm thời thành công
-    Pipeline-->>Gateway: Báo cáo hoàn tất phân rã
-    Gateway->>Tracker: Ghi nhận mức tiêu thụ tài nguyên và lịch sử phiên
-    Tracker-->>Gateway: Xác nhận lưu vết thành công
-    Gateway-->>ClientSvc: Gửi bản đề xuất kế hoạch Sprint hoàn chỉnh
-    ClientSvc-->>UI: Hiển thị Thẻ Tóm tắt Điều hành, Epics, Tasks và Subtasks
+        %% Giai đoạn 6: Self-Check Critique & Lưu Staging
+        Note over Pipeline,Staging: GIAI ĐOẠN 5: TỰ KIỂM TRA & CẬP NHẬT TRÍ NHỚ PHIÊN
+        Pipeline-->>Gateway: Cập nhật bước 5: Tự kiểm tra & Lưu trữ bộ nhớ phiên
+        Gateway-->>ClientSvc: Báo cáo tiến độ bước 5
+        Pipeline->>Pipeline: Kiểm tra tiêu chuẩn nghiệm thu và cân bằng khối lượng
+        Pipeline->>Staging: Cập nhật lịch sử hội thoại và bản đề xuất vào bộ nhớ phiên
+        Staging-->>Pipeline: Xác nhận lưu trữ thành công
+        Pipeline-->>Gateway: Báo cáo hoàn tất lượt hội thoại
+        Gateway->>Tracker: Ghi nhận mức tiêu thụ tài nguyên và lịch sử phiên
+        Tracker-->>Gateway: Xác nhận lưu vết thành công
+        Gateway-->>ClientSvc: Gửi câu trả lời Trợ Lý AI, lịch sử và bản đề xuất cập nhật
+        ClientSvc-->>UI: Hiển thị đoạn chat 2 phía (Trợ Lý AI bên trái, Tôi bên phải) và bảng công việc
+    end
 
-    %% Giai đoạn 7: Người dùng chỉnh sửa & Áp dụng
-    Note over SM,DB: GIAI ĐOẠN 6: PHÊ DUYỆT & GHI DỮ LIỆU CHÍNH THỨC
+    %% Giai đoạn 7: Người dùng chỉnh sửa, Đẩy Kho Backlog hoặc Áp dụng Sprint
+    Note over SM,DB: GIAI ĐOẠN 6: PHÊ DUYỆT VÀO KHO BACKLOG HOẶC SPRINT
     opt Người dùng xem trước tài liệu trích dẫn
         SM->>UI: Nhấp vào nguồn trích dẫn tài liệu
         UI->>UI: Mở ngăn kéo hiển thị nội dung đặc tả liên quan
     end
 
-    opt Người dùng yêu cầu làm lại một việc cụ thể
-        SM->>UI: Yêu cầu tinh chỉnh lại công việc được chọn
-        UI->>Gateway: Gửi yêu cầu tái tạo công việc kèm phản hồi
-        Gateway->>Pipeline: Tái cấu trúc công việc độc lập
-        Pipeline->>Staging: Cập nhật công việc mới vào bộ nhớ đệm phiên
-        Pipeline-->>UI: Cập nhật công việc hiển thị trên giao diện
+    opt Người dùng yêu cầu làm lại hoặc tinh chỉnh qua hội thoại
+        SM->>UI: Gửi tin nhắn chỉnh sửa nối tiếp hoặc yêu cầu làm lại từng việc
+        UI->>Gateway: Gửi yêu cầu tái cấu trúc dựa trên trí nhớ phiên
+        Gateway->>Pipeline: Cập nhật công việc tương ứng và giữ nguyên các việc còn lại
+        Pipeline->>Staging: Lưu bản cập nhật vào bộ nhớ phiên
+        Pipeline-->>UI: Cập nhật công việc hiển thị ngay trong hội thoại
     end
 
-    SM->>UI: Xác nhận áp dụng kế hoạch vào Sprint
-    UI->>Gateway: Gửi lệnh phê duyệt kế hoạch chính thức
-    Gateway->>Staging: Truy xuất bản kế hoạch đã qua chỉnh sửa
-    Staging-->>Gateway: Trả về dữ liệu kế hoạch hoàn chỉnh
-    Gateway->>DB: Ghi nhận Epics, Tasks, Subtasks và phân công nhân sự
-    DB-->>Gateway: Xác nhận ghi nhận thành công
-    Gateway->>Staging: Dọn dẹp dữ liệu phiên tạm thời
-    Gateway-->>UI: Thông báo hoàn tất và chuyển hướng đến bảng điều phối Sprint
+    alt Người dùng chọn Đẩy vào Kho Backlog (qua nút hoặc hội thoại)
+        SM->>UI: Chọn đẩy công việc đề xuất vào Kho Product Backlog
+        UI->>Gateway: Gửi lệnh ghi nhận không gắn vào Sprint
+        Gateway->>DB: Ghi nhận Epics, Tasks và Subtasks vào Kho Backlog (Sprint rỗng)
+        DB-->>Gateway: Xác nhận ghi nhận thành công
+        Gateway->>Staging: Dọn danh sách việc đã ghi và giữ lại lịch sử hội thoại
+        Gateway-->>UI: Thông báo đẩy Kho Backlog thành công và giữ nguyên cuộc hội thoại
+    else Người dùng chọn Áp dụng kế hoạch vào Sprint
+        SM->>UI: Xác nhận áp dụng kế hoạch vào Sprint
+        UI->>Gateway: Gửi lệnh phê duyệt kế hoạch Sprint chính thức
+        Gateway->>Staging: Truy xuất bản kế hoạch đã qua chỉnh sửa
+        Staging-->>Gateway: Trả về dữ liệu kế hoạch hoàn chỉnh
+        Gateway->>DB: Ghi nhận chu kỳ Sprint, Epics, Tasks, Subtasks và di chuyển việc Backlog
+        DB-->>Gateway: Xác nhận ghi nhận thành công
+        Gateway->>Staging: Dọn danh sách việc đã ghi và lưu lịch sử xác nhận trong phiên
+        Gateway-->>UI: Thông báo hoàn tất và chuyển hướng đến bảng điều phối Sprint
+    end
 ```
 
 ---
 
-## 3. Sơ đồ Hoạt động (Activity Diagram) của Pipeline 5 bước
+## 3. Sơ đồ Hoạt động (Activity Diagram) của Pipeline Đa lượt Có Trạng thái
 
 Quy trình xử lý nội bộ của [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs) được mô hình hóa theo sơ đồ hoạt động chặt chẽ dưới đây:
 
 ```mermaid
 flowchart TD
-    Start(["Bắt đầu: Tiếp nhận yêu cầu phân rã kế hoạch"]) --> Step1["BƯỚC 1: TIẾP NHẬN & XÁC THỰC BẢO MẬT\n- Xác thực quyền hạn và ranh giới an toàn của dự án\n- Trích xuất nội dung văn bản từ tài liệu tải lên\n- Chuẩn hóa ghi chú cuộc họp và yêu cầu người dùng\n- Phát tín hiệu tiến trình bước 1"]
+    Start(["Bắt đầu: Tiếp nhận lượt hội thoại từ Người dùng"]) --> Step1["BƯỚC 1: TIẾP NHẬN, ĐỌC TRÍ NHỚ & ĐỊNH TUYẾN Ý ĐỊNH\n- Xác thực quyền hạn và ranh giới an toàn dự án\n- Tải lịch sử hội thoại và bản đề xuất cũ theo mã phiên\n- Phân loại ý định người dùng (Kế hoạch / Hỏi đáp / Xuất Excel / Ngoài luồng)\n- Trích xuất tài liệu tải lên (nếu có)"]
 
-    Step1 --> Step2["BƯỚC 2: TRA CỨU ĐẶC TẢ & DỮ LIỆU LỊCH SỬ\n- Tìm kiếm các đoạn tài liệu đặc tả kỹ thuật phù hợp\n- Quét danh sách các hạng mục tồn đọng trong Backlog\n- Tính toán vận tốc trung bình từ các chu kỳ trước\n- Phát tín hiệu tiến trình bước 2"]
+    Step1 --> GuardIntent{"Kiểm tra Ý định\nNghiệp vụ"}
 
-    Step2 --> Step3["BƯỚC 3: ĐÁNH GIÁ NĂNG LỰC ĐỘI NGŨ\n- Rà soát hồ sơ chuyên môn của các thành viên\n- Xác định phân bổ kỹ năng: Giao diện, Xử lý phía sau, Kiểm thử\n- Xác định tổng quỹ giờ làm việc khả dụng trong chu kỳ\n- Phát tín hiệu tiến trình bước 3"]
+    GuardIntent -- "Ngoài phạm vi Quản lý Dự án" --> RefuseOut["RÀO CHẮN NGOÀI LUỒNG\n- Từ chối lịch sự ngoài phạm vi công cụ\n- Bảo toàn nguyên vẹn bản đề xuất cũ trong bộ nhớ phiên"]
+    RefuseOut --> DisplayUI
 
-    Step3 --> Step4["BƯỚC 4: SUY LUẬN & PHÂN RÃ KẾ HOẠCH\n- Nạp toàn bộ dữ liệu thực tế và quy chuẩn dự án vào mô hình\n- Áp dụng nguyên tắc: Việc nhỏ độc lập; việc phức tạp chia việc con\n- Điều phối yêu cầu suy luận đến Mô hình AI\n- Chuẩn hóa cấu trúc dữ liệu đề xuất từ phản hồi\n- Phát tín hiệu tiến trình bước 4"]
+    GuardIntent -- "Xuất tệp Excel Dự án" --> ExportExcel["KÍCH HOẠT XUẤT EXCEL\n- Ghi nhận lượt xác nhận vào lịch sử hội thoại\n- Phát tín hiệu tải tệp Excel dự án về giao diện"]
+    ExportExcel --> DisplayUI
 
-    Step4 --> Check{"BƯỚC 5: TỰ KIỂM TRA CHẤT LƯỢNG\n- Tổng khối lượng có vượt quá vận tốc đội ngũ?\n- Phân bổ nhân sự đã đúng chuyên môn kỹ thuật chưa?\n- Đã đầy đủ tiêu chí nghiệm thu và trích dẫn đặc tả chưa?"}
+    GuardIntent -- "Đẩy Kho Backlog hoặc Áp dụng Sprint qua Lệnh Chat" --> AutoTrigger["PHÁT LỆNH THỰC THI TRỰC TIẾP\n- Kiểm tra danh sách công việc đã có trong bộ nhớ phiên\n- Gắn cờ kích hoạt thao tác tương ứng cho giao diện"]
+    AutoTrigger --> DisplayUI
 
-    Check -- "Chưa tối ưu" --> AutoFix["Tự động điều chỉnh cân bằng lại khối lượng\n& gắn nhãn lưu ý để người dùng xem xét"]
+    GuardIntent -- "Lập kế hoạch / Tinh chỉnh / Hỏi đáp Dự án" --> Step2["BƯỚC 2: TRA CỨU ĐẶC TẢ, BACKLOG & QUY CHUẨN\n- Tìm kiếm các đoạn tài liệu đặc tả kỹ thuật phù hợp\n- Quét các hạng mục tồn đọng trong Backlog\n- Đọc quy trình workflow, mức ưu tiên, loại việc, nhãn đang áp dụng\n- Tính toán vận tốc trung bình các chu kỳ trước"]
+
+    Step2 --> Step3["BƯỚC 3: ĐÁNH GIÁ NĂNG LỰC ĐỘI NGŨ\n- Rà soát hồ sơ chuyên môn các thành viên\n- Xác định phân bổ kỹ năng và quỹ giờ làm việc khả dụng"]
+
+    Step3 --> Step4["BƯỚC 4: SUY LUẬN ĐA LƯỢT & PHÂN RÃ KẾ HOẠCH\n- Nạp lịch sử hội thoại, bản đề xuất đang lưu và dữ liệu dự án\n- Sinh câu trả lời tự nhiên kèm cấu trúc công việc đề xuất hoặc giải đáp số liệu"]
+
+    Step4 --> Check{"BƯỚC 5: TỰ KIỂM TRA CHẤT LƯỢNG\n- Khối lượng, nhân sự, nghiệm thu và trích dẫn hợp chuẩn?"}
+
+    Check -- "Chưa tối ưu" --> AutoFix["Cân bằng lại khối lượng & gắn ghi chú lưu ý"]
     AutoFix --> SaveStaging
-    Check -- "Đạt chuẩn" --> SaveStaging["LƯU TRỮ VÀO BỘ NHỚ ĐỆM PHIÊN TẠM THỜI\n- Tạo mã phiên ngẫu nhiên an toàn\n- Lưu trữ bản đề xuất vào bộ nhớ đệm với thời hạn an toàn\n- Ghi nhận chỉ số tài nguyên và lịch sử phiên\n- Phát tín hiệu hoàn tất và gửi bản đề xuất đầy đủ"]
+    Check -- "Đạt chuẩn" --> SaveStaging["CẬP NHẬT TRÍ NHỚ PHIÊN TRÊN BỘ NHỚ ĐỆM\n- Lưu cả câu trả lời hội thoại, lịch sử trao đổi & bản đề xuất\n- Ghi nhận chỉ số tài nguyên và phát bản đề xuất về giao diện"]
 
-    SaveStaging --> DisplayUI["GIAO DIỆN HIỂN THỊ KẾ HOẠCH CHO NGƯỜI DÙNG\n- Hiển thị Thẻ Tóm tắt Điều hành, mục tiêu chu kỳ và danh sách công việc\n- Huy hiệu phân loại: Vai trò kỹ thuật, độ ưu tiên, việc con\n- Nguồn trích dẫn tài liệu cho phép mở xem trực tiếp"]
+    SaveStaging --> DisplayUI["GIAO DIỆN HỘI THOẠI 2 PHÍA TRỢ LÝ AI (TRÁI) & TÔI (PHẢI)\n- Câu trả lời liền mạch, không tách thẻ vụn, có bảng công việc tích hợp\n- Cho phép chỉnh sửa trực tiếp hoặc chat tiếp trong cùng phiên"]
 
-    DisplayUI --> UserAction{"Lựa chọn của Người điều phối"}
+    DisplayUI --> UserAction{"Thao tác tiếp theo của Người điều phối"}
 
-    UserAction -- "Xem tài liệu đặc tả" --> OpenDrawer["Mở ngăn kéo xem phân đoạn tài liệu trích dẫn\n(Không làm gián đoạn hay mất phiên làm việc)"]
+    UserAction -- "Tiếp tục nhắn tin trao đổi / yêu cầu sửa" --> Start
+    UserAction -- "Xem tài liệu đặc tả" --> OpenDrawer["Mở ngăn kéo xem phân đoạn tài liệu trích dẫn\n(Không làm gián đoạn đoạn hội thoại)"]
     OpenDrawer --> DisplayUI
 
     UserAction -- "Chỉnh sửa trực tiếp" --> EditItem["Hiệu chỉnh tiêu đề, điểm ước lượng, người phụ trách"]
     EditItem --> DisplayUI
 
-    UserAction -- "Yêu cầu AI làm lại việc cụ thể" --> RegenTask["Gửi yêu cầu tái tạo kèm góp ý chi tiết\nCập nhật công việc mới vào bộ nhớ đệm phiên"]
-    RegenTask --> DisplayUI
+    UserAction -- "Đẩy vào Kho Backlog" --> CommitBacklog["GHI VÀO KHO PRODUCT BACKLOG\n- Tạo Epics, Tasks, Subtasks với Sprint rỗng\n- Xóa danh sách việc vừa ghi, giữ nguyên lịch sử hội thoại"]
+    CommitBacklog --> DisplayUI
 
-    UserAction -- "Phê duyệt áp dụng" --> CommitDB["XÁC NHẬN ÁP DỤNG KẾ HOẠCH VÀO SPRINT\n- Ghi nhận chính thức danh mục công việc vào cơ sở dữ liệu\n- Dọn dẹp dữ liệu phiên tạm thời trong bộ nhớ đệm\n- Cập nhật bảng công việc của chu kỳ Sprint"]
+    UserAction -- "Áp dụng vào Sprint" --> CommitDB["XÁC NHẬN ÁP DỤNG KẾ HOẠCH VÀO SPRINT\n- Tạo Sprint mới, di chuyển Backlog không trùng lặp\n- Xóa danh sách việc vừa ghi và hoàn tất phiên lập kế hoạch"]
 
     CommitDB --> Finish(["Kết thúc: Chu kỳ Sprint sẵn sàng thực thi"])
 ```
@@ -646,13 +693,13 @@ Hệ thống giải quyết triệt để thông qua bộ phân tách loại chu
 
 | Thành phần | Vai trò kỹ thuật | Liên kết mã nguồn |
 | :--- | :--- | :--- |
-| **AiAgentController** | Tiếp nhận SSE, điều phối stream, tái tạo task và commit staging | [`AiAgentController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/AiAgentController.cs#L25-L160) |
-| **AiSprintDecompositionService** | Pipeline 5 bước thực thi Agentic Workflow, prompt engineering | [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs#L45-L250) |
-| **AiTokenUsageTracker** | Ghi nhận token, latency và lịch sử các phiên phân tách | [`AiTokenUsageTracker.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiTokenUsageTracker.cs) |
+| **AiAgentController** | Tiếp nhận SSE kèm `sessionId`, điều phối stream, tái tạo task và commit Sprint/Kho Backlog | [`AiAgentController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/AiAgentController.cs#L25-L160) |
+| **AiSprintDecompositionService** | Trợ Lý AI có trạng thái Redis: phân loại ý định, rào chắn ngoài luồng, pipeline 5 bước & prompt engineering | [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs#L45-L250) |
+| **AiTokenUsageTracker** | Ghi nhận token, latency và lịch sử các phiên Trợ Lý AI | [`AiTokenUsageTracker.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiTokenUsageTracker.cs) |
 | **MultiProviderAiModelClient** | Router gọi API mô hình ngoài (Gemini, Claude, OpenAI) | [`MultiProviderAiModelClient.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/MultiProviderAiModelClient.cs#L25-L120) |
 | **SpecHubTools** | Công cụ trích xuất đặc tả yêu cầu phục vụ Grounding | [`SpecHubTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SpecHubTools.cs#L15-L80) |
-| **ai-agent.service.ts** | Xử lý EventSource, đọc SSE stream theo từng chunk JSON | [`ai-agent.service.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/core/services/ai-agent.service.ts#L40-L150) |
-| **ai-decompose-modal.ts** | Render giao diện tiến trình 5 bước, bảng công việc đề xuất | [`ai-decompose-modal.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.ts#L80-L280) |
+| **ai-agent.service.ts** | Xử lý SSE theo `sessionId`, đẩy Kho Backlog, áp dụng Sprint và 401 refresh token | [`ai-agent.service.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/core/services/ai-agent.service.ts#L40-L150) |
+| **ai-decompose-modal.ts** | Giao diện **Trợ Lý AI** hội thoại 2 phía, bảng công việc tích hợp, xuất Excel & khôi phục Redis | [`ai-decompose-modal.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.ts#L80-L280) |
 
 
 
@@ -675,11 +722,11 @@ flowchart TD
         WM3["Thời gian tồn tại: Trong suốt tiến trình phân rã (vài giây đến vài chục giây)"]
     end
 
-    subgraph T2["TẦNG 2: TRÍ NHỚ PHIÊN TẠM THỜI (STAGING SESSION MEMORY)"]
+    subgraph T2["TẦNG 2: TRÍ NHỚ HỘI THOẠI & STAGING CÓ TRẠNG THÁI (STATEFUL CONVERSATION & STAGING MEMORY)"]
         SM1["Lưu trữ trên Hệ thống Bộ nhớ đệm Phân tán Đàn hồi"]
-        SM2["Chứa toàn bộ đề xuất: Mục tiêu, Epics, Tasks, Subtasks, Nghiệm thu & Trích dẫn"]
-        SM3["Thời gian tồn tại: Tự động giải phóng sau thời hạn an toàn quy định"]
-        SM4["Cho phép Người dùng Rà soát, Hiệu chỉnh hoặc Yêu cầu Tái tạo độc lập"]
+        SM2["Chứa bản đề xuất (Mục tiêu, Epics, Tasks, Subtasks) KÈM lịch sử hội thoại đa lượt"]
+        SM3["Hỗ trợ định tuyến đích đến (Sprint hoặc Kho Backlog), cờ hành động & ngữ cảnh nối tiếp"]
+        SM4["Cho phép Người dùng Trao đổi tiếp, Hiệu chỉnh, Xuất Excel hoặc Phê duyệt vào Backlog/Sprint"]
     end
 
     subgraph T3["TẦNG 3: BỘ NHỚ LỊCH SỬ PHIÊN DỰ ÁN (PROJECT SESSION MEMORY)"]
@@ -712,32 +759,32 @@ Sơ đồ dưới đây minh họa chi tiết cách dữ liệu đề xuất AI 
 
 ```mermaid
 flowchart TD
-    StartInput["Hoàn thành phân rã hoặc Người dùng yêu cầu sửa"] --> CheckConfig{"Kiểm tra Cấu hình Bộ nhớ đệm Phân tán"}
+    StartInput["Hoàn tất lượt hội thoại hoặc Người dùng gửi yêu cầu nối tiếp"] --> LoadPrior["Đọc trí nhớ hội thoại và bản đề xuất cũ theo mã phiên\n(nếu tiếp tục cuộc hội thoại trước đó)"]
+    LoadPrior --> CheckConfig{"Kiểm tra Cấu hình Bộ nhớ đệm Phân tán"}
 
     CheckConfig -- "Chưa bật" --> MemoryFallback["Chuyển hướng lưu vào Bộ nhớ đệm Nội bộ an toàn"]
     CheckConfig -- "Đã bật" --> CheckCircuit{"Kiểm tra Trạng thái Ngắt mạch Tự động"}
 
     CheckCircuit -- "Mạch Đang Mở (Hệ thống gặp sự cố)" --> MemoryFallback
-    CheckCircuit -- "Mạch Đang Đóng (Hoạt động bình thường)" --> TryDistributed["Ghi dữ liệu vào Bộ nhớ đệm Phân tán\nkèm thời hạn tồn tại an toàn"]
+    CheckCircuit -- "Mạch Đang Đóng (Hoạt động bình thường)" --> TryDistributed["Ghi cả lịch sử hội thoại & bản đề xuất vào Bộ nhớ đệm Phân tán\nkèm thời hạn tồn tại an toàn"]
 
     TryDistributed --> CheckResult{"Giao tiếp thành công?"}
     CheckResult -- "Thành công" --> ResetFailures["Khởi tạo lại bộ đếm lỗi ngắt mạch\nTrả về mã định danh phiên cho Client"]
     CheckResult -- "Gián đoạn / Timeout" --> RecordFailure["Ghi nhận lỗi vào bộ ngắt mạch\n(Đạt ngưỡng quy định -> Mở mạch tự động)"]
     RecordFailure --> MemoryFallback
 
-    MemoryFallback --> ReturnClient["Trả về mã định danh phiên cho Client\n(Đảm bảo trải nghiệm liền mạch không ngắt quãng)"]
+    MemoryFallback --> ReturnClient["Trả về mã định danh phiên cho Client\n(Đảm bảo trải nghiệm hội thoại liền mạch không ngắt quãng)"]
 
     ReturnClient --> UserAction{"Tương tác tiếp theo của Người điều phối"}
 
     UserAction -- "Hiệu chỉnh trực tiếp thông tin" --> PatchMemory["Gửi dữ liệu cập nhật trực tiếp vào bộ nhớ phiên"]
     PatchMemory --> ReturnClient
 
-    UserAction -- "Yêu cầu tái tạo riêng một việc" --> RegenTask["Gửi yêu cầu tái tạo đến Động cơ AI\n1. Đọc ngữ cảnh phiên hiện tại\n2. Tái cấu trúc công việc độc lập\n3. Cập nhật dữ liệu mới vào bộ nhớ phiên\n4. Phản hồi công việc mới về giao diện"]
-    RegenTask --> ReturnClient
+    UserAction -- "Nhắn tin tiếp / Yêu cầu sửa / Hỏi đáp / Xuất Excel" --> StartInput
 
-    UserAction -- "Phê duyệt áp dụng vào Sprint" --> CommitPhase["1. Đọc toàn bộ kế hoạch từ bộ nhớ phiên\n2. Mở giao dịch cơ sở dữ liệu: Ghi nhận danh mục công việc\n3. Dọn dẹp dữ liệu phiên tạm thời\n4. Xác nhận giao dịch thành công"]
+    UserAction -- "Đẩy Kho Backlog hoặc Áp dụng vào Sprint" --> CommitPhase["1. Đọc toàn bộ kế hoạch từ bộ nhớ phiên\n2. Mở giao dịch cơ sở dữ liệu: Ghi nhận vào Kho Backlog (Sprint rỗng) hoặc Sprint mới\n3. Xóa danh sách việc đã ghi và bổ sung tin nhắn xác nhận vào lịch sử hội thoại phiên\n4. Cho phép tiếp tục hội thoại trong cùng phiên"]
 
-    CommitPhase --> Done(["Hoàn tất: Kế hoạch chính thức được ghi nhận"])
+    CommitPhase --> Done(["Hoàn tất: Công việc đã ghi nhận & Phiên hội thoại vẫn liền mạch"])
 ```
 
 ---
@@ -754,17 +801,40 @@ ProjectMgmt:Ai:staging:{stagingGuid}
 `ProjectMgmt:Ai:staging:e7c4f1a2-8b3d-4e9a-9c12-3456789abcde`
 
 ### 3.2. Cấu trúc Payload JSON Lưu trữ
-Toàn bộ đề xuất phân rã được tuần tự hóa (serialize) thành chuỗi JSON tối ưu, chứa đầy đủ ngữ cảnh nghiệp vụ Scrum:
+Toàn bộ đề xuất phân rã kèm trạng thái đoạn hội thoại đa lượt được tuần tự hóa (serialize) thành chuỗi JSON tối ưu:
 
 ```json
 {
-  "stagingId": "e7c4f1a2-8b3d-4e9a-9c12-3456789abcde",
+  "stagingId": "sprint_ai_e7c4f1a28b3d4e9a9c123456789abcde",
   "projectId": 12,
   "sprintId": 5,
+  "intent": "sprint_plan",
+  "assistantReply": "Tôi đã phân tích tài liệu đặc tả cùng kho Backlog và đề xuất kế hoạch gồm 2 công việc chính (8 SP).",
+  "recommendedTarget": "sprint",
+  "triggerAction": null,
   "sprintGoal": "Xây dựng lõi xác thực đa yếu tố và đồng bộ dữ liệu thời gian thực cho hệ thống",
   "suggestedSprintName": "Sprint 5 - Bảo mật & Realtime Engine",
   "targetVelocity": 32,
   "totalStoryPoints": 28,
+  "conversationHistory": [
+    {
+      "id": "turn-1-u",
+      "role": "user",
+      "content": "Phân rã tính năng xác thực RBAC và realtime SSE",
+      "attachmentName": "Kien-truc-realtime.docx",
+      "intent": "sprint_plan",
+      "toolSteps": [],
+      "timestamp": "2026-11-14T08:15:20Z"
+    },
+    {
+      "id": "turn-1-a",
+      "role": "assistant",
+      "content": "Tôi đã phân tích tài liệu đặc tả cùng kho Backlog và đề xuất kế hoạch gồm 2 công việc chính.",
+      "intent": "sprint_plan",
+      "toolSteps": ["spec_hub_search: 7ms", "backlog_get_stories: 13ms"],
+      "timestamp": "2026-11-14T08:15:30Z"
+    }
+  ],
   "epics": [
     {
       "id": "epic-1",
@@ -865,10 +935,11 @@ Toàn bộ đề xuất phân rã được tuần tự hóa (serialize) thành c
 }
 ```
 
-### 3.3. Thời gian Sống (TTL) & Chính sách Giải phóng (Eviction Policy)
+### 3.3. Thời gian Sống (TTL) & Chính sách Cập nhật / Giải phóng (Eviction & Lifecycle Policy)
 - **TTL Mặc định**: `24 giờ` (`TimeSpan.FromHours(24)`).
-- **Lý do thiết kế**: Đủ dài để Scrum Master đóng laptop, trao đổi nội bộ với nhóm và quay lại duyệt vào ngày hôm sau mà không bị mất dữ liệu; đồng thời tự động biến mất sau 24h để giải phóng dung lượng RAM của Redis.
-- **Xóa chủ động (Explicit Invalidation)**: Khi người dùng bấm **"Áp dụng vào Sprint"** hoặc **"Hủy bỏ"**, phương thức `RemoveAsync(key)` được gọi để thu hồi bộ nhớ ngay lập tức.
+- **Lý do thiết kế**: Đủ dài để Scrum Master đóng laptop, trao đổi nội bộ với nhóm và quay lại tiếp tục đoạn hội thoại vào ngày hôm sau mà không bị mất ngữ cảnh; đồng thời tự động biến mất sau 24h để giải phóng dung lượng RAM của Redis.
+- **Bảo toàn Hội thoại Sau Khi Commit (`ApplyProposal` / `PushToBacklog`)**: Khi người dùng bấm **"Áp dụng vào Sprint"** hoặc **"Đẩy vào Kho Backlog"**, `AiAgentController.ApplyProposal` ghi nhận công việc vào MySQL, xóa danh sách `Tasks` đã commit trong bản Staging (tránh áp dụng trùng lặp nhiều lần), đồng thời **bổ sung tin nhắn xác nhận của Trợ Lý AI vào `ConversationHistory` và lưu lại vào Redis** để đoạn hội thoại được giữ nguyên mạch tiếp tục.
+- **Xóa sạch Chủ động (Explicit Full Reset)**: Khi người dùng bấm nút **"Làm mới & Phiên mới"** (`POST /api/ai/agent/clear-cache`), hệ thống gọi `RemoveAsync(key)` để thu hồi toàn bộ bộ nhớ phiên cũ trên Redis và tạo `sessionId` mới.
 
 ---
 
@@ -950,11 +1021,12 @@ PONG
 "{\"stagingId\":\"e7c4f1a2...\",\"sprintGoal\":\"Xây dựng lõi xác thực...\"}"
 ```
 
-### 5.3. Chứng minh Tính Độc lập với Cơ sở Dữ liệu
-1. **Trước khi bấm "Áp dụng vào Sprint"**: Kiểm tra trong MySQL: bảng `Issues` chưa có bất kỳ bản ghi nào mới từ AI. Dữ liệu chỉ tồn tại duy nhất trên Redis (`ProjectMgmt:Ai:staging:*`).
-2. **Sau khi bấm "Áp dụng vào Sprint"**: 
-   - MySQL ghi nhận các Issue mới kèm SprintId tương ứng.
-   - Kiểm tra lại Redis CLI: Khóa `ProjectMgmt:Ai:staging:...` đã bị xóa tự động (`nil`).
+### 5.3. Chứng minh Tính Độc lập với Cơ sở Dữ liệu & Hội thoại Liên tục
+1. **Trước khi bấm "Đẩy vào Kho Backlog" hoặc "Áp dụng vào Sprint"**: Kiểm tra trong MySQL: bảng `Issues` chưa có bất kỳ bản ghi nào mới từ AI. Dữ liệu kế hoạch và `conversationHistory` chỉ tồn tại duy nhất trên Redis (`ProjectMgmt:Ai:staging:*`).
+2. **Sau khi bấm "Đẩy vào Kho Backlog" hoặc "Áp dụng vào Sprint"**:
+   - Nếu chọn **Đẩy vào Kho Backlog** (`PushToBacklog = true`): MySQL ghi nhận các Issue mới với `SprintId = null` (nằm trực tiếp trong kho Product Backlog) mà không tạo Sprint mới.
+   - Nếu chọn **Áp dụng vào Sprint**: MySQL ghi nhận Sprint mới cùng các Issue tương ứng và di chuyển các Story từ kho Backlog (nếu có) không trùng lặp.
+   - Kiểm tra lại Redis CLI: Trường `tasks` trong bản Staging đã được dọn sạch (`[]`) nhưng `conversationHistory` vẫn được cập nhật thêm tin nhắn xác nhận để tiếp tục cuộc hội thoại; khi bấm **"Làm mới & Phiên mới"**, khóa `ProjectMgmt:Ai:staging:...` được xóa hoàn toàn (`nil`).
 
 ---
 
@@ -965,7 +1037,7 @@ Bên cạnh bộ nhớ đề xuất tức thời (Staging Session), hệ thống
 ### 6.1. Quản lý Lịch sử Phiên Phân rã Dự án (Project Session Memory)
 - **Cơ chế hoạt động**: Mỗi khi một lượt phân rã Sprint hoàn tất, hệ thống tự động ghi nhận bản tóm tắt phiên [`AiSessionSummary`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/IAiTokenUsageTracker.cs) gồm: `SessionId`, `ProjectId`, `SprintGoal`, `TaskCount`, `TotalStoryPoints`, `Model`, `CreatedByName`, `CreatedAtUtc`.
 - **Khôi phục phiên làm việc cũ (Session History Restore)**:
-  - Trên thanh tiêu đề của Modal AI có biểu tượng **Lịch sử phiên (đồng hồ)**.
+  - Trên thanh tiêu đề của Modal **Trợ Lý AI** có biểu tượng **Lịch sử phiên (đồng hồ)**.
   - Khi nhấp vào, dropdown hiển thị danh sách các phiên phân tách gần nhất trong dự án từ API `GET /api/ai/agent/sessions?projectId=...`.
   - Nhấp vào phiên bất kỳ để khôi phục toàn bộ bản kế hoạch đề xuất từ Staging Cache (`GET /api/ai/agent/proposal/{sessionId}`) mà không cần chạy lại mô hình LLM từ đầu.
 
@@ -978,7 +1050,7 @@ Bên cạnh bộ nhớ đề xuất tức thời (Staging Session), hệ thống
 
 ### 6.3. Cơ chế Giải phóng Bộ nhớ đệm Cache & Làm mới Tri thức (Staging Cache Invalidation & Session Reset)
 - **Xóa sạch bộ đệm phân tán Redis**: Endpoint `POST /api/ai/agent/clear-cache` giải phóng tức thì các đối tượng đề xuất lưu tạm trong Redis (`ProjectMgmt:Ai:staging:...`), ngăn chặn tình trạng lưu vết kế hoạch cũ khi người dùng chuyển hướng hoặc thay đổi hoàn toàn yêu cầu.
-- **Khởi tạo phiên làm việc tươi mới 100%**: Trên thanh tiêu đề của Modal AI phân rã, nút **"Làm mới & Phiên mới"** cho phép người dùng chủ động xóa bỏ cache cục bộ (`localStorage`), hủy bỏ đề xuất cũ và giải phóng bộ nhớ đệm server chỉ với một thao tác duy nhất.
+- **Khởi tạo phiên làm việc tươi mới 100%**: Trên thanh tiêu đề của Modal **Trợ Lý AI**, nút **"Làm mới & Phiên mới"** cho phép người dùng chủ động xóa bỏ cache cục bộ (`localStorage`), hủy bỏ đề xuất/đoạn chat cũ và giải phóng bộ nhớ đệm server chỉ với một thao tác duy nhất.
 
 ---
 
@@ -1446,22 +1518,22 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
 
 ## 2. Nhóm Câu Hỏi 1: Tổng Quan Kiến Trúc & Vị Trí Mã Nguồn
 
-### Câu hỏi 1.1: Module AI này là gì và giải quyết bài toán gì trong Scrum?
+### Câu hỏi 1.1: Trợ Lý AI trong hệ thống là gì và giải quyết bài toán gì trong Scrum?
 - **Trả lời**:
-  Module AI này là một **Hệ thống AI Agent hỗ trợ Phân rã và Lập kế hoạch Sprint (AI Sprint Decomposition Agent)**. Trong Scrum truyền thống, buổi họp Sprint Planning thường mất hàng giờ để đọc tài liệu đặc tả, bóc tách User Story thành các Task kỹ thuật, ước lượng điểm Story Points và phân chia công việc cho thành viên.
-  Module AI giải quyết triệt để 3 vấn đề:
-  1. Đọc và hiểu toàn bộ tài liệu đặc tả (Word, Excel, PDF, Text, Biên bản họp) qua cơ chế RAG.
-  2. Tự động đối chiếu năng lực thực tế của từng thành viên (Frontend, Backend, QA) và vận tốc Sprint trước.
-  3. Đề xuất bản kế hoạch Sprint cân bằng, kèm tiêu chí nghiệm thu và trích dẫn tài liệu minh bạch 100%.
+  **Trợ Lý AI** trong hệ thống là một **Trợ lý Hội thoại Có Trạng thái (Stateful Hermes Agentic Assistant)** hỗ trợ toàn diện quy trình Quản lý Dự án Scrum/Agile: từ lập kế hoạch Sprint, bóc tách công việc đẩy vào Kho Product Backlog, trả lời câu hỏi về số liệu/quy chuẩn dự án, xuất tệp Excel báo cáo cho tới điều chỉnh từng hạng mục qua đối thoại tự nhiên.
+  Trợ Lý AI giải quyết triệt để 4 vấn đề:
+  1. Đọc và hiểu toàn bộ tài liệu đặc tả (Word, Excel, PDF, Text, Biên bản họp) qua cơ chế RAG & Spec Hub.
+  2. Tự động đối chiếu năng lực thực tế của từng thành viên (Frontend, Backend, QA), vận tốc Sprint trước, Backlog và bộ Workflow/Priority/IssueType/Labels đang áp dụng của dự án.
+  3. Đề xuất bản kế hoạch cân bằng cho Sprint hoặc Kho Product Backlog kèm tiêu chí nghiệm thu và trích dẫn tài liệu minh bạch 100%.
+  4. Duy trì đoạn hội thoại liền mạch nhiều lượt trên Redis để người dùng tinh chỉnh nối tiếp, hỏi đáp dự án hoặc xuất báo cáo Excel bằng ngôn ngữ tự nhiên.
 
-### Câu hỏi 1.2: Tại sao gọi đây là một "AI Agent" mà không phải một "API Wrapper" thông thường?
+### Câu hỏi 1.2: Tại sao gọi đây là một "Hermes Agentic Workflow Có Trạng thái" mà không phải Chatbot Stateless hay API Wrapper?
 - **Trả lời**:
-  Một API Wrapper thông thường chỉ nhận prompt của người dùng rồi chuyển tiếp (forward) trực tiếp đến OpenAI/Gemini và trả kết quả về.
-  Trong khi đó, hệ thống này là một **Agentic Workflow 5 bước có quyền tự chủ công cụ (Tool-using Agent)**:
-  - Tự động gọi chuỗi công cụ MCP (`SpecHubTools`, `BacklogTools`, `SprintTools`, `TeamTools`) để tự thu thập dữ liệu dự án.
-  - Tự suy luận và phân rã theo nguyên tắc Scrum thực tế: Task 1-3 SP độc lập; chỉ $\ge 5$ SP mới chia việc con.
-  - Tự thực hiện bước kiểm tra (Self-Check) xem tổng Story Points có vượt quá vận tốc trung bình của nhóm không trước khi lưu Staging.
-  - Duy trì trạng thái phiên làm việc (Session Memory) trên Redis để người dùng tương tác chỉnh sửa hoặc yêu cầu làm lại từng phần.
+  Một Chatbot Stateless hay API Wrapper chỉ nhận từng câu hỏi độc lập, quên ngay lượt trao đổi trước đó và không có khả năng tương tác nghiệp vụ an toàn.
+  Ngược lại, Trợ Lý AI của hệ thống vận hành theo quy trình **Stateful Hermes Agentic Workflow**:
+  - **Định tuyến Ý định & Rào chắn Ngoài luồng**: Tự động phân loại 8 nhóm ý định (`sprint_plan`, `backlog_plan`, `refine_proposal`, `project_qa`, `export_excel`, `push_backlog`, `apply_sprint`, `out_of_scope_refusal`) và từ chối lịch sự mọi yêu cầu không thuộc phạm vi công cụ quản lý dự án.
+  - **Tự chủ Công cụ MCP**: Tự động gọi chuỗi công cụ (`SpecHubTools`, `BacklogTools`, `SprintTools`, `TeamTools`, `project_get_active_config`) để thu thập dữ liệu thật trước khi trả lời.
+  - **Trí nhớ Hội thoại & Staging trên Redis (`ConversationHistory`)**: Truyền `sessionId` qua từng lượt SSE (`POST /api/ai/agent/decompose/stream`), nạp lại toàn bộ lịch sử trò chuyện và bản đề xuất đang lưu để chỉnh sửa hoặc thực thi hành động (như xuất Excel, đẩy Kho Backlog) mà vẫn giữ nguyên ngữ cảnh.
 
 ### Câu hỏi 1.3: Cấu trúc mã nguồn của Module AI nằm ở đâu?
 - **Trả lời**:
@@ -1654,6 +1726,16 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
      - **Loại công việc (`IssueTypes`) & Nhãn (`Labels`)**: Tách rõ `Story` (nhu cầu người dùng cần bóc tách thành các đầu việc kỹ thuật), `Task` (đầu việc kỹ thuật thực thi), `Bug` và `Sub-task`, đồng thời nạp danh mục `Labels` của dự án và lưu liên kết `IssueLabels`.
   2. **Di chuyển hạng mục từ kho Backlog vào Sprint không trùng lặp (`AiSprintCommitCoordinator`)**:
      - Khi AI chọn hạng mục từ Product Backlog (`sourceBacklogIssueId` / `sourceBacklogIssueKey`), bộ điều phối thực hiện **di chuyển trực tiếp (Move)** bản ghi từ kho Backlog (`SprintId = null`) sang `TargetSprintId` (kéo theo các việc con sẵn có), tuyệt đối không tạo bản ghi mới trùng lặp trong kho Backlog.
+
+### Câu hỏi 8.5: Trợ Lý AI đẩy công việc trực tiếp vào Kho Product Backlog, xuất file Excel qua đoạn chat và chặn yêu cầu ngoài luồng như thế nào?
+- **Trả lời**:
+  1. **Đẩy trực tiếp vào Kho Product Backlog (`PushToBacklog = true`)**:
+     - Khi người dùng yêu cầu phân tách đưa vào Kho Backlog (`recommendedTarget = "backlog"`), bấm nút **"Đẩy vào Kho Backlog"**, hoặc nhắn lệnh trực tiếp trong chat (`triggerAction = "push_backlog"`), API `POST /api/ai/agent/apply` (chỉ yêu cầu quyền `issue.create`) chuyển qua `AiSprintCommitCoordinator.ApplySprintProposalAsync` tạo Epics/Tasks/Subtasks với `SprintId = null` mà không sinh Sprint mới, đồng thời xóa danh sách việc vừa đẩy khỏi Redis và bổ sung tin nhắn xác nhận vào `ConversationHistory` để đoạn chat vẫn liền mạch.
+  2. **Xuất tệp Excel ngay trong hội thoại (`triggerAction = "export_excel"`)**:
+     - Khi người dùng yêu cầu *"xuất file excel giúp tôi"* trong đoạn hội thoại (khác với yêu cầu *"tạo task xây dựng tính năng xuất excel"* được bộ phân loại phân biệt rõ), backend trả về `Intent = "export_excel"` và `TriggerAction = "export_excel"`; Angular [`AiDecomposeModalComponent`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.ts) tự động gọi `ExcelDataService` xuất toàn bộ dữ liệu dự án ra file Excel và hiển thị nút tải lại ngay trong tin nhắn Trợ Lý AI.
+  3. **Rào chắn Phạm vi Ngoài luồng (`out_of_scope_refusal`) & Giao diện Hội thoại 2 phía**:
+     - Mọi yêu cầu không liên quan đến công cụ quản lý dự án đều được `ClassifyConversationalIntent` chặn lại với phản hồi lịch sự mà không phá hỏng danh sách công việc đang chuẩn bị trong Redis.
+     - Trên giao diện [`ai-decompose-modal.html`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.html) & [`ai-decompose-modal.scss`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.scss), khung trả lời của **Trợ Lý AI** đặt bên trái (loại bỏ hoàn toàn đường viền màu cạnh trái và các thẻ lồng ghép đứt đoạn), tin nhắn của **Tôi** đặt bên phải, tích hợp thống nhất bảng công việc đề xuất ngay dưới phản hồi.
 
 ---
 

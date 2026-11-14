@@ -96,6 +96,10 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
   onAiProposalApplied(): void {
     this.showAiDecomposeModal.set(false);
+    this.onAiDataChanged();
+  }
+
+  onAiDataChanged(): void {
     const proj = this.projectService.currentProject();
     if (proj?.id) {
       this.projectService.selectProject(proj);
