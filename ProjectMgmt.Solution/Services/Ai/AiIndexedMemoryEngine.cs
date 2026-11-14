@@ -769,7 +769,7 @@ public static partial class AiIndexedMemoryEngine
                    or "hey bạn" or "good morning" or "good afternoon" or "good evening"
                    or "ok" or "okay" or "oke" or "ok bạn" or "ok cảm ơn" or "cảm ơn"
                    or "cám ơn" or "cảm ơn bạn" or "cám ơn bạn" or "thanks" or "thank you"
-                   or "tốt lắm" or "hay quá" or "được rồi" or "help" or "giúp tôi"
+                   or "tốt lắm" or "ok tốt lắm" or "hay quá" or "được rồi" or "help" or "giúp tôi"
                    or "giúp mình" or "hướng dẫn" ||
                clean.StartsWith("chào ", StringComparison.Ordinal) ||
                clean.StartsWith("xin chào", StringComparison.Ordinal) ||
@@ -778,6 +778,7 @@ public static partial class AiIndexedMemoryEngine
                lower.Contains("bạn là ai") ||
                lower.Contains("bạn làm được gì") ||
                lower.Contains("bạn có thể làm gì") ||
+               lower.Contains("bạn có thể hỗ trợ") ||
                lower.Contains("bạn biết làm gì") ||
                lower.Contains("bạn hỗ trợ") ||
                lower.Contains("hỗ trợ gì") ||
@@ -809,8 +810,10 @@ public static partial class AiIndexedMemoryEngine
                lower.Contains("cuối cùng") || lower.Contains("ý tôi là") ||
                lower.Contains("chi tiết hơn") || lower.Contains("rõ hơn") ||
                lower.Contains("kỹ hơn") || lower.Contains("cụ thể hơn") ||
-               lower.Contains("ngắn gọn") || lower.Contains("tại sao") ||
-               lower.Contains("vì sao") || lower.Contains("thế còn") ||
+               lower.Contains("ngắn gọn") || lower.Contains("tại sao vậy") ||
+               lower.Contains("vì sao vậy") || lower.Contains("tại sao chia") ||
+               lower.Contains("vì sao gán") || lower.Contains("tại sao lại") ||
+               lower.Contains("thế còn") ||
                lower.Contains("tiếp đi") || lower.Contains("nói tiếp") ||
                lower.Contains("giải thích thêm") || lower.Contains("bổ sung thêm") ||
                PronounItRegex().IsMatch(lower) ||

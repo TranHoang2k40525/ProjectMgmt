@@ -136,11 +136,11 @@ Quy trình xử lý nội bộ của [`AiSprintDecompositionService.cs`](file://
 
 ```mermaid
 flowchart TD
-    Start(["Bắt đầu: Tiếp nhận lượt hội thoại từ Người dùng (hoặc mở lại phiên cũ)"]) --> Step1["BƯỚC 1: KHÓA PHẠM VI, NẠP TRÍ NHỚ KÉP & PHÂN LOẠI Ý ĐỊNH\n- Xác thực bộ ba (Tổ chức, Dự án, Người dùng)\n- Tải phiên từ Bộ nhớ đệm Nóng; nếu hết hạn thì nạp bù từ CSDL\n- Trích xuất ràng buộc xuyên suốt phiên & kế thừa chủ đề lượt trước cho câu hỏi rút gọn\n- Phân loại ý định (nhận diện câu hỏi nối tiếp, hỏi đáp mệnh lệnh & rào chắn ngoài luồng)"]
+    Start(["Bắt đầu: Tiếp nhận lượt hội thoại từ Người dùng (hoặc mở lại phiên cũ)"]) --> Step1["BƯỚC 1: KHÓA PHẠM VI, NẠP TRÍ NHỚ KÉP & PHÂN LOẠI Ý ĐỊNH\n- Xác thực bộ ba (Tổ chức, Dự án, Người dùng)\n- Tải phiên từ Bộ nhớ đệm Nóng; nếu hết hạn thì nạp bù từ CSDL\n- Rào chắn Default-Deny đa tầng: kiểm tra tiêm nhiễm prompt, rò rỉ bí mật, chéo tổ chức & lập trình hộ trực tiếp kể cả khi phiên đang mở đề xuất\n- Trích xuất ràng buộc xuyên suốt phiên & phân giải ý định nghiệp vụ chính xác"]
 
     Step1 --> GuardIntent{"Kiểm tra Ý định\n& Kế hoạch Thực thi"}
 
-    GuardIntent -- "Ngoài phạm vi Quản lý Dự án" --> RefuseOut["RÀO CHẮN NGOÀI LUỒNG\n- Từ chối lịch sự ngoài phạm vi công cụ\n- Bảo toàn nguyên vẹn đề xuất và lịch sử phiên"]
+    GuardIntent -- "Tiêm nhiễm Bảo mật hoặc Ngoài phạm vi" --> RefuseOut["RÀO CHẮN DEFAULT-DENY (0 TOKEN MÔ HÌNH)\n- Từ chối ngay yêu cầu lập trình hộ, bẫy từ đồng âm, ngoài lề & tấn công bảo mật\n- Giữ nguyên toàn bộ đề xuất và lịch sử phiên hiện tại"]
     RefuseOut --> SaveDual
 
     GuardIntent -- "Xuất tệp Excel Theo Ngữ Cảnh" --> ExportExcel["PHÂN GIẢI PHẠM VI & XUẤT EXCEL CHUẨN HỆ THỐNG\n- Đối chiếu đúng Sprint, Backlog, việc lẻ, chi tiết, bộ lọc hay đề xuất\n- Hỗ trợ đặt tên tệp tùy chỉnh & kế thừa phạm vi lượt trước\n- Từ chối trung thực nếu dữ liệu không tồn tại/trống; gắn đặc tả xuất vào lượt chat"]
@@ -227,7 +227,9 @@ Hệ thống giải quyết triệt để thông qua bộ phân tách loại chu
 | Thành phần | Vai trò kỹ thuật | Liên kết mã nguồn |
 | :--- | :--- | :--- |
 | **AiAgentController** | Tiếp nhận SSE theo `sessionId`, khóa phạm vi 3 chiều, khôi phục/xóa phiên & commit Sprint/Kho Backlog | [`AiAgentController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/AiAgentController.cs) |
-| **AiSprintDecompositionService** | Trợ Lý AI có trạng thái: định tuyến ý định, Selective MCP, Thinking trace & prompt engineering | [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs) |
+| **AiSprintDecompositionService** | Trợ Lý AI có trạng thái: điều phối pipeline, Selective MCP, Thinking trace & prompt engineering | [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs) |
+| **AiIntentClassifier** | Bộ phân loại ý định Default-Deny & rào chắn phạm vi nghiêm ngặt (chặn lập trình hộ kể cả trong phiên mở, bẫy từ đồng âm & điều phối 7 intent PM) | [`AiIntentClassifier.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiIntentClassifier.cs) |
+| **InputGuardrail** | Rào chắn bảo mật phát hiện Prompt Injection, trích xuất bí mật, truy cập chéo tenant, SQLi & XSS trước khi gọi mô hình | [`InputGuardrail.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Core/Security/InputGuardrail.cs) |
 | **AiExcelExportResolver** | Phân giải thông minh phạm vi xuất Excel (Sprint, Backlog, Việc lẻ, Chi tiết, Đề xuất, Bộ lọc) & kiểm tra tồn tại thực thể | [`AiExcelExportResolver.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiExcelExportResolver.cs) |
 | **ExcelDataService** | Bộ sinh OpenXML `.xlsx` bảng sạch chuẩn ProjectMgmt (màu trạng thái động + bảng Chú thích + hồ sơ chi tiết) | [`excel-data.service.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/core/services/excel-data.service.ts) |
 | **AiIndexedMemoryEngine** | Lập kế hoạch gọi MCP chọn lọc và truy xuất chỉ mục trí nhớ `#mem-1..#mem-n` | [`AiIndexedMemoryEngine.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiIndexedMemoryEngine.cs) |
