@@ -4,6 +4,7 @@ import {
   Component,
   ElementRef,
   EventEmitter,
+  HostListener,
   Input,
   Output,
   ViewChild,
@@ -2481,6 +2482,37 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
     this.isSessionHistoryOpen.update((v) => !v);
     if (this.isSessionHistoryOpen() && this.projectId) {
       this.loadProjectSessions();
+    }
+  }
+
+  onShellClick(event: MouseEvent): void {
+    event.stopPropagation();
+    if (!this.isSessionHistoryOpen()) return;
+    const target = event.target as HTMLElement | null;
+    if (!target?.closest('.session-history-container')) {
+      this.isSessionHistoryOpen.set(false);
+    }
+  }
+
+  onBackdropClick(): void {
+    if (this.isSessionHistoryOpen()) {
+      this.isSessionHistoryOpen.set(false);
+    }
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent): void {
+    if (!this.isSessionHistoryOpen()) return;
+    const target = event.target as HTMLElement | null;
+    if (!target?.closest('.session-history-container')) {
+      this.isSessionHistoryOpen.set(false);
+    }
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscapeKey(): void {
+    if (this.isSessionHistoryOpen()) {
+      this.isSessionHistoryOpen.set(false);
     }
   }
 

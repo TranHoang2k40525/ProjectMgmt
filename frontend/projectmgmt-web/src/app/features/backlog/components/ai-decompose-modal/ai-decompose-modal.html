@@ -1,8 +1,8 @@
 <div class="ai-modal-backdrop" [class.is-fullscreen]="isFullscreen()" data-testid="ai-decompose-modal"
-  (dragover)="onDragOver($event)" (dragleave)="onDragLeave($event)" (drop)="onDrop($event)"
+  (click)="onBackdropClick()" (dragover)="onDragOver($event)" (dragleave)="onDragLeave($event)" (drop)="onDrop($event)"
   (paste)="onClipboardPaste($event)">
   <div class="ai-modal-shell" [class.is-drag-over]="isDragOver()" [class.is-fullscreen]="isFullscreen()"
-    (click)="$event.stopPropagation()">
+    (click)="onShellClick($event)">
     <!-- Modal Header -->
     <header class="ai-modal-header">
       <div class="header-title-group">
