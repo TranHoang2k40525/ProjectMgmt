@@ -307,6 +307,148 @@
               </button>
               }
 
+              @if (turn.removalPlan; as rPlan) {
+              <div class="removal-confirm-card" [class.is-executed]="rPlan.status === 'executed'"
+                [class.is-cancelled]="rPlan.status === 'cancelled'" data-testid="ai-removal-confirm-card">
+                <div class="removal-card-head">
+                  <div class="removal-head-title-wrap">
+                    <span class="material-symbols-outlined removal-head-icon" aria-hidden="true">
+                      {{ rPlan.status === 'executed' ? 'check_circle' : (rPlan.status === 'cancelled' ? 'cancel' : 'warning') }}
+                    </span>
+                    <div class="removal-head-texts">
+                      <div class="removal-head-title">
+                        @if (rPlan.status === 'executed') {
+                        <span>Đã thực hiện {{ rPlan.executedMode === 'soft_delete' ? 'xóa công việc' : 'gỡ công việc khỏi Sprint' }}</span>
+                        } @else if (rPlan.status === 'cancelled') {
+                        <span>Đã hủy thao tác gỡ / xóa công việc</span>
+                        } @else {
+                        <span>Xác nhận gỡ khỏi Sprint / xóa công việc ({{ rPlan.candidates.length }} mục)</span>
+                        }
+                      </div>
+                      <div class="removal-head-scope">{{ rPlan.targetScopeDescription }}</div>
+                    </div>
+                  </div>
+                  @if (rPlan.status === 'pending') {
+                  <span class="removal-pending-chip">
+                    <span class="material-symbols-outlined" aria-hidden="true">shield</span>
+                    <span>Chờ bạn xác nhận</span>
+                  </span>
+                  }
+                </div>
+
+                @if (rPlan.status === 'pending') {
+                <div class="removal-select-toolbar">
+                  <label class="removal-select-all">
+                    <input type="checkbox" [checked]="areAllRemovalCandidatesSelected(rPlan)"
+                      (change)="toggleAllRemovalCandidates(rPlan)" />
+                    <span>Chọn tất cả ({{ getSelectedRemovalCount(rPlan) }}/{{ rPlan.candidates.length }})</span>
+                  </label>
+                  @if (rPlan.hasAppliedFromSessionMatch) {
+                  <span class="removal-origin-note">
+                    <span class="material-symbols-outlined" aria-hidden="true">history</span>
+                    <span>Đối chiếu theo các việc AI vừa áp dụng</span>
+                  </span>
+                  }
+                </div>
+
+                <div class="removal-candidate-list">
+                  @for (c of rPlan.candidates; track c.issueId) {
+                  <label class="removal-candidate-row"
+                    [class.is-selected]="isRemovalCandidateSelected(rPlan, c.issueId)">
+                    <input type="checkbox" [checked]="isRemovalCandidateSelected(rPlan, c.issueId)"
+                      (change)="toggleRemovalCandidate(rPlan, c.issueId)" />
+                    <div class="removal-candidate-main">
+                      <div class="removal-candidate-top">
+                        <span class="removal-issue-key">{{ c.issueKey }}</span>
+                        <span class="removal-issue-title">{{ c.title }}</span>
+                        @if (c.wasMovedFromBacklog) {
+                        <span class="removal-badge-origin is-backlog-moved"
+                          title="Công việc này được chuyển từ Product Backlog sang Sprint; gỡ khỏi Sprint sẽ trả về kho Backlog nguyên vẹn">
+                          Chuyển từ Backlog
+                        </span>
+                        } @else if (c.isAiGenerated) {
+                        <span class="removal-badge-origin is-ai-created"
+                          title="Công việc này do AI khởi tạo mới khi áp dụng đề xuất">
+                          AI vừa tạo
+                        </span>
+                        }
+                      </div>
+                      <div class="removal-candidate-meta">
+                        <span class="removal-meta-pill">
+                          <span class="material-symbols-outlined" aria-hidden="true">layers</span>
+                          <span>{{ c.sprintName || 'Product Backlog' }}</span>
+                        </span>
+                        <span class="removal-meta-pill">{{ c.statusName }}</span>
+                        <span class="removal-meta-pill">{{ c.storyPoints }} SP</span>
+                        @if (c.assigneeName) {
+                        <span class="removal-meta-pill">{{ c.assigneeName }}</span>
+                        }
+                        @if (c.subtaskCount > 0) {
+                        <span class="removal-meta-pill is-subtask-warn">
+                          <span class="material-symbols-outlined" aria-hidden="true">subdirectory_arrow_right</span>
+                          <span>+{{ c.subtaskCount }} việc con</span>
+                        </span>
+                        }
+                      </div>
+                    </div>
+                  </label>
+                  }
+                </div>
+
+                <div class="removal-card-footer">
+                  <div class="removal-safety-hint">
+                    <span class="material-symbols-outlined" aria-hidden="true">info</span>
+                    <span>
+                      <strong>Gỡ khỏi Sprint</strong> sẽ đưa các công việc (cùng việc con) về Product Backlog nguyên vẹn.
+                      <strong>Xóa công việc</strong> sẽ xóa mềm khỏi dự án.
+                    </span>
+                  </div>
+                  <div class="removal-card-actions">
+                    <button type="button" class="btn-removal-cancel" data-testid="btn-removal-cancel"
+                      [disabled]="confirmingRemovalPlanId() === rPlan.planId"
+                      (click)="executeRemovalPlan(turn, rPlan, 'cancel')">
+                      <span class="material-symbols-outlined" aria-hidden="true">close</span>
+                      <span>Hủy bỏ</span>
+                    </button>
+
+                    @if (rPlan.canDetachToBacklog) {
+                    <button type="button" class="btn-removal-detach" data-testid="btn-removal-detach"
+                      [class.is-recommended]="rPlan.requestedMode === 'detach_to_backlog'"
+                      [disabled]="confirmingRemovalPlanId() === rPlan.planId || !hasSelectedSprintCandidate(rPlan)"
+                      (click)="executeRemovalPlan(turn, rPlan, 'detach_to_backlog')">
+                      <span class="material-symbols-outlined" aria-hidden="true">undo</span>
+                      <span>
+                        {{ confirmingRemovalPlanId() === rPlan.planId ? 'Đang xử lý...' : 'Gỡ khỏi Sprint (Về Backlog)' }}
+                      </span>
+                    </button>
+                    }
+
+                    @if (rPlan.canDelete) {
+                    <button type="button" class="btn-removal-delete" data-testid="btn-removal-delete"
+                      [class.is-primary-danger]="rPlan.requestedMode === 'soft_delete'"
+                      [disabled]="confirmingRemovalPlanId() === rPlan.planId || getSelectedRemovalCount(rPlan) === 0"
+                      (click)="executeRemovalPlan(turn, rPlan, 'soft_delete')">
+                      <span class="material-symbols-outlined" aria-hidden="true">delete_outline</span>
+                      <span>
+                        {{ confirmingRemovalPlanId() === rPlan.planId ? 'Đang xử lý...' : 'Xác nhận Xóa' }}
+                      </span>
+                    </button>
+                    }
+                  </div>
+                </div>
+                } @else {
+                <div class="removal-completed-summary">
+                  <span>{{ rPlan.completedMessage || 'Yêu cầu đã được xử lý.' }}</span>
+                  <div class="removal-completed-keys">
+                    @for (c of rPlan.candidates; track c.issueId) {
+                    <span class="removal-issue-key is-muted">{{ c.issueKey }}</span>
+                    }
+                  </div>
+                </div>
+                }
+              </div>
+              }
+
               @if (turn.id === proposalAnchorTurnId() && (proposal()?.tasks?.length ?? 0) > 0) {
               <ng-container [ngTemplateOutlet]="proposalBlock"></ng-container>
               }

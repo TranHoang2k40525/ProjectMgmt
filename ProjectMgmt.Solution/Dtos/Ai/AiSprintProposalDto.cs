@@ -39,8 +39,8 @@ public sealed class AiConversationTurnDto
     public string Content { get; set; } = string.Empty;
     public string? FullContent { get; set; }
     public string? FileName { get; set; }
-    public string Intent { get; set; } = "sprint_plan"; // "sprint_plan" | "backlog_plan" | "refine_proposal" | "project_qa" | "export_excel" | "push_backlog" | "apply_sprint" | "out_of_scope_refusal"
-    public string? ActionType { get; set; } // "none" | "export_excel" | "push_backlog" | "apply_sprint"
+    public string Intent { get; set; } = "sprint_plan"; // "sprint_plan" | "backlog_plan" | "refine_proposal" | "project_qa" | "export_excel" | "push_backlog" | "apply_sprint" | "remove_tasks" | "out_of_scope_refusal"
+    public string? ActionType { get; set; } // "none" | "export_excel" | "push_backlog" | "apply_sprint" | "confirm_remove_tasks" | "remove_tasks_done" | "detach_tasks_done"
     public int? TaskCount { get; set; }
     public decimal? TotalStoryPoints { get; set; }
     public string? ThinkingSummary { get; set; }
@@ -50,6 +50,8 @@ public sealed class AiConversationTurnDto
     public List<string>? DocumentCitations { get; set; }
     public List<AiTurnTraceItemDto>? TraceItems { get; set; }
     public AiExcelExportSpecDto? ExportSpec { get; set; }
+    public List<AiCreatedIssueItemDto>? CommittedIssues { get; set; }
+    public AiTaskRemovalPlanDto? RemovalPlan { get; set; }
     public DateTime TimestampUtc { get; set; } = DateTime.UtcNow;
 }
 
@@ -68,8 +70,9 @@ public sealed class AiSprintProposalDto
     public string Intent { get; set; } = "sprint_plan";
     public string? AssistantReply { get; set; }
     public string RecommendedTarget { get; set; } = "sprint"; // "sprint" | "backlog"
-    public string? TriggerAction { get; set; } // "none" | "export_excel" | "push_backlog" | "apply_sprint"
+    public string? TriggerAction { get; set; } // "none" | "export_excel" | "push_backlog" | "apply_sprint" | "confirm_remove_tasks"
     public AiExcelExportSpecDto? ExportSpec { get; set; }
+    public AiTaskRemovalPlanDto? PendingRemovalPlan { get; set; }
     public List<AiConversationTurnDto> ConversationHistory { get; set; } = [];
     public List<AiMemoryAnchorDto> IndexedMemories { get; set; } = [];
     public List<string> Tags { get; set; } = [];

@@ -435,7 +435,141 @@ public class BacklogTools
             Items = items
         }, indented: false);
     }
+
+    /// <summary>
+    /// Truy xuất dấu vết các công việc được AI áp dụng/đẩy vào dự án trong phiên hiện tại (và batch AI gần nhất của người dùng)
+    /// từ bảng Issue và ActivityLog trong đúng biên (OrganizationId, ProjectId).
+    /// </summary>
+    public async Task<AiCommittedOriginSnapshot> GetAiCommittedOriginSnapshotAsync(
+        Guid projectId,
+        IProjectScopeContext scope,
+        string? sessionId,
+        CancellationToken ct = default)
+    {
+        var empty = new AiCommittedOriginSnapshot([], new HashSet<Guid>(), new HashSet<Guid>(), new HashSet<Guid>());
+        if (projectId == Guid.Empty)
+        {
+            return empty;
+        }
+
+        ProjectScopeGuard.ValidateProject(scope, projectId);
+
+        var project = await _planning.Projects.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == projectId && !p.IsDeleted, ct);
+        if (project == null)
+        {
+            return empty;
+        }
+
+        ProjectScopeGuard.Validate(scope, project.OrgId, projectId);
+
+        var activeIssues = await _delivery.Issues.AsNoTracking()
+            .Where(i => i.ProjectId == projectId && !i.IsDeleted)
+            .Select(i => new { i.Id, i.IsAiGenerated, i.AiGenerationLogId, i.ReporterId, i.UpdatedAt, i.CreatedAt })
+            .ToListAsync(ct);
+
+        if (activeIssues.Count == 0)
+        {
+            return empty;
+        }
+
+        var activeIds = activeIssues.Select(i => i.Id).ToList();
+        var aiGeneratedIds = activeIssues
+            .Where(i => i.IsAiGenerated)
+            .Select(i => i.Id)
+            .ToHashSet();
+
+        var relevantActions = new[]
+        {
+            "AiSprintTaskCommitted",
+            "AiSprintBacklogItemMovedToSprint",
+            "AiBacklogTaskPushed"
+        };
+
+        var aiCommitLogs = await _delivery.ActivityLogs.AsNoTracking()
+            .Where(l => activeIds.Contains(l.IssueId) && relevantActions.Contains(l.Action))
+            .OrderByDescending(l => l.CreatedAt)
+            .ToListAsync(ct);
+
+        var sessionCommittedIds = new List<Guid>();
+        var movedFromBacklogIds = new HashSet<Guid>();
+        var seenSessionIds = new HashSet<Guid>();
+
+        foreach (var log in aiCommitLogs)
+        {
+            if (log.Action == "AiSprintBacklogItemMovedToSprint")
+            {
+                movedFromBacklogIds.Add(log.IssueId);
+            }
+
+            if (string.IsNullOrWhiteSpace(log.Detail)) continue;
+
+            try
+            {
+                using var doc = JsonDocument.Parse(log.Detail);
+                if (doc.RootElement.ValueKind != JsonValueKind.Object) continue;
+
+                if (doc.RootElement.TryGetProperty("movedFromBacklog", out var movedEl) &&
+                    movedEl.ValueKind == JsonValueKind.True)
+                {
+                    movedFromBacklogIds.Add(log.IssueId);
+                }
+
+                if (!string.IsNullOrWhiteSpace(sessionId) &&
+                    doc.RootElement.TryGetProperty("sessionId", out var sidEl) &&
+                    sidEl.ValueKind == JsonValueKind.String &&
+                    string.Equals(sidEl.GetString(), sessionId, StringComparison.Ordinal))
+                {
+                    if (seenSessionIds.Add(log.IssueId))
+                    {
+                        sessionCommittedIds.Add(log.IssueId);
+                    }
+                }
+            }
+            catch
+            {
+                // Ignore malformed JSON log details
+            }
+        }
+
+        // Batch AI gần nhất của người dùng (dự phòng khi người dùng mở lại modal hoặc mở phiên mới để hoàn tác lần áp dụng gần nhất)
+        var latestUserLogId = activeIssues
+            .Where(i => i.AiGenerationLogId.HasValue && i.ReporterId == scope.UserId)
+            .OrderByDescending(i => i.UpdatedAt)
+            .ThenByDescending(i => i.CreatedAt)
+            .Select(i => i.AiGenerationLogId)
+            .FirstOrDefault();
+
+        if (!latestUserLogId.HasValue)
+        {
+            latestUserLogId = activeIssues
+                .Where(i => i.AiGenerationLogId.HasValue)
+                .OrderByDescending(i => i.UpdatedAt)
+                .ThenByDescending(i => i.CreatedAt)
+                .Select(i => i.AiGenerationLogId)
+                .FirstOrDefault();
+        }
+
+        var latestBatchIds = latestUserLogId.HasValue
+            ? activeIssues
+                .Where(i => i.AiGenerationLogId == latestUserLogId.Value)
+                .Select(i => i.Id)
+                .ToHashSet()
+            : new HashSet<Guid>();
+
+        return new AiCommittedOriginSnapshot(
+            sessionCommittedIds,
+            movedFromBacklogIds,
+            latestBatchIds,
+            aiGeneratedIds);
+    }
 }
+
+public sealed record AiCommittedOriginSnapshot(
+    IReadOnlyList<Guid> SessionCommittedIds,
+    IReadOnlySet<Guid> MovedFromBacklogIds,
+    IReadOnlySet<Guid> LatestAiBatchIds,
+    IReadOnlySet<Guid> AiGeneratedIssueIds);
 
 public sealed record ExportSprintMetadata(
     Guid Id,

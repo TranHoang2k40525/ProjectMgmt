@@ -269,6 +269,53 @@ public class AiAgentController : ControllerBase
                     proposal.OrganizationId = scope.OrganizationId;
                     proposal.ProjectId = scope.ProjectId;
                     proposal.UserId = scope.UserId;
+
+                    if (proposal.PendingRemovalPlan != null
+                        && string.Equals(proposal.PendingRemovalPlan.Status, "pending", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var isLead = project.LeadUserId == userId.Value;
+                        var allowDelete = isLead || await _projectAccess.AllowsAsync(project.Id, "issue.delete");
+                        var allowDetach = isLead
+                            || await _projectAccess.AllowsAsync(project.Id, "issue.update")
+                            || await _projectAccess.AllowsAsync(project.Id, "sprint.create")
+                            || await _projectAccess.AllowsAsync(project.Id, "project.update");
+
+                        var plan = proposal.PendingRemovalPlan;
+                        plan.CanDelete = allowDelete;
+                        plan.CanDetachToBacklog = allowDetach && plan.Candidates.Any(c => c.SprintId.HasValue);
+
+                        if (!plan.CanDelete && !plan.CanDetachToBacklog)
+                        {
+                            const string rbacDeniedMsg = "Bạn không có quyền gỡ công việc khỏi Sprint hoặc xóa công việc trong dự án này (yêu cầu quyền cập nhật/xóa công việc hoặc vai trò Quản lý).";
+                            proposal.PendingRemovalPlan = null;
+                            proposal.TriggerAction = "none";
+                            var lastTurn = proposal.ConversationHistory?.LastOrDefault(t => t.Role == "assistant");
+                            if (lastTurn != null)
+                            {
+                                lastTurn.RemovalPlan = null;
+                                lastTurn.ActionType = "none";
+                                lastTurn.Content = rbacDeniedMsg;
+                            }
+                        }
+                        else
+                        {
+                            if (string.Equals(plan.RequestedMode, "soft_delete", StringComparison.OrdinalIgnoreCase) && !plan.CanDelete && plan.CanDetachToBacklog)
+                            {
+                                plan.RequestedMode = "detach_to_backlog";
+                            }
+                            else if (string.Equals(plan.RequestedMode, "detach_to_backlog", StringComparison.OrdinalIgnoreCase) && !plan.CanDetachToBacklog && plan.CanDelete)
+                            {
+                                plan.RequestedMode = "soft_delete";
+                            }
+
+                            var lastTurn = proposal.ConversationHistory?.LastOrDefault(t => t.Role == "assistant");
+                            if (lastTurn != null)
+                            {
+                                lastTurn.RemovalPlan = plan;
+                            }
+                        }
+                    }
+
                     await _stagingService.SaveProposalAsync(sessionId, proposal, TimeSpan.FromHours(2), ct);
                     await EmitEventAsync(AiSseEventTypes.ProposalReady, proposal);
                 },
@@ -934,11 +981,190 @@ public class AiAgentController : ControllerBase
                 ActionType = request.PushToBacklog ? "push_backlog_done" : "apply_sprint_done",
                 TaskCount = result.CreatedTaskCount,
                 TotalStoryPoints = result.TotalStoryPoints,
+                CommittedIssues = result.CreatedIssues,
                 TimestampUtc = DateTime.UtcNow
             });
             await _stagingService.SaveProposalAsync(request.SessionId, stagedProposal, TimeSpan.FromHours(2), ct);
             await PersistUpdatedSessionAsync(scope, stagedProposal, ct);
         }
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Thực thi gỡ công việc khỏi Sprint (về Product Backlog) hoặc xóa mềm công việc sau khi người dùng xác nhận trên thẻ.
+    /// </summary>
+    [HttpPost("remove-tasks/confirm")]
+    public async Task<IActionResult> ConfirmTaskRemoval([FromBody] AiConfirmTaskRemovalRequest request)
+    {
+        if (!ModelState.IsValid) return BadRequest(ModelState);
+
+        var ct = HttpContext.RequestAborted;
+        var userId = _currentUser.UserId;
+        if (!userId.HasValue || userId.Value == Guid.Empty)
+        {
+            return Unauthorized(new { code = "UNAUTHORIZED", message = "Yêu cầu đăng nhập." });
+        }
+
+        if (_commitCoordinator == null)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new { code = "SERVICE_UNAVAILABLE", message = "Dịch vụ xử lý công việc chưa sẵn sàng." });
+        }
+
+        var (stagedProposal, isForbiddenSession) = await LoadScopedProposalAsync(request.SessionId, userId, ct);
+        if (isForbiddenSession)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Phiên hội thoại AI này thuộc về thành viên hoặc tổ chức khác." });
+        }
+        if (stagedProposal == null)
+        {
+            return NotFound(new { code = "SESSION_NOT_FOUND", message = "Không tìm thấy phiên hội thoại AI hoặc kế hoạch xác nhận đã hết hạn." });
+        }
+
+        var projectId = request.ProjectId ?? stagedProposal.ProjectId;
+        if (projectId == Guid.Empty)
+        {
+            return BadRequest(new { code = "INVALID_PROJECT_ID", message = "Không xác định được dự án cần thực hiện." });
+        }
+        if (stagedProposal.ProjectId != Guid.Empty && stagedProposal.ProjectId != projectId)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Phiên hội thoại không thuộc dự án đang thao tác." });
+        }
+
+        var project = await _planningDb.Projects.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == projectId && !p.IsDeleted, ct);
+        if (project == null)
+        {
+            return NotFound(new { code = "PROJECT_NOT_FOUND", message = "Dự án không tồn tại hoặc đã bị xóa." });
+        }
+
+        if (IsScopeMismatch(stagedProposal, userId.Value, project.OrgId))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Phiên hội thoại không khớp phạm vi người dùng hoặc tổ chức." });
+        }
+
+        var targetPlan = stagedProposal.ConversationHistory?
+            .AsEnumerable()
+            .Reverse()
+            .Select(t => t.RemovalPlan)
+            .FirstOrDefault(p => p != null && (string.IsNullOrWhiteSpace(request.PlanId) || string.Equals(p.PlanId, request.PlanId, StringComparison.Ordinal)));
+
+        if (targetPlan == null && stagedProposal.PendingRemovalPlan != null &&
+            (string.IsNullOrWhiteSpace(request.PlanId) || string.Equals(stagedProposal.PendingRemovalPlan.PlanId, request.PlanId, StringComparison.Ordinal)))
+        {
+            targetPlan = stagedProposal.PendingRemovalPlan;
+        }
+
+        if (targetPlan == null)
+        {
+            return NotFound(new { code = "REMOVAL_PLAN_NOT_FOUND", message = "Không tìm thấy bảng xác nhận gỡ/xóa công việc tương ứng trong phiên này." });
+        }
+
+        if (string.Equals(targetPlan.Status, "executed", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(targetPlan.Status, "cancelled", StringComparison.OrdinalIgnoreCase))
+        {
+            return Conflict(new
+            {
+                code = "PLAN_ALREADY_PROCESSED",
+                message = string.Equals(targetPlan.Status, "cancelled", StringComparison.OrdinalIgnoreCase)
+                    ? "Kế hoạch gỡ/xóa công việc này đã được hủy bỏ trước đó. Vui lòng gửi yêu cầu mới nếu muốn thực hiện lại."
+                    : "Kế hoạch gỡ/xóa công việc này đã được xác nhận thực thi trước đó."
+            });
+        }
+
+        var normalizedMode = (request.Mode ?? string.Empty).Trim().ToLowerInvariant();
+        if (normalizedMode is not ("detach_to_backlog" or "soft_delete" or "cancel"))
+        {
+            return BadRequest(new { code = "INVALID_REMOVAL_MODE", message = "Chế độ xác nhận không hợp lệ." });
+        }
+
+        var isLead = project.LeadUserId == userId.Value;
+        var allowDelete = isLead || await _projectAccess.AllowsAsync(projectId, "issue.delete");
+        var allowDetach = isLead
+            || await _projectAccess.AllowsAsync(projectId, "issue.update")
+            || await _projectAccess.AllowsAsync(projectId, "sprint.create")
+            || await _projectAccess.AllowsAsync(projectId, "project.update");
+
+        if (normalizedMode == "soft_delete" && !allowDelete)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN_ISSUE_DELETE", message = "Bạn không có quyền xóa công việc khỏi dự án (yêu cầu quyền issue.delete)." });
+        }
+        if (normalizedMode == "detach_to_backlog" && !allowDetach)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN_ISSUE_DETACH", message = "Bạn không có quyền gỡ công việc khỏi Sprint trong dự án này." });
+        }
+        if (normalizedMode == "cancel" && !allowDelete && !allowDetach)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Bạn không có quyền thao tác với kế hoạch công việc này." });
+        }
+
+        if (normalizedMode != "cancel")
+        {
+            var candidateIds = targetPlan.Candidates.Select(c => c.IssueId).ToHashSet();
+            if (request.IssueIds == null || request.IssueIds.Count == 0)
+            {
+                return BadRequest(new { code = "NO_ISSUES_SELECTED", message = "Vui lòng chọn ít nhất một công việc để thực hiện." });
+            }
+            if (request.IssueIds.Any(id => !candidateIds.Contains(id)))
+            {
+                return BadRequest(new { code = "INVALID_ISSUE_SELECTION", message = "Danh sách công việc gửi lên không nằm trong bảng xác nhận của phiên này." });
+            }
+        }
+
+        var scope = new ProjectScopeContext(project.OrgId, projectId, userId.Value);
+        ProjectScopeGuard.Validate(scope, project.OrgId, projectId);
+
+        var result = await _commitCoordinator.ExecuteTaskRemovalAsync(request, scope, allowDelete, allowDetach, ct);
+        if (!result.Success)
+        {
+            if (result.ErrorCode is "FORBIDDEN_DELETE" or "FORBIDDEN_DETACH")
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { code = result.ErrorCode, message = result.Message });
+            }
+            return BadRequest(new { code = result.ErrorCode ?? "REMOVAL_FAILED", message = result.Message });
+        }
+
+        var finalStatus = normalizedMode == "cancel" ? "cancelled" : "executed";
+        targetPlan.Status = finalStatus;
+        targetPlan.ExecutedMode = normalizedMode;
+        targetPlan.CompletedMessage = result.Message;
+
+        if (stagedProposal.ConversationHistory != null)
+        {
+            foreach (var turn in stagedProposal.ConversationHistory)
+            {
+                if (turn.RemovalPlan != null && string.Equals(turn.RemovalPlan.PlanId, targetPlan.PlanId, StringComparison.Ordinal))
+                {
+                    turn.RemovalPlan.Status = finalStatus;
+                    turn.RemovalPlan.ExecutedMode = normalizedMode;
+                    turn.RemovalPlan.CompletedMessage = result.Message;
+                }
+            }
+        }
+
+        if (stagedProposal.PendingRemovalPlan != null &&
+            string.Equals(stagedProposal.PendingRemovalPlan.PlanId, targetPlan.PlanId, StringComparison.Ordinal))
+        {
+            stagedProposal.PendingRemovalPlan.Status = finalStatus;
+            stagedProposal.PendingRemovalPlan.ExecutedMode = normalizedMode;
+            stagedProposal.PendingRemovalPlan.CompletedMessage = result.Message;
+        }
+        stagedProposal.TriggerAction = "none";
+
+        stagedProposal.ConversationHistory ??= [];
+        stagedProposal.ConversationHistory.Add(new AiConversationTurnDto
+        {
+            Id = $"assistant_remove_{DateTime.UtcNow.Ticks}",
+            Role = "assistant",
+            Content = result.Message,
+            Intent = "remove_tasks",
+            ActionType = normalizedMode == "cancel" ? "remove_tasks_cancelled" : "remove_tasks_done",
+            TaskCount = result.TotalAffectedCount,
+            TimestampUtc = DateTime.UtcNow
+        });
+
+        await _stagingService.SaveProposalAsync(request.SessionId, stagedProposal, TimeSpan.FromHours(2), ct);
+        await PersistUpdatedSessionAsync(scope, stagedProposal, ct);
 
         return Ok(result);
     }
@@ -1201,6 +1427,7 @@ public class AiAgentController : ControllerBase
             "project_get_active_config" => ("Truy vấn MCP", "project_get_active_config"),
             "project_export_metadata" => ("Truy vấn MCP", "project_export_metadata"),
             "excel_export_scope_resolver" => ("Kiểm chuẩn", "Phạm vi Xuất Excel"),
+            "task_removal_resolver" => ("Kiểm chuẩn", "Xác nhận Gỡ / Xóa công việc"),
             "context_reuse" => ("Tận dụng ngữ cảnh", "Phiên hiện hành"),
             "qa_synthesis" or "focused_answer" or "llm_reasoning" or "gemini_reasoner" => ("Suy luận AI", "Mô hình Trợ lý AI"),
             "self_check_critique" or "domain_guardrail_audit" or "domain_guardrail" or "security_guardrail" => ("Kiểm chuẩn", "Bộ kiểm chuẩn & Ngữ cảnh dự án"),

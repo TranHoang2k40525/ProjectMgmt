@@ -264,6 +264,7 @@ flowchart LR
         UC16["Xuất Excel Đúng Ngữ Cảnh (Sprint, Backlog, Việc Lẻ, Chi Tiết, Đề Xuất)"]
         UC17["Hỏi đáp Trực tiếp Về Số liệu & Gọi Công cụ Chọn lọc"]
         UC18["Từ chối Tự động Yêu cầu Ngoài Phạm vi Dự án"]
+        UC19["Gỡ khỏi Sprint / Hoàn tác Áp dụng & Xóa Công việc (Có Thẻ Xác nhận)"]
         UC11["Truy vấn Dữ liệu Dự án qua Giao thức Mở rộng"]
         UC12["Theo dõi Tài nguyên Tiêu thụ & Thống kê Sử dụng"]
         UC13["Khôi phục / Xóa Phiên Hội thoại Đã Lưu (Khóa Tổ chức - Dự án - User)"]
@@ -283,6 +284,7 @@ flowchart LR
     SM --> UC15
     SM --> UC16
     SM --> UC17
+    SM --> UC19
     SM --> UC12
     SM --> UC13
     SM --> UC14
@@ -291,6 +293,7 @@ flowchart LR
     DEV --> UC11
     DEV --> UC12
     DEV --> UC17
+    DEV --> UC19
 
     UC2 --> AI
     UC4 --> AI
@@ -300,6 +303,7 @@ flowchart LR
     UC16 --> AI
     UC17 --> AI
     UC18 --> AI
+    UC19 --> AI
     UC12 --> AI
     UC13 --> AI
     UC14 --> AI
@@ -489,7 +493,7 @@ Trong hệ thống Quản lý Dự án Scrum Agile, **Trợ Lý AI** vận hành
 
 Module này đảm bảo 5 tiêu chí cốt lõi:
 1. **Minh bạch Thời gian thực & Mặc định Đóng Gọn (Default-Collapsed Thinking Log)**: Người dùng nhìn thấy trạng thái AI đang suy nghĩ theo từng giây (`Đang suy nghĩ · X.Xs — ...`) và kết quả hoàn tất tông sáng gọn nhẹ (`Đã suy nghĩ xong trong X.Xs · N thao tác`). Mặc định khung suy nghĩ **luôn đóng** để giữ không gian hội thoại sạch sẽ; khi mở rộng sẽ hiện rõ từng bước thực thi (`actionVerb`, `target`, `durationMs`, chi tiết mở/đóng từng dòng) và các mảnh trí nhớ `#mem-X` vừa nạp.
-2. **Định tuyến Ý định Thông minh, Khử Nhãn Trích Xuất Giả & Gọi MCP Có Chọn Lọc (Selective MCP Routing)**: Tự động loại bỏ nhãn trích xuất mặc định (`# GHI CHÚ / YÊU CẦU BỔ SUNG:`) khi không có tệp đính kèm, kiểm tra ranh giới từ (`\b...\b`) cho từ khóa viết tắt (`ui`, `sp`, `qa`, `db`...) và phân loại 8 nhóm ý định để chỉ kích hoạt đúng công cụ thực sự cần thiết: phản hồi tức thì `< 5ms` (`0 MCP`, `0 LLM call`) cho lời chào/xác nhận/hỏi khả năng (`hello`, `hi`, `xin chào`, `cảm ơn`, `bạn làm được gì`); chỉ `memory_recall` cho câu hỏi nối tiếp `#mem-X`; tập công cụ khu trú cho hỏi đáp dự án hẹp; đầy đủ công cụ khi lập kế hoạch Sprint/Backlog.
+2. **Định tuyến Ý định Thông minh, Khử Nhãn Trích Xuất Giả & Gọi MCP Có Chọn Lọc (Selective MCP Routing)**: Tự động loại bỏ nhãn trích xuất mặc định (`# GHI CHÚ / YÊU CẦU BỔ SUNG:`) khi không có tệp đính kèm, kiểm tra ranh giới từ (`\b...\b`) cho từ khóa viết tắt (`ui`, `sp`, `qa`, `db`...) và phân loại 9 nhóm ý định để chỉ kích hoạt đúng công cụ thực sự cần thiết: phản hồi tức thì `< 5ms` (`0 MCP`, `0 LLM call`) cho lời chào/xác nhận/hỏi khả năng (`hello`, `hi`, `xin chào`, `cảm ơn`, `bạn làm được gì`); chỉ `memory_recall` cho câu hỏi nối tiếp `#mem-X`; thẻ xác nhận an toàn cho gỡ/xóa công việc (`remove_tasks`); tập công cụ khu trú cho hỏi đáp dự án hẹp; đầy đủ công cụ khi lập kế hoạch Sprint/Backlog.
 3. **Ngăn chặn triệt để ảo giác (Zero Hallucination Grounding)**: Khi cần số liệu dự án, AI buộc phải truy vấn dữ liệu thực tế từ hệ thống trước khi suy luận.
 4. **Phê duyệt Staging & Lưu trữ Bền vững Kết hợp Redis + MySQL**: Bản đề xuất và toàn bộ lịch sử hội thoại, log thao tác, các mảnh trí nhớ đánh chỉ mục (`#mem-1..#mem-n`) được giữ nóng trên Redis đồng thời ghi bền vững vào cơ sở dữ liệu theo khóa phạm vi **`(OrganizationId, ProjectId, UserId)`**.
 5. **Tạo mới Không Phá Hủy & Xóa Phiên Có Kiểm Soát**: Nút **"Tạo mới"** bắt đầu đoạn chat mới mà không xóa phiên cũ; người dùng có thể mở lại phiên cũ (kể cả khi Redis đã hết hạn nhờ tự động nạp lại từ MySQL) hoặc xóa chủ động phiên cũ khi cần.
@@ -597,6 +601,28 @@ sequenceDiagram
         Gateway->>HotCache: Dọn danh sách việc đã ghi và giữ lại lịch sử hội thoại
         Gateway->>DB: Lưu tin nhắn xác nhận vào lịch sử phiên hội thoại
         Gateway-->>UI: Thông báo đẩy Kho Backlog thành công và giữ nguyên cuộc hội thoại
+    else Người dùng yêu cầu Gỡ khỏi Sprint / Hoàn tác Áp dụng / Xóa Công việc
+        SM->>UI: Nhập yêu cầu gỡ/xóa việc đã áp dụng hoặc theo mã/Sprint/Backlog
+        UI->>Gateway: Gửi yêu cầu hội thoại kèm mã phiên và phạm vi 3 chiều
+        Gateway->>Pipeline: Định tuyến nhánh Gỡ/Xóa công việc (chỉ đọc, chưa ghi CSDL)
+        Pipeline->>Tools: Truy xuất danh sách việc thật & dấu vết áp dụng trong phiên/dự án
+        Tools-->>Pipeline: Trả về danh sách ứng viên & chặn Sprint đã hoàn thành
+        Pipeline-->>UI: Phát thẻ xác nhận nội tuyến kèm quyền Gỡ về Backlog / Xóa / Hủy
+        UI-->>SM: Hiển thị thẻ xác nhận cho phép tích chọn lại danh sách công việc
+        alt Người dùng xác nhận Gỡ về Backlog hoặc Xóa công việc
+            SM->>UI: Tích chọn công việc & nhấn nút xác nhận thao tác tương ứng
+            UI->>Gateway: Gửi yêu cầu xác nhận kèm mã kế hoạch, chế độ & danh sách chọn
+            Gateway->>Guard: Kiểm tra phạm vi 3 chiều, quyền vai trò & chống thực thi trùng
+            Gateway->>DB: Gỡ công việc khỏi Sprint về Backlog hoặc Xóa mềm kèm nhật ký
+            DB-->>Gateway: Xác nhận hoàn tất (chống sửa Sprint đã đóng)
+            Gateway->>HotCache: Cập nhật trạng thái thẻ đã xử lý & lưu nhật ký phản hồi
+            Gateway->>DB: Đồng bộ lịch sử phiên hội thoại vào CSDL
+            Gateway-->>UI: Khóa thẻ xác nhận, hiện kết quả & tự động làm mới bảng Backlog/Sprint
+        else Người dùng bấm Hủy bỏ
+            UI->>Gateway: Gửi xác nhận hủy kế hoạch gỡ/xóa
+            Gateway->>HotCache: Đánh dấu thẻ đã hủy để không dùng lại
+            Gateway-->>UI: Đóng thao tác an toàn, giữ nguyên 100% công việc hiện có
+        end
     else Người dùng chọn Áp dụng kế hoạch vào Sprint
         SM->>UI: Xác nhận áp dụng kế hoạch vào Sprint
         UI->>Gateway: Gửi lệnh phê duyệt kế hoạch Sprint chính thức
@@ -628,6 +654,9 @@ flowchart TD
     GuardIntent -- "Xuất tệp Excel Theo Ngữ Cảnh" --> ExportExcel["PHÂN GIẢI PHẠM VI & XUẤT EXCEL CHUẨN HỆ THỐNG\n- Đối chiếu đúng Sprint, Backlog, việc lẻ, chi tiết, bộ lọc hay đề xuất\n- Hỗ trợ đặt tên tệp tùy chỉnh & kế thừa phạm vi lượt trước\n- Từ chối trung thực nếu dữ liệu không tồn tại/trống; gắn đặc tả xuất vào lượt chat"]
     ExportExcel --> SaveDual
 
+    GuardIntent -- "Gỡ khỏi Sprint / Hoàn tác / Xóa Việc (Có Xác Nhận)" --> RemoveTasks["PHÂN GIẢI PHẠM VI GỠ / XÓA & THẺ XÁC NHẬN\n- Đối chiếu dấu vết áp dụng trong phiên, mã công việc, Sprint hoặc Backlog\n- Phân biệt việc chuyển từ Backlog sang với việc AI vừa tạo mới\n- Tự động chặn Sprint đã hoàn thành; tuyệt đối không sửa CSDL khi chưa xác nhận"]
+    RemoveTasks --> SaveDual
+
     GuardIntent -- "Đẩy Kho Backlog hoặc Áp dụng Sprint qua Chat" --> AutoTrigger["PHÁT LỆNH THỰC THI TRỰC TIẾP\n- Kiểm tra danh sách công việc đã có trong phiên\n- Gắn cờ kích hoạt thao tác tương ứng"]
     AutoTrigger --> SaveDual
 
@@ -652,7 +681,9 @@ flowchart TD
     UserAction -- "Bấm nút Tạo mới" --> NewBlank["Mở cuộc hội thoại trống mới (giữ nguyên toàn bộ phiên cũ trong CSDL)"]
     UserAction -- "Mở lại hoặc Xóa phiên cũ trong Lịch sử" --> ManageHist["Khôi phục ngữ cảnh phiên từ CSDL hoặc Xóa hẳn phiên thuộc quyền sở hữu"]
     UserAction -- "Đẩy Kho Backlog / Áp dụng Sprint" --> CommitDB["Ghi công việc vào CSDL chính & giữ mạch hội thoại liền mạch"]
+    UserAction -- "Xác nhận Thẻ Gỡ / Xóa Công việc" --> ExecuteRemove["Gỡ công việc về Backlog / Xóa mềm (kèm kiểm tra quyền) & làm mới giao diện"]
     CommitDB --> Finish(["Kết thúc lượt làm việc"])
+    ExecuteRemove --> Finish
 ```
 
 ---
@@ -1607,7 +1638,7 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
 - **Trả lời**:
   Một Chatbot Stateless hay API Wrapper chỉ nhận từng câu hỏi độc lập, quên ngay lượt trao đổi trước đó và không có khả năng tương tác nghiệp vụ an toàn.
   Ngược lại, Trợ Lý AI của hệ thống vận hành theo quy trình **Stateful Hermes Agentic Workflow**:
-  - **Định tuyến Ý định & Rào chắn Ngoài luồng**: Tự động phân loại 8 nhóm ý định (`sprint_plan`, `backlog_plan`, `refine_proposal`, `project_qa`, `export_excel`, `push_backlog`, `apply_sprint`, `out_of_scope_refusal`) và từ chối lịch sự mọi yêu cầu không thuộc phạm vi công cụ quản lý dự án.
+  - **Định tuyến Ý định & Rào chắn Ngoài luồng**: Tự động phân loại 9 nhóm ý định (`sprint_plan`, `backlog_plan`, `refine_proposal`, `project_qa`, `export_excel`, `remove_tasks`, `push_backlog`, `apply_sprint`, `out_of_scope_refusal`) và từ chối lịch sự mọi yêu cầu không thuộc phạm vi công cụ quản lý dự án.
   - **Tự chủ Công cụ MCP**: Tự động gọi chuỗi công cụ (`SpecHubTools`, `BacklogTools`, `SprintTools`, `TeamTools`, `project_get_active_config`) để thu thập dữ liệu thật trước khi trả lời.
   - **Trí nhớ Hội thoại & Staging trên Redis (`ConversationHistory`)**: Truyền `sessionId` qua từng lượt SSE (`POST /api/ai/agent/decompose/stream`), nạp lại toàn bộ lịch sử trò chuyện và bản đề xuất đang lưu để chỉnh sửa hoặc thực thi hành động (như xuất Excel, đẩy Kho Backlog) mà vẫn giữ nguyên ngữ cảnh.
 
@@ -1769,7 +1800,7 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
 - **Trả lời & Kết quả Kiểm thử E2E Thực tế**:
   1. **Rào chắn Default-Deny & Chống Prompt Injection / XSS (`InputGuardrail` + `AiIntentClassifier`)**: Tự động phát hiện mẫu ghi đè chỉ thị (*"Ignore all previous instructions"*, *"Giả vờ bạn là admin tối cao"*), đòi đọc secret/`.env`/`appsettings.Local.json` (kể cả khi xen từ khóa giữa tên key như `Gemini API key`), đọc dữ liệu xuyên tổ chức/dự án khác, SQLi/XSS/Path Traversal ở cả luồng SSE lẫn các endpoint tinh chỉnh (`/regenerate-task`, `/regenerate-all` trả `400 SECURITY_GUARDRAIL_BLOCKED`), tiêu tốn `0` token LLM (`security_refusal`).
   2. **Từ chối Lập trình hộ & Bẫy Từ đồng âm Kể cả Khi Phiên Đang Mở Đề xuất (`out_of_scope_refusal`)**: Khắc phục triệt để cơ chế fallback cũ; yêu cầu viết mã nguồn trực tiếp ngay trong phiên đang có task đề xuất (như *"code cho tôi"*, *"viết code TypeScript cho task đầu tiên"*, *"tạo class Go kết nối Redis cache giúp tôi"*), thơ/giải trí ngụy trang chữ *"sprint"*/*""công việc"*, hoặc bẫy từ đồng âm đời thường (*"chạy sprint 100m"*, *"hàng backlog quần áo tồn kho"*, *"tại sao Trái Đất tự quay..."* chứa cụm *"của nó"*) đều bị `AiIntentClassifier` từ chối ở tầng 0 với `0` lệnh gọi LLM mà không làm mất bảng đề xuất hay lịch sử phiên. Ngược lại, các yêu cầu lập kế hoạch phần mềm hợp lệ cho domain đặc thù (*"Lập kế hoạch Sprint cho phân hệ đặt vé máy bay trên website du lịch"*, *"Tạo danh sách công việc rà soát bảo mật..."*, *"Thống kê năng lực... vào backlog"*) vẫn được định tuyến chính xác tuyệt đối.
-  3. **Chứng minh Kiểm thử Hồi quy 1.000 Hành vi (`AiScopeGuardrail1000BehaviorsTests`)**: Toàn bộ bộ kiểm thử tự động gồm **500 hành vi ngoài phạm vi** (lập trình hộ cả cold & active session, bẫy từ đồng âm, tấn công bảo mật, đời sống/học thuật/rác) và **500 hành vi trong phạm vi** (đầy đủ 7 intent: `sprint_plan`, `backlog_plan`, `refine_proposal`, `project_qa`, `export_excel`, `push_backlog`, `apply_sprint`) cùng `5` ca tích hợp đầu cuối đạt **`1.006/1.006` PASSED (0 Failed)**; toàn bộ solution test đạt **`2.485/2.485` PASSED** (`24` ca MySQL env-gated bị skip theo cấu hình chuẩn).
+  3. **Chứng minh Kiểm thử Hồi quy 1.000 Hành vi & Gỡ/Xóa Công việc Có Xác nhận**: Bộ kiểm thử phạm vi [`AiScopeGuardrail1000BehaviorsTests.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Tests/Services/AiScopeGuardrail1000BehaviorsTests.cs) gồm **500 hành vi ngoài phạm vi** và **500 hành vi trong phạm vi** đạt **`1.006/1.006` PASSED (0 Failed)**; bộ kiểm thử gỡ/xóa công việc [`AiTaskRemovalTests.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Tests/Services/AiTaskRemovalTests.cs) đạt **`18/18` PASSED (0 Failed)**; toàn bộ solution test đạt **`2.503/2.503` PASSED** (`24` ca MySQL env-gated bị skip theo cấu hình chuẩn, tổng `2.527`).
   4. **Chống Dẫn dắt Sai lệch (Anti-Leading Grounding)**:
      - Trong Q&A: Khi người dùng khẳng định sai sự thật (*"Giám đốc đã xóa toàn bộ Priority/Workflow"*), AI đối chiếu MCP thực tế và phản bác chính xác.
      - Khi phân tách Sprint/Backlog: Nếu prompt đưa thông số lệch chuẩn (SP `100`, trạng thái/mức ưu tiên/thành viên hoặc tên tài liệu Spec Hub bịa đặt), `AiSprintDecompositionService` tự động ép lại thang Fibonacci (`1..13`) và lọc chỉ giữ các thực thể có thật từ `ProjectActiveConfigResolver`, `TeamTools` và `SpecHubTools`.
@@ -1865,6 +1896,18 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
      - Mọi bảng `.xlsx` sinh trực tiếp bằng OpenXML theo phong cách doanh nghiệp tối giản: nền trắng viền xám nhạt (`#CBD5E1`), tiêu đề cột `#F1F5F9`, cố định dòng tiêu đề + AutoFilter, **chỉ tô màu pastel tự pha kết hợp chữ đậm tương phản tại cột Trạng thái** theo đúng `ProjectStatus.colorHex` đang cấu hình trên quy trình dự án (cộng màu cảnh báo nhạt `#FEE2E2` khi `IsBlocked`), đồng thời tự động sinh bảng **CHÚ THÍCH TRẠNG THÁI & KÝ HIỆU (Legend)** ngay cuối mỗi sheet.
      - Các nút xuất trực tiếp ngoài AI (Backlog tổng/lựa chọn nhiều dòng/đang lọc, từng Sprint cụ thể, Kho Backlog, Danh sách công việc đã lọc, Ngăn kéo Chi tiết công việc) đều chia sẻ cùng bộ sinh OpenXML sạch chuẩn ProjectMgmt này.
 
+### Câu hỏi 9.8: Khi người dùng nhắn *"gỡ các việc mà bạn áp dụng cho tôi"*, gỡ task khỏi Sprint về Backlog hoặc xóa task thật qua Trợ Lý AI, hệ thống xử lý và kiểm soát an toàn như thế nào?
+- **Trả lời**:
+  - **Không bao giờ tự ý sửa hay xóa DB ngay khi chat (`Zero Silent Mutation`)**: `AiIntentClassifier` phân loại chính xác ý định `remove_tasks` (tách biệt rạch ròi với xóa dòng trong bảng nháp `refine_proposal`, hỏi đáp `project_qa` như *"cách xóa task"*, hay yêu cầu phá hoại ngoài luồng), sau đó [`AiTaskRemovalResolver`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiTaskRemovalResolver.cs) đối chiếu siêu dữ liệu thực tế từ `BacklogTools.GetExportMetadataAsync` và `GetAiCommittedOriginSnapshotAsync` với `0` lệnh gọi LLM.
+  - **Nhận diện thông minh ngữ cảnh gỡ/xóa & bảo vệ Sprint đã hoàn thành**:
+    1. **Hoàn tác / Gỡ đợt vừa áp dụng bởi AI**: Theo dõi danh sách `CommittedIssues` (phân biệt rõ việc `MovedFromBacklog` với việc AI tạo mới) cả trong Redis phiên hiện tại lẫn dấu vết `ActivityLog` / `AiGenerated` gần nhất của dự án.
+    2. **Gỡ theo Mã công việc (`QLDA-18`, `QLDA-19`), tên trong ngoặc kép, Sprint cụ thể, Kho Backlog, Thành viên hoặc Trạng thái**: Tự động lọc và từ chối rõ ràng nếu công việc nằm trong Sprint `Completed` (*"Công việc ... đang nằm trong Sprint đã hoàn thành nên không thể gỡ hoặc xóa."*).
+  - **Thẻ Xác Nhận Nội Tuyến Bắt Buộc (`TriggerAction = "confirm_remove_tasks"` & `POST /api/ai/agent/remove-tasks/confirm`)**: Giao diện [`ai-decompose-modal.html`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.html) hiển thị thẻ `ai-removal-confirm-card` cho phép bỏ chọn từng công việc và chọn đúng thao tác theo quyền thực tế (kiểm soát qua `CanDelete` / `CanDetachToBacklog`):
+    - **`detach_to_backlog` (*Gỡ khỏi Sprint về Backlog*)**: Yêu cầu `LeadUserId` hoặc một trong các quyền `issue.update`, `sprint.create`, `project.update`; đưa `SprintId = null` cho cả việc cha lẫn việc con (giữ nguyên toàn bộ task).
+    - **`soft_delete` (*Xác nhận Xóa*)**: Yêu cầu `LeadUserId` hoặc `issue.delete`; xóa mềm đệ quy (`IsDeleted = true`) cả việc con và dọn liên kết Epic không làm gãy dữ liệu.
+    - **`cancel` (*Hủy bỏ*)**: Đánh dấu kế hoạch đã hủy mà không chạm vào DB.
+  - **Chống Tampering, Cross-User & Thực thi Trùng (`Idempotency`)**: Endpoint `POST /api/ai/agent/remove-tasks/confirm` khóa chặt phạm vi 3 chiều `(OrgId, ProjectId, UserId)` (`403` nếu sai user/thiếu quyền RBAC), từ chối `400 INVALID_ISSUE_SELECTION` nếu cố gửi `IssueId` ngoài danh sách `PendingRemovalPlan.Candidates`, trả `409 PLAN_ALREADY_PROCESSED` nếu gọi lại cùng `PlanId` sau khi đã thực thi/hủy, đồng thời cập nhật đồng bộ Redis + MySQL và phát `dataChanged` để bảng Backlog/Sprint tải lại ngay lập tức.
+
 ---
 
 ## 9. Bảng Tổng Hợp Tham Chiếu Mã Nguồn Toàn Bộ Module AI
@@ -1875,6 +1918,8 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
 | **Agent Pipeline & Selective Routing** | `AiSprintDecompositionService` | [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs) |
 | **Bộ Phân Loại Default-Deny & Guardrail** | `AiIntentClassifier` & `InputGuardrail` | [`AiIntentClassifier.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiIntentClassifier.cs) |
 | **Kiểm Thử Hồi Quy 1.000 Hành Vi Phạm Vi** | `AiScopeGuardrail1000BehaviorsTests` | [`AiScopeGuardrail1000BehaviorsTests.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Tests/Services/AiScopeGuardrail1000BehaviorsTests.cs) |
+| **Phân Giải Gỡ / Xóa Công Việc (Có Xác Nhận)** | `AiTaskRemovalResolver` & `AiTaskRemovalDtos` | [`AiTaskRemovalResolver.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiTaskRemovalResolver.cs) |
+| **Kiểm Thử Gỡ / Xóa & Bảo Mật RBAC AI** | `AiTaskRemovalTests` | [`AiTaskRemovalTests.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Tests/Services/AiTaskRemovalTests.cs) |
 | **Phân Giải Phạm Vi Xuất Excel** | `AiExcelExportResolver` | [`AiExcelExportResolver.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiExcelExportResolver.cs) |
 | **Chỉ Mục Trí Nhớ & Selective MCP** | `AiIndexedMemoryEngine` | [`AiIndexedMemoryEngine.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiIndexedMemoryEngine.cs) |
 | **Kho Phiên Hội Thoại MySQL (3D Scope)** | `AiConversationSessionStore` | [`AiConversationSessionStore.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiConversationSessionStore.cs) |

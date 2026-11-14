@@ -144,6 +144,12 @@ internal static partial class AiIntentClassifier
     [GeneratedRegex(@"(?i)\b(?:áp\s+dụng|commit|đưa|đẩy|chuyển|cho|nạp|lưu)\b.{0,55}\b(?:vào|lên)\s+sprint\b")]
     private static partial Regex ApplySprintCommandRegex();
 
+    [GeneratedRegex(@"(?i)\b(?:xóa|xoá|gỡ|gỡ\s+bỏ|loại\s+bỏ|rút|hoàn\s+tác|hủy\s+áp\s+dụng|rollback|revert|undo|delete|remove)\b")]
+    private static partial Regex RemoveOrDeleteCommandVerbRegex();
+
+    [GeneratedRegex(@"(?i)\b(?:công\s+việc|các\s+việc|những\s+việc|mấy\s+việc|đầu\s+việc|hạng\s+mục|task|tasks|subtask|subtasks|sub-task|việc\s+con|user\s+story|story|bug|bugs)\b")]
+    private static partial Regex WorkItemRemovalNounRegex();
+
     [GeneratedRegex(@"(?i)\b(?:dịch\s+(?:đoạn\s+|câu\s+|bài\s+|từ\s+|văn\s+bản\s+)?(?:này\s+|sau\s+)?sang\s+tiếng|translate\s+.*\s+to|tiếng\s+(?:anh|nhật|hàn|trung|pháp)\s+nói\s+thế\s+nào|phát\s+âm\s+từ)\b")]
     private static partial Regex GeneralTranslationRegex();
 
@@ -268,6 +274,20 @@ internal static partial class AiIntentClassifier
             if (exportIntent != null)
             {
                 return exportIntent;
+            }
+        }
+
+        // 3b. Gỡ khỏi Sprint / Xóa công việc thực tế trong dự án (luôn yêu cầu bảng xác nhận trước khi thực thi)
+        if (!string.IsNullOrWhiteSpace(promptText) && promptText.Length <= 420)
+        {
+            var removalIntent = TryClassifyRemoveOrDeleteTasksIntent(
+                promptText,
+                lowerPrompt,
+                existingProposal,
+                isPureInquiryQuestion);
+            if (removalIntent != null)
+            {
+                return removalIntent;
             }
         }
 
@@ -483,6 +503,83 @@ internal static partial class AiIntentClassifier
                lower.Contains("tạo backlog");
     }
 
+    private static string? TryClassifyRemoveOrDeleteTasksIntent(
+        string promptText,
+        string lowerPrompt,
+        AiSprintProposalDto? existingProposal,
+        bool isPureInquiryQuestion)
+    {
+        if (string.IsNullOrWhiteSpace(lowerPrompt)) return null;
+        if (!RemoveOrDeleteCommandVerbRegex().IsMatch(lowerPrompt)) return null;
+
+        // Tránh nhầm yêu cầu lập kế hoạch chức năng có chữ "xóa" / "gỡ lỗi" (VD: "Tạo task xây dựng tính năng xóa user")
+        if (ExplicitPlanningActionRegex().IsMatch(lowerPrompt) ||
+            BuildFeatureOrApiRegex().IsMatch(lowerPrompt))
+        {
+            return null;
+        }
+
+        // Tránh nhầm thao tác hệ thống ngoài phạm vi công việc (xóa cache, xóa phiên chat, xóa file đính kèm)
+        if (lowerPrompt.Contains("xóa cache") || lowerPrompt.Contains("xoá cache") ||
+            lowerPrompt.Contains("xóa bộ nhớ") || lowerPrompt.Contains("xóa phiên") ||
+            lowerPrompt.Contains("xoá phiên") || lowerPrompt.Contains("xóa lịch sử") ||
+            lowerPrompt.Contains("gỡ file") || lowerPrompt.Contains("xóa file"))
+        {
+            return null;
+        }
+
+        // Nếu đang hỏi cách làm / ai đã xóa / có nên gỡ hay không -> giữ nguyên project_qa
+        bool isHowToOrQaQuestion =
+            lowerPrompt.Contains("làm sao") || lowerPrompt.Contains("cách nào") ||
+            lowerPrompt.Contains("làm thế nào") || lowerPrompt.Contains("ai đã xóa") ||
+            lowerPrompt.Contains("ai vừa xóa") || lowerPrompt.Contains("đã xóa những gì") ||
+            lowerPrompt.Contains("bị xóa chưa") || isPureInquiryQuestion;
+        if (isHowToOrQaQuestion)
+        {
+            return null;
+        }
+
+        bool hasRealIssueKey = IssueKeyTokenRegex().Matches(promptText)
+            .Any(m => !m.Value.Contains("-AI", StringComparison.OrdinalIgnoreCase));
+        bool hasWorkItemTarget = WorkItemRemovalNounRegex().IsMatch(lowerPrompt) || hasRealIssueKey;
+        if (!hasWorkItemTarget)
+        {
+            return null;
+        }
+
+        bool mentionsDraftProposal =
+            lowerPrompt.Contains("đề xuất") || lowerPrompt.Contains("bản nháp") ||
+            lowerPrompt.Contains("nháp") || lowerPrompt.Contains("bảng trên") ||
+            DraftTaskIdRegex().IsMatch(lowerPrompt);
+
+        bool mentionsAppliedOrCommittedAction =
+            lowerPrompt.Contains("áp dụng") || lowerPrompt.Contains("apply") || lowerPrompt.Contains("commit") ||
+            lowerPrompt.Contains("vừa đẩy") || lowerPrompt.Contains("mới đẩy") || lowerPrompt.Contains("đã đẩy") || lowerPrompt.Contains("bạn đẩy") ||
+            lowerPrompt.Contains("hoàn tác") || lowerPrompt.Contains("rollback") || lowerPrompt.Contains("undo") || lowerPrompt.Contains("revert");
+
+        bool mentionsRealProjectStorage =
+            lowerPrompt.Contains("khỏi sprint") || lowerPrompt.Contains("ra khỏi sprint") ||
+            lowerPrompt.Contains("trong sprint") || lowerPrompt.Contains("ở sprint") ||
+            lowerPrompt.Contains("của sprint") || lowerPrompt.Contains("về backlog") ||
+            lowerPrompt.Contains("về kho backlog") || lowerPrompt.Contains("trong backlog") ||
+            lowerPrompt.Contains("trong kho backlog") || lowerPrompt.Contains("kho backlog") ||
+            lowerPrompt.Contains("product backlog") || lowerPrompt.Contains("trong dự án") ||
+            lowerPrompt.Contains("của dự án");
+
+        bool hasExistingDraftTasks = existingProposal?.Tasks != null && existingProposal.Tasks.Count > 0;
+        bool targetsRealProjectTasks =
+            !mentionsDraftProposal &&
+            (hasRealIssueKey || mentionsAppliedOrCommittedAction || mentionsRealProjectStorage);
+
+        // Nếu đang mở bảng đề xuất nháp và người dùng không chỉ đích danh task thật/đã áp dụng -> để refine_proposal xử lý xóa dòng nháp
+        if (hasExistingDraftTasks && !targetsRealProjectTasks)
+        {
+            return null;
+        }
+
+        return "remove_tasks";
+    }
+
     private static string? TryClassifyExportIntent(
         string exportCandidate,
         AiSprintProposalDto? existingProposal,
@@ -578,6 +675,13 @@ internal static partial class AiIntentClassifier
                                         lower.Contains("sửa mô tả") ||
                                         lower.Contains("đổi mô tả") ||
                                         lower.Contains("xóa task") ||
+                                        lower.Contains("xoá task") ||
+                                        lower.Contains("xóa việc") ||
+                                        lower.Contains("xóa công việc") ||
+                                        lower.Contains("gỡ task") ||
+                                        lower.Contains("gỡ việc") ||
+                                        lower.Contains("gỡ các việc") ||
+                                        lower.Contains("gỡ công việc") ||
                                         lower.Contains("giao cho") ||
                                         lower.Contains("gán cho") ||
                                         lower.Contains("ai đang làm") ||

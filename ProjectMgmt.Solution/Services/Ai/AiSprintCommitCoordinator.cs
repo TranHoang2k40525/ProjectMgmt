@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using DeliveryIntelligence.Application.IServices;
+using DeliveryIntelligence.Application.Services;
 using DeliveryIntelligence.Domain.Entities;
 using DeliveryIntelligence.Infrastructure;
 using IdentityExperience.Application.IServices;
@@ -22,6 +23,13 @@ public interface IAiSprintCommitCoordinator
     Task<AiApplySprintProposalResponse> ApplySprintProposalAsync(
         AiApplySprintProposalRequest request,
         IProjectScopeContext scope,
+        CancellationToken ct = default);
+
+    Task<AiConfirmTaskRemovalResponse> ExecuteTaskRemovalAsync(
+        AiConfirmTaskRemovalRequest request,
+        IProjectScopeContext scope,
+        bool allowDelete,
+        bool allowDetach,
         CancellationToken ct = default);
 }
 
@@ -456,7 +464,10 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                         IssueKey = parentIssueKey,
                         Title = matchedBacklogIssue.Title,
                         Type = parentIssueType.Name,
-                        StoryPoints = matchedBacklogIssue.StoryPoints
+                        StoryPoints = matchedBacklogIssue.StoryPoints,
+                        MovedFromBacklog = !request.PushToBacklog,
+                        SprintId = targetSprintIdForIssues,
+                        SprintName = destinationLabel
                     });
                 }
                 else
@@ -503,7 +514,10 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                         IssueKey = parentIssueKey,
                         Title = parentIssue.Title,
                         Type = parentIssueType.Name,
-                        StoryPoints = parentIssue.StoryPoints
+                        StoryPoints = parentIssue.StoryPoints,
+                        MovedFromBacklog = false,
+                        SprintId = targetSprintIdForIssues,
+                        SprintName = destinationLabel
                     });
                 }
 
@@ -697,7 +711,10 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                             Title = subIssue.Title,
                             Type = subtaskIssueType.Name,
                             ParentIssueId = parentIssueId,
-                            StoryPoints = subIssue.StoryPoints
+                            StoryPoints = subIssue.StoryPoints,
+                            MovedFromBacklog = false,
+                            SprintId = targetSprintIdForIssues,
+                            SprintName = destinationLabel
                         });
                     }
                 }
@@ -915,6 +932,296 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
     }
 
     private static AiApplySprintProposalResponse Failure(string code, string message) => new()
+    {
+        Success = false,
+        ErrorCode = code,
+        Message = message
+    };
+
+    public async Task<AiConfirmTaskRemovalResponse> ExecuteTaskRemovalAsync(
+        AiConfirmTaskRemovalRequest request,
+        IProjectScopeContext scope,
+        bool allowDelete,
+        bool allowDetach,
+        CancellationToken ct = default)
+    {
+        ProjectScopeGuard.EnsureValidScope(scope);
+
+        var mode = (request.Mode ?? string.Empty).Trim().ToLowerInvariant();
+        if (mode is not ("detach_to_backlog" or "soft_delete" or "cancel"))
+        {
+            return RemovalFailure("INVALID_REMOVAL_MODE", "Chế độ xác nhận gỡ/xóa công việc không hợp lệ.");
+        }
+
+        if (mode == "cancel")
+        {
+            return new AiConfirmTaskRemovalResponse
+            {
+                Success = true,
+                Mode = "cancel",
+                Message = "Đã hủy yêu cầu gỡ/xóa công việc theo xác nhận của bạn. Toàn bộ công việc trong dự án được giữ nguyên."
+            };
+        }
+
+        if (mode == "soft_delete" && !allowDelete)
+        {
+            return RemovalFailure("FORBIDDEN_ISSUE_DELETE", "Bạn không có quyền xóa công việc trong dự án này.");
+        }
+
+        if (mode == "detach_to_backlog" && !allowDetach)
+        {
+            return RemovalFailure("FORBIDDEN_ISSUE_UPDATE", "Bạn không có quyền gỡ công việc khỏi Sprint trong dự án này.");
+        }
+
+        var distinctIds = request.IssueIds?
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList() ?? [];
+
+        if (distinctIds.Count == 0)
+        {
+            return RemovalFailure("NO_ISSUES_SELECTED", "Vui lòng chọn ít nhất một công việc trong bảng xác nhận để thực hiện.");
+        }
+
+        try
+        {
+            var project = await _planningDb.Projects.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Id == scope.ProjectId && !p.IsDeleted && !p.IsArchived, ct);
+            if (project == null)
+            {
+                return RemovalFailure("PROJECT_NOT_FOUND", "Dự án không tồn tại hoặc đã bị lưu trữ/xóa.");
+            }
+
+            ProjectScopeGuard.Validate(scope, project.OrgId, project.Id);
+
+            var projectKey = string.IsNullOrWhiteSpace(project.ProjectKey) ? "PRJ" : project.ProjectKey.Trim();
+            var sprintsById = await _planningDb.Sprints.AsNoTracking()
+                .Where(s => s.ProjectId == project.Id)
+                .ToDictionaryAsync(s => s.Id, ct);
+
+            var allProjectIssues = await _deliveryDb.Issues
+                .Where(i => i.ProjectId == project.Id && !i.IsDeleted)
+                .ToListAsync(ct);
+
+            var issueById = allProjectIssues.ToDictionary(i => i.Id);
+            var selectedTargets = distinctIds
+                .Where(issueById.ContainsKey)
+                .Select(id => issueById[id])
+                .ToList();
+
+            if (selectedTargets.Count == 0)
+            {
+                return RemovalFailure("ISSUES_NOT_FOUND", "Các công việc được chọn không còn tồn tại hoặc đã bị xóa trước đó.");
+            }
+
+            // Bảo vệ toàn vẹn dữ liệu Sprint đã hoàn thành
+            var completedTarget = selectedTargets.FirstOrDefault(i =>
+                i.SprintId.HasValue &&
+                sprintsById.TryGetValue(i.SprintId.Value, out var sp) &&
+                string.Equals(sp.Status, "Completed", StringComparison.OrdinalIgnoreCase));
+            if (completedTarget != null)
+            {
+                var completedSprintName = sprintsById[completedTarget.SprintId!.Value].Name;
+                return RemovalFailure(
+                    "CANNOT_MODIFY_COMPLETED_SPRINT",
+                    $"Không thể chỉnh sửa hoặc xóa công việc thuộc Sprint đã hoàn thành ({completedSprintName}).");
+            }
+
+            var now = DateTime.UtcNow;
+            var newLogs = new List<ActivityLog>();
+
+            if (mode == "detach_to_backlog")
+            {
+                var targetsWithSprint = selectedTargets.Where(i => i.SprintId.HasValue).ToList();
+                if (targetsWithSprint.Count == 0)
+                {
+                    return new AiConfirmTaskRemovalResponse
+                    {
+                        Success = true,
+                        Mode = mode,
+                        Message = "Các công việc được chọn hiện đã nằm sẵn trong kho Product Backlog (chưa thuộc Sprint nào)."
+                    };
+                }
+
+                var selectedSet = targetsWithSprint.Select(i => i.Id).ToHashSet();
+                var affectedSubtasks = new List<Issue>();
+
+                foreach (var parent in targetsWithSprint)
+                {
+                    var prevSprintId = parent.SprintId;
+                    var prevSprintName = prevSprintId.HasValue && sprintsById.TryGetValue(prevSprintId.Value, out var sp)
+                        ? sp.Name
+                        : "Sprint";
+                    parent.SprintId = null;
+                    parent.UpdatedAt = now;
+
+                    newLogs.Add(new ActivityLog
+                    {
+                        Id = Guid.NewGuid(),
+                        IssueId = parent.Id,
+                        UserId = scope.UserId,
+                        Action = IssueActivities.SprintChanged,
+                        FieldName = nameof(Issue.SprintId),
+                        OldValue = prevSprintName,
+                        NewValue = "Product Backlog",
+                        Detail = JsonSerializer.Serialize(new
+                        {
+                            sessionId = request.SessionId,
+                            planId = request.PlanId,
+                            previousSprintId = prevSprintId,
+                            previousSprintName = prevSprintName,
+                            destination = "Product Backlog",
+                            confirmedByAi = true
+                        }),
+                        Source = "AI",
+                        CreatedAt = now
+                    });
+                }
+
+                // Di chuyển luôn các việc con trực thuộc của các task vừa gỡ về Backlog
+                var queue = new Queue<Guid>(selectedSet);
+                while (queue.Count > 0)
+                {
+                    var currentParentId = queue.Dequeue();
+                    foreach (var child in allProjectIssues.Where(i => i.ParentId == currentParentId))
+                    {
+                        if (selectedSet.Contains(child.Id)) continue;
+                        selectedSet.Add(child.Id);
+                        queue.Enqueue(child.Id);
+
+                        if (child.SprintId.HasValue)
+                        {
+                            var childPrevSprint = sprintsById.GetValueOrDefault(child.SprintId.Value)?.Name ?? "Sprint";
+                            child.SprintId = null;
+                            child.UpdatedAt = now;
+                            affectedSubtasks.Add(child);
+                            newLogs.Add(new ActivityLog
+                            {
+                                Id = Guid.NewGuid(),
+                                IssueId = child.Id,
+                                UserId = scope.UserId,
+                                Action = IssueActivities.SprintChanged,
+                                FieldName = nameof(Issue.SprintId),
+                                OldValue = childPrevSprint,
+                                NewValue = "Product Backlog",
+                                Detail = JsonSerializer.Serialize(new
+                                {
+                                    sessionId = request.SessionId,
+                                    planId = request.PlanId,
+                                    parentDetached = true,
+                                    confirmedByAi = true
+                                }),
+                                Source = "AI",
+                                CreatedAt = now
+                            });
+                        }
+                    }
+                }
+
+                if (newLogs.Count > 0)
+                {
+                    await _deliveryDb.ActivityLogs.AddRangeAsync(newLogs, ct);
+                }
+                await _deliveryDb.SaveChangesAsync(ct);
+
+                var keys = targetsWithSprint.Select(i => $"{projectKey}-{i.IssueNumber}").ToList();
+                var subNote = affectedSubtasks.Count > 0 ? $" và {affectedSubtasks.Count} việc con" : string.Empty;
+                return new AiConfirmTaskRemovalResponse
+                {
+                    Success = true,
+                    Mode = mode,
+                    AffectedParentCount = targetsWithSprint.Count,
+                    AffectedSubtaskCount = affectedSubtasks.Count,
+                    TotalAffectedCount = targetsWithSprint.Count + affectedSubtasks.Count,
+                    AffectedIssueKeys = keys,
+                    Message = $"Đã gỡ thành công {targetsWithSprint.Count} công việc ({string.Join(", ", keys)}){subNote} khỏi Sprint và đưa về kho Product Backlog."
+                };
+            }
+
+            // mode == "soft_delete": Thu thập đệ quy toàn bộ công việc được chọn và các việc con trực thuộc
+            var deleteTargets = new List<Issue>(selectedTargets);
+            var deleteTargetIds = deleteTargets.Select(i => i.Id).ToHashSet();
+            for (var idx = 0; idx < deleteTargets.Count; idx++)
+            {
+                var currId = deleteTargets[idx].Id;
+                foreach (var child in allProjectIssues.Where(i => i.ParentId == currId))
+                {
+                    if (deleteTargetIds.Add(child.Id))
+                    {
+                        deleteTargets.Add(child);
+                    }
+                }
+            }
+
+            // Nếu trong danh sách xóa có Epic, gỡ liên kết EpicId khỏi các công việc còn lại
+            foreach (var remaining in allProjectIssues)
+            {
+                if (!deleteTargetIds.Contains(remaining.Id) &&
+                    remaining.EpicId.HasValue &&
+                    deleteTargetIds.Contains(remaining.EpicId.Value))
+                {
+                    remaining.EpicId = null;
+                    remaining.UpdatedAt = now;
+                }
+            }
+
+            foreach (var item in deleteTargets)
+            {
+                item.IsDeleted = true;
+                item.UpdatedAt = now;
+                newLogs.Add(new ActivityLog
+                {
+                    Id = Guid.NewGuid(),
+                    IssueId = item.Id,
+                    UserId = scope.UserId,
+                    Action = IssueActivities.Deleted,
+                    Detail = JsonSerializer.Serialize(new
+                    {
+                        sessionId = request.SessionId,
+                        planId = request.PlanId,
+                        issueKey = $"{projectKey}-{item.IssueNumber}",
+                        deletedByAiConfirmation = true
+                    }),
+                    Source = "AI",
+                    CreatedAt = now
+                });
+            }
+
+            if (newLogs.Count > 0)
+            {
+                await _deliveryDb.ActivityLogs.AddRangeAsync(newLogs, ct);
+            }
+            await _deliveryDb.SaveChangesAsync(ct);
+
+            var selectedParentIds = selectedTargets.Select(t => t.Id).ToHashSet();
+            var deletedParentKeys = selectedTargets.Select(i => $"{projectKey}-{i.IssueNumber}").ToList();
+            var deletedChildCount = deleteTargets.Count(d => !selectedParentIds.Contains(d.Id));
+            var childNote = deletedChildCount > 0 ? $" và {deletedChildCount} việc con đi kèm" : string.Empty;
+
+            return new AiConfirmTaskRemovalResponse
+            {
+                Success = true,
+                Mode = mode,
+                AffectedParentCount = selectedTargets.Count,
+                AffectedSubtaskCount = deletedChildCount,
+                TotalAffectedCount = deleteTargets.Count,
+                AffectedIssueKeys = deletedParentKeys,
+                Message = $"Đã xóa thành công {selectedTargets.Count} công việc ({string.Join(", ", deletedParentKeys)}){childNote} theo xác nhận của bạn."
+            };
+        }
+        catch (ProjectScopeException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[AiSprintCommitCoordinator] Lỗi khi thực thi gỡ/xóa công việc cho dự án {ProjectId}", scope.ProjectId);
+            _deliveryDb.ChangeTracker.Clear();
+            return RemovalFailure("REMOVAL_FAILED", $"Không thể gỡ/xóa công việc: {ex.Message}");
+        }
+    }
+
+    private static AiConfirmTaskRemovalResponse RemovalFailure(string code, string message) => new()
     {
         Success = false,
         ErrorCode = code,

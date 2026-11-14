@@ -7,7 +7,7 @@ Trong hệ thống Quản lý Dự án Scrum Agile, **Trợ Lý AI** vận hành
 
 Module này đảm bảo 5 tiêu chí cốt lõi:
 1. **Minh bạch Thời gian thực & Mặc định Đóng Gọn (Default-Collapsed Thinking Log)**: Người dùng nhìn thấy trạng thái AI đang suy nghĩ theo từng giây (`Đang suy nghĩ · X.Xs — ...`) và kết quả hoàn tất tông sáng gọn nhẹ (`Đã suy nghĩ xong trong X.Xs · N thao tác`). Mặc định khung suy nghĩ **luôn đóng** để giữ không gian hội thoại sạch sẽ; khi mở rộng sẽ hiện rõ từng bước thực thi (`actionVerb`, `target`, `durationMs`, chi tiết mở/đóng từng dòng) và các mảnh trí nhớ `#mem-X` vừa nạp.
-2. **Định tuyến Ý định Thông minh, Khử Nhãn Trích Xuất Giả & Gọi MCP Có Chọn Lọc (Selective MCP Routing)**: Tự động loại bỏ nhãn trích xuất mặc định (`# GHI CHÚ / YÊU CẦU BỔ SUNG:`) khi không có tệp đính kèm, kiểm tra ranh giới từ (`\b...\b`) cho từ khóa viết tắt (`ui`, `sp`, `qa`, `db`...) và phân loại 8 nhóm ý định để chỉ kích hoạt đúng công cụ thực sự cần thiết: phản hồi tức thì `< 5ms` (`0 MCP`, `0 LLM call`) cho lời chào/xác nhận/hỏi khả năng (`hello`, `hi`, `xin chào`, `cảm ơn`, `bạn làm được gì`); chỉ `memory_recall` cho câu hỏi nối tiếp `#mem-X`; tập công cụ khu trú cho hỏi đáp dự án hẹp; đầy đủ công cụ khi lập kế hoạch Sprint/Backlog.
+2. **Định tuyến Ý định Thông minh, Khử Nhãn Trích Xuất Giả & Gọi MCP Có Chọn Lọc (Selective MCP Routing)**: Tự động loại bỏ nhãn trích xuất mặc định (`# GHI CHÚ / YÊU CẦU BỔ SUNG:`) khi không có tệp đính kèm, kiểm tra ranh giới từ (`\b...\b`) cho từ khóa viết tắt (`ui`, `sp`, `qa`, `db`...) và phân loại 9 nhóm ý định để chỉ kích hoạt đúng công cụ thực sự cần thiết: phản hồi tức thì `< 5ms` (`0 MCP`, `0 LLM call`) cho lời chào/xác nhận/hỏi khả năng (`hello`, `hi`, `xin chào`, `cảm ơn`, `bạn làm được gì`); chỉ `memory_recall` cho câu hỏi nối tiếp `#mem-X`; tập công cụ khu trú cho hỏi đáp dự án hẹp; thẻ xác nhận an toàn cho gỡ/xóa công việc; đầy đủ công cụ khi lập kế hoạch Sprint/Backlog.
 3. **Ngăn chặn triệt để ảo giác (Zero Hallucination Grounding)**: Khi cần số liệu dự án, AI buộc phải truy vấn dữ liệu thực tế từ hệ thống trước khi suy luận.
 4. **Phê duyệt Staging & Lưu trữ Bền vững Kết hợp Redis + MySQL**: Bản đề xuất và toàn bộ lịch sử hội thoại, log thao tác, các mảnh trí nhớ đánh chỉ mục (`#mem-1..#mem-n`) được giữ nóng trên Redis đồng thời ghi bền vững vào cơ sở dữ liệu theo khóa phạm vi **`(OrganizationId, ProjectId, UserId)`**.
 5. **Tạo mới Không Phá Hủy & Xóa Phiên Có Kiểm Soát**: Nút **"Tạo mới"** bắt đầu đoạn chat mới mà không xóa phiên cũ; người dùng có thể mở lại phiên cũ (kể cả khi Redis đã hết hạn nhờ tự động nạp lại từ MySQL) hoặc xóa chủ động phiên cũ khi cần.
@@ -115,6 +115,28 @@ sequenceDiagram
         Gateway->>HotCache: Dọn danh sách việc đã ghi và giữ lại lịch sử hội thoại
         Gateway->>DB: Lưu tin nhắn xác nhận vào lịch sử phiên hội thoại
         Gateway-->>UI: Thông báo đẩy Kho Backlog thành công và giữ nguyên cuộc hội thoại
+    else Người dùng yêu cầu Gỡ khỏi Sprint / Hoàn tác Áp dụng / Xóa Công việc
+        SM->>UI: Nhập yêu cầu gỡ/xóa việc đã áp dụng hoặc theo mã/Sprint/Backlog
+        UI->>Gateway: Gửi yêu cầu hội thoại kèm mã phiên và phạm vi 3 chiều
+        Gateway->>Pipeline: Định tuyến nhánh Gỡ/Xóa công việc (chỉ đọc, chưa ghi CSDL)
+        Pipeline->>Tools: Truy xuất danh sách việc thật & dấu vết áp dụng trong phiên/dự án
+        Tools-->>Pipeline: Trả về danh sách ứng viên & chặn Sprint đã hoàn thành
+        Pipeline-->>UI: Phát thẻ xác nhận nội tuyến kèm quyền Gỡ về Backlog / Xóa / Hủy
+        UI-->>SM: Hiển thị thẻ xác nhận cho phép tích chọn lại danh sách công việc
+        alt Người dùng xác nhận Gỡ về Backlog hoặc Xóa công việc
+            SM->>UI: Tích chọn công việc & nhấn nút xác nhận thao tác tương ứng
+            UI->>Gateway: Gửi yêu cầu xác nhận kèm mã kế hoạch, chế độ & danh sách chọn
+            Gateway->>Guard: Kiểm tra phạm vi 3 chiều, quyền vai trò & chống thực thi trùng
+            Gateway->>DB: Gỡ công việc khỏi Sprint về Backlog hoặc Xóa mềm kèm nhật ký
+            DB-->>Gateway: Xác nhận hoàn tất (chống sửa Sprint đã đóng)
+            Gateway->>HotCache: Cập nhật trạng thái thẻ đã xử lý & lưu nhật ký phản hồi
+            Gateway->>DB: Đồng bộ lịch sử phiên hội thoại vào CSDL
+            Gateway-->>UI: Khóa thẻ xác nhận, hiện kết quả & tự động làm mới bảng Backlog/Sprint
+        else Người dùng bấm Hủy bỏ
+            UI->>Gateway: Gửi xác nhận hủy kế hoạch gỡ/xóa
+            Gateway->>HotCache: Đánh dấu thẻ đã hủy để không dùng lại
+            Gateway-->>UI: Đóng thao tác an toàn, giữ nguyên 100% công việc hiện có
+        end
     else Người dùng chọn Áp dụng kế hoạch vào Sprint
         SM->>UI: Xác nhận áp dụng kế hoạch vào Sprint
         UI->>Gateway: Gửi lệnh phê duyệt kế hoạch Sprint chính thức
@@ -146,6 +168,9 @@ flowchart TD
     GuardIntent -- "Xuất tệp Excel Theo Ngữ Cảnh" --> ExportExcel["PHÂN GIẢI PHẠM VI & XUẤT EXCEL CHUẨN HỆ THỐNG\n- Đối chiếu đúng Sprint, Backlog, việc lẻ, chi tiết, bộ lọc hay đề xuất\n- Hỗ trợ đặt tên tệp tùy chỉnh & kế thừa phạm vi lượt trước\n- Từ chối trung thực nếu dữ liệu không tồn tại/trống; gắn đặc tả xuất vào lượt chat"]
     ExportExcel --> SaveDual
 
+    GuardIntent -- "Gỡ khỏi Sprint / Hoàn tác / Xóa Việc (Có Xác Nhận)" --> RemoveTasks["PHÂN GIẢI PHẠM VI GỠ / XÓA & THẺ XÁC NHẬN\n- Đối chiếu dấu vết áp dụng trong phiên, mã công việc, Sprint hoặc Backlog\n- Phân biệt việc chuyển từ Backlog sang với việc AI vừa tạo mới\n- Tự động chặn Sprint đã hoàn thành; tuyệt đối không sửa CSDL khi chưa xác nhận"]
+    RemoveTasks --> SaveDual
+
     GuardIntent -- "Đẩy Kho Backlog hoặc Áp dụng Sprint qua Chat" --> AutoTrigger["PHÁT LỆNH THỰC THI TRỰC TIẾP\n- Kiểm tra danh sách công việc đã có trong phiên\n- Gắn cờ kích hoạt thao tác tương ứng"]
     AutoTrigger --> SaveDual
 
@@ -170,7 +195,9 @@ flowchart TD
     UserAction -- "Bấm nút Tạo mới" --> NewBlank["Mở cuộc hội thoại trống mới (giữ nguyên toàn bộ phiên cũ trong CSDL)"]
     UserAction -- "Mở lại hoặc Xóa phiên cũ trong Lịch sử" --> ManageHist["Khôi phục ngữ cảnh phiên từ CSDL hoặc Xóa hẳn phiên thuộc quyền sở hữu"]
     UserAction -- "Đẩy Kho Backlog / Áp dụng Sprint" --> CommitDB["Ghi công việc vào CSDL chính & giữ mạch hội thoại liền mạch"]
+    UserAction -- "Xác nhận Thẻ Gỡ / Xóa Công việc" --> ExecuteRemove["Gỡ công việc về Backlog / Xóa mềm (kèm kiểm tra quyền) & làm mới giao diện"]
     CommitDB --> Finish(["Kết thúc lượt làm việc"])
+    ExecuteRemove --> Finish
 ```
 
 ---
@@ -228,8 +255,10 @@ Hệ thống giải quyết triệt để thông qua bộ phân tách loại chu
 | :--- | :--- | :--- |
 | **AiAgentController** | Tiếp nhận SSE theo `sessionId`, khóa phạm vi 3 chiều, khôi phục/xóa phiên & commit Sprint/Kho Backlog | [`AiAgentController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/AiAgentController.cs) |
 | **AiSprintDecompositionService** | Trợ Lý AI có trạng thái: điều phối pipeline, Selective MCP, Thinking trace & prompt engineering | [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs) |
-| **AiIntentClassifier** | Bộ phân loại ý định Default-Deny & rào chắn phạm vi nghiêm ngặt (chặn lập trình hộ kể cả trong phiên mở, bẫy từ đồng âm & điều phối 7 intent PM) | [`AiIntentClassifier.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiIntentClassifier.cs) |
+| **AiIntentClassifier** | Bộ phân loại ý định Default-Deny & rào chắn phạm vi nghiêm ngặt (chặn lập trình hộ kể cả trong phiên mở, bẫy từ đồng âm & điều phối 9 nhóm ý định PM gồm `remove_tasks`) | [`AiIntentClassifier.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiIntentClassifier.cs) |
 | **InputGuardrail** | Rào chắn bảo mật phát hiện Prompt Injection, trích xuất bí mật, truy cập chéo tenant, SQLi & XSS trước khi gọi mô hình | [`InputGuardrail.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Core/Security/InputGuardrail.cs) |
+| **AiTaskRemovalResolver** | Bộ phân giải phạm vi gỡ/xóa công việc có xác nhận (`detach_to_backlog`, `soft_delete`), phân biệt nguồn gốc `MovedFromBacklog`, chặn Sprint `Completed` & từ chối rỗng | [`AiTaskRemovalResolver.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiTaskRemovalResolver.cs) |
+| **AiTaskRemovalDtos** | Lược đồ hợp đồng kế hoạch gỡ/xóa (`AiTaskRemovalPlanDto`), ứng viên (`AiRemovalCandidateIssueDto`) & API xác nhận | [`AiTaskRemovalDtos.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Dtos/Ai/AiTaskRemovalDtos.cs) |
 | **AiExcelExportResolver** | Phân giải thông minh phạm vi xuất Excel (Sprint, Backlog, Việc lẻ, Chi tiết, Đề xuất, Bộ lọc) & kiểm tra tồn tại thực thể | [`AiExcelExportResolver.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiExcelExportResolver.cs) |
 | **ExcelDataService** | Bộ sinh OpenXML `.xlsx` bảng sạch chuẩn ProjectMgmt (màu trạng thái động + bảng Chú thích + hồ sơ chi tiết) | [`excel-data.service.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/core/services/excel-data.service.ts) |
 | **AiIndexedMemoryEngine** | Lập kế hoạch gọi MCP chọn lọc và truy xuất chỉ mục trí nhớ `#mem-1..#mem-n` | [`AiIndexedMemoryEngine.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiIndexedMemoryEngine.cs) |

@@ -100,6 +100,48 @@ export interface AiExcelExportSpecDto {
   summaryDescription?: string | null;
 }
 
+export interface AiRemovalCandidateIssueDto {
+  issueId: string;
+  issueKey: string;
+  title: string;
+  issueType: string;
+  sprintId?: string | null;
+  sprintName?: string | null;
+  statusName: string;
+  priority: string;
+  storyPoints: number;
+  assigneeName?: string | null;
+  subtaskCount: number;
+  childIssueKeys: string[];
+  wasMovedFromBacklog: boolean;
+  isAiGenerated: boolean;
+  selectedByDefault: boolean;
+}
+
+export interface AiTaskRemovalPlanDto {
+  planId: string;
+  requestedMode: 'detach_to_backlog' | 'soft_delete' | string;
+  canDetachToBacklog: boolean;
+  canDelete: boolean;
+  hasAppliedFromSessionMatch: boolean;
+  targetScopeDescription: string;
+  status: 'pending' | 'executed' | 'cancelled' | string;
+  executedMode?: string | null;
+  completedMessage?: string | null;
+  candidates: AiRemovalCandidateIssueDto[];
+}
+
+export interface AiConfirmTaskRemovalResponse {
+  success: boolean;
+  errorCode?: string | null;
+  message: string;
+  mode: string;
+  affectedParentCount: number;
+  affectedSubtaskCount: number;
+  totalAffectedCount: number;
+  affectedIssueKeys: string[];
+}
+
 export interface AiConversationTurnDto {
   id: string;
   role: 'user' | 'assistant' | string;
@@ -117,6 +159,7 @@ export interface AiConversationTurnDto {
   documentCitations?: string[];
   traceItems?: AiTurnTraceItemDto[];
   exportSpec?: AiExcelExportSpecDto | null;
+  removalPlan?: AiTaskRemovalPlanDto | null;
   timestampUtc?: string;
 }
 
@@ -126,6 +169,7 @@ export type AiConversationIntent =
   | 'refine_proposal'
   | 'project_qa'
   | 'export_excel'
+  | 'remove_tasks'
   | 'push_backlog'
   | 'apply_sprint'
   | 'out_of_scope_refusal';
@@ -152,8 +196,9 @@ export interface AiSprintProposalDto {
   intent?: AiConversationIntent | string | null;
   assistantReply?: string | null;
   recommendedTarget?: 'sprint' | 'backlog' | string | null;
-  triggerAction?: 'none' | 'export_excel' | 'push_backlog' | 'apply_sprint' | string | null;
+  triggerAction?: 'none' | 'export_excel' | 'push_backlog' | 'apply_sprint' | 'confirm_remove_tasks' | string | null;
   exportSpec?: AiExcelExportSpecDto | null;
+  pendingRemovalPlan?: AiTaskRemovalPlanDto | null;
   conversationHistory?: AiConversationTurnDto[];
   indexedMemories?: AiMemoryAnchorDto[];
   totalConversationTurns?: number;
@@ -502,6 +547,16 @@ export class AiAgentService {
     pushToBacklog?: boolean;
   }): Observable<AiApplySprintProposalResponse> {
     return this.http.post<AiApplySprintProposalResponse>(`${this.baseUrl}/apply`, payload);
+  }
+
+  confirmTaskRemoval(payload: {
+    sessionId: string;
+    projectId: string;
+    planId: string;
+    mode: 'detach_to_backlog' | 'soft_delete' | 'cancel';
+    issueIds: string[];
+  }): Observable<AiConfirmTaskRemovalResponse> {
+    return this.http.post<AiConfirmTaskRemovalResponse>(`${this.baseUrl}/remove-tasks/confirm`, payload);
   }
 
   getTokenUsage(projectId?: string): Observable<AiTokenUsageSummary> {

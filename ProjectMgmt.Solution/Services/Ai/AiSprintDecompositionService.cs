@@ -216,6 +216,7 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
             "refine_proposal" => "Tinh chỉnh đề xuất",
             "project_qa" => "Tra cứu & phân tích dự án",
             "export_excel" => "Xuất báo cáo Excel",
+            "remove_tasks" => "Gỡ / Xóa công việc",
             "push_backlog" => "Đẩy vào kho Backlog",
             "apply_sprint" => "Áp dụng vào Sprint",
             "out_of_scope_refusal" => "Kiểm chuẩn phạm vi",
@@ -310,6 +311,9 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
                 TraceItems = traceItems.ToList(),
                 ExportSpec = string.Equals(actionType, "export_excel", StringComparison.OrdinalIgnoreCase)
                     ? targetProposal.ExportSpec
+                    : null,
+                RemovalPlan = string.Equals(turnIntent, "remove_tasks", StringComparison.OrdinalIgnoreCase)
+                    ? targetProposal.PendingRemovalPlan
                     : null,
                 TimestampUtc = DateTime.UtcNow
             });
@@ -506,6 +510,92 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
             }
 
             await onProposalReady(excelProposal);
+            return;
+        }
+
+        // =========================================================================
+        // ACTION INTENT (WITH CONFIRMATION): Gỡ khỏi Sprint / Xóa công việc (remove_tasks)
+        // Luôn đối soát dữ liệu thật + trả về thẻ xác nhận, tuyệt đối KHÔNG xóa/gỡ tự động khi chưa xác nhận.
+        // =========================================================================
+        if (intent == "remove_tasks")
+        {
+            await onStepProgress(2, "LOAD_CONTEXT", "Truy xuất công việc thực tế và dấu vết áp dụng AI", 40, "Đang kiểm tra các công việc trong dự án và phiên làm việc...");
+            var removalProposal = BuildPreservedProposalShell(sessionId, scope.ProjectId, targetSprintId, existingProposal);
+
+            var swMeta = Stopwatch.StartNew();
+            var memberNames = await _teamTools.GetProjectMemberDisplayNamesAsync(scope.ProjectId, scope, cancellationToken);
+            var exportMeta = await _backlogTools.GetExportMetadataAsync(scope.ProjectId, scope, memberNames, cancellationToken);
+            var originSnapshot = await _backlogTools.GetAiCommittedOriginSnapshotAsync(scope.ProjectId, scope, sessionId, cancellationToken);
+            swMeta.Stop();
+
+            if (exportMeta == null)
+            {
+                const string notFoundProjMsg = "Không thể đọc dữ liệu dự án hiện tại để kiểm tra công việc cần gỡ hoặc xóa. Vui lòng thử lại sau.";
+                removalProposal.Intent = "remove_tasks";
+                removalProposal.TriggerAction = "none";
+                removalProposal.PendingRemovalPlan = null;
+                FinalizeAssistantTurn(removalProposal, notFoundProjMsg, "remove_tasks", "none", recalledKeys);
+                await onStepProgress(5, "FINALIZE_PROPOSAL", "Không thể tải danh sách công việc", 100, notFoundProjMsg);
+                await onProposalReady(removalProposal);
+                return;
+            }
+
+            await RecordTraceAsync(
+                "mcp",
+                "Truy vấn MCP",
+                "project_export_metadata",
+                "project_export_metadata",
+                new
+                {
+                    projectId = scope.ProjectId,
+                    sprintCount = exportMeta.Sprints.Count,
+                    issueCount = exportMeta.Issues.Count(i => !i.IsEpic),
+                    sessionCommittedCount = originSnapshot.SessionCommittedIds.Count
+                },
+                $"Đối chiếu {exportMeta.Issues.Count(i => !i.IsEpic)} công việc thực tế và {originSnapshot.SessionCommittedIds.Count} mục đã áp dụng trong phiên",
+                swMeta.ElapsedMilliseconds);
+
+            var removalPrompt = !string.IsNullOrWhiteSpace(sanitizedPrompt) ? sanitizedPrompt : effectiveUserText;
+            var resolution = AiTaskRemovalResolver.Resolve(
+                removalPrompt,
+                exportMeta,
+                originSnapshot,
+                existingProposal);
+
+            await RecordTraceAsync(
+                "guardrail",
+                "Kiểm chuẩn",
+                "Xác nhận Gỡ / Xóa công việc",
+                "task_removal_resolver",
+                new
+                {
+                    hasCandidates = resolution.HasCandidates,
+                    candidateCount = resolution.Plan?.Candidates.Count ?? 0,
+                    requestedMode = resolution.Plan?.RequestedMode
+                },
+                resolution.TraceSummary,
+                1,
+                emitToolCall: false);
+
+            await EmitThoughtAsync($"Phân giải phạm vi gỡ/xóa công việc (chờ người dùng xác nhận): {resolution.TraceSummary}.\n");
+
+            removalProposal.Intent = "remove_tasks";
+            if (resolution.HasCandidates && resolution.Plan != null)
+            {
+                removalProposal.PendingRemovalPlan = resolution.Plan;
+                removalProposal.TriggerAction = "confirm_remove_tasks";
+                await onStepProgress(5, "FINALIZE_PROPOSAL", "Sẵn sàng bảng xác nhận gỡ / xóa công việc", 100, resolution.TraceSummary);
+                FinalizeAssistantTurn(removalProposal, resolution.ReplyMessage, "remove_tasks", "confirm_remove_tasks", recalledKeys);
+            }
+            else
+            {
+                removalProposal.PendingRemovalPlan = null;
+                removalProposal.TriggerAction = "none";
+                await onStepProgress(5, "FINALIZE_PROPOSAL", "Không tìm thấy công việc phù hợp để gỡ / xóa", 100, resolution.TraceSummary);
+                FinalizeAssistantTurn(removalProposal, resolution.ReplyMessage, "remove_tasks", "none", recalledKeys);
+            }
+
+            await onProposalReady(removalProposal);
             return;
         }
 

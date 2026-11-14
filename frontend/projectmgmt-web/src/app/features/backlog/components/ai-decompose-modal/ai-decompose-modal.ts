@@ -24,6 +24,7 @@ import {
   AiExcelExportSpecDto,
   AiSprintProposalDto,
   AiStepProgressEvent,
+  AiTaskRemovalPlanDto,
   AiToolCallEvent,
   AiTurnTraceItemDto,
   ProposedTaskDto,
@@ -87,6 +88,8 @@ export interface ChatTurn {
   hasProposalTable?: boolean;
   /** Đặc tả phạm vi & bộ lọc xuất tệp Excel (.xlsx) gắn riêng cho lượt này */
   exportSpec?: AiExcelExportSpecDto | null;
+  /** Kế hoạch xác nhận gỡ khỏi Sprint hoặc xóa công việc gắn riêng cho lượt này */
+  removalPlan?: AiTaskRemovalPlanDto | null;
 }
 
 export interface SpecDocPreview {
@@ -234,6 +237,8 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
   readonly proposal = signal<AiSprintProposalDto | null>(null);
   readonly selectedTaskIds = signal<Record<string, boolean>>({});
   readonly expandedSubtasks = signal<Record<string, boolean>>({});
+  readonly removalSelections = signal<Record<string, Record<string, boolean>>>({});
+  readonly confirmingRemovalPlanId = signal<string | null>(null);
   readonly inlineEditingTitleId = signal<string | null>(null);
   readonly inlineEditingSpId = signal<string | null>(null);
   readonly isSprintGoalInfoExpanded = signal<boolean>(false);
@@ -1845,6 +1850,12 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
     const referencedMemoryAnchors = lastBackendAssistantTurn?.referencedMemoryAnchors ?? [];
     const documentCitations = lastBackendAssistantTurn?.documentCitations ?? [];
     const turnExportSpec = lastBackendAssistantTurn?.exportSpec ?? prop.exportSpec ?? null;
+    const turnRemovalPlan =
+      lastBackendAssistantTurn?.removalPlan ??
+      (prop.pendingRemovalPlan?.status === 'pending' ? prop.pendingRemovalPlan : null);
+    if (turnRemovalPlan) {
+      this.initRemovalSelectionForPlan(turnRemovalPlan);
+    }
 
     const doneTime = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
     const turnId = lastBackendAssistantTurn?.id || `agent_${Date.now()}`;
@@ -1863,6 +1874,7 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
       documentCitations,
       hasProposalTable: producesTable,
       exportSpec: action === 'export_excel' ? turnExportSpec : null,
+      removalPlan: action === 'confirm_remove_tasks' || !!turnRemovalPlan ? turnRemovalPlan : null,
     };
     newTurn.thinkingSummary =
       (lastBackendAssistantTurn?.thinkingSummary || '').trim() ||
@@ -2098,6 +2110,8 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
         return 'Tra cứu dự án';
       case 'export_excel':
         return 'Xuất Excel';
+      case 'remove_tasks':
+        return 'Gỡ / Xóa công việc';
       case 'push_backlog':
         return 'Đẩy vào kho Backlog';
       case 'apply_sprint':
@@ -2208,7 +2222,11 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
         referencedMemoryAnchors: h.referencedMemoryAnchors ?? [],
         documentCitations: h.documentCitations ?? [],
         exportSpec: h.exportSpec ?? null,
+        removalPlan: h.removalPlan ?? null,
       };
+      if (h.removalPlan && h.removalPlan.status === 'pending') {
+        this.initRemovalSelectionForPlan(h.removalPlan);
+      }
       if (turn.role === 'agent' && !turn.thinkingSummary && ((turn.traceItems?.length ?? 0) > 0 || (turn.durationMs ?? 0) > 0)) {
         turn.thinkingSummary = this.buildFallbackThinkingSummary(turn);
       }
@@ -2336,6 +2354,132 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
       this.appendAssistantNote(`Chưa thể lưu vào kho Backlog: ${msg}`);
     } finally {
       this.isPushingBacklog.set(false);
+    }
+  }
+
+  private initRemovalSelectionForPlan(plan?: AiTaskRemovalPlanDto | null): void {
+    if (!plan?.planId || this.removalSelections()[plan.planId]) return;
+    const map: Record<string, boolean> = {};
+    for (const item of plan.candidates || []) {
+      map[item.issueId] = item.selectedByDefault ?? true;
+    }
+    this.removalSelections.update((prev) => ({ ...prev, [plan.planId]: map }));
+  }
+
+  isRemovalCandidateSelected(plan: AiTaskRemovalPlanDto, issueId: string): boolean {
+    const map = this.removalSelections()[plan.planId];
+    return map ? !!map[issueId] : true;
+  }
+
+  areAllRemovalCandidatesSelected(plan: AiTaskRemovalPlanDto): boolean {
+    const candidates = plan.candidates || [];
+    return candidates.length > 0 && candidates.every((c) => this.isRemovalCandidateSelected(plan, c.issueId));
+  }
+
+  toggleAllRemovalCandidates(plan: AiTaskRemovalPlanDto): void {
+    if (plan.status !== 'pending') return;
+    const selectAll = !this.areAllRemovalCandidatesSelected(plan);
+    const nextMap: Record<string, boolean> = {};
+    for (const c of plan.candidates || []) {
+      nextMap[c.issueId] = selectAll;
+    }
+    this.removalSelections.update((prev) => ({ ...prev, [plan.planId]: nextMap }));
+  }
+
+  toggleRemovalCandidate(plan: AiTaskRemovalPlanDto, issueId: string): void {
+    if (plan.status !== 'pending') return;
+    const current = this.isRemovalCandidateSelected(plan, issueId);
+    const existing = this.removalSelections()[plan.planId] || {};
+    this.removalSelections.update((prev) => ({
+      ...prev,
+      [plan.planId]: { ...existing, [issueId]: !current },
+    }));
+  }
+
+  getSelectedRemovalCount(plan: AiTaskRemovalPlanDto): number {
+    return (plan.candidates || []).filter((c) => this.isRemovalCandidateSelected(plan, c.issueId)).length;
+  }
+
+  hasSelectedSprintCandidate(plan: AiTaskRemovalPlanDto): boolean {
+    return (plan.candidates || []).some((c) => this.isRemovalCandidateSelected(plan, c.issueId) && !!c.sprintId);
+  }
+
+  async executeRemovalPlan(
+    turn: ChatTurn,
+    plan: AiTaskRemovalPlanDto,
+    mode: 'detach_to_backlog' | 'soft_delete' | 'cancel'
+  ): Promise<void> {
+    if (!plan || plan.status !== 'pending' || this.confirmingRemovalPlanId()) return;
+
+    const selectedIds =
+      mode === 'cancel'
+        ? []
+        : (plan.candidates || [])
+            .filter((c) => this.isRemovalCandidateSelected(plan, c.issueId))
+            .map((c) => c.issueId);
+
+    if (mode !== 'cancel' && selectedIds.length === 0) {
+      this.toastService.show('Vui lòng chọn ít nhất một công việc để thực hiện.', 'info');
+      return;
+    }
+
+    const sessionId = this.activeSessionId() || this.proposal()?.sessionId || '';
+    if (!sessionId) {
+      this.errorMessage.set('Không tìm thấy mã phiên làm việc AI để xác nhận thao tác.');
+      return;
+    }
+
+    this.confirmingRemovalPlanId.set(plan.planId);
+    this.errorMessage.set(null);
+
+    try {
+      const res = await firstValueFrom(
+        this.aiService.confirmTaskRemoval({
+          sessionId,
+          projectId: this.projectId,
+          planId: plan.planId,
+          mode,
+          issueIds: selectedIds,
+        })
+      );
+
+      const updatedPlan: AiTaskRemovalPlanDto = {
+        ...plan,
+        status: mode === 'cancel' ? 'cancelled' : 'executed',
+        executedMode: mode,
+        completedMessage: res.message,
+      };
+
+      this.chatHistory.update((list) =>
+        list.map((t) =>
+          t.id === turn.id || t.removalPlan?.planId === plan.planId
+            ? { ...t, removalPlan: updatedPlan }
+            : t
+        )
+      );
+
+      const curProp = this.proposal();
+      if (curProp && curProp.pendingRemovalPlan?.planId === plan.planId) {
+        this.proposal.set({ ...curProp, pendingRemovalPlan: null, triggerAction: 'none' });
+      }
+
+      this.appendAssistantNote(
+        res.message || 'Đã xử lý yêu cầu gỡ / xóa công việc.',
+        mode === 'cancel' ? 'remove_tasks_cancelled' : 'remove_tasks_done'
+      );
+
+      if (mode !== 'cancel') {
+        this.dataChanged.emit();
+        this.toastService.show(res.message || 'Đã cập nhật công việc theo xác nhận.', 'success');
+      } else {
+        this.toastService.show('Đã hủy bỏ thao tác gỡ / xóa công việc.', 'info');
+      }
+    } catch (err: any) {
+      const msg = err?.error?.message || 'Không thể thực hiện xác nhận gỡ / xóa công việc.';
+      this.errorMessage.set(msg);
+      this.toastService.show(msg, 'error');
+    } finally {
+      this.confirmingRemovalPlanId.set(null);
     }
   }
 

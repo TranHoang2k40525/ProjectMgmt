@@ -70,5 +70,8 @@ public sealed class AiCreatedIssueItemDto
     public string Type { get; set; } = string.Empty;
     public Guid? ParentIssueId { get; set; }
     public decimal? StoryPoints { get; set; }
+    public bool MovedFromBacklog { get; set; }
+    public Guid? SprintId { get; set; }
+    public string? SprintName { get; set; }
 }
 
