@@ -301,7 +301,9 @@ public class AiSprintCommitExhaustiveMatrixTests
             "CrossOrgUnauthorized",
             "MissingProjectWorkflowConfig",
             "NegativeStoryPointsAndHoursClamping",
-            "LongAcceptanceCriteriaTruncation"
+            "LongAcceptanceCriteriaTruncation",
+            "ForeignTargetSprint",
+            "XssAndExtremeMetricsClamping"
         };
 
         for (var iteration = 1; iteration <= 6; iteration++)
@@ -367,10 +369,12 @@ public class AiSprintCommitExhaustiveMatrixTests
         var request = new AiApplySprintProposalRequest
         {
             SessionId = $"sess_{suffix}",
+            TargetSprintId = scenario == "ForeignTargetSprint" ? Guid.NewGuid() : null,
             SprintGoal = scenario switch
             {
                 "EmptySprintGoal" => "",
                 "WhitespaceSprintGoal" => "   ",
+                "XssAndExtremeMetricsClamping" => "Mục tiêu <script>alert(1)</script> chuẩn",
                 _ => "Mục tiêu hợp lệ"
             },
             Tasks = scenario == "EmptyTaskList"
@@ -380,12 +384,31 @@ public class AiSprintCommitExhaustiveMatrixTests
                     new()
                     {
                         Id = "task_01",
-                        Title = "Task kiểm thử biên",
-                        StoryPoints = scenario == "NegativeStoryPointsAndHoursClamping" ? -10 : 5,
-                        EstimatedHours = scenario == "NegativeStoryPointsAndHoursClamping" ? -25 : 8,
+                        Title = scenario == "XssAndExtremeMetricsClamping"
+                            ? "Task bảo mật <script>evil()</script>"
+                            : "Task kiểm thử biên",
+                        Description = scenario == "XssAndExtremeMetricsClamping"
+                            ? "Mô tả <iframe src=\"https://bad.local\"></iframe>"
+                            : "Mô tả chuẩn",
+                        StoryPoints = scenario switch
+                        {
+                            "NegativeStoryPointsAndHoursClamping" => -10,
+                            "XssAndExtremeMetricsClamping" => 999,
+                            _ => 5
+                        },
+                        EstimatedHours = scenario switch
+                        {
+                            "NegativeStoryPointsAndHoursClamping" => -25,
+                            "XssAndExtremeMetricsClamping" => 999,
+                            _ => 8
+                        },
                         AcceptanceCriteria = new List<string>
                         {
-                            scenario == "LongAcceptanceCriteriaTruncation" ? new string('A', 2500) : "Tiêu chí chuẩn"
+                            scenario == "LongAcceptanceCriteriaTruncation"
+                                ? new string('A', 2500)
+                                : scenario == "XssAndExtremeMetricsClamping"
+                                    ? "Tiêu chí <script>xss()</script> chuẩn"
+                                    : "Tiêu chí chuẩn"
                         }
                     }
                 }
@@ -439,6 +462,23 @@ public class AiSprintCommitExhaustiveMatrixTests
                 Assert.True(res.Success);
                 var ac = await deliveryDb.AcceptanceCriteria.FirstAsync();
                 Assert.Equal(2000, ac.Content.Length);
+                break;
+
+            case "ForeignTargetSprint":
+                Assert.False(res.Success);
+                Assert.Equal("INVALID_TARGET_SPRINT", res.ErrorCode);
+                break;
+
+            case "XssAndExtremeMetricsClamping":
+                Assert.True(res.Success);
+                Assert.DoesNotContain("<script", res.SprintGoal, StringComparison.OrdinalIgnoreCase);
+                var clampedIssue = await deliveryDb.Issues.FirstAsync(i => i.ProjectId == projectId);
+                Assert.DoesNotContain("<script", clampedIssue.Title, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("<iframe", clampedIssue.Description ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+                Assert.Equal(21m, clampedIssue.StoryPoints);
+                Assert.Equal(160m, clampedIssue.EstimatedHours);
+                var sanitizedAc = await deliveryDb.AcceptanceCriteria.FirstAsync(c => c.IssueId == clampedIssue.Id);
+                Assert.DoesNotContain("<script", sanitizedAc.Content, StringComparison.OrdinalIgnoreCase);
                 break;
         }
     }

@@ -62,7 +62,7 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
 
         var effectiveGoal = string.IsNullOrWhiteSpace(request.SprintGoal)
             ? "Bổ sung hạng mục công việc vào kho Product Backlog"
-            : request.SprintGoal.Trim();
+            : InputGuardrail.StripUnsafeHtmlOrScript(request.SprintGoal);
 
         if (request.Tasks == null || request.Tasks.Count == 0)
         {
@@ -112,8 +112,17 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
             {
                 if (request.TargetSprintId.HasValue && request.TargetSprintId.Value != Guid.Empty)
                 {
-                    targetSprint = await _planningDb.Sprints
-                        .FirstOrDefaultAsync(s => s.Id == request.TargetSprintId.Value && s.ProjectId == project.Id && s.Status != "Completed", ct);
+                    var requestedSprint = await _planningDb.Sprints
+                        .FirstOrDefaultAsync(s => s.Id == request.TargetSprintId.Value && s.ProjectId == project.Id, ct);
+                    if (requestedSprint == null)
+                    {
+                        return Failure("INVALID_TARGET_SPRINT", "Sprint đích không tồn tại trong dự án này.");
+                    }
+
+                    if (!string.Equals(requestedSprint.Status, "Completed", StringComparison.OrdinalIgnoreCase))
+                    {
+                        targetSprint = requestedSprint;
+                    }
                 }
 
                 targetSprint ??= await _planningDb.Sprints
@@ -149,7 +158,7 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                 {
                     if (!string.IsNullOrWhiteSpace(request.SprintGoal))
                     {
-                        targetSprint.Goal = request.SprintGoal.Trim();
+                        targetSprint.Goal = InputGuardrail.StripUnsafeHtmlOrScript(request.SprintGoal);
                     }
                     else if (string.IsNullOrWhiteSpace(targetSprint.Goal))
                     {
@@ -265,10 +274,12 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
 
             foreach (var taskDto in request.Tasks)
             {
-                if (string.IsNullOrWhiteSpace(taskDto.Title))
+                var safeTaskTitle = InputGuardrail.StripUnsafeHtmlOrScript(taskDto.Title);
+                if (string.IsNullOrWhiteSpace(safeTaskTitle))
                 {
                     continue;
                 }
+                var safeTaskDescription = InputGuardrail.StripUnsafeHtmlOrScript(taskDto.Description);
 
                 // Resolve EpicId
                 Guid? resolvedEpicId = null;
@@ -278,7 +289,8 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                 }
                 else if (!string.IsNullOrWhiteSpace(taskDto.EpicTitle))
                 {
-                    var cleanEpicTitle = taskDto.EpicTitle.Trim();
+                    var cleanEpicTitle = InputGuardrail.StripUnsafeHtmlOrScript(taskDto.EpicTitle);
+                    if (string.IsNullOrWhiteSpace(cleanEpicTitle)) cleanEpicTitle = "Epic AI";
                     if (epicIdByTitle.TryGetValue(cleanEpicTitle, out var cachedEpicId))
                     {
                         resolvedEpicId = cachedEpicId;
@@ -360,9 +372,9 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                 Guid parentIssueId;
                 string parentIssueKey;
                 string parentTitle;
-                var estHours = Math.Max(0m, taskDto.EstimatedHours);
-                var remHours = taskDto.RemainingHours > 0m ? taskDto.RemainingHours : estHours;
-                var points = Math.Max(0m, taskDto.StoryPoints);
+                var estHours = Math.Clamp(Math.Max(0m, taskDto.EstimatedHours), 0m, 160m);
+                var remHours = Math.Clamp(taskDto.RemainingHours > 0m ? taskDto.RemainingHours : estHours, 0m, 160m);
+                var points = Math.Clamp(Math.Max(0m, taskDto.StoryPoints), 0m, 21m);
 
                 if (matchedBacklogIssue != null)
                 {
@@ -384,10 +396,10 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                         matchedBacklogIssue.AssigneeId = resolvedAssigneeId.Value;
                         matchedBacklogIssue.IsAiAssigned = true;
                     }
-                    matchedBacklogIssue.Title = taskDto.Title.Trim();
-                    if (!string.IsNullOrWhiteSpace(taskDto.Description))
+                    matchedBacklogIssue.Title = safeTaskTitle;
+                    if (!string.IsNullOrWhiteSpace(safeTaskDescription))
                     {
-                        matchedBacklogIssue.Description = taskDto.Description.Trim();
+                        matchedBacklogIssue.Description = safeTaskDescription;
                     }
                     matchedBacklogIssue.StoryPoints = points;
                     matchedBacklogIssue.EstimatedHours = estHours;
@@ -434,8 +446,8 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                         StatusId = matchedStatus.Id,
                         IssueTypeId = parentIssueType.Id,
                         PriorityId = matchedPriority?.Id,
-                        Title = taskDto.Title.Trim(),
-                        Description = taskDto.Description?.Trim(),
+                        Title = safeTaskTitle,
+                        Description = string.IsNullOrWhiteSpace(safeTaskDescription) ? null : safeTaskDescription,
                         StoryPoints = points,
                         EstimatedHours = estHours,
                         RemainingHours = remHours,
@@ -529,11 +541,13 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
 
                     foreach (var subDto in taskDto.Subtasks)
                     {
-                        if (string.IsNullOrWhiteSpace(subDto.Title)) continue;
+                        var rawSubTitle = InputGuardrail.StripUnsafeHtmlOrScript(subDto.Title);
+                        if (string.IsNullOrWhiteSpace(rawSubTitle)) continue;
 
-                        var rawSubTitle = subDto.Title.Trim();
-                        var prefixedSubTitle = !string.IsNullOrWhiteSpace(subDto.Role) && !rawSubTitle.StartsWith("[", StringComparison.Ordinal)
-                            ? $"[{subDto.Role.Trim()}] {rawSubTitle}"
+                        var cleanSubRole = InputGuardrail.StripUnsafeHtmlOrScript(subDto.Role);
+                        var safeSubDescription = InputGuardrail.StripUnsafeHtmlOrScript(subDto.Description);
+                        var prefixedSubTitle = !string.IsNullOrWhiteSpace(cleanSubRole) && !rawSubTitle.StartsWith("[", StringComparison.Ordinal)
+                            ? $"[{cleanSubRole}] {rawSubTitle}"
                             : rawSubTitle;
 
                         if (existingChildTitles.Contains(rawSubTitle) || existingChildTitles.Contains(prefixedSubTitle))
@@ -544,7 +558,7 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                         currentIssueNumber++;
                         maxRank += 1000m;
                         var subId = Guid.NewGuid();
-                        var subHours = Math.Max(0m, subDto.EstimatedHours);
+                        var subHours = Math.Clamp(Math.Max(0m, subDto.EstimatedHours), 0m, 80m);
 
                         var subAssigneeId = ResolveAssigneeId(subDto.AssigneeUserId, subDto.AssigneeName, userById, allUsers)
                             ?? resolvedAssigneeId;
@@ -568,10 +582,10 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                             IssueTypeId = subtaskIssueType.Id,
                             PriorityId = subPriority?.Id,
                             Title = prefixedSubTitle,
-                            Description = !string.IsNullOrWhiteSpace(subDto.Description)
-                                ? subDto.Description.Trim()
+                            Description = !string.IsNullOrWhiteSpace(safeSubDescription)
+                                ? safeSubDescription
                                 : $"Công việc con thuộc {parentIssueKey}: {parentTitle}",
-                            StoryPoints = Math.Max(0, subDto.StoryPoints),
+                            StoryPoints = Math.Clamp(subDto.StoryPoints, 0, 13),
                             EstimatedHours = subHours,
                             RemainingHours = subHours,
                             OriginalEstimateMinutes = (int)Math.Round(subHours * 60m, MidpointRounding.AwayFromZero),
@@ -1172,7 +1186,7 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
 
         for (var idx = 0; idx < criteriaList.Count; idx++)
         {
-            var criterionText = criteriaList[idx]?.Trim();
+            var criterionText = InputGuardrail.StripUnsafeHtmlOrScript(criteriaList[idx]);
             if (string.IsNullOrWhiteSpace(criterionText) || !existingAcSet.Add(criterionText)) continue;
 
             newCriteria.Add(new AcceptanceCriteria

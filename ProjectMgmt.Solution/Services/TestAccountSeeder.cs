@@ -294,7 +294,8 @@ public static class TestAccountSeeder
             await identityDb.SaveChangesAsync();
 
             var sysAdminRole = allRoles.FirstOrDefault(r => r.Scope == "System" || r.Name == "Admin" || r.Name == "SystemAdmin");
-            var orgMemberRole = allRoles.FirstOrDefault(r => r.Scope == "Organization");
+            var orgOwnerRole = allRoles.FirstOrDefault(r => r.Scope == "Organization" && r.Name == "OrgOwner")
+                ?? allRoles.FirstOrDefault(r => r.Scope == "Organization");
 
             // Also enrich Project Owner ("Hoàng Hải Hậu") profile & skills
             var ownerEmail = "HOANGHAIHAU989@GMAIL.COM";
@@ -398,22 +399,37 @@ public static class TestAccountSeeder
                     var projectId = targetProject.Id;
                     var inviterUserId = targetProject.LeadUserId;
 
-                    if (orgMemberRole != null)
+                    if (orgOwnerRole != null)
                     {
-                        var hasOrgRole = await identityDb.UserRoles.AnyAsync(ur =>
-                            ur.UserId == user.Id && ur.ScopeType == "Organization" && ur.ScopeId == orgId);
-                        if (!hasOrgRole)
+                        var shouldHaveOrgOwner =
+                            string.Equals(spec.OrgRole, "Owner", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(spec.OrgRole, "Admin", StringComparison.OrdinalIgnoreCase) ||
+                            targetProject.LeadUserId == user.Id;
+
+                        var existingOrgRoles = await identityDb.UserRoles
+                            .Where(ur => ur.UserId == user.Id && ur.ScopeType == "Organization" && ur.ScopeId == orgId)
+                            .ToListAsync();
+
+                        if (shouldHaveOrgOwner)
                         {
-                            identityDb.UserRoles.Add(new UserRole
+                            if (existingOrgRoles.Count == 0)
                             {
-                                Id = Guid.NewGuid(),
-                                UserId = user.Id,
-                                RoleId = orgMemberRole.Id,
-                                ScopeType = "Organization",
-                                ScopeId = orgId,
-                                GrantedBy = inviterUserId,
-                                CreatedAt = now
-                            });
+                                identityDb.UserRoles.Add(new UserRole
+                                {
+                                    Id = Guid.NewGuid(),
+                                    UserId = user.Id,
+                                    RoleId = orgOwnerRole.Id,
+                                    ScopeType = "Organization",
+                                    ScopeId = orgId,
+                                    GrantedBy = inviterUserId,
+                                    CreatedAt = now
+                                });
+                            }
+                        }
+                        else if (existingOrgRoles.Count > 0)
+                        {
+                            // Chỉ Chủ tổ chức / Quản trị tổ chức mới giữ vai trò cấp Organization; Member giữ quyền theo Project Role.
+                            identityDb.UserRoles.RemoveRange(existingOrgRoles);
                         }
                     }
 

@@ -61,7 +61,7 @@ public static partial class AiIndexedMemoryEngine
         var recalled = SelectRelevantMemories(effectiveUserText, docContent, allMemories, maxMatches: 4, historyWindow);
 
         // 1. Guardrail & Direct Commands: Không gọi thừa các MCP tools không liên quan
-        if (intent is "out_of_scope_refusal" or "push_backlog" or "apply_sprint" or "export_excel")
+        if (intent is "out_of_scope_refusal" or "security_refusal" or "push_backlog" or "apply_sprint" or "export_excel")
         {
             return new AiContextExecutionPlan(
                 Intent: intent,
@@ -115,6 +115,7 @@ public static partial class AiIndexedMemoryEngine
 
         if (intent == "project_qa" &&
             !asksDeeperDbFetch &&
+            (historyWindow?.Count > 1 || allMemories.Count > 0 || existingProposal?.Tasks?.Count > 0) &&
             (explicitMemoryRef ||
              (isFollowUp && !asksLiveDbData && (recalled.Count > 0 || (historyWindow?.Count ?? 0) > 1)) ||
              (recalled.Count > 0 && !asksLiveDbData)))
@@ -148,12 +149,16 @@ public static partial class AiIndexedMemoryEngine
             bool asksOverview = lower.Contains("tổng quan") || lower.Contains("tóm tắt dự án") ||
                                 lower.Contains("dự án có gì") || lower.Contains("dự án này") ||
                                 lower.Contains("tình hình dự án");
+            bool asksVerification = lower.Contains("có thật") || lower.Contains("đúng không") ||
+                                    lower.Contains("phải không") || lower.Contains("nghe nói") ||
+                                    lower.Contains("thực hư") || lower.Contains("đã hủy") ||
+                                    lower.Contains("đã bỏ");
 
             bool needsSpec = asksOverview || MentionsSpecHub(combinedLower) || (isFollowUp && MentionsSpecHub(topicAwareLower) && !asksLiveDbData);
             bool needsBacklog = asksOverview || MentionsBacklog(combinedLower) || (isFollowUp && MentionsBacklog(topicAwareLower) && lower.Contains("còn "));
-            bool needsSprint = asksOverview || MentionsSprint(combinedLower) || (isFollowUp && MentionsSprint(topicAwareLower) && lower.Contains("còn "));
-            bool needsTeam = asksOverview || MentionsTeam(combinedLower);
-            bool needsConfig = asksOverview || MentionsConfig(combinedLower);
+            bool needsSprint = asksOverview || asksVerification || MentionsSprint(combinedLower) || (isFollowUp && MentionsSprint(topicAwareLower) && lower.Contains("còn "));
+            bool needsTeam = asksOverview || asksVerification || MentionsTeam(combinedLower);
+            bool needsConfig = asksOverview || asksVerification || MentionsConfig(combinedLower);
 
             // Nếu người dùng đã đính kèm tài liệu nhưng câu hỏi không nhắc Spec Hub và chỉ hỏi tài liệu vừa gửi
             if (hasAttachedDoc && !lower.Contains("spec"))
@@ -733,7 +738,7 @@ public static partial class AiIndexedMemoryEngine
         text.Contains("workflow") || text.Contains("quy trình") || text.Contains("trạng thái") ||
         text.Contains("status") || text.Contains("ưu tiên") || text.Contains("priority") ||
         text.Contains("loại việc") || text.Contains("issue type") || text.Contains("nhãn") ||
-        text.Contains("label") || text.Contains("cấu hình");
+        text.Contains("label") || text.Contains("cấu hình") || text.Contains("story point");
 
     private static string BuildSpecSearchQuery(string? userPrompt, string? docContent = null)
     {

@@ -20,5 +20,6 @@ Chỉ đạo tái cấu trúc cho Agent:
 2. Không giới hạn số lượng Task hay Subtask; bóc tách linh hoạt theo đúng phạm vi kỹ thuật cần thiết.
 3. Chỉ dùng đúng `status`, `priority`, `type` và ưu tiên nhãn từ cấu hình dự án ở trên.
 4. Story Points tuân thủ dãy Fibonacci (1, 2, 3, 5, 8), phân công đúng chuyên môn kỹ thuật (Frontend, Backend, QA) và cân bằng tải.
-5. Giữ vững trích dẫn tài liệu thật (`documentCitations`) từ các tệp Spec Hub của dự án.
-6. Trả về đúng duy nhất đối tượng JSON SprintProposal theo quy chuẩn (không có markdown giải thích ở ngoài).
+5. Giữ vững trích dẫn tài liệu thật (`documentCitations`) từ các tệp Spec Hub của dự án, tuyệt đối không bịa tên tài liệu không tồn tại.
+6. [CHỐNG DẪN DẮT SAI LỆCH]: Tuyệt đối không đồng ý hoặc áp dụng trạng thái/mức ưu tiên/thành viên không có thật trong cấu hình & danh sách nhân sự dự án ở trên; nếu người dùng đòi gán > 13 SP hoặc nhân sự ảo hoặc bỏ Workflow, hãy đính chính lịch sự trong `assistantReply` và giữ đúng quy chuẩn hệ thống.
+7. Trả về đúng duy nhất đối tượng JSON SprintProposal theo quy chuẩn (không có markdown giải thích ở ngoài).

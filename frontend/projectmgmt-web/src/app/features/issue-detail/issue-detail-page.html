@@ -75,13 +75,13 @@
               <h2>Tài liệu căn cứ &amp; Trích dẫn đặc tả</h2>
               <div style="display:flex; flex-wrap:wrap; gap:0.5rem;">
                 @for (link of task.specLinks || []; track link.documentId) {
-                  <a [routerLink]="['/spec-hub']" [queryParams]="{ docId: link.documentId, docName: link.documentTitle || link.fileName }"
+                  <a [routerLink]="service.currentProject().id ? ['/projects', service.currentProject().id, 'documents'] : ['/documents']" [queryParams]="{ docId: link.documentId, docName: link.documentTitle || link.fileName }"
                      style="display:inline-flex; align-items:center; gap:0.35rem; padding:0.25rem 0.6rem; border-radius:6px; background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; font-size:0.8rem;">
                     <span>{{ link.excerpt || link.documentTitle || link.fileName }}</span>
                   </a>
                 }
                 @for (cite of unlinkedCitations(); track $index) {
-                  <a [routerLink]="['/spec-hub']" [queryParams]="{ docName: extractCiteDocName(cite) }"
+                  <a [routerLink]="service.currentProject().id ? ['/projects', service.currentProject().id, 'documents'] : ['/documents']" [queryParams]="{ docName: extractCiteDocName(cite) }"
                      style="display:inline-flex; align-items:center; gap:0.35rem; padding:0.25rem 0.6rem; border-radius:6px; background:#f8fafc; color:#334155; border:1px solid #cbd5e1; font-size:0.8rem;">
                     <span>{{ cite }}</span>
                   </a>

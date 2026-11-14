@@ -78,6 +78,7 @@ public class AiAgentControllerAdversarialTests
     public sealed class FakePermissionEvaluator : IPermissionEvaluator
     {
         public bool AllowProjectRead { get; set; } = true;
+        public HashSet<string>? AllowedPermissions { get; set; }
 
         public Task<bool> HasPermissionAsync(
             Guid userId,
@@ -86,12 +87,16 @@ public class AiAgentControllerAdversarialTests
             Guid? scopeId,
             Guid? organizationId = null)
         {
+            if (AllowedPermissions != null)
+            {
+                return Task.FromResult(AllowedPermissions.Contains(permissionCode));
+            }
             return Task.FromResult(AllowProjectRead);
         }
 
         public Task<bool> IsProjectMemberAsync(Guid userId, Guid projectId)
         {
-            return Task.FromResult(AllowProjectRead);
+            return Task.FromResult(AllowedPermissions != null ? AllowedPermissions.Count > 0 : AllowProjectRead);
         }
     }
 
@@ -1000,6 +1005,107 @@ public class AiAgentControllerAdversarialTests
         var foreignUserResult = await controller.GetSessionMessages(sessionId, project.Id, beforeIndex: 6, limit: 4);
         var foreignUserObj = Assert.IsType<ObjectResult>(foreignUserResult);
         Assert.Equal(StatusCodes.Status403Forbidden, foreignUserObj.StatusCode);
+    }
+
+    [Fact]
+    public async Task RoleBasedAiAccess_ViewerIsBlockedFromWriteEndpoints_AndDeveloperCannotCommitToSprint()
+    {
+        var (controller, db, permissions, currentUser, staging, _, responseStreamOwner, responseBody) = CreateTestHarness();
+        _ = responseStreamOwner;
+        var project = await SeedProjectAsync(db);
+
+        // 1. Viewer chỉ có project.read (không có issue.create, sprint.create, project.update)
+        permissions.AllowedPermissions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "project.read",
+            "member.read",
+            "report.view"
+        };
+
+        // Viewer -> DecomposeStream phải trả sự kiện FORBIDDEN
+        await controller.DecomposeStream(new AiDecomposeStreamRequest
+        {
+            ProjectId = project.Id,
+            Prompt = "Tạo nhiệm vụ kiểm thử phân quyền"
+        });
+        responseBody.Seek(0, SeekOrigin.Begin);
+        var sseText = new StreamReader(responseBody, Encoding.UTF8).ReadToEnd();
+        Assert.Contains("FORBIDDEN", sseText, StringComparison.OrdinalIgnoreCase);
+
+        // Viewer -> ApplyProposal (cả Sprint lẫn Backlog) đều 403
+        var viewerSprintApply = await controller.ApplyProposal(new AiApplySprintProposalRequest
+        {
+            ProjectId = project.Id,
+            PushToBacklog = false,
+            TargetSprintId = Guid.NewGuid(),
+            SprintGoal = "Không hợp lệ"
+        });
+        Assert.Equal(StatusCodes.Status403Forbidden, Assert.IsType<ObjectResult>(viewerSprintApply).StatusCode);
+
+        var viewerBacklogApply = await controller.ApplyProposal(new AiApplySprintProposalRequest
+        {
+            ProjectId = project.Id,
+            PushToBacklog = true,
+            SprintGoal = "Không hợp lệ"
+        });
+        Assert.Equal(StatusCodes.Status403Forbidden, Assert.IsType<ObjectResult>(viewerBacklogApply).StatusCode);
+
+        // Viewer -> DeleteSession phải 403
+        var viewerDelete = await controller.DeleteSession("viewer_blocked_session", project.Id);
+        Assert.Equal(StatusCodes.Status403Forbidden, Assert.IsType<ObjectResult>(viewerDelete).StatusCode);
+
+        // 2. Developer có issue.create nhưng KHÔNG có sprint.create / project.update
+        permissions.AllowedPermissions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "project.read",
+            "issue.create",
+            "issue.update",
+            "issue.transition",
+            "backlog.rank"
+        };
+
+        var devSprintApply = await controller.ApplyProposal(new AiApplySprintProposalRequest
+        {
+            ProjectId = project.Id,
+            PushToBacklog = false,
+            TargetSprintId = Guid.NewGuid(),
+            SprintGoal = "Dev cố áp dụng vào Sprint"
+        });
+        var devObj = Assert.IsType<ObjectResult>(devSprintApply);
+        Assert.Equal(StatusCodes.Status403Forbidden, devObj.StatusCode);
+
+        // Developer được phép đưa vào Backlog (vượt qua bước phân quyền trước khi kiểm tra service/proposal)
+        const string devSessionId = "dev_backlog_allowed_session";
+        await staging.SaveProposalAsync(devSessionId, new AiSprintProposalDto
+        {
+            SessionId = devSessionId,
+            OrganizationId = project.OrgId,
+            ProjectId = project.Id,
+            UserId = currentUser.UserId,
+            SprintGoal = "Đề xuất Dev đưa Backlog",
+            Tasks =
+            [
+                new ProposedTaskDto
+                {
+                    Id = "t1",
+                    Title = "Dev Task",
+                    Description = "Chi tiết hợp lệ",
+                    StoryPoints = 3,
+                    EstimatedHours = 8
+                }
+            ]
+        }, TimeSpan.FromHours(1));
+
+        var devBacklogApply = await controller.ApplyProposal(new AiApplySprintProposalRequest
+        {
+            ProjectId = project.Id,
+            SessionId = devSessionId,
+            PushToBacklog = true,
+            SprintGoal = "Đề xuất Dev đưa Backlog"
+        });
+        // Test harness không gắn commitCoordinator nên qua được lớp 403 RBAC sẽ vào nhánh SERVICE_UNAVAILABLE (500) chứ không 403
+        var devBacklogObj = Assert.IsType<ObjectResult>(devBacklogApply);
+        Assert.Equal(StatusCodes.Status500InternalServerError, devBacklogObj.StatusCode);
     }
 
     #endregion

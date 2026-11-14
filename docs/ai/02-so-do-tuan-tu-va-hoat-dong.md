@@ -90,17 +90,8 @@ sequenceDiagram
         Gateway->>DB: Nạp phân trang ngược hoặc xóa bản ghi phiên thuộc đúng phạm vi sở hữu
         DB-->>UI: Trả về trang tin nhắn & tự động cuộn ngay xuống cuối đoạn chat (Thinking luôn đóng)
     end
-```
-        Pipeline->>Staging: Cập nhật lịch sử hội thoại và bản đề xuất vào bộ nhớ phiên
-        Staging-->>Pipeline: Xác nhận lưu trữ thành công
-        Pipeline-->>Gateway: Báo cáo hoàn tất lượt hội thoại
-        Gateway->>Tracker: Ghi nhận mức tiêu thụ tài nguyên và lịch sử phiên
-        Tracker-->>Gateway: Xác nhận lưu vết thành công
-        Gateway-->>ClientSvc: Gửi câu trả lời Trợ Lý AI, lịch sử và bản đề xuất cập nhật
-        ClientSvc-->>UI: Hiển thị đoạn chat 2 phía (Trợ Lý AI bên trái, Tôi bên phải) và bảng công việc
-    end
 
-    %% Giai đoạn 7: Người dùng chỉnh sửa, Đẩy Kho Backlog hoặc Áp dụng Sprint
+    %% Giai đoạn 6: Người dùng chỉnh sửa, Đẩy Kho Backlog hoặc Áp dụng Sprint
     Note over SM,DB: GIAI ĐOẠN 6: PHÊ DUYỆT VÀO KHO BACKLOG HOẶC SPRINT
     opt Người dùng xem trước tài liệu trích dẫn
         SM->>UI: Nhấp vào nguồn trích dẫn tài liệu

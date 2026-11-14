@@ -144,7 +144,7 @@ import { extractCiteDocName, filterUnlinkedCitations } from '../../../core/utils
                 <div class="flex flex-wrap gap-1.5">
                   @for (link of task.specLinks || []; track link.documentId) {
                     <a
-                      [routerLink]="['/spec-hub']"
+                      [routerLink]="projectService.currentProject().id ? ['/projects', projectService.currentProject().id, 'documents'] : ['/documents']"
                       [queryParams]="{ docId: link.documentId, docName: link.documentTitle || link.fileName }"
                       (click)="dismissed.emit()"
                       class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 transition-colors"
@@ -157,7 +157,7 @@ import { extractCiteDocName, filterUnlinkedCitations } from '../../../core/utils
                   }
                   @for (cite of unlinkedCitations(); track $index) {
                     <a
-                      [routerLink]="['/spec-hub']"
+                      [routerLink]="projectService.currentProject().id ? ['/projects', projectService.currentProject().id, 'documents'] : ['/documents']"
                       [queryParams]="{ docName: extractCiteDocName(cite) }"
                       (click)="dismissed.emit()"
                       class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-700 transition-colors"

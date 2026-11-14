@@ -133,6 +133,13 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
   readonly pastedDocumentText = signal<string>('');
   readonly attachedFile = signal<File | null>(null);
   readonly isDragOver = signal<boolean>(false);
+  readonly canSubmitPrompt = computed(
+    () =>
+      !this.isStreaming() &&
+      (this.promptInput().trim().length > 0 ||
+        this.pastedDocumentText().trim().length > 0 ||
+        this.attachedFile() !== null)
+  );
   readonly chatHistory = signal<ChatTurn[]>([]);
   readonly hasOlderMessages = signal<boolean>(false);
   readonly oldestLoadedIndex = signal<number | null>(null);
@@ -1020,8 +1027,7 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (file) {
-      this.attachedFile.set(file);
-      this.errorMessage.set(null);
+      this.validateAndAttachFile(file);
     }
     input.value = '';
   }
@@ -1048,8 +1054,7 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
     this.isDragOver.set(false);
     const file = event.dataTransfer?.files?.[0];
     if (file) {
-      this.attachedFile.set(file);
-      this.errorMessage.set(null);
+      this.validateAndAttachFile(file);
     }
   }
 
@@ -1057,8 +1062,7 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
     const files = event.clipboardData?.files;
     if (files && files.length > 0) {
       event.preventDefault();
-      this.attachedFile.set(files[0]);
-      this.errorMessage.set(null);
+      this.validateAndAttachFile(files[0]);
       return;
     }
 
@@ -1068,6 +1072,36 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
       this.pastedDocumentText.set(pastedText.trim());
       this.toastService.info('Dán nội dung', 'Đã tiếp nhận văn bản từ clipboard. Bạn có thể bấm "Xem & Sửa" để kiểm tra.');
     }
+  }
+
+  private validateAndAttachFile(file: File): void {
+    const allowedExts = ['.docx', '.pdf', '.txt', '.md', '.xlsx', '.json', '.csv'];
+    const lowerName = (file.name || '').toLowerCase();
+    const hasAllowedExt = allowedExts.some((ext) => lowerName.endsWith(ext));
+    if (!hasAllowedExt) {
+      const msg = `Định dạng tệp "${file.name}" không được hỗ trợ. Chỉ chấp nhận: ${allowedExts.join(', ')}.`;
+      this.errorMessage.set(msg);
+      this.toastService.error('Tệp không hợp lệ', msg);
+      return;
+    }
+
+    if (file.size <= 0) {
+      const msg = `Tệp "${file.name}" bị rỗng (0 byte). Vui lòng chọn tệp có nội dung.`;
+      this.errorMessage.set(msg);
+      this.toastService.error('Tệp rỗng', msg);
+      return;
+    }
+
+    const maxBytes = 30 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      const msg = `Tệp "${file.name}" vượt quá giới hạn dung lượng 30 MB.`;
+      this.errorMessage.set(msg);
+      this.toastService.error('Tệp quá lớn', msg);
+      return;
+    }
+
+    this.attachedFile.set(file);
+    this.errorMessage.set(null);
   }
 
   clearPastedDocument(): void {
@@ -1351,6 +1385,10 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
     } else if (action === 'push_backlog') {
       void this.commitToBacklogProposal();
     } else if (action === 'apply_sprint') {
+      if (!this.canCommitSprint) {
+        this.appendAssistantNote('Bạn chưa có quyền quản trị Sprint để áp dụng trực tiếp vào Sprint. Hãy dùng nút "Đẩy vào Kho Backlog" hoặc nhờ Quản lý dự án/Scrum Master áp dụng.');
+        return;
+      }
       void this.commitSprintProposal();
     }
   }

@@ -97,6 +97,7 @@ public class AiConversationMemoryEntryConfiguration : IEntityTypeConfiguration<A
         builder.HasOne(e => e.Session)
             .WithMany(s => s.Memories)
             .HasForeignKey(e => e.ConversationSessionId)
+            .HasConstraintName("FK_AiConvMemory_Session")
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasIndex(

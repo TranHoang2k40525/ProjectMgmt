@@ -202,25 +202,26 @@ public sealed class AiConversationSessionStore : IAiConversationSessionStore
         }
 
         var now = DateTime.UtcNow;
-        var title = AiIndexedMemoryEngine.BuildSessionTitle(proposal);
+        var title = Cap(AiIndexedMemoryEngine.BuildSessionTitle(proposal), 290);
         var historyJson = JsonSerializer.Serialize(proposal.ConversationHistory ?? [], JsonOptions);
         var proposalJson = JsonSerializer.Serialize(proposal, JsonOptions);
-        var effectiveModel = string.IsNullOrWhiteSpace(model) ? "Gemini 3.6 Flash" : model;
+        var effectiveModel = Cap(string.IsNullOrWhiteSpace(model) ? "Gemini 3.6 Flash" : model, 95);
+        var safeActorName = Cap(string.IsNullOrWhiteSpace(actorName) ? "Thành viên" : actorName, 145);
 
         if (existing == null)
         {
             existing = new AiConversationSession
             {
                 Id = Guid.NewGuid(),
-                SessionId = proposal.SessionId,
+                SessionId = Cap(proposal.SessionId, 115),
                 OrganizationId = scope.OrganizationId,
                 ProjectId = scope.ProjectId,
                 UserId = scope.UserId,
-                CreatedByName = string.IsNullOrWhiteSpace(actorName) ? "Thành viên" : actorName,
+                CreatedByName = safeActorName,
                 Title = title,
                 Model = effectiveModel,
-                LastIntent = proposal.Intent ?? "sprint_plan",
-                RecommendedTarget = proposal.RecommendedTarget ?? "sprint",
+                LastIntent = Cap(proposal.Intent ?? "sprint_plan", 48),
+                RecommendedTarget = Cap(proposal.RecommendedTarget ?? "sprint", 28),
                 TargetSprintId = proposal.TargetSprintId,
                 TurnCount = proposal.ConversationHistory?.Count ?? 0,
                 TaskCount = proposal.Tasks?.Count ?? 0,
@@ -243,8 +244,8 @@ public sealed class AiConversationSessionStore : IAiConversationSessionStore
             {
                 existing.Model = effectiveModel;
             }
-            existing.LastIntent = proposal.Intent ?? existing.LastIntent;
-            existing.RecommendedTarget = proposal.RecommendedTarget ?? existing.RecommendedTarget;
+            existing.LastIntent = Cap(proposal.Intent ?? existing.LastIntent, 48);
+            existing.RecommendedTarget = Cap(proposal.RecommendedTarget ?? existing.RecommendedTarget, 28);
             existing.TargetSprintId = proposal.TargetSprintId;
             existing.TurnCount = proposal.ConversationHistory?.Count ?? existing.TurnCount;
             existing.TaskCount = proposal.Tasks?.Count ?? 0;
@@ -269,16 +270,16 @@ public sealed class AiConversationSessionStore : IAiConversationSessionStore
                 {
                     Id = Guid.NewGuid(),
                     ConversationSessionId = existing.Id,
-                    SessionId = proposal.SessionId,
+                    SessionId = Cap(proposal.SessionId, 115),
                     OrganizationId = scope.OrganizationId,
                     ProjectId = scope.ProjectId,
                     UserId = scope.UserId,
-                    AnchorKey = mem.AnchorKey,
+                    AnchorKey = Cap(mem.AnchorKey, 30),
                     TurnIndex = mem.TurnIndex,
-                    Category = mem.Category,
-                    Title = mem.Title,
-                    Keywords = mem.Keywords,
-                    Summary = mem.Summary,
+                    Category = Cap(mem.Category, 48),
+                    Title = Cap(mem.Title, 210),
+                    Keywords = Cap(mem.Keywords, 490),
+                    Summary = Cap(mem.Summary, 590),
                     ContentJson = JsonSerializer.Serialize(new { detail = mem.DetailContent }, JsonOptions),
                     CreatedAtUtc = mem.CreatedAtUtc == default ? now : mem.CreatedAtUtc
                 };
@@ -287,6 +288,13 @@ public sealed class AiConversationSessionStore : IAiConversationSessionStore
         }
 
         await _deliveryDb.SaveChangesAsync(ct);
+    }
+
+    private static string Cap(string? value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        var trimmed = value.Trim();
+        return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength];
     }
 
     public async Task<List<AiSessionSummary>> ListUserProjectSessionsAsync(

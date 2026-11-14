@@ -60,8 +60,19 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     const proj = this.projectService.currentProject();
     if (proj.leadUserId && proj.leadUserId.toLowerCase() === myId.toLowerCase()) return true;
     const myMember = (proj.members || []).find(m => m.userId && m.userId.toLowerCase() === myId.toLowerCase());
-    if (myMember && ['Project Lead', 'ProjectManager', 'Scrum Master', 'ScrumMaster', 'ProductOwner'].includes(myMember.role)) return true;
+    if (myMember && ['Project Lead', 'Lead', 'Giám đốc DA', 'ProjectManager', 'Scrum Master', 'ScrumMaster', 'ProductOwner'].includes(myMember.role)) return true;
     return false;
+  });
+
+  readonly canUseAiAssistant = computed(() => {
+    if (this.identityService.isSystemAdmin()) return true;
+    const myId = this.identityService.authState().currentUser?.id;
+    if (!myId) return false;
+    const proj = this.projectService.currentProject();
+    if (proj.leadUserId && proj.leadUserId.toLowerCase() === myId.toLowerCase()) return true;
+    const myMember = (proj.members || []).find(m => m.userId && m.userId.toLowerCase() === myId.toLowerCase());
+    if (!myMember) return false;
+    return myMember.role !== 'Viewer';
   });
 
   // Search & Filter State

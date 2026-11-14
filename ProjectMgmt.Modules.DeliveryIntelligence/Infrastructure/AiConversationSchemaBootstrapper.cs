@@ -76,7 +76,7 @@ public static class AiConversationSchemaBootstrapper
                     CONSTRAINT `PRIMARY` PRIMARY KEY (`Id`),
                     INDEX `IX_AiConversationMemoryEntry_SessionAnchor` (`ConversationSessionId`, `AnchorKey`),
                     INDEX `IX_AiConversationMemoryEntry_TenantLock` (`OrganizationId`, `ProjectId`, `UserId`, `SessionId`),
-                    CONSTRAINT `FK_AiConversationMemoryEntry_AiConversationSession_ConversationSessionId`
+                    CONSTRAINT `FK_AiConvMemory_Session`
                         FOREIGN KEY (`ConversationSessionId`) REFERENCES `AiConversationSession` (`Id`) ON DELETE CASCADE
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Chỉ mục trí nhớ đánh mã trỏ (#mem-X) cho từng phiên Trợ Lý AI';
                 """,

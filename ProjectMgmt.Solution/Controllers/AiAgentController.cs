@@ -146,9 +146,9 @@ public class AiAgentController : ControllerBase
                 return;
             }
 
-            if (!await _projectAccess.AllowsAsync(request.ProjectId, "project.read"))
+            if (!await HasAiWriteAccessAsync(request.ProjectId, project.LeadUserId, userId.Value))
             {
-                await EmitEventAsync(AiSseEventTypes.Error, new AiErrorPayload("FORBIDDEN", "Bạn không có quyền truy cập vào dự án này."));
+                await EmitEventAsync(AiSseEventTypes.Error, new AiErrorPayload("FORBIDDEN", "Bạn không có quyền sử dụng Trợ Lý AI để phân tách hoặc khởi tạo công việc trong dự án này."));
                 return;
             }
 
@@ -528,9 +528,19 @@ public class AiAgentController : ControllerBase
             return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Phiên hội thoại không khớp phạm vi người dùng hoặc tổ chức." });
         }
 
-        if (!await _projectAccess.AllowsAsync(proposal.ProjectId, "project.read"))
+        if (!await HasAiWriteAccessAsync(proposal.ProjectId, project.LeadUserId, userId.Value))
         {
-            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Không có quyền thao tác trên dự án này." });
+            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Bạn không có quyền tinh chỉnh đề xuất công việc trên dự án này." });
+        }
+
+        if (InputGuardrail.ContainsPromptInjectionOrExfiltration(request.Feedback, out _) ||
+            InputGuardrail.ContainsUnsafeScript(request.Feedback))
+        {
+            return BadRequest(new
+            {
+                code = "SECURITY_GUARDRAIL_BLOCKED",
+                message = "Yêu cầu bị từ chối bởi bộ kiểm chuẩn an toàn: không cho phép ghi đè chỉ dẫn bảo mật, truy xuất bí mật hoặc chèn mã độc."
+            });
         }
 
         var targetTask = proposal.Tasks?.FirstOrDefault(t => t.Id == request.TaskId);
@@ -594,16 +604,26 @@ public class AiAgentController : ControllerBase
             return NotFound(new { code = "PROPOSAL_EXPIRED", message = "Phiên đề xuất đã hết hạn. Vui lòng thực hiện phân tách lại." });
         }
 
-        if (!await _projectAccess.AllowsAsync(proposal.ProjectId, "project.read"))
-        {
-            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Không có quyền thao tác trên dự án này." });
-        }
-
         var project = await _planningDb.Projects.AsNoTracking()
             .FirstOrDefaultAsync(p => p.Id == proposal.ProjectId && !p.IsDeleted, ct);
         if (project == null)
         {
             return NotFound(new { code = "PROJECT_NOT_FOUND", message = "Dự án liên quan không tồn tại hoặc đã bị xóa." });
+        }
+
+        if (!await HasAiWriteAccessAsync(proposal.ProjectId, project.LeadUserId, userId.Value))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Bạn không có quyền tinh chỉnh đề xuất công việc trên dự án này." });
+        }
+
+        if (InputGuardrail.ContainsPromptInjectionOrExfiltration(request.Feedback, out _) ||
+            InputGuardrail.ContainsUnsafeScript(request.Feedback))
+        {
+            return BadRequest(new
+            {
+                code = "SECURITY_GUARDRAIL_BLOCKED",
+                message = "Yêu cầu bị từ chối bởi bộ kiểm chuẩn an toàn: không cho phép ghi đè chỉ dẫn bảo mật, truy xuất bí mật hoặc chèn mã độc."
+            });
         }
 
         if (IsScopeMismatch(proposal, userId.Value, project.OrgId))
@@ -658,30 +678,95 @@ public class AiAgentController : ControllerBase
             return NotFound(new { code = "PROPOSAL_EXPIRED", message = "Phiên đề xuất không tồn tại hoặc đã hết hạn." });
         }
 
-        if (!await _projectAccess.AllowsAsync(proposal.ProjectId, "project.read"))
-        {
-            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Không có quyền thao tác." });
-        }
-
         var project = await _planningDb.Projects.AsNoTracking()
             .FirstOrDefaultAsync(p => p.Id == proposal.ProjectId && !p.IsDeleted, ct);
-        if (project != null && IsScopeMismatch(proposal, userId.Value, project.OrgId))
+        if (project == null)
+        {
+            return NotFound(new { code = "PROJECT_NOT_FOUND", message = "Dự án liên quan không tồn tại hoặc đã bị xóa." });
+        }
+
+        if (!await HasAiWriteAccessAsync(proposal.ProjectId, project.LeadUserId, userId.Value))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Bạn không có quyền chỉnh sửa đề xuất AI của dự án này." });
+        }
+
+        if (IsScopeMismatch(proposal, userId.Value, project.OrgId))
         {
             return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Phiên hội thoại không khớp phạm vi tổ chức hoặc người dùng." });
         }
 
-        proposal.SprintGoal = request.SprintGoal?.Trim() ?? proposal.SprintGoal;
-        if (request.Rationale != null) proposal.Rationale = request.Rationale.Trim();
-        if (request.TargetSprintId.HasValue) proposal.TargetSprintId = request.TargetSprintId;
+        if (request.SprintGoal != null)
+        {
+            proposal.SprintGoal = InputGuardrail.StripUnsafeHtmlOrScript(request.SprintGoal);
+        }
+        if (request.Rationale != null)
+        {
+            proposal.Rationale = InputGuardrail.StripUnsafeHtmlOrScript(request.Rationale);
+        }
+        if (request.TargetSprintId.HasValue)
+        {
+            if (request.TargetSprintId.Value != Guid.Empty)
+            {
+                var sprintExists = await _planningDb.Sprints.AsNoTracking()
+                    .AnyAsync(s => s.Id == request.TargetSprintId.Value && s.ProjectId == proposal.ProjectId && s.Status != "Completed", ct);
+                if (!sprintExists)
+                {
+                    return BadRequest(new { code = "INVALID_TARGET_SPRINT", message = "Sprint đích không tồn tại trong dự án này hoặc đã hoàn thành." });
+                }
+            }
+            proposal.TargetSprintId = request.TargetSprintId;
+        }
+
         if (request.Tasks != null)
         {
-            proposal.Tasks = request.Tasks;
+            var sanitizedTasks = new List<ProposedTaskDto>();
+            foreach (var rawTask in request.Tasks)
+            {
+                var cleanTitle = InputGuardrail.StripUnsafeHtmlOrScript(rawTask.Title);
+                if (string.IsNullOrWhiteSpace(cleanTitle)) continue;
+
+                rawTask.Title = cleanTitle.Length > 500 ? cleanTitle[..500] : cleanTitle;
+                rawTask.Description = InputGuardrail.StripUnsafeHtmlOrScript(rawTask.Description);
+                rawTask.EpicTitle = InputGuardrail.StripUnsafeHtmlOrScript(rawTask.EpicTitle);
+                rawTask.AiRationale = InputGuardrail.StripUnsafeHtmlOrScript(rawTask.AiRationale);
+                rawTask.StoryPoints = Math.Clamp(rawTask.StoryPoints <= 0 ? 1m : rawTask.StoryPoints, 1m, 13m);
+                rawTask.EstimatedHours = Math.Clamp(rawTask.EstimatedHours <= 0 ? rawTask.StoryPoints * 3m : rawTask.EstimatedHours, 0.5m, 120m);
+                rawTask.RemainingHours = Math.Clamp(rawTask.RemainingHours <= 0 ? rawTask.EstimatedHours : rawTask.RemainingHours, 0m, 120m);
+                rawTask.AcceptanceCriteria = (rawTask.AcceptanceCriteria ?? [])
+                    .Select(InputGuardrail.StripUnsafeHtmlOrScript)
+                    .Where(ac => !string.IsNullOrWhiteSpace(ac))
+                    .ToList();
+
+                if (rawTask.Subtasks != null)
+                {
+                    var cleanSubs = new List<ProposedSubTaskDto>();
+                    foreach (var sub in rawTask.Subtasks)
+                    {
+                        var cleanSubTitle = InputGuardrail.StripUnsafeHtmlOrScript(sub.Title);
+                        if (string.IsNullOrWhiteSpace(cleanSubTitle)) continue;
+
+                        sub.Title = cleanSubTitle.Length > 500 ? cleanSubTitle[..500] : cleanSubTitle;
+                        sub.Description = InputGuardrail.StripUnsafeHtmlOrScript(sub.Description);
+                        sub.StoryPoints = Math.Clamp(sub.StoryPoints <= 0 ? 1 : sub.StoryPoints, 1, 5);
+                        sub.EstimatedHours = Math.Clamp(sub.EstimatedHours <= 0 ? 4m : sub.EstimatedHours, 0.5m, 80m);
+                        sub.AcceptanceCriteria = (sub.AcceptanceCriteria ?? [])
+                            .Select(InputGuardrail.StripUnsafeHtmlOrScript)
+                            .Where(ac => !string.IsNullOrWhiteSpace(ac))
+                            .ToList();
+                        cleanSubs.Add(sub);
+                    }
+                    rawTask.Subtasks = cleanSubs;
+                }
+
+                sanitizedTasks.Add(rawTask);
+            }
+
+            proposal.Tasks = sanitizedTasks;
             proposal.TotalStoryPoints = proposal.Tasks.Sum(t => t.StoryPoints);
             proposal.TotalEstimatedHours = proposal.Tasks.Sum(t => t.EstimatedHours);
         }
 
         await _stagingService.SaveProposalAsync(sessionId, proposal, TimeSpan.FromHours(2), ct);
-        if (project != null)
         {
             var scope = new ProjectScopeContext(project.OrgId, proposal.ProjectId, userId.Value);
             await PersistUpdatedSessionAsync(scope, proposal, ct);
@@ -753,6 +838,18 @@ public class AiAgentController : ControllerBase
         if (_commitCoordinator == null)
         {
             return StatusCode(StatusCodes.Status500InternalServerError, new { code = "SERVICE_UNAVAILABLE", message = "Dịch vụ commit Sprint chưa sẵn sàng." });
+        }
+
+        var lastAction = stagedProposal?.ConversationHistory?.LastOrDefault()?.ActionType;
+        if (stagedProposal != null &&
+            stagedProposal.Tasks.Count == 0 &&
+            (lastAction is "apply_sprint_done" or "push_backlog_done"))
+        {
+            return Conflict(new
+            {
+                code = "ALREADY_COMMITTED",
+                message = "Đề xuất của phiên này đã được áp dụng vào dự án trước đó. Hãy yêu cầu AI tạo đề xuất mới để tránh trùng lặp."
+            });
         }
 
         if ((request.Tasks == null || request.Tasks.Count == 0) && stagedProposal != null)
@@ -917,9 +1014,9 @@ public class AiAgentController : ControllerBase
             return NotFound(new { code = "PROJECT_NOT_FOUND", message = "Dự án không tồn tại hoặc đã bị xóa." });
         }
 
-        if (!await _projectAccess.AllowsAsync(projectId, "project.read"))
+        if (!await HasAiWriteAccessAsync(projectId, project.LeadUserId, userId.Value))
         {
-            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Không có quyền thao tác trên dự án này." });
+            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Chỉ thành viên có quyền chỉnh sửa công việc hoặc quản lý dự án mới được xóa phiên AI." });
         }
 
         var scope = new ProjectScopeContext(project.OrgId, projectId, userId.Value);
@@ -992,6 +1089,18 @@ public class AiAgentController : ControllerBase
             return true;
         }
         return false;
+    }
+
+    private async Task<bool> HasAiWriteAccessAsync(Guid projectId, Guid? leadUserId, Guid userId)
+    {
+        if (leadUserId.HasValue && leadUserId.Value == userId)
+        {
+            return true;
+        }
+
+        return await _projectAccess.AllowsAsync(projectId, "issue.create")
+            || await _projectAccess.AllowsAsync(projectId, "sprint.create")
+            || await _projectAccess.AllowsAsync(projectId, "project.update");
     }
 
     private async Task PersistUpdatedSessionAsync(IProjectScopeContext scope, AiSprintProposalDto proposal, CancellationToken ct)
