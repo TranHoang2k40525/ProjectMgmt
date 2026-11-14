@@ -14,10 +14,10 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
     @if (!projectService.hasActiveProject()) {
       <app-no-project-state featureName="Danh Sách Công Việc"></app-no-project-state>
     } @else {
-    <div class="task-list-page flex flex-col gap-6 animate-fade-in font-body text-slate-900 dark:text-slate-100">
+    <div class="task-list-page flex flex-col gap-4 md:gap-5 animate-fade-in font-body text-slate-900 dark:text-slate-100">
       
-      <!-- Top Action Bar -->
-      <div class="task-list-header flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200 dark:border-slate-800">
+      <!-- Top Action Bar (Cố định phía trên khi cuộn bảng nội bộ) -->
+      <div class="task-list-header shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200 dark:border-slate-800">
         <div class="flex flex-col">
           <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <span class="material-symbols-outlined text-[24px] text-primary">table_rows</span>
@@ -35,10 +35,10 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
       </div>
 
       <!-- Main Layout: Left Group Filter + Right Work Items Table -->
-      <div class="task-list-layout grid grid-cols-1 lg:grid-cols-4 gap-5">
+      <div class="task-list-layout flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-4 gap-5">
         
         <!-- Left Filter Panel -->
-        <div class="task-list-filters p-3.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-col gap-3 select-none">
+        <div class="task-list-filters min-h-0 p-3.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-col gap-3 select-none">
           <div class="flex flex-col gap-1">
             <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-2">Phân loại công việc</span>
             <nav class="flex flex-col gap-1">
@@ -98,11 +98,11 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
           </div>
         </div>
 
-        <!-- Right Main Work Items Table -->
-        <div class="task-list-panel lg:col-span-3 p-4 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-col gap-3">
+        <!-- Right Main Work Items Table (Thanh tìm kiếm & tiêu đề bảng luôn cố định, phần danh sách cuộn bên trong) -->
+        <div class="task-list-panel lg:col-span-3 min-h-0 p-4 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs flex flex-col gap-3 overflow-hidden">
           
           <!-- Search & Filter Controls -->
-          <div class="task-list-controls flex items-center justify-between gap-3">
+          <div class="task-list-controls shrink-0 flex items-center justify-between gap-3">
             <div class="relative flex-1">
               <span class="material-symbols-outlined absolute left-2.5 top-2 text-[18px] text-slate-400 pointer-events-none">search</span>
               <input
@@ -110,33 +110,47 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
                 [ngModel]="searchTerm()"
                 (ngModelChange)="searchTerm.set($event)"
                 placeholder="Lọc công việc theo tên hoặc mã task..."
-                class="w-full h-8 pl-8 pr-3 rounded-md bg-slate-50 dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-slate-900 border border-slate-200 dark:border-slate-700"
+                class="w-full h-8 pl-8 pr-8 rounded-md bg-slate-50 dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-slate-900 border border-slate-200 dark:border-slate-700"
               />
+              @if (searchTerm()) {
+                <button
+                  type="button"
+                  (click)="searchTerm.set('')"
+                  title="Xóa từ khóa lọc"
+                  aria-label="Xóa từ khóa lọc"
+                  class="absolute right-1.5 top-1 w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition-colors cursor-pointer"
+                >
+                  <span class="material-symbols-outlined text-[15px]" aria-hidden="true">close</span>
+                </button>
+              }
             </div>
+            <span class="hidden sm:inline-flex items-center px-2.5 h-8 rounded-md bg-slate-100 dark:bg-slate-800 text-[11px] font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap shrink-0">
+              {{ filteredItems().length }} / {{ allWorkItems().length }} việc
+            </span>
           </div>
 
-          <!-- Table Container (Font size min 14px text-sm) -->
-          <div class="task-table-wrap overflow-x-auto">
-            <table class="task-table w-full text-left text-xs border-collapse">
+          <!-- Internal Scrollable Table Container with Sticky Header -->
+          <div class="task-table-wrap flex-1 min-h-0 overflow-auto rounded-md border border-slate-200/80 dark:border-slate-800">
+            <table class="task-table w-full text-left text-xs border-separate border-spacing-0">
               <thead>
-                <tr class="border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase font-bold text-slate-400 bg-slate-50/70 dark:bg-slate-950/70">
-                  <th class="py-2.5 px-3">STT</th>
-                  <th class="py-2.5 px-3">Mã Task</th>
-                  <th class="py-2.5 px-3">Tên công việc</th>
-                  <th class="py-2.5 px-3">Người xử lý</th>
-                  <th class="py-2.5 px-3">Trạng thái</th>
-                  <th class="py-2.5 px-3">Sprint</th>
+                <tr class="text-[11px] uppercase font-bold text-slate-500 dark:text-slate-400">
+                  <th class="sticky top-0 z-10 bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 py-2.5 px-3 whitespace-nowrap">STT</th>
+                  <th class="sticky top-0 z-10 bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 py-2.5 px-3 whitespace-nowrap">Mã Task</th>
+                  <th class="sticky top-0 z-10 bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 py-2.5 px-3 whitespace-nowrap min-w-[220px]">Tên công việc</th>
+                  <th class="sticky top-0 z-10 bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 py-2.5 px-3 whitespace-nowrap">Người xử lý</th>
+                  <th class="sticky top-0 z-10 bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 py-2.5 px-3 whitespace-nowrap">Trạng thái</th>
+                  <th class="sticky top-0 z-10 bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 py-2.5 px-3 whitespace-nowrap">Sprint</th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-slate-100 dark:divide-slate-800/60">
+              <tbody>
                 @for (item of filteredItems(); track item.id; let i = $index) {
                   <tr
                     (click)="openDrawer(item)"
                     class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 cursor-pointer transition-colors group"
                   >
-                    <td data-label="STT" class="py-2.5 px-3 font-mono text-slate-400 text-xs">{{ i + 1 }}</td>
-                    <td data-label="Mã Task" class="py-2.5 px-3 font-mono font-semibold text-xs">
-                      <div class="inline-flex items-center gap-2">
+                    <td data-label="STT" class="py-2.5 px-3 border-b border-slate-100 dark:border-slate-800/60 font-mono text-slate-400 text-xs whitespace-nowrap">{{ i + 1 }}</td>
+                    <td data-label="Mã Task" class="py-2.5 px-3 border-b border-slate-100 dark:border-slate-800/60 font-mono font-semibold text-xs whitespace-nowrap">
+                      <div class="inline-flex items-center gap-2 whitespace-nowrap">
                         <span
                           class="w-6 h-6 rounded-md inline-flex items-center justify-center text-white shrink-0 shadow-2xs"
                           [style.backgroundColor]="getIssueTypeColor(item)"
@@ -144,13 +158,13 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
                         >
                           <span class="material-symbols-outlined text-[15px]">{{ getIssueTypeIcon(item) }}</span>
                         </span>
-                        <span [style.color]="getIssueTypeColor(item)" class="font-bold">{{ item.issueKey }}</span>
+                        <span [style.color]="getIssueTypeColor(item)" class="font-bold whitespace-nowrap">{{ item.issueKey }}</span>
                       </div>
                     </td>
-                    <td data-label="Công việc" class="py-2.5 px-3 font-medium text-slate-900 dark:text-white group-hover:text-primary transition-colors text-xs">
+                    <td data-label="Công việc" class="py-2.5 px-3 border-b border-slate-100 dark:border-slate-800/60 font-medium text-slate-900 dark:text-white group-hover:text-primary transition-colors text-xs">
                       {{ item.title }}
                     </td>
-                    <td data-label="Người xử lý" class="py-2.5 px-3 text-xs">
+                    <td data-label="Người xử lý" class="py-2.5 px-3 border-b border-slate-100 dark:border-slate-800/60 text-xs whitespace-nowrap">
                       <div class="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
                         @if (getAssigneeAvatar(item); as avatarUrl) {
                           <img [src]="avatarUrl" [alt]="item.assigneeName || 'Chưa gán'" class="w-5 h-5 rounded-full object-cover shrink-0 ring-1 ring-slate-200 dark:ring-slate-700" />
@@ -159,10 +173,10 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
                             {{ (item.assigneeName || 'U')[0] }}
                           </div>
                         }
-                        <span class="truncate max-w-[120px]">{{ item.assigneeName }}</span>
+                        <span class="truncate max-w-[135px]">{{ item.assigneeName }}</span>
                       </div>
                     </td>
-                    <td data-label="Trạng thái" class="py-2.5 px-3">
+                    <td data-label="Trạng thái" class="py-2.5 px-3 border-b border-slate-100 dark:border-slate-800/60 whitespace-nowrap">
                       <span
                         [class.bg-slate-100]="item.statusName === 'To Do'"
                         [class.text-slate-700]="item.statusName === 'To Do'"
@@ -176,12 +190,12 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
                         [class.bg-emerald-50]="item.statusName === 'Done'"
                         [class.text-emerald-700]="item.statusName === 'Done'"
                         [class.border-emerald-200]="item.statusName === 'Done'"
-                        class="px-2 py-0.5 rounded text-[11px] font-medium border"
+                        class="px-2 py-0.5 rounded text-[11px] font-medium border whitespace-nowrap inline-block"
                       >
                         {{ item.statusName }}
                       </span>
                     </td>
-                    <td data-label="Sprint" class="py-2.5 px-3 text-slate-500 font-medium text-xs">
+                    <td data-label="Sprint" class="py-2.5 px-3 border-b border-slate-100 dark:border-slate-800/60 text-slate-500 font-medium text-xs">
                       {{ item.sprintName }}
                     </td>
                   </tr>
@@ -205,6 +219,69 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
     }
   `,
   styles: [`
+    :host {
+      display: block;
+      min-width: 0;
+    }
+
+    .task-table-wrap,
+    .task-list-filters {
+      scrollbar-width: thin;
+      overscroll-behavior: contain;
+    }
+
+    .task-table thead th {
+      box-shadow: inset 0 -1px 0 rgba(226, 232, 240, 0.9);
+    }
+
+    :host-context(.dark) .task-table thead th {
+      box-shadow: inset 0 -1px 0 rgba(30, 41, 59, 0.95);
+    }
+
+    .task-table tbody tr:last-child td {
+      border-bottom: 0;
+    }
+
+    @media (min-width: 768px) {
+      .task-list-page {
+        height: calc(100dvh - var(--app-shell-offset, 7rem) - 3rem);
+        min-height: 460px;
+        overflow: hidden;
+      }
+
+      .task-list-layout {
+        min-height: 0;
+        align-items: stretch;
+      }
+
+      .task-list-panel {
+        height: 100%;
+        min-height: 0;
+      }
+    }
+
+    @media (min-width: 1280px) {
+      .task-list-layout {
+        grid-template-rows: minmax(0, 1fr);
+      }
+
+      .task-list-filters {
+        height: 100%;
+        overflow-y: auto;
+      }
+    }
+
+    @media (min-width: 768px) and (max-width: 1279px) {
+      .task-list-layout {
+        grid-template-rows: auto minmax(0, 1fr);
+      }
+
+      .task-list-filters {
+        max-height: 156px;
+        overflow-y: auto;
+      }
+    }
+
     @media (max-width: 1279px) {
       .task-list-page, .task-list-layout, .task-list-panel, .task-table-wrap { min-width: 0; }
       .task-list-layout { grid-template-columns: minmax(0, 1fr); }
@@ -215,16 +292,16 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
     }
 
     @media (max-width: 767px) {
-      .task-list-page { gap: 1rem; }
+      .task-list-page { height: auto; min-height: 0; overflow: visible; gap: 1rem; }
       .task-list-header { align-items: stretch; }
       .task-list-header > div:last-child,
       .task-list-header button { width: 100%; }
       .task-list-header button { justify-content: center; min-height: 44px; }
-      .task-list-layout { gap: 1rem; }
+      .task-list-layout { flex: none; gap: 1rem; }
       .task-list-filters { display: flex; padding: .75rem; }
       .task-list-filters button { min-height: 42px; }
-      .task-list-panel { padding: .75rem; }
-      .task-table-wrap { overflow: visible; }
+      .task-list-panel { height: auto; overflow: visible; padding: .75rem; }
+      .task-table-wrap { flex: none; overflow: visible; border: 0; border-radius: 0; }
       .task-table { display: block; min-width: 0; width: 100%; }
       .task-table thead { display: none; }
       .task-table tbody { display: grid; gap: .75rem; }
