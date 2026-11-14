@@ -215,9 +215,16 @@ public class AiAgentController : ControllerBase
                 actorName,
                 DateTime.UtcNow));
 
-            // Step 1: Tiếp nhận & Phân tích tài liệu (15%)
+            // Step 1: Tiếp nhận & Phân tích đầu vào cụ thể (15%)
+            var step1PreviewText = (request.Prompt ?? request.Text ?? string.Empty).Replace("\r", " ").Replace("\n", " ").Trim();
+            if (step1PreviewText.Length > 48) step1PreviewText = step1PreviewText[..48].TrimEnd() + "...";
+            var step1Label = request.File != null
+                ? $"Phân tích · Tệp đính kèm — Đọc \"{request.File.FileName}\""
+                : (!string.IsNullOrWhiteSpace(step1PreviewText)
+                    ? $"Phân tích · Định tuyến Ý định — Đọc yêu cầu \"{step1PreviewText}\""
+                    : "Phân tích · Tài liệu đầu vào — Trích xuất nội dung văn bản");
             await EmitEventAsync(AiSseEventTypes.StepProgress, new AiStepProgressPayload(
-                1, 5, "INGEST_DOCUMENTS", "Tiếp nhận & Phân tích tài liệu", 15, "Đang trích xuất nội dung văn bản từ tệp và ghi chú..."));
+                1, 5, "INGEST_DOCUMENTS", step1Label, 15, "Đang kiểm tra an toàn đầu vào và trích xuất ngữ cảnh..."));
 
             string extractedContent;
             try
@@ -1149,33 +1156,61 @@ public class AiAgentController : ControllerBase
         object? toolArgs,
         string summaryVi)
     {
-        var key = (toolName ?? string.Empty).Trim().ToLowerInvariant();
-        var (verb, target) = key switch
-        {
-            "intent_router" => ("Phân tích", "Ngữ cảnh hội thoại & Ý định"),
-            "memory_recall" => ("Trỏ trí nhớ", "Chỉ mục ghi nhớ phiên (#mem-X)"),
-            "project_get_active_config" => ("Truy vấn MCP", "Cấu hình Active (Workflow, Priority, Type, Label)"),
-            "backlog_get_pending_issues" => ("Truy vấn MCP", "Kho Backlog tồn đọng"),
-            "spechub_get_latest_docs" => ("Truy vấn MCP", "Tài liệu Đặc tả (Spec Hub)"),
-            "sprint_get_active_velocity" => ("Truy vấn MCP", "Sprint & Năng lực thực thi"),
-            "team_get_member_workloads" => ("Truy vấn MCP", "Thành viên & Tải công việc"),
-            "gemini_reasoner" => ("Suy luận AI", "Mô hình Trợ lý AI"),
-            "domain_guardrail_audit" => ("Kiểm chuẩn", "Bộ kiểm chuẩn & Ngữ cảnh dự án"),
-            _ => ("Thực thi", string.IsNullOrWhiteSpace(toolName) ? "Công cụ hệ thống" : toolName)
-        };
-
-        string? detailPreview = null;
+        string? rawArgs = null;
+        string? argFileName = null;
+        string? argAnchorText = null;
         if (toolArgs != null)
         {
             try
             {
-                var rawArgs = JsonSerializer.Serialize(toolArgs, SseJsonOptions);
-                detailPreview = rawArgs.Length > 260 ? $"{rawArgs[..260]}..." : rawArgs;
+                rawArgs = JsonSerializer.Serialize(toolArgs, SseJsonOptions);
+                using var doc = JsonDocument.Parse(rawArgs);
+                if (doc.RootElement.ValueKind == JsonValueKind.Object)
+                {
+                    if (doc.RootElement.TryGetProperty("fileName", out var fn) && fn.ValueKind == JsonValueKind.String)
+                    {
+                        argFileName = fn.GetString();
+                    }
+                    if (doc.RootElement.TryGetProperty("anchors", out var anc) && anc.ValueKind == JsonValueKind.Array)
+                    {
+                        var list = anc.EnumerateArray()
+                            .Where(x => x.ValueKind == JsonValueKind.String)
+                            .Select(x => x.GetString())
+                            .Where(x => !string.IsNullOrWhiteSpace(x))
+                            .ToList();
+                        if (list.Count > 0) argAnchorText = string.Join(", ", list);
+                    }
+                }
             }
             catch
             {
-                detailPreview = null;
+                // Ignore JSON inspection errors
             }
+        }
+
+        var key = (toolName ?? string.Empty).Trim().ToLowerInvariant();
+        var (verb, target) = key switch
+        {
+            "intent_router" => ("Phân tích", "Định tuyến Ý định"),
+            "memory_recall" => ("Trỏ trí nhớ", !string.IsNullOrWhiteSpace(argAnchorText) ? argAnchorText! : "Chỉ mục ghi nhớ phiên (#mem-X)"),
+            "spec_hub_search" or "spechub_get_latest_docs" => ("Truy vấn MCP", "spec_hub_search"),
+            "spec_hub_read_document" => ("Đọc Spec Hub", !string.IsNullOrWhiteSpace(argFileName) ? argFileName! : "spec_hub_read_document"),
+            "backlog_get_stories" or "backlog_get_pending_issues" => ("Truy vấn MCP", "backlog_get_stories"),
+            "sprint_get_history_and_velocity" or "sprint_get_active_velocity" => ("Truy vấn MCP", "sprint_get_history_and_velocity"),
+            "team_get_dev_capacities" or "team_get_member_workloads" => ("Truy vấn MCP", "team_get_dev_capacities"),
+            "project_get_active_config" => ("Truy vấn MCP", "project_get_active_config"),
+            "project_export_metadata" => ("Truy vấn MCP", "project_export_metadata"),
+            "excel_export_scope_resolver" => ("Kiểm chuẩn", "Phạm vi Xuất Excel"),
+            "context_reuse" => ("Tận dụng ngữ cảnh", "Phiên hiện hành"),
+            "qa_synthesis" or "focused_answer" or "llm_reasoning" or "gemini_reasoner" => ("Suy luận AI", "Mô hình Trợ lý AI"),
+            "self_check_critique" or "domain_guardrail_audit" or "domain_guardrail" or "security_guardrail" => ("Kiểm chuẩn", "Bộ kiểm chuẩn & Ngữ cảnh dự án"),
+            _ => ("Truy vấn MCP", string.IsNullOrWhiteSpace(toolName) ? "Công cụ hệ thống" : toolName)
+        };
+
+        string? detailPreview = null;
+        if (!string.IsNullOrWhiteSpace(rawArgs))
+        {
+            detailPreview = rawArgs.Length > 260 ? $"{rawArgs[..260]}..." : rawArgs;
         }
 
         return (verb, target, string.IsNullOrWhiteSpace(detailPreview) ? summaryVi : $"{summaryVi} · Tham số: {detailPreview}");

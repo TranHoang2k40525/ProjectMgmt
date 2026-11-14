@@ -1031,6 +1031,7 @@ public class AiConversationalAssistantTests
         var scope = new ProjectScopeContext(orgId, projectId, actorId);
 
         var calledTools = new List<string>();
+        var stepLabels = new List<string>();
         AiSprintProposalDto? result = null;
         await service.ExecutePipelineAsync(
             sessionId: "sprint_ai_doc_list_typo",
@@ -1038,7 +1039,7 @@ public class AiConversationalAssistantTests
             targetSprintId: null,
             extractedDocumentContent: "# GHI CHÚ / YÊU CẦU BỔ SUNG:\nliệt kê các tài liêuj dód ra đây",
             userPrompt: "liệt kê các tài liêuj dód ra đây",
-            onStepProgress: (_, _, _, _, _) => Task.CompletedTask,
+            onStepProgress: (_, _, labelVi, _, _) => { stepLabels.Add(labelVi); return Task.CompletedTask; },
             onToolCall: (toolName, _, _, _) => { calledTools.Add(toolName); return Task.CompletedTask; },
             onThoughtDelta: _ => Task.CompletedTask,
             onProposalReady: p => { result = p; return Task.CompletedTask; });
@@ -1046,10 +1047,15 @@ public class AiConversationalAssistantTests
         Assert.NotNull(result);
         Assert.Equal("project_qa", result!.Intent);
         Assert.Contains("spec_hub_search", calledTools);
+        Assert.Contains(stepLabels, s => s.Contains("Truy vấn MCP · spec_hub_search", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(stepLabels, s => s.Contains("Đọc Spec Hub · mcp-server-guide.md", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(stepLabels, s => s.Contains("Suy luận AI ·", StringComparison.OrdinalIgnoreCase) && s.Contains("liệt kê các tài liêuj dód ra đây", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(stepLabels, s => string.Equals(s, "Tổng hợp câu trả lời đúng trọng tâm", StringComparison.OrdinalIgnoreCase));
 
         var lastAssistantTurn = result.ConversationHistory.Last(t => t.Role == "assistant");
         Assert.NotNull(lastAssistantTurn.DocumentCitations);
         Assert.Contains("mcp-server-guide.md", lastAssistantTurn.DocumentCitations!);
         Assert.Contains("Bản đặc tả về quản lý dự án.txt", lastAssistantTurn.DocumentCitations!);
+        Assert.Contains("spec_hub_search", lastAssistantTurn.ThinkingSummary ?? string.Empty);
     }
 }

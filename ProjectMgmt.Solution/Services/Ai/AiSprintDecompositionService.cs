@@ -202,13 +202,68 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
             }
         }
 
+        static string TruncateProgress(string? text, int maxLen = 48)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+            var clean = text.Replace("\r", " ").Replace("\n", " ").Trim();
+            return clean.Length <= maxLen ? clean : clean[..maxLen].TrimEnd() + "...";
+        }
+
+        static string GetIntentLabelVi(string? rawIntent) => (rawIntent ?? string.Empty) switch
+        {
+            "sprint_plan" => "Lập kế hoạch Sprint",
+            "backlog_plan" => "Lập danh sách Backlog",
+            "refine_proposal" => "Tinh chỉnh đề xuất",
+            "project_qa" => "Tra cứu & phân tích dự án",
+            "export_excel" => "Xuất báo cáo Excel",
+            "push_backlog" => "Đẩy vào kho Backlog",
+            "apply_sprint" => "Áp dụng vào Sprint",
+            "out_of_scope_refusal" => "Kiểm chuẩn phạm vi",
+            "security_refusal" => "Kiểm chuẩn an toàn",
+            _ => "Xử lý yêu cầu"
+        };
+
+        string BuildActiveSourcesBrief(
+            IReadOnlyList<string>? memKeys,
+            IReadOnlyList<(Guid Id, string Name)>? docs,
+            bool hasBacklog,
+            bool hasSprint,
+            bool hasTeam,
+            bool hasConfig)
+        {
+            var src = new List<string>();
+            if (memKeys is { Count: > 0 }) src.Add(string.Join(", ", memKeys.Take(3)));
+            if (docs is { Count: > 0 }) src.Add($"Spec Hub ({string.Join(", ", docs.Take(2).Select(d => d.Name))})");
+            if (hasSprint) src.Add("sprint_get_history_and_velocity");
+            if (hasBacklog) src.Add("backlog_get_stories");
+            if (hasTeam) src.Add("team_get_dev_capacities");
+            if (hasConfig) src.Add("project_get_active_config");
+            if (src.Count == 0 && (existingProposal?.Tasks?.Count ?? 0) > 0)
+            {
+                src.Add($"{existingProposal!.Tasks.Count} việc trong phiên");
+            }
+            return src.Count > 0 ? string.Join(" · ", src) : "ngữ cảnh phiên";
+        }
+
         string BuildThinkingSummary(long elapsedMs, List<AiTurnTraceItemDto> items, int mcpCount, int recalledCount)
         {
             var secs = Math.Max(0.1, elapsedMs / 1000.0).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
             var parts = new List<string> { $"Đã suy nghĩ xong trong {secs}s", $"{items.Count} thao tác" };
             if (recalledCount > 0) parts.Add($"{recalledCount} chỉ mục nhớ");
             if (mcpCount > 0) parts.Add($"{mcpCount} MCP");
-            return string.Join(" · ", parts);
+            var head = string.Join(" · ", parts);
+
+            var highlights = items
+                .Where(t => !string.Equals(t.Target, "Định tuyến Ý định", StringComparison.OrdinalIgnoreCase))
+                .Select(t => !string.IsNullOrWhiteSpace(t.Target) ? $"{t.ActionVerb}: {t.Target}" : t.ActionVerb)
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(3)
+                .ToList();
+
+            return highlights.Count > 0
+                ? $"{head} — {string.Join(" → ", highlights)}"
+                : head;
         }
 
         void FinalizeAssistantTurn(
@@ -274,16 +329,25 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
             history);
 
         var recalledKeys = contextPlan.RecalledMemories.Select(m => m.AnchorKey).ToList();
+        var activeModelDisplay = string.IsNullOrWhiteSpace(model) ? _aiClient.ProviderName : model;
+        var intentSummaryVi = $"Xác định ý định '{intent}' ({GetIntentLabelVi(intent)}) cho \"{TruncateProgress(effectiveUserText, 48)}\"";
 
         traceItems.Add(new AiTurnTraceItemDto
         {
             Kind = "step",
             ActionVerb = "Phân tích",
             Target = "Định tuyến Ý định",
-            Summary = $"Xác định ý định '{intent}' ({(contextPlan.UseMemoryOnly || contextPlan.IsGreetingOrHelp ? "không cần gọi thừa MCP ngoài" : "nạp ngữ cảnh chọn lọc")})",
+            Summary = intentSummaryVi,
             DurationMs = 1,
             Status = "done"
         });
+
+        await onStepProgress(
+            1,
+            "INTENT_ROUTING",
+            $"Phân tích · Định tuyến Ý định — {intentSummaryVi}",
+            20,
+            intentSummaryVi);
 
         var userTurn = new AiConversationTurnDto
         {
@@ -303,10 +367,10 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
         // =========================================================================
         if (intent == "security_refusal")
         {
-            await onStepProgress(2, "SECURITY_GUARDRAIL", "Kiểm tra An toàn Thông tin & Cách ly Tổ chức", 60, "Phát hiện yêu cầu vi phạm quy tắc bảo mật hệ thống...");
+            await onStepProgress(2, "SECURITY_GUARDRAIL", "Kiểm chuẩn · Security Guardrail — Chặn yêu cầu vi phạm bảo mật / cách ly tổ chức", 60, "Phát hiện yêu cầu vi phạm quy tắc bảo mật hệ thống...");
             await EmitThoughtAsync("Phát hiện dấu hiệu ghi đè chỉ dẫn hệ thống (Prompt Injection), yêu cầu trích xuất bí mật/cấu hình nội bộ hoặc truy cập dữ liệu tổ chức khác. Kích hoạt từ chối an toàn (0 MCP, 0 LLM).\n");
             await RecordTraceAsync("guardrail", "Ngăn chặn", "Security & Tenant Guardrail", "security_guardrail", new { intent }, "Từ chối yêu cầu không an toàn hoặc vượt phạm vi phân quyền tổ chức (0 MCP call)", 1, emitToolCall: false);
-            await onStepProgress(5, "FINALIZE_PROPOSAL", "Hoàn tất phản hồi an toàn", 100, "Đã từ chối yêu cầu vi phạm bảo mật.");
+            await onStepProgress(5, "FINALIZE_PROPOSAL", "Kiểm chuẩn · Security Guardrail — Đã từ chối yêu cầu không an toàn", 100, "Đã từ chối yêu cầu vi phạm bảo mật.");
 
             var securityReply = "Yêu cầu vừa rồi bị từ chối bởi cơ chế Bảo mật Hệ thống & Cách ly Dữ liệu: tôi không thể bỏ qua quy tắc vận hành, không tiết lộ chỉ dẫn hệ thống, khóa bí mật, chuỗi kết nối, thông tin tài khoản/mật khẩu hoặc truy xuất dữ liệu của tổ chức và dự án khác. Vui lòng trao đổi các nội dung quản lý công việc hợp lệ trong phạm vi dự án hiện tại.";
 
@@ -324,10 +388,10 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
         // =========================================================================
         if (intent == "out_of_scope_refusal")
         {
-            await onStepProgress(2, "DOMAIN_GUARDRAIL", "Kiểm tra phạm vi nghiệp vụ Quản lý Dự án", 60, "Yêu cầu không thuộc phạm vi quản lý dự án...");
+            await onStepProgress(2, "DOMAIN_GUARDRAIL", $"Kiểm chuẩn · Domain Guardrail — Từ chối yêu cầu ngoài phạm vi \"{TruncateProgress(effectiveUserText, 40)}\"", 60, "Yêu cầu không thuộc phạm vi quản lý dự án...");
             await EmitThoughtAsync("Phát hiện yêu cầu nằm ngoài phạm vi công cụ Quản lý Dự án. Thực hiện từ chối lịch sự theo quy tắc Domain Guardrail (0 MCP call).\n");
             await RecordTraceAsync("guardrail", "Kiểm tra", "Domain Guardrail", "domain_guardrail", new { intent }, "Từ chối yêu cầu nằm ngoài phạm vi Quản lý Dự án (không gọi MCP)", 1, emitToolCall: false);
-            await onStepProgress(5, "FINALIZE_PROPOSAL", "Hoàn tất phản hồi Trợ Lý AI", 100, "Đã từ chối yêu cầu ngoài luồng.");
+            await onStepProgress(5, "FINALIZE_PROPOSAL", "Kiểm chuẩn · Domain Guardrail — Đã từ chối yêu cầu ngoài luồng", 100, "Đã từ chối yêu cầu ngoài luồng.");
 
             var refusalReply = "Tôi là Trợ Lý AI chuyên biệt cho hệ thống Quản lý Dự án. Tôi chỉ hỗ trợ các nghiệp vụ thuộc phạm vi quản lý dự án như: phân tích tài liệu đặc tả (Spec Hub), lập kế hoạch Sprint, khởi tạo và đẩy công việc vào kho Product Backlog, phân bổ nhân sự theo năng lực, tra cứu tiến độ Scrum và xuất báo cáo Excel cho dự án. Yêu cầu vừa rồi nằm ngoài phạm vi công cụ quản lý dự án nên tôi xin phép từ chối thực hiện.";
 
@@ -345,7 +409,7 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
         // =========================================================================
         if (intent == "export_excel")
         {
-            await onStepProgress(2, "QUERY_CONTEXT", "Phân tích phạm vi & dữ liệu xuất Excel (.xlsx)", 50, "Đang kiểm tra Sprint, Backlog hoặc Công việc được yêu cầu...");
+            await onStepProgress(2, "QUERY_CONTEXT", $"Truy vấn MCP · project_export_metadata — Phân tích phạm vi xuất Excel cho \"{TruncateProgress(effectiveUserText, 42)}\"", 50, "Đang kiểm tra Sprint, Backlog hoặc Công việc được yêu cầu...");
             var excelProposal = BuildPreservedProposalShell(sessionId, scope.ProjectId, targetSprintId, existingProposal);
 
             var swConfig = Stopwatch.StartNew();
@@ -481,17 +545,24 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
         if (contextPlan.RecalledMemories.Count > 0)
         {
             var anchorListText = string.Join(", ", contextPlan.RecalledMemories.Select(m => m.AnchorKey));
+            var anchorTitlesText = TruncateProgress(string.Join("; ", contextPlan.RecalledMemories.Select(m => m.Title)), 52);
             var detailPreview = string.Join("\n", contextPlan.RecalledMemories.Select(m => $"{m.AnchorKey} ({m.Title}): {m.Summary}"));
+            await onStepProgress(
+                1,
+                "RECALL_MEMORY",
+                $"Trỏ trí nhớ · {anchorListText} — Đối chiếu chỉ mục ({anchorTitlesText})",
+                28,
+                detailPreview);
             await RecordTraceAsync(
                 "memory",
                 "Trỏ trí nhớ",
                 anchorListText,
                 "memory_recall",
                 new { anchors = contextPlan.RecalledMemories.Select(m => m.AnchorKey).ToArray() },
-                $"Trỏ trực tiếp chỉ mục trí nhớ phiên ({anchorListText}) thay vì nạp toàn bộ hội thoại cũ",
+                $"Trỏ trực tiếp chỉ mục trí nhớ phiên ({anchorListText}: {anchorTitlesText}) thay vì nạp toàn bộ hội thoại cũ",
                 1,
                 detail: detailPreview);
-            await EmitThoughtAsync($"Đã trỏ chỉ mục trí nhớ phiên: {anchorListText} để kế thừa ngữ cảnh trọng tâm.\n");
+            await EmitThoughtAsync($"Đã trỏ chỉ mục trí nhớ phiên: {anchorListText} ({anchorTitlesText}) để kế thừa ngữ cảnh trọng tâm.\n");
         }
 
         // =========================================================================
@@ -499,14 +570,19 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
         // =========================================================================
         if (intent == "project_qa" && (contextPlan.IsGreetingOrHelp || contextPlan.UseMemoryOnly))
         {
+            var fastSourcesBrief = contextPlan.IsGreetingOrHelp
+                ? "Trả lời trực tiếp 0 MCP"
+                : BuildActiveSourcesBrief(recalledKeys, null, false, false, false, false);
             await onStepProgress(
                 4,
                 "PROJECT_CONSULTATION",
-                contextPlan.IsGreetingOrHelp ? "Soạn câu trả lời hướng dẫn sử dụng" : "Tổng hợp câu trả lời từ chỉ mục trí nhớ phiên",
+                contextPlan.IsGreetingOrHelp
+                    ? "Phân tích · Hướng dẫn nhanh — Phản hồi trực tiếp (0 truy vấn MCP)"
+                    : $"Suy luận AI · {activeModelDisplay} — Phân tích \"{TruncateProgress(effectiveUserText, 42)}\" từ {fastSourcesBrief}",
                 85,
                 contextPlan.IsGreetingOrHelp
                     ? "Trợ Lý AI đang trả lời trực tiếp (0 truy vấn MCP)..."
-                    : "Đang trỏ dữ liệu đã ghi nhớ trong phiên để trả lời đúng trọng tâm...");
+                    : $"Đang đối chiếu {fastSourcesBrief} với mô hình {activeModelDisplay} để trả lời cho \"{TruncateProgress(effectiveUserText, 60)}\"...");
 
             var fastProjectDocs = new List<(Guid Id, string Name)>();
             if (!contextPlan.IsGreetingOrHelp)
@@ -535,6 +611,12 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
                 }
             }
 
+            if (!contextPlan.IsGreetingOrHelp)
+            {
+                await EmitThoughtAsync($"Đang phân tích \"{TruncateProgress(effectiveUserText, 56)}\" từ {fastSourcesBrief} bằng mô hình {activeModelDisplay}...\n");
+            }
+
+            var fastQaSw = Stopwatch.StartNew();
             var fastQaReply = await BuildFocusedProjectQaAnswerAsync(
                 effectiveUserText,
                 contextPlan,
@@ -550,15 +632,18 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
                 scope,
                 model,
                 cancellationToken);
+            fastQaSw.Stop();
 
             await RecordTraceAsync(
                 "reasoning",
-                "Tổng hợp",
-                contextPlan.IsGreetingOrHelp ? "Trả lời trực tiếp" : "Ngữ cảnh trí nhớ",
+                contextPlan.IsGreetingOrHelp ? "Phản hồi nhanh" : "Suy luận AI",
+                contextPlan.IsGreetingOrHelp ? "Trả lời trực tiếp (0 MCP)" : activeModelDisplay,
                 "focused_answer",
-                new { mcpCalls = 0 },
-                "Trả lời đúng trọng tâm câu hỏi mà không cần truy vấn dư thừa MCP Server",
-                turnSw.ElapsedMilliseconds,
+                new { mcpCalls = 0, model = activeModelDisplay, sources = fastSourcesBrief },
+                contextPlan.IsGreetingOrHelp
+                    ? "Phản hồi hướng dẫn sử dụng tức thì mà không gọi MCP hay LLM"
+                    : $"Phân tích \"{TruncateProgress(effectiveUserText, 46)}\" từ {fastSourcesBrief}",
+                fastQaSw.ElapsedMilliseconds,
                 emitToolCall: false);
 
             var fastQaProposal = BuildPreservedProposalShell(sessionId, scope.ProjectId, targetSprintId, existingProposal);
@@ -569,7 +654,7 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
                 : ResolveTurnDocumentCitations("project_qa", effectiveUserText, fastQaReply, fastProjectDocs, fastQaProposal);
             FinalizeAssistantTurn(fastQaProposal, fastQaReply, "project_qa", "none", recalledKeys, fastTurnCitations);
 
-            await onStepProgress(5, "FINALIZE_PROPOSAL", "Hoàn tất phản hồi Trợ Lý AI", 100, "Đã hoàn tất câu trả lời.");
+            await onStepProgress(5, "FINALIZE_PROPOSAL", $"Hoàn tất · {activeModelDisplay} — Đã trả lời \"{TruncateProgress(effectiveUserText, 42)}\"", 100, "Đã hoàn tất câu trả lời.");
             await onProposalReady(fastQaProposal);
             return;
         }
@@ -585,13 +670,14 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
         string? sprintHistory = null;
         string? teamCapacities = null;
 
-        if (contextPlan.NeedsSpecHub || contextPlan.NeedsBacklog || contextPlan.NeedsSprintHistory)
-        {
-            await onStepProgress(2, "QUERY_CONTEXT", "Truy vấn Ngữ cảnh Dự án có chọn lọc", 35, "Chỉ gọi các công cụ MCP cần thiết cho câu hỏi và mục tiêu hiện tại...");
-        }
-
         if (contextPlan.NeedsSpecHub)
         {
+            await onStepProgress(
+                2,
+                "QUERY_CONTEXT",
+                $"Truy vấn MCP · spec_hub_search — Tìm đặc tả \"{TruncateProgress(contextPlan.SpecSearchKeyword, 38)}\"",
+                34,
+                $"Đang tìm kiếm tài liệu Spec Hub theo từ khóa \"{TruncateProgress(contextPlan.SpecSearchKeyword, 60)}\"...");
             sw.Restart();
             relevantDocs = await _specHubTools.SearchRelevantSpecsAsync(scope, contextPlan.SpecSearchKeyword, 5, cancellationToken);
             sw.Stop();
@@ -635,6 +721,12 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
 
                 foreach (var doc in rankedDocs)
                 {
+                    await onStepProgress(
+                        2,
+                        "QUERY_CONTEXT",
+                        $"Đọc Spec Hub · {doc.Name} — Trích xuất phân đoạn đặc tả liên quan",
+                        40,
+                        $"Đang đọc tài liệu đặc tả \"{doc.Name}\"...");
                     sw.Restart();
                     var docJson = await _specHubTools.ReadDocumentAsync(doc.Id, scope, cancellationToken);
                     sw.Stop();
@@ -663,6 +755,12 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
 
         if (contextPlan.NeedsBacklog)
         {
+            await onStepProgress(
+                2,
+                "QUERY_CONTEXT",
+                "Truy vấn MCP · backlog_get_stories — Đọc danh sách hạng mục Product Backlog",
+                46,
+                "Đang lấy danh sách User Story và công việc tồn đọng trong Product Backlog...");
             sw.Restart();
             backlogStories = await _backlogTools.GetActiveStoriesAsync(scope, cancellationToken);
             sw.Stop();
@@ -678,6 +776,12 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
 
         if (contextPlan.NeedsSprintHistory)
         {
+            await onStepProgress(
+                2,
+                "QUERY_CONTEXT",
+                "Truy vấn MCP · sprint_get_history_and_velocity — Đọc tiến độ Sprint & vận tốc Scrum",
+                52,
+                "Đang truy xuất lịch sử Sprint, tiến độ công việc và vận tốc đội Scrum...");
             sw.Restart();
             sprintHistory = await _sprintTools.GetSprintHistoryAndVelocityAsync(scope, cancellationToken);
             sw.Stop();
@@ -696,7 +800,12 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
         // =========================================================================
         if (contextPlan.NeedsTeamCapacity)
         {
-            await onStepProgress(3, "EVALUATE_CAPACITY", "Đánh giá Năng lực Đội ngũ & Kỹ năng", 55, "Đang thống kê số lượng thành viên, kỹ năng và giờ làm khả dụng...");
+            await onStepProgress(
+                3,
+                "EVALUATE_CAPACITY",
+                "Truy vấn MCP · team_get_dev_capacities — Phân tích kỹ năng & giờ khả dụng thành viên",
+                58,
+                "Đang thống kê số lượng thành viên, kỹ năng và giờ làm khả dụng...");
             sw.Restart();
             teamCapacities = await _teamTools.GetDevCapacitiesAsync(scope, cancellationToken);
             sw.Stop();
@@ -713,6 +822,15 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
         ProjectActiveConfig? activeConfig = null;
         if (contextPlan.NeedsActiveConfig || intent is "sprint_plan" or "backlog_plan" or "refine_proposal")
         {
+            if (contextPlan.NeedsActiveConfig)
+            {
+                await onStepProgress(
+                    3,
+                    "EVALUATE_CAPACITY",
+                    "Truy vấn MCP · project_get_active_config — Đọc cấu hình Workflow, Priority, Type & Label",
+                    65,
+                    "Đang đọc cấu hình quy trình Workflow, Mức ưu tiên, Loại việc và Nhãn của dự án...");
+            }
             sw.Restart();
             activeConfig = await _backlogTools.ResolveActiveConfigAsync(scope.ProjectId, cancellationToken);
             if (contextPlan.NeedsActiveConfig)
@@ -750,7 +868,23 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
 
         if (intent == "project_qa")
         {
-            await onStepProgress(4, "PROJECT_CONSULTATION", "Tổng hợp câu trả lời đúng trọng tâm", 80, "Đang tổng hợp từ dữ liệu đã truy xuất có chọn lọc...");
+            var qaSourcesBrief = BuildActiveSourcesBrief(
+                recalledKeys,
+                projectDocsList,
+                !string.IsNullOrWhiteSpace(backlogStories),
+                !string.IsNullOrWhiteSpace(sprintHistory),
+                !string.IsNullOrWhiteSpace(teamCapacities),
+                activeConfig != null && contextPlan.NeedsActiveConfig);
+
+            await onStepProgress(
+                4,
+                "PROJECT_CONSULTATION",
+                $"Suy luận AI · {activeModelDisplay} — Phân tích \"{TruncateProgress(effectiveUserText, 42)}\" ({qaSourcesBrief})",
+                82,
+                $"Đang đối chiếu {qaSourcesBrief} bằng mô hình {activeModelDisplay} để trả lời cho \"{TruncateProgress(effectiveUserText, 64)}\"...");
+            await EmitThoughtAsync($"Đang phân tích yêu cầu \"{TruncateProgress(effectiveUserText, 56)}\" trên nguồn dữ liệu ({qaSourcesBrief}) với mô hình {activeModelDisplay}...\n");
+
+            var qaSw = Stopwatch.StartNew();
             var qaReply = await BuildFocusedProjectQaAnswerAsync(
                 effectiveUserText,
                 contextPlan,
@@ -766,15 +900,16 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
                 scope,
                 model,
                 cancellationToken);
+            qaSw.Stop();
 
             await RecordTraceAsync(
                 "reasoning",
-                "Tổng hợp",
-                "Trả lời trọng tâm",
+                "Suy luận AI",
+                activeModelDisplay,
                 "qa_synthesis",
-                new { retrievedSources = traceItems.Count(t => t.Kind == "mcp") },
-                "Tổng hợp câu trả lời ngắn gọn đúng câu hỏi của người dùng",
-                null,
+                new { model = activeModelDisplay, retrievedSources = traceItems.Count(t => t.Kind == "mcp"), sources = qaSourcesBrief },
+                $"Phân tích \"{TruncateProgress(effectiveUserText, 46)}\" dựa trên {qaSourcesBrief}",
+                qaSw.ElapsedMilliseconds,
                 emitToolCall: false);
 
             var qaProposal = BuildPreservedProposalShell(sessionId, scope.ProjectId, targetSprintId, existingProposal);
@@ -795,7 +930,7 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
             var qaTurnCitations = ResolveTurnDocumentCitations("project_qa", effectiveUserText, qaReply, projectDocsList, qaProposal);
             FinalizeAssistantTurn(qaProposal, qaReply, "project_qa", "none", recalledKeys, qaTurnCitations);
 
-            await onStepProgress(5, "FINALIZE_PROPOSAL", "Hoàn tất phản hồi tra cứu dự án", 100, "Đã trả lời dựa trên dữ liệu thực tế.");
+            await onStepProgress(5, "FINALIZE_PROPOSAL", $"Hoàn tất · {activeModelDisplay} — Đã trả lời \"{TruncateProgress(effectiveUserText, 42)}\"", 100, "Đã trả lời dựa trên dữ liệu thực tế.");
             await onProposalReady(qaProposal);
             return;
         }
@@ -804,7 +939,19 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
         // STEP 4: Phân rã hoặc Tinh chỉnh Sprint Goal, Epics & Tasks (75%)
         // =========================================================================
         activeConfig ??= await _backlogTools.ResolveActiveConfigAsync(scope.ProjectId, cancellationToken);
-        await onStepProgress(4, "DECOMPOSE_SPRINT", "Suy luận cấu trúc kế hoạch & phân bổ công việc", 75, "Mô hình AI đang suy luận từ ngữ cảnh và dữ liệu vừa thu thập...");
+        var planSourcesBrief = BuildActiveSourcesBrief(
+            recalledKeys,
+            projectDocsList,
+            !string.IsNullOrWhiteSpace(backlogStories),
+            !string.IsNullOrWhiteSpace(sprintHistory),
+            !string.IsNullOrWhiteSpace(teamCapacities),
+            true);
+        await onStepProgress(
+            4,
+            "DECOMPOSE_SPRINT",
+            $"Suy luận AI · {activeModelDisplay} — Bóc tách công việc cho \"{TruncateProgress(effectiveUserText, 38)}\" ({planSourcesBrief})",
+            75,
+            $"Mô hình {activeModelDisplay} đang suy luận kế hoạch từ {planSourcesBrief}...");
 
         var workflowStatusesList = activeConfig.Statuses.Select(s => s.Name).ToList();
         var issueTypesList = activeConfig.ParentWorkItemTypes.Select(t => t.Name).ToList();
@@ -936,7 +1083,7 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         // =========================================================================
         // STEP 5: Tự kiểm tra (Self-Check Critique Agent) & Lưu Staging (100%)
         // =========================================================================
-        await onStepProgress(5, "FINALIZE_PROPOSAL", "Tự kiểm tra (Self-Check) & Lưu Staging", 100, "Đang đối chiếu tiêu chí nghiệm thu, cân bằng tải và lưu trữ đề xuất...");
+        await onStepProgress(5, "FINALIZE_PROPOSAL", $"Kiểm chuẩn · {activeConfig.WorkflowName} — Đối chiếu tiêu chí nghiệm thu, cân bằng tải & lưu Staging", 100, "Đang đối chiếu tiêu chí nghiệm thu, cân bằng tải và lưu trữ đề xuất...");
         await EmitThoughtAsync("Tự kiểm tra (Self-Check Agent): Xác nhận Workflow, Priority, Issue Type hợp lệ và bảo toàn nguồn Backlog.\n");
 
         var rawAiOutput = responseContentBuilder.ToString();

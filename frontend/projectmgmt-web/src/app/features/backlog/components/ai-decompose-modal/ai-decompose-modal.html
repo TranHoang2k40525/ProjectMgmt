@@ -214,6 +214,17 @@
                   [attr.aria-expanded]="!!expandedTurnTraces()[turn.id]" (click)="toggleTurnTrace(turn.id)">
                   <span class="material-symbols-outlined thinking-check-icon" aria-hidden="true">check_circle</span>
                   <span class="thinking-label">{{ turn.thinkingSummary || buildFallbackThinkingSummary(turn) }}</span>
+                  @let doneChips = getTurnCompactChips(turn);
+                  @if (!expandedTurnTraces()[turn.id] && doneChips.length > 0) {
+                  <span class="thinking-inline-chips">
+                    @for (chip of doneChips; track chip.target) {
+                    <span class="thinking-inline-chip" [title]="chip.verb + ': ' + chip.target">
+                      <span class="material-symbols-outlined" aria-hidden="true">{{ chip.icon }}</span>
+                      <span>{{ chip.target }}</span>
+                    </span>
+                    }
+                  </span>
+                  }
                   <span class="material-symbols-outlined thinking-chevron" aria-hidden="true">
                     {{ expandedTurnTraces()[turn.id] ? 'expand_less' : 'expand_more' }}
                   </span>
@@ -328,14 +339,32 @@
             <div class="msg-assistant-stack">
               <div class="msg-meta"><strong>Trợ Lý AI</strong></div>
               <div class="thinking-box is-running" [class.is-open]="isThinkingExpanded()">
-                <button type="button" class="thinking-bar" data-testid="btn-toggle-live-thinking"
+                <button type="button" class="thinking-bar is-live-bar" data-testid="btn-toggle-live-thinking"
                   [attr.aria-expanded]="isThinkingExpanded()" (click)="isThinkingExpanded.set(!isThinkingExpanded())">
                   <span class="material-symbols-outlined spinning-icon thinking-live-icon"
                     aria-hidden="true">progress_activity</span>
-                  <span class="thinking-label">
-                    Đang suy nghĩ · {{ thinkingElapsedSeconds().toFixed(1) }}s — {{ currentStepLabel() || 'Đang phân
-                    tích ngữ cảnh...' }}
+                  <span class="thinking-live-timer">Đang suy nghĩ · {{ thinkingElapsedSeconds().toFixed(1) }}s</span>
+                  <span class="thinking-live-divider" aria-hidden="true"></span>
+                  <span class="thinking-live-action" data-testid="ai-live-action-indicator">
+                    <span class="thinking-live-verb">{{ liveActionVerb() }}</span>
+                    <span class="material-symbols-outlined thinking-live-action-icon" aria-hidden="true">{{
+                      getActionRowIcon(liveActionVerb()) }}</span>
+                    <span class="thinking-live-target">{{ liveActionTarget() }}</span>
+                    @if (liveActionSummary()) {
+                    <span class="thinking-live-summary">— {{ liveActionSummary() }}</span>
+                    }
                   </span>
+                  @let runChips = liveExecutedChips();
+                  @if (runChips.length > 0) {
+                  <span class="thinking-inline-chips">
+                    @for (chip of runChips; track chip.target) {
+                    <span class="thinking-inline-chip" [title]="chip.verb + ': ' + chip.target">
+                      <span class="material-symbols-outlined" aria-hidden="true">{{ chip.icon }}</span>
+                      <span>{{ chip.target }}</span>
+                    </span>
+                    }
+                  </span>
+                  }
                   <span class="material-symbols-outlined thinking-chevron" aria-hidden="true">
                     {{ isThinkingExpanded() ? 'expand_less' : 'expand_more' }}
                   </span>

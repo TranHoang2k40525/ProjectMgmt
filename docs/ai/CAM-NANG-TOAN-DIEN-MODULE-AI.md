@@ -456,8 +456,8 @@ Dịch vụ [`PromptTemplateService`](file:///c:/Users/hoang/Downloads/ProjectMg
 Thay thế các thẻ khối rời rạc có viền màu cạnh trái trước đây, giao diện **Trợ Lý AI** áp dụng bố cục hội thoại rành mạch 2 phía kết hợp trải nghiệm Agent minh bạch:
 - **Bên trái — Trợ Lý AI**:
   - **Nhật ký Suy nghĩ (Thinking Box - Tông Sáng Chuẩn Hệ Thống, Mặc Định Luôn Đóng)**:
-    - Khi đang chạy: thanh tiêu đề hiển thị spinner, bộ đếm giây trực tiếp `Đang suy nghĩ · X.Xs` và tên bước đang thực thi.
-    - Khi hoàn tất thành công: hiển thị biểu tượng xác nhận màu xanh ngọc (`check_circle`) cùng tóm tắt ngắn gọn (`Đã suy nghĩ xong trong X.Xs · N thao tác`) và mũi tên mở rộng.
+    - Khi đang chạy: ngay cạnh spinner và bộ đếm giây trực tiếp `Đang suy nghĩ · X.Xs`, thanh tiêu đề hiển thị trực tiếp **hành động cụ thể có cấu trúc đang thực thi** (`ActionVerb` badge + icon + `Target` cụ thể như `sprint_get_history_and_velocity`, `mcp-server-guide.md`, `#mem-1, #mem-2`, `Gemini 3.6 Flash` + mô tả chi tiết theo đúng câu hỏi và nguồn dữ liệu) kèm các chip công cụ/tài liệu đã nạp, tuyệt đối không hiển thị khẩu hiệu chung chung.
+    - Khi hoàn tất thành công: hiển thị biểu tượng xác nhận màu xanh ngọc (`check_circle`) cùng tóm tắt chuỗi hành động thực tế (`Đã suy nghĩ xong trong X.Xs · N thao tác — ...`), các chip công cụ/chỉ mục trí nhớ đã dùng và mũi tên mở rộng.
     - Trạng thái thu gọn/mở rộng (`isThinkingExpanded`) luôn mặc định bằng `false` ở mọi thời điểm (đang stream, sau khi hoàn tất và khi khôi phục lại từ lịch sử).
     - Khi người dùng chủ động mở rộng: hiển thị từng bước hành động theo dòng thời gian (`actionVerb`, `target`, `summary`, `durationMs`, có thể nhấp từng dòng để xem chi tiết thực thi), các chip trí nhớ `#mem-X` vừa nạp và suy luận tổng hợp sạch sẽ.
   - Phần giải thích tự nhiên (`assistantReply`), nút tải lại đúng tệp Excel theo `ExportSpec` gắn riêng cho từng lượt hỏi (tự động nạp đủ bình luận/tiêu chí mới nhất khi xuất hồ sơ chi tiết `task_detail`), và bảng công việc đề xuất tích hợp ngay bên dưới (chỉ rõ mục tiêu Sprint hoặc **Kho Product Backlog** kèm nút **Đẩy vào Kho Backlog** và **Áp dụng vào Sprint**).

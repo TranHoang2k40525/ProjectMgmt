@@ -179,8 +179,25 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
   readonly currentPercent = signal<number>(0);
   readonly currentStepLabel = signal<string>('');
   readonly currentStepDetail = signal<string>('');
+  readonly liveActionVerb = signal<string>('Phân tích');
+  readonly liveActionTarget = signal<string>('Định tuyến Ý định');
+  readonly liveActionSummary = signal<string>('');
   readonly stepsLog = signal<AiStepProgressEvent[]>([]);
   readonly toolCallsLog = signal<AiToolCallEvent[]>([]);
+  readonly liveExecutedChips = computed<Array<{ verb: string; target: string; icon: string }>>(() => {
+    const tools = this.toolCallsLog();
+    const seen = new Set<string>();
+    const chips: Array<{ verb: string; target: string; icon: string }> = [];
+    for (const t of tools) {
+      const verb = t.actionVerb || this.inferActionVerb(t.toolName);
+      const target = t.targetLabel || this.inferTargetLabel(t.toolName);
+      const key = `${verb}:${target}`.toLowerCase();
+      if (!target || seen.has(key)) continue;
+      seen.add(key);
+      chips.push({ verb, target, icon: this.getActionRowIcon(verb) });
+    }
+    return chips.slice(-3);
+  });
   readonly expandedToolIndices = signal<Record<number, boolean>>({});
   readonly streamedThoughts = signal<string>('');
   readonly errorMessage = signal<string | null>(null);
@@ -1335,11 +1352,21 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
     this.pastedDocumentText.set('');
     this.attachedFile.set(null);
 
+    const rawPreview = (promptText || docText || file?.name || '').replace(/\s+/g, ' ').trim();
+    const shortPreview = rawPreview.length > 48 ? `${rawPreview.slice(0, 48).trim()}...` : rawPreview;
+    const initTarget = file ? file.name : 'Định tuyến Ý định';
+    const initSummary = file
+      ? `Đọc tệp đính kèm "${file.name}"`
+      : (shortPreview ? `Đọc yêu cầu "${shortPreview}"` : 'Đọc nội dung tài liệu đã dán');
+
     this.isStreaming.set(true);
     this.currentStepIndex.set(1);
     this.currentPercent.set(10);
-    this.currentStepLabel.set('Khởi tạo phiên làm việc AI Agent...');
-    this.currentStepDetail.set('Đang kiểm tra bảo mật Input Guardrail & Project Scope Guard...');
+    this.liveActionVerb.set('Phân tích');
+    this.liveActionTarget.set(initTarget);
+    this.liveActionSummary.set(initSummary);
+    this.currentStepLabel.set(`Phân tích · ${initTarget} — ${initSummary}`);
+    this.currentStepDetail.set(initSummary);
     this.stepsLog.set([]);
     this.toolCallsLog.set([]);
     this.streamedThoughts.set('');
@@ -1376,6 +1403,7 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
             this.currentPercent.set(step.percent);
             this.currentStepLabel.set(step.labelVi);
             this.currentStepDetail.set(step.detail ?? '');
+            this.updateLiveActionFromStep(step, shortPreview);
             this.stepsLog.update((prev) => {
               const filtered = prev.filter((s) => s.stepIndex !== step.stepIndex);
               return [...filtered, step].sort((a, b) => a.stepIndex - b.stepIndex);
@@ -1383,6 +1411,7 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
           },
           onToolCall: (tool) => {
             this.toolCallsLog.update((prev) => [...prev, tool]);
+            this.updateLiveActionFromTool(tool);
           },
           onThoughtDelta: (delta) => {
             if (!delta) return;
@@ -1402,6 +1431,17 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
               return;
             }
             this.streamedThoughts.update((prev) => (prev + delta).slice(-2500));
+            const cleanThought = this.cleanStreamedThoughts();
+            if (cleanThought) {
+              const lines = cleanThought
+                .split(/\r?\n/)
+                .map((l) => l.trim())
+                .filter((l) => l.length > 6);
+              if (lines.length > 0) {
+                const lastLine = lines[lines.length - 1];
+                this.liveActionSummary.set(lastLine.length > 96 ? `${lastLine.slice(0, 96).trim()}...` : lastLine);
+              }
+            }
           },
           onProposalReady: (prop) => {
             this.handleAssistantTurn(prop);
@@ -1592,22 +1632,119 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
     const secNum = Math.max(0.1, (turn.durationMs ?? 0) / 1000);
     const secLabel = turn.durationMs && turn.durationMs > 0 ? `${secNum.toFixed(1)}s` : '';
     const opCount = items.length;
-    if (secLabel && opCount > 0) {
-      return `Đã suy nghĩ xong trong ${secLabel} · ${opCount} thao tác`;
+    const head =
+      secLabel && opCount > 0
+        ? `Đã suy nghĩ xong trong ${secLabel} · ${opCount} thao tác`
+        : opCount > 0
+          ? `Đã suy nghĩ xong · ${opCount} thao tác`
+          : secLabel
+            ? `Đã suy nghĩ xong trong ${secLabel}`
+            : 'Đã suy nghĩ xong';
+
+    const highlights = items
+      .filter((t) => (t.target || '').toLowerCase() !== 'định tuyến ý định')
+      .map((t) => (t.target ? `${t.actionVerb}: ${t.target}` : t.actionVerb))
+      .filter(Boolean)
+      .slice(0, 3);
+
+    return highlights.length > 0 ? `${head} — ${highlights.join(' → ')}` : head;
+  }
+
+  getTurnCompactChips(turn: ChatTurn): Array<{ verb: string; target: string; icon: string }> {
+    const items =
+      turn.traceItems && turn.traceItems.length > 0
+        ? turn.traceItems
+        : this.buildTraceItemsFromLog(turn.toolCalls);
+    const seen = new Set<string>();
+    const chips: Array<{ verb: string; target: string; icon: string }> = [];
+    for (const item of items) {
+      const verb = (item.actionVerb || '').trim();
+      const target = (item.target || '').trim();
+      if (!target || target.toLowerCase() === 'định tuyến ý định') continue;
+      const key = `${verb}:${target}`.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      chips.push({ verb, target, icon: this.getActionRowIcon(verb) });
     }
-    if (opCount > 0) {
-      return `Đã suy nghĩ xong · ${opCount} thao tác`;
+    return chips.slice(0, 4);
+  }
+
+  private updateLiveActionFromStep(step: AiStepProgressEvent, queryPreview: string): void {
+    const rawLabel = (step.labelVi || '').trim();
+    const dotIdx = rawLabel.indexOf('·');
+    const dashMatch = rawLabel.match(/\s+[—–-]\s+/);
+
+    if (dotIdx > 0 && dashMatch && dashMatch.index !== undefined && dashMatch.index > dotIdx) {
+      const verb = rawLabel.slice(0, dotIdx).trim();
+      const target = rawLabel.slice(dotIdx + 1, dashMatch.index).trim();
+      const summary = rawLabel.slice(dashMatch.index + dashMatch[0].length).trim();
+      this.liveActionVerb.set(verb || 'Thực thi');
+      this.liveActionTarget.set(target || this.selectedModel());
+      this.liveActionSummary.set(summary || step.detail || '');
+      return;
     }
-    return secLabel ? `Đã suy nghĩ xong trong ${secLabel}` : 'Đã suy nghĩ xong';
+
+    const activeTargets = this.liveExecutedChips().map((c) => c.target);
+    const activeSourcesText = activeTargets.length > 0 ? activeTargets.join(' · ') : 'ngữ cảnh phiên';
+    const stepKey = (step.stepName || '').toUpperCase();
+
+    if (stepKey === 'PROJECT_CONSULTATION' || stepKey === 'DECOMPOSE_SPRINT') {
+      this.liveActionVerb.set('Suy luận AI');
+      this.liveActionTarget.set(this.selectedModel());
+      this.liveActionSummary.set(
+        queryPreview
+          ? `Phân tích "${queryPreview}" (${activeSourcesText})`
+          : (step.detail || rawLabel)
+      );
+      return;
+    }
+
+    if (stepKey === 'RECALL_MEMORY') {
+      this.liveActionVerb.set('Trỏ trí nhớ');
+      this.liveActionTarget.set(activeTargets[0] || '#mem');
+      this.liveActionSummary.set(step.detail || rawLabel);
+      return;
+    }
+
+    if (stepKey === 'QUERY_CONTEXT' || stepKey === 'EVALUATE_CAPACITY') {
+      const lastTool = this.toolCallsLog().slice(-1)[0];
+      this.liveActionVerb.set(lastTool?.actionVerb || 'Truy vấn MCP');
+      this.liveActionTarget.set(lastTool?.targetLabel || lastTool?.toolName || 'Dữ liệu dự án');
+      this.liveActionSummary.set(lastTool?.summaryVi || step.detail || rawLabel);
+      return;
+    }
+
+    if (stepKey === 'FINALIZE_PROPOSAL') {
+      this.liveActionVerb.set('Kiểm chuẩn');
+      this.liveActionTarget.set(this.proposal()?.workflowName || 'Quy chuẩn dự án');
+      this.liveActionSummary.set(step.detail || rawLabel);
+      return;
+    }
+
+    this.liveActionVerb.set('Phân tích');
+    this.liveActionTarget.set('Định tuyến Ý định');
+    this.liveActionSummary.set(
+      queryPreview ? `Đọc yêu cầu "${queryPreview}"` : (step.detail || rawLabel)
+    );
+  }
+
+  private updateLiveActionFromTool(tool: AiToolCallEvent): void {
+    const verb = tool.actionVerb || this.inferActionVerb(tool.toolName);
+    const target = tool.targetLabel || this.inferTargetLabel(tool.toolName);
+    const summary = tool.summaryVi || tool.toolName;
+    this.liveActionVerb.set(verb);
+    this.liveActionTarget.set(target);
+    this.liveActionSummary.set(summary);
+    this.currentStepLabel.set(`${verb} · ${target} — ${summary}`);
   }
 
   getActionRowIcon(verb?: string | null): string {
     const v = (verb || '').toLowerCase();
     if (v.includes('phân tích') || v.includes('đọc')) return 'manage_search';
-    if (v.includes('trí nhớ') || v.includes('trỏ')) return 'bookmarks';
+    if (v.includes('trí nhớ') || v.includes('trỏ') || v.includes('ngữ cảnh')) return 'bookmarks';
     if (v.includes('mcp') || v.includes('truy vấn')) return 'database';
-    if (v.includes('suy luận')) return 'psychology';
-    if (v.includes('kiểm')) return 'verified_user';
+    if (v.includes('suy luận') || v.includes('tổng hợp')) return 'psychology';
+    if (v.includes('kiểm') || v.includes('ngăn chặn')) return 'verified_user';
     return 'bolt';
   }
 
@@ -1615,8 +1752,9 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
     const k = (toolName || '').toLowerCase();
     if (k.includes('intent')) return 'Phân tích';
     if (k.includes('memory')) return 'Trỏ trí nhớ';
-    if (k.includes('gemini') || k.includes('reason')) return 'Suy luận AI';
-    if (k.includes('guardrail') || k.includes('audit')) return 'Kiểm chuẩn';
+    if (k.includes('read_document')) return 'Đọc Spec Hub';
+    if (k.includes('gemini') || k.includes('reason') || k.includes('synthesis') || k.includes('focused_answer')) return 'Suy luận AI';
+    if (k.includes('guardrail') || k.includes('audit') || k.includes('critique') || k.includes('resolver')) return 'Kiểm chuẩn';
     if (k.includes('project') || k.includes('backlog') || k.includes('spec') || k.includes('sprint') || k.includes('team')) {
       return 'Truy vấn MCP';
     }
@@ -1625,15 +1763,22 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
 
   private inferTargetLabel(toolName?: string): string {
     const k = (toolName || '').toLowerCase();
-    if (k.includes('intent')) return 'Ngữ cảnh hội thoại & Ý định';
+    if (k.includes('intent')) return 'Định tuyến Ý định';
     if (k.includes('memory')) return 'Chỉ mục ghi nhớ phiên (#mem-X)';
-    if (k.includes('active_config')) return 'Cấu hình Active (Workflow, Priority, Type, Label)';
-    if (k.includes('backlog')) return 'Kho Backlog tồn đọng';
-    if (k.includes('spechub')) return 'Tài liệu Đặc tả (Spec Hub)';
-    if (k.includes('sprint')) return 'Sprint & Năng lực thực thi';
-    if (k.includes('team')) return 'Thành viên & Tải công việc';
-    if (k.includes('gemini')) return 'Mô hình Trợ lý AI';
-    if (k.includes('guardrail')) return 'Bộ kiểm chuẩn & Ngữ cảnh dự án';
+    if (k === 'spec_hub_search') return 'spec_hub_search';
+    if (k === 'spec_hub_read_document') return 'spec_hub_read_document';
+    if (k === 'backlog_get_stories') return 'backlog_get_stories';
+    if (k === 'sprint_get_history_and_velocity') return 'sprint_get_history_and_velocity';
+    if (k === 'team_get_dev_capacities') return 'team_get_dev_capacities';
+    if (k === 'project_get_active_config') return 'project_get_active_config';
+    if (k === 'project_export_metadata') return 'project_export_metadata';
+    if (k.includes('active_config')) return 'project_get_active_config';
+    if (k.includes('backlog')) return 'backlog_get_stories';
+    if (k.includes('spechub')) return 'spec_hub_search';
+    if (k.includes('sprint')) return 'sprint_get_history_and_velocity';
+    if (k.includes('team')) return 'team_get_dev_capacities';
+    if (k.includes('gemini') || k.includes('reason') || k.includes('synthesis')) return this.selectedModel();
+    if (k.includes('guardrail') || k.includes('critique')) return 'Bộ kiểm chuẩn & Ngữ cảnh dự án';
     return toolName || 'Công cụ hệ thống';
   }
 

@@ -183,8 +183,8 @@ Trong tác vụ AI Agent suy luận dài (từ 5 đến 45 giây tùy quy mô t�
 - **WebSocket**: Quá phức tạp cho tác vụ một chiều (server truyền tiến trình về client), đòi hỏi duy trì kết nối TCP song công toàn phần (Full-duplex) và dễ bị proxy/firewall doanh nghiệp chặn.
 - **Server-Sent Events (SSE - `text/event-stream`)**: Chuẩn HTTP/1.1 và HTTP/2 gốc của trình duyệt, truyền tải một chiều nhẹ nhàng, hỗ trợ streaming văn bản mượt mà, vượt qua tường lửa dễ dàng và tích hợp sẵn cơ chế auto-reconnect.
 
-### 4.2. Cấu trúc Message SSE & Metadata Thao tác Suy nghĩ
-Mỗi gói tin SSE phát đi từ [`AiAgentController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/AiAgentController.cs) được chuẩn hóa theo [`AiSsePayloads.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Dtos/Ai/AiSsePayloads.cs), trong đó sự kiện gọi công cụ bổ sung `ActionVerb`, `TargetLabel` và `DetailPreview` để hiển thị trực quan trong khung **Thinking** khi người dùng mở rộng:
+### 4.2. Cấu trúc Message SSE & Hiển thị Hành động Cụ thể Ngay Cạnh "Đang suy nghĩ"
+Mỗi gói tin SSE phát đi từ [`AiAgentController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/AiAgentController.cs) và [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs) được chuẩn hóa theo [`AiSsePayloads.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Dtos/Ai/AiSsePayloads.cs). Thay vì hiển thị các câu mô tả chung chung (như *"Tổng hợp câu trả lời đúng trọng tâm"*), thanh trạng thái trực tiếp (`thinking-bar is-live-bar`) hiển thị ngay cạnh `Đang suy nghĩ · X.Xs` **hành động có cấu trúc đang thực thi** (`[ActionVerb]` + `icon` + `Target` + `Summary cụ thể theo câu hỏi & nguồn dữ liệu`) cùng các chip công cụ/chỉ mục trí nhớ vừa nạp (`#mem-1`, `sprint_get_history_and_velocity`, `mcp-server-guide.md`...):
 
 ```http
 HTTP/1.1 200 OK
