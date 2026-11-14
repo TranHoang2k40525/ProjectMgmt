@@ -48,6 +48,7 @@ public sealed class AiConversationTurnDto
     public string? Thoughts { get; set; }
     public List<string>? ReferencedMemoryAnchors { get; set; }
     public List<AiTurnTraceItemDto>? TraceItems { get; set; }
+    public AiExcelExportSpecDto? ExportSpec { get; set; }
     public DateTime TimestampUtc { get; set; } = DateTime.UtcNow;
 }
 
@@ -67,6 +68,7 @@ public sealed class AiSprintProposalDto
     public string? AssistantReply { get; set; }
     public string RecommendedTarget { get; set; } = "sprint"; // "sprint" | "backlog"
     public string? TriggerAction { get; set; } // "none" | "export_excel" | "push_backlog" | "apply_sprint"
+    public AiExcelExportSpecDto? ExportSpec { get; set; }
     public List<AiConversationTurnDto> ConversationHistory { get; set; } = [];
     public List<AiMemoryAnchorDto> IndexedMemories { get; set; } = [];
     public List<string> Tags { get; set; } = [];
@@ -140,4 +142,35 @@ public sealed class ProposedSubTaskDto
     public List<string> AcceptanceCriteria { get; set; } = [];
     public List<string> DocumentCitations { get; set; } = [];
     public Guid? DocumentId { get; set; }
+}
+
+/// <summary>
+/// Đặc tả phạm vi và bộ lọc xuất tệp Excel (.xlsx) do Trợ Lý AI phân tích chính xác từ yêu cầu người dùng.
+/// </summary>
+public sealed class AiExcelExportSpecDto
+{
+    /// <summary>
+    /// Phạm vi xuất:
+    /// "project_all" | "single_sprint" | "sprint_list" | "backlog_only" | "single_task" | "filtered_tasks" | "task_detail" | "ai_proposal"
+    /// </summary>
+    public string Scope { get; set; } = "project_all";
+    public string Title { get; set; } = string.Empty;
+    public string? Subtitle { get; set; }
+    public string? SuggestedFileName { get; set; }
+    public List<Guid> SprintIds { get; set; } = [];
+    public List<string> SprintNames { get; set; } = [];
+    public List<string> SprintStatuses { get; set; } = [];
+    public List<Guid> IssueIds { get; set; } = [];
+    public List<string> IssueKeys { get; set; } = [];
+    public List<string> AssigneeNames { get; set; } = [];
+    public List<string> StatusNames { get; set; } = [];
+    public List<string> Priorities { get; set; } = [];
+    public List<string> IssueTypes { get; set; } = [];
+    public List<string> EpicNames { get; set; } = [];
+    public string? SearchKeyword { get; set; }
+    public bool IncludeSubtasks { get; set; } = true;
+    public bool IncludeLegend { get; set; } = true;
+    public bool? BlockedOnly { get; set; }
+    public int MatchedItemCount { get; set; }
+    public string? SummaryDescription { get; set; }
 }

@@ -20,6 +20,7 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import {
   AiAgentService,
   AiConversationTurnDto,
+  AiExcelExportSpecDto,
   AiSprintProposalDto,
   AiStepProgressEvent,
   AiToolCallEvent,
@@ -81,6 +82,8 @@ export interface ChatTurn {
   referencedMemoryAnchors?: string[];
   /** Lượt trả lời này sinh ra / cập nhật bảng đề xuất công việc */
   hasProposalTable?: boolean;
+  /** Đặc tả phạm vi & bộ lọc xuất tệp Excel (.xlsx) gắn riêng cho lượt này */
+  exportSpec?: AiExcelExportSpecDto | null;
 }
 
 export interface SpecDocPreview {
@@ -1334,6 +1337,7 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
       this.cleanStreamedThoughts() ||
       null;
     const referencedMemoryAnchors = lastBackendAssistantTurn?.referencedMemoryAnchors ?? [];
+    const turnExportSpec = lastBackendAssistantTurn?.exportSpec ?? prop.exportSpec ?? null;
 
     const doneTime = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
     const turnId = lastBackendAssistantTurn?.id || `agent_${Date.now()}`;
@@ -1350,6 +1354,7 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
       thoughts,
       referencedMemoryAnchors,
       hasProposalTable: producesTable,
+      exportSpec: action === 'export_excel' ? turnExportSpec : null,
     };
     newTurn.thinkingSummary =
       (lastBackendAssistantTurn?.thinkingSummary || '').trim() ||
@@ -1381,7 +1386,7 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
 
     // Thực thi hành động hội thoại trên dữ liệu thật
     if (action === 'export_excel') {
-      this.exportProjectExcelFromChat();
+      void this.exportProjectExcelFromChat(turnExportSpec);
     } else if (action === 'push_backlog') {
       void this.commitToBacklogProposal();
     } else if (action === 'apply_sprint') {
@@ -1588,6 +1593,7 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
         durationMs: h.durationMs ?? null,
         thoughts: h.thoughts ?? null,
         referencedMemoryAnchors: h.referencedMemoryAnchors ?? [],
+        exportSpec: h.exportSpec ?? null,
       };
       if (turn.role === 'agent' && !turn.thinkingSummary && ((turn.traceItems?.length ?? 0) > 0 || (turn.durationMs ?? 0) > 0)) {
         turn.thinkingSummary = this.buildFallbackThinkingSummary(turn);
@@ -1635,14 +1641,46 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
     this.scrollChatToBottom();
   }
 
-  /** Xuất tệp Excel từ dữ liệu thật đang lưu trong dự án (Sprint + kho Backlog), không trộn dữ liệu đề xuất chưa lưu */
-  exportProjectExcelFromChat(): void {
+  /** Xuất tệp Excel theo đúng phạm vi, bộ lọc hoặc chế độ chi tiết mà Trợ Lý AI đã phân tích cho lượt hội thoại này */
+  async exportProjectExcelFromChat(spec?: AiExcelExportSpecDto | null): Promise<void> {
     try {
-      const items = this.projectManagementService.workItems();
+      let items = [...this.projectManagementService.workItems()];
       const allSprints = this.sprints?.length ? this.sprints : this.projectManagementService.sprints();
-      const today = new Date().toISOString().slice(0, 10);
-      const safeKey = (this.projectKey || 'PRJ').replace(/[^\w\-]/g, '');
-      this.excelDataService.exportToExcel(items, `${safeKey}_Bao_Cao_Du_An_${today}.xlsx`, allSprints, this.projectName);
+      const targetDetailId = spec?.scope === 'task_detail' && spec.searchKeyword !== 'ai_proposal'
+        ? spec.issueIds?.[0]
+        : undefined;
+
+      if (targetDetailId) {
+        try {
+          const freshItem = await firstValueFrom(this.projectManagementService.getIssue(targetDetailId));
+          if (freshItem?.id) {
+            const exists = items.some((i) => i.id?.toLowerCase() === freshItem.id.toLowerCase());
+            items = exists
+              ? items.map((i) => (i.id?.toLowerCase() === freshItem.id.toLowerCase() ? freshItem : i))
+              : [...items, freshItem];
+          }
+        } catch {
+          // Bỏ qua lỗi mạng nếu dữ liệu đã có sẵn trong tín hiệu cục bộ
+        }
+      }
+
+      const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const safeKey = (this.projectKey || 'ProjectMgmt').replace(/[^\w\-]/g, '');
+      const effectiveSpec: AiExcelExportSpecDto = spec ?? {
+        scope: 'project_all',
+        title: `BÁO CÁO TỔNG HỢP DỰ ÁN - ${(this.projectName || safeKey).toUpperCase()}`,
+        suggestedFileName: `${safeKey}_Bao_Cao_Du_An_${today}.xlsx`,
+        includeSubtasks: true,
+        includeLegend: true,
+      };
+
+      const res = this.excelDataService.exportFromAiSpec(items, allSprints, effectiveSpec, {
+        projectName: this.projectName || safeKey,
+        projectKey: safeKey,
+        projectStatuses: this.projectManagementService.projectStatuses(),
+        proposal: this.proposal(),
+      });
+      this.toastService.success('Xuất Excel thành công', `Đã tạo tệp ${res.filename} (${res.itemCount} mục).`);
     } catch {
       this.errorMessage.set('Không thể tạo tệp Excel từ dữ liệu dự án. Vui lòng thử lại.');
     }

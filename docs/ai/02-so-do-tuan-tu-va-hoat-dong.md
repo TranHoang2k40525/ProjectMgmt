@@ -143,7 +143,7 @@ flowchart TD
     GuardIntent -- "Ngoài phạm vi Quản lý Dự án" --> RefuseOut["RÀO CHẮN NGOÀI LUỒNG\n- Từ chối lịch sự ngoài phạm vi công cụ\n- Bảo toàn nguyên vẹn đề xuất và lịch sử phiên"]
     RefuseOut --> SaveDual
 
-    GuardIntent -- "Xuất tệp Excel Dự án" --> ExportExcel["KÍCH HOẠT XUẤT EXCEL\n- Ghi nhận lượt xác nhận vào lịch sử hội thoại\n- Phát tín hiệu tải tệp Excel dự án về giao diện"]
+    GuardIntent -- "Xuất tệp Excel Theo Ngữ Cảnh" --> ExportExcel["PHÂN GIẢI PHẠM VI & XUẤT EXCEL CHUẨN HỆ THỐNG\n- Đối chiếu đúng Sprint, Backlog, việc lẻ, chi tiết, bộ lọc hay đề xuất\n- Từ chối trung thực nếu dữ liệu không tồn tại/trống; gắn đặc tả xuất vào lượt chat"]
     ExportExcel --> SaveDual
 
     GuardIntent -- "Đẩy Kho Backlog hoặc Áp dụng Sprint qua Chat" --> AutoTrigger["PHÁT LỆNH THỰC THI TRỰC TIẾP\n- Kiểm tra danh sách công việc đã có trong phiên\n- Gắn cờ kích hoạt thao tác tương ứng"]
@@ -228,6 +228,8 @@ Hệ thống giải quyết triệt để thông qua bộ phân tách loại chu
 | :--- | :--- | :--- |
 | **AiAgentController** | Tiếp nhận SSE theo `sessionId`, khóa phạm vi 3 chiều, khôi phục/xóa phiên & commit Sprint/Kho Backlog | [`AiAgentController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/AiAgentController.cs) |
 | **AiSprintDecompositionService** | Trợ Lý AI có trạng thái: định tuyến ý định, Selective MCP, Thinking trace & prompt engineering | [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs) |
+| **AiExcelExportResolver** | Phân giải thông minh phạm vi xuất Excel (Sprint, Backlog, Việc lẻ, Chi tiết, Đề xuất, Bộ lọc) & kiểm tra tồn tại thực thể | [`AiExcelExportResolver.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiExcelExportResolver.cs) |
+| **ExcelDataService** | Bộ sinh OpenXML `.xlsx` bảng sạch chuẩn ProjectMgmt (màu trạng thái động + bảng Chú thích + hồ sơ chi tiết) | [`excel-data.service.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/core/services/excel-data.service.ts) |
 | **AiIndexedMemoryEngine** | Lập kế hoạch gọi MCP chọn lọc và truy xuất chỉ mục trí nhớ `#mem-1..#mem-n` | [`AiIndexedMemoryEngine.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiIndexedMemoryEngine.cs) |
 | **AiConversationSessionStore** | Lưu trữ & khôi phục phiên đa lượt trong MySQL kèm khóa `(OrganizationId, ProjectId, UserId)` | [`AiConversationSessionStore.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiConversationSessionStore.cs) |
 | **AiSsePayloads & Proposal DTOs** | Lược đồ SSE `tool_call` (`ActionVerb`, `TargetLabel`, `DetailPreview`) và `AiTurnTraceItemDto` | [`AiSsePayloads.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Dtos/Ai/AiSsePayloads.cs) |

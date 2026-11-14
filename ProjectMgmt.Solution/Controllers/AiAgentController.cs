@@ -484,6 +484,7 @@ public class AiAgentController : ControllerBase
             AssistantReply = source.AssistantReply,
             RecommendedTarget = source.RecommendedTarget,
             TriggerAction = source.TriggerAction,
+            ExportSpec = source.ExportSpec,
             ConversationHistory = slicedHistory,
             IndexedMemories = source.IndexedMemories,
             Tags = source.Tags,

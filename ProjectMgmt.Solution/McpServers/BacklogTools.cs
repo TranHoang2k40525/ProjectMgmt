@@ -253,4 +253,180 @@ public class BacklogTools
     {
         return await GetStoriesAsync(scope.ProjectId, scope, ct);
     }
+
+    /// <summary>
+    /// Nạp siêu dữ liệu thực tế của Sprint, Công việc, Epic và Thành viên trong phạm vi dự án để đối chiếu phạm vi xuất Excel.
+    /// </summary>
+    public async Task<ProjectExportMetadataResult?> GetExportMetadataAsync(
+        Guid projectId,
+        IProjectScopeContext scope,
+        IReadOnlyDictionary<Guid, string>? memberNamesById = null,
+        CancellationToken ct = default)
+    {
+        if (projectId == Guid.Empty)
+        {
+            return null;
+        }
+
+        ProjectScopeGuard.ValidateProject(scope, projectId);
+
+        var project = await _planning.Projects.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == projectId && !p.IsDeleted, ct);
+        if (project == null)
+        {
+            return null;
+        }
+
+        ProjectScopeGuard.Validate(scope, project.OrgId, projectId);
+
+        var projectKey = string.IsNullOrWhiteSpace(project.ProjectKey) ? "PRJ" : project.ProjectKey.Trim();
+        var config = await ProjectActiveConfigResolver.ResolveAsync(_planning, _delivery, projectId, ct);
+
+        var issueTypeById = config.IssueTypes.ToDictionary(t => t.Id, t => t);
+        var statusNameById = config.Statuses.ToDictionary(s => s.Id, s => s.Name);
+        var priorityNameById = config.Priorities.ToDictionary(p => p.Id, p => p.Name);
+
+        var sprints = await _planning.Sprints.AsNoTracking()
+            .Where(s => s.ProjectId == projectId)
+            .OrderBy(s => s.OrderIndex)
+            .ThenBy(s => s.StartDate)
+            .ToListAsync(ct);
+
+        var sprintById = sprints.ToDictionary(s => s.Id, s => s);
+
+        var rawIssues = await _delivery.Issues.AsNoTracking()
+            .Where(i => i.ProjectId == projectId && !i.IsDeleted)
+            .OrderBy(i => i.RankOrder)
+            .ThenBy(i => i.IssueNumber)
+            .ToListAsync(ct);
+
+        var epicIdSet = new HashSet<Guid>();
+        if (config.EpicType != null)
+        {
+            epicIdSet.Add(config.EpicType.Id);
+        }
+
+        var epicTitleById = new Dictionary<Guid, string>();
+        foreach (var issue in rawIssues)
+        {
+            bool isEpic = epicIdSet.Contains(issue.IssueTypeId) ||
+                          (issueTypeById.TryGetValue(issue.IssueTypeId, out var tInfo) &&
+                           tInfo.Name.Equals("Epic", StringComparison.OrdinalIgnoreCase));
+            if (isEpic)
+            {
+                epicTitleById[issue.Id] = issue.Title;
+            }
+        }
+
+        var issueSummaries = rawIssues.Select(i =>
+        {
+            var typeInfo = issueTypeById.GetValueOrDefault(i.IssueTypeId);
+            var typeName = typeInfo?.Name ?? "Story";
+            var isEpic = typeName.Equals("Epic", StringComparison.OrdinalIgnoreCase);
+            var sprintName = i.SprintId.HasValue && sprintById.TryGetValue(i.SprintId.Value, out var sp)
+                ? sp.Name
+                : null;
+            var epicTitle = i.EpicId.HasValue ? epicTitleById.GetValueOrDefault(i.EpicId.Value) : null;
+            var statusName = statusNameById.GetValueOrDefault(i.StatusId, config.InitialStatusName);
+            var prioName = i.PriorityId.HasValue
+                ? priorityNameById.GetValueOrDefault(i.PriorityId.Value, config.GetDefaultPriorityName())
+                : config.GetDefaultPriorityName();
+            var assigneeName = i.AssigneeId.HasValue && memberNamesById != null
+                ? memberNamesById.GetValueOrDefault(i.AssigneeId.Value)
+                : null;
+
+            return new ExportIssueMetadata(
+                i.Id,
+                $"{projectKey}-{i.IssueNumber}",
+                i.IssueNumber,
+                i.ParentId,
+                i.SprintId,
+                sprintName,
+                i.EpicId,
+                epicTitle,
+                i.Title,
+                typeName,
+                isEpic,
+                typeInfo?.IsSubtask ?? false,
+                statusName,
+                prioName,
+                i.StoryPoints ?? 0m,
+                i.IsBlocked,
+                i.BlockReason,
+                i.AssigneeId,
+                assigneeName);
+        }).ToList();
+
+        var parentCountBySprint = issueSummaries
+            .Where(i => i.SprintId.HasValue && !i.IsEpic && i.ParentId == null)
+            .GroupBy(i => i.SprintId!.Value)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        var sprintSummaries = sprints.Select(s => new ExportSprintMetadata(
+            s.Id,
+            s.Name,
+            s.Goal,
+            (s.Status ?? "future").Trim().ToLowerInvariant(),
+            s.OrderIndex,
+            s.StartDate,
+            s.EndDate,
+            parentCountBySprint.GetValueOrDefault(s.Id, 0))).ToList();
+
+        var memberList = (memberNamesById ?? new Dictionary<Guid, string>())
+            .Where(kv => !string.IsNullOrWhiteSpace(kv.Value))
+            .Select(kv => new ExportMemberMetadata(kv.Key, kv.Value.Trim()))
+            .OrderBy(m => m.DisplayName)
+            .ToList();
+
+        return new ProjectExportMetadataResult(
+            projectKey,
+            project.Name,
+            sprintSummaries,
+            issueSummaries,
+            memberList,
+            epicTitleById.Values.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToList());
+    }
 }
+
+public sealed record ExportSprintMetadata(
+    Guid Id,
+    string Name,
+    string? Goal,
+    string Status,
+    int OrderIndex,
+    DateOnly? StartDate,
+    DateOnly? EndDate,
+    int ParentItemCount);
+
+public sealed record ExportIssueMetadata(
+    Guid Id,
+    string IssueKey,
+    int IssueNumber,
+    Guid? ParentId,
+    Guid? SprintId,
+    string? SprintName,
+    Guid? EpicId,
+    string? EpicTitle,
+    string Title,
+    string IssueType,
+    bool IsEpic,
+    bool IsSubtask,
+    string StatusName,
+    string Priority,
+    decimal StoryPoints,
+    bool IsBlocked,
+    string? BlockReason,
+    Guid? AssigneeUserId,
+    string? AssigneeName);
+
+public sealed record ExportMemberMetadata(
+    Guid UserId,
+    string DisplayName);
+
+public sealed record ProjectExportMetadataResult(
+    string ProjectKey,
+    string ProjectName,
+    IReadOnlyList<ExportSprintMetadata> Sprints,
+    IReadOnlyList<ExportIssueMetadata> Issues,
+    IReadOnlyList<ExportMemberMetadata> Members,
+    IReadOnlyList<string> Epics);

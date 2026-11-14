@@ -58,7 +58,7 @@ flowchart TD
 1. [**Chuyên đề 1: Kiến trúc Tổng quan & Sơ đồ Use Case**](file:///c:/Users/hoang/Downloads/ProjectMgmt/docs/ai/01-kien-truc-tong-quan-va-use-case.md)
    - Khái niệm & Bài toán cốt lõi trong Scrum Agile; nâng cấp thành **Trợ Lý AI** hội thoại có trạng thái đa tầng (**Redis + MySQL Session Persistence**).
    - Clean Architecture & Modular Monolith kết hợp Module AI; **Rào chắn Phạm vi Nghiệp vụ** (từ chối yêu cầu ngoài luồng) & **Định tuyến Ngữ cảnh Chọn lọc (Selective MCP Routing)**.
-   - Sơ đồ Use Case tổng quát (Mermaid) gồm lập kế hoạch Sprint/Backlog, hỏi đáp dự án, truy xuất trí nhớ đánh chỉ mục `#mem-X`, xuất Excel qua hội thoại, đẩy Kho Backlog, **Tạo mới (không xóa phiên cũ)** và **Xóa phiên cũ có kiểm soát**.
+   - Sơ đồ Use Case tổng quát (Mermaid) gồm lập kế hoạch Sprint/Backlog, hỏi đáp dự án, truy xuất trí nhớ đánh chỉ mục `#mem-X`, xuất Excel đúng ngữ cảnh (Sprint, Backlog, Việc lẻ, Chi tiết, Bộ lọc, Đề xuất) qua hội thoại, đẩy Kho Backlog, **Tạo mới (không xóa phiên cũ)** và **Xóa phiên cũ có kiểm soát**.
    - Kiến trúc Đa nhà cung cấp (Multi-Provider Model Client): Gemini 3.6/3.5 Flash, Claude 3.7 Sonnet, OpenAI GPT-4o, Local Ollama.
    - Quy chuẩn Bảo mật Tuyệt đối: Zero-Secret-Leakage & Khóa chặt Phạm vi Tổ chức - Dự án - Người dùng (`OrganizationId`, `ProjectId`, `UserId`).
 
@@ -101,6 +101,7 @@ flowchart TD
 | :--- | :--- | :--- |
 | **AiAgentController** | API Controller phục vụ SSE stream theo `sessionId`, staging, khôi phục phiên, xóa phiên cũ & commit Sprint/Backlog | [`AiAgentController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/AiAgentController.cs) |
 | **AiSprintDecompositionService** | Trợ Lý AI hội thoại có trạng thái: phân loại ý định, rào chắn ngoài luồng, Selective MCP Routing, trace suy nghĩ & RAG | [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs) |
+| **AiExcelExportResolver** | Bộ phân giải thông minh phạm vi xuất Excel theo ngữ cảnh hội thoại (Sprint, Backlog, Task, Chi tiết, Bộ lọc, Đề xuất) & xác thực tồn tại | [`AiExcelExportResolver.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiExcelExportResolver.cs) |
 | **AiIndexedMemoryEngine** | Động cơ lập kế hoạch thực thi chọn lọc (Selective MCP) và truy xuất chỉ mục trí nhớ `#mem-1..#mem-n` | [`AiIndexedMemoryEngine.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiIndexedMemoryEngine.cs) |
 | **AiConversationSessionStore** | Kho lưu trữ phiên hội thoại bền vững trên MySQL + khóa chặt `(OrganizationId, ProjectId, UserId)` + bù lạnh Redis | [`AiConversationSessionStore.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiConversationSessionStore.cs) |
 | **AiConversationSession & MemoryEntry** | Thực thể miền lưu trữ phiên chat hoàn chỉnh và các mảnh trí nhớ đánh chỉ mục trong MySQL | [`AiConversationSession.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Modules.DeliveryIntelligence/Domain/Entities/AiConversationSession.cs) |
@@ -119,6 +120,7 @@ flowchart TD
 | **ProjectMgmt.McpServer** | Ứng dụng Console Stdio JSON-RPC phục vụ Agent ngoài | [`Program.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.McpServer/Program.cs) |
 | **ai-agent.service.ts** | Service Angular kết nối SSE stream (`sessionId`), áp dụng Sprint / đẩy Backlog, **xóa phiên cũ (`deleteSession`)** & 401 refresh | [`ai-agent.service.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/core/services/ai-agent.service.ts) |
 | **ai-decompose-modal.ts** | Component giao diện **Trợ Lý AI** hội thoại 2 phía, **Thinking Accordion mặc định luôn đóng**, nút **Tạo mới**, khôi phục & xóa phiên cũ | [`ai-decompose-modal.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.ts) |
+| **excel-data.service.ts** | Bộ sinh tệp `.xlsx` OpenXML bảng sạch chuẩn ProjectMgmt (màu trạng thái động + bảng Chú thích + hồ sơ chi tiết việc & xuất theo phạm vi AI) | [`excel-data.service.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/core/services/excel-data.service.ts) |
 | **ai-decompose-modal.html** | Template đoạn hội thoại Trợ Lý AI (trái) & Tôi (phải) liền mạch, khối Thinking tông sáng tối giản & danh sách lịch sử có nút xóa | [`ai-decompose-modal.html`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.html) |
 | **profile-page.html** | Dashboard quản lý mức tiêu thụ Token AI và chi phí vận hành | [`profile-page.html`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/identity/profile-page.html) |
 | **spec-hub-page.ts** | Giao diện Spec Hub hỗ trợ mở đúng vị trí phân đoạn trích dẫn | [`spec-hub-page.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/spec-hub/spec-hub-page.ts) |
@@ -153,7 +155,7 @@ Module AI được nâng cấp từ công cụ phân rã đơn lượt thành **
 - **Lưu trữ Phiên Hội thoại Đích thực Trong MySQL + Redis Hot Cache & Phân trang Kiểu Messenger**: Mỗi cuộc hội thoại hoàn chỉnh (kèm lịch sử đa lượt, log thao tác `TraceItems`, tóm tắt suy nghĩ `ThinkingSummary`, bản đề xuất `ProposalJson` và các mảnh trí nhớ đánh chỉ mục `#mem-1..#mem-n`) được lưu bền vững vào MySQL, gắn chặt theo bộ ba **`(OrganizationId, ProjectId, UserId)`** để tuyệt đối không nhầm lẫn giữa các dự án hay tổ chức khác nhau. Khi mở lại phiên cũ, hệ thống áp dụng **phân trang ngược kiểu Messenger** (`tailLimit=12` và `GET /api/ai/agent/sessions/{sessionId}/messages`) đồng thời **tự động cuộn ngay xuống tin nhắn mới nhất** và giữ nguyên vị trí đọc khi cuộn lên tải thêm tin cũ để tránh tràn RAM trình duyệt. Khi Redis hết hạn/lạnh, hệ thống tự động khôi phục từ MySQL và nạp lại lên Redis (**Cold-Redis Re-hydration**).
 - **Nút "Tạo mới" Không Phá Hủy & Quản lý Xóa Phiên Cũ**: Nút **"Tạo mới"** trên thanh tiêu đề chỉ bắt đầu khung hội thoại mới sạch sẽ trên giao diện mà **không xóa phiên cũ** trong lịch sử. Người dùng có thể mở lại bất kỳ phiên cũ nào để trò chuyện tiếp, hoặc chủ động bấm **Xóa** phiên cũ khỏi cơ sở dữ liệu ngay trong danh sách lịch sử phiên.
 - **Rào chắn Phạm vi Nghiệp vụ (Out-of-Scope Domain Guardrail)**: Trợ Lý AI chỉ phục vụ nghiệp vụ quản lý dự án (lập kế hoạch Sprint/Backlog, phân rã Story/Task, hỏi đáp số liệu dự án, xuất Excel, điều phối thành viên & workflow). Mọi yêu cầu ngoài luồng (viết thơ, code bài tập rời rạc, tư vấn đời sống, hỏi đáp ngoài công cụ quản lý dự án) đều bị từ chối lịch sự ngay tức thì (`Intent = "out_of_scope_refusal"`) mà vẫn giữ nguyên bản đề xuất hiện có.
-- **Hành động Hội thoại Trực tiếp (Xuất Excel & Đẩy Kho Backlog)**: Hỗ trợ xuất tệp Excel toàn bộ dữ liệu dự án (`TriggerAction = "export_excel"`) hoặc đẩy trực tiếp toàn bộ công việc đề xuất vào **Kho Product Backlog** (`PushToBacklog = true`, `SprintId = null`) ngay trong cuộc hội thoại hoặc qua nút thao tác trực tiếp cạnh nút **Áp dụng vào Sprint**.
+- **Hành động Hội thoại Trực tiếp (Xuất Excel Đúng Ngữ Cảnh & Đẩy Kho Backlog)**: Hỗ trợ phân giải thông minh yêu cầu xuất Excel theo đúng phạm vi người dùng chỉ định (`single_sprint`, `sprint_list`, `backlog_only`, `single_task`, `task_detail`, `filtered_tasks`, `ai_proposal`, `project_all`) hoặc từ chối trung thực nếu Sprint/Công việc/Thành viên không tồn tại hay bộ lọc rỗng (`TriggerAction = "none"`); tệp `.xlsx` trình bày dạng bảng sạch chuẩn ProjectMgmt (không nhãn công cụ ngoài, không banner tối màu), chỉ tô màu ô Trạng thái theo bảng màu quy trình động + cột/bảng Chú thích. Hỗ trợ đẩy trực tiếp công việc đề xuất vào **Kho Product Backlog** (`PushToBacklog = true`, `SprintId = null`) qua chat hoặc nút thao tác cạnh **Áp dụng vào Sprint**.
 - **Tiếp nhận đa kênh**: Hỗ trợ đính kèm file Word, Excel, PDF, Text hoặc dán trực tiếp ghi chú cuộc họp vào ô nhập liệu tự co giãn.
 - **RAG & MCP Grounding**: Tự động truy xuất kho tài liệu đặc tả dự án (**Spec Hub**) qua giao thức MCP khi cần thiết, đối chiếu số liệu Backlog, vận tốc Sprint trước, cấu hình Workflow/Priority/IssueType/Labels đang áp dụng và kỹ năng từng thành viên.
 - **Phân tách thực tế & Không giới hạn quy mô**: Bóc tách tự nhiên theo cấu trúc sản phẩm và biên bản họp, không bị gò bó bởi giới hạn cứng về số lượng task hay subtask. Phân biệt chuẩn xác bản chất Scrum giữa **User Story (`Story`)** (nhu cầu/giá trị dưới góc nhìn người dùng, được phân rã thành các đầu việc kỹ thuật khả thi), **Task** (công việc kỹ thuật độc lập) và **Bug** (lỗi cần khắc phục).
@@ -259,7 +261,7 @@ flowchart LR
         UC9["Hiệu chỉnh trực tiếp Tiêu đề, Điểm số, Nhân sự"]
         UC10["Phê duyệt Áp dụng Kế hoạch vào Sprint"]
         UC15["Đẩy Danh sách Công việc Vào Kho Product Backlog"]
-        UC16["Yêu cầu Xuất Tệp Excel Dự án Qua Hội thoại"]
+        UC16["Xuất Excel Đúng Ngữ Cảnh (Sprint, Backlog, Việc Lẻ, Chi Tiết, Đề Xuất)"]
         UC17["Hỏi đáp Trực tiếp Về Số liệu & Gọi Công cụ Chọn lọc"]
         UC18["Từ chối Tự động Yêu cầu Ngoài Phạm vi Dự án"]
         UC11["Truy vấn Dữ liệu Dự án qua Giao thức Mở rộng"]
@@ -458,7 +460,7 @@ Thay thế các thẻ khối rời rạc có viền màu cạnh trái trước �
     - Khi hoàn tất thành công: hiển thị biểu tượng xác nhận màu xanh ngọc (`check_circle`) cùng tóm tắt ngắn gọn (`Đã suy nghĩ xong trong X.Xs · N thao tác`) và mũi tên mở rộng.
     - Trạng thái thu gọn/mở rộng (`isThinkingExpanded`) luôn mặc định bằng `false` ở mọi thời điểm (đang stream, sau khi hoàn tất và khi khôi phục lại từ lịch sử).
     - Khi người dùng chủ động mở rộng: hiển thị từng bước hành động theo dòng thời gian (`actionVerb`, `target`, `summary`, `durationMs`, có thể nhấp từng dòng để xem chi tiết thực thi), các chip trí nhớ `#mem-X` vừa nạp và suy luận tổng hợp sạch sẽ.
-  - Phần giải thích tự nhiên (`assistantReply`), nút tải lại tệp Excel khi vừa xuất qua chat, và bảng công việc đề xuất tích hợp ngay bên dưới (chỉ rõ mục tiêu Sprint hoặc **Kho Product Backlog** kèm nút **Đẩy vào Kho Backlog** và **Áp dụng vào Sprint**).
+  - Phần giải thích tự nhiên (`assistantReply`), nút tải lại đúng tệp Excel theo `ExportSpec` gắn riêng cho từng lượt hỏi (tự động nạp đủ bình luận/tiêu chí mới nhất khi xuất hồ sơ chi tiết `task_detail`), và bảng công việc đề xuất tích hợp ngay bên dưới (chỉ rõ mục tiêu Sprint hoặc **Kho Product Backlog** kèm nút **Đẩy vào Kho Backlog** và **Áp dụng vào Sprint**).
 - **Bên phải — Tôi (Người dùng)**: Hiển thị tin nhắn yêu cầu, tệp đính kèm và liên kết mở xem nội dung văn bản đã gửi trong ngăn trượt riêng biệt.
 - **Thanh Tiêu Đề: Nút "Tạo mới" & Lịch Sử Phiên Phân Trang Kiểu Messenger**:
   - Nút **"Tạo mới"** chỉ khởi tạo một phiên trò chuyện mới sạch sẽ trên giao diện mà **tuyệt đối không xóa sạch các phiên làm việc đã lưu** trong cơ sở dữ liệu.
@@ -623,7 +625,7 @@ flowchart TD
     GuardIntent -- "Ngoài phạm vi Quản lý Dự án" --> RefuseOut["RÀO CHẮN NGOÀI LUỒNG\n- Từ chối lịch sự ngoài phạm vi công cụ\n- Bảo toàn nguyên vẹn đề xuất và lịch sử phiên"]
     RefuseOut --> SaveDual
 
-    GuardIntent -- "Xuất tệp Excel Dự án" --> ExportExcel["KÍCH HOẠT XUẤT EXCEL\n- Ghi nhận lượt xác nhận vào lịch sử hội thoại\n- Phát tín hiệu tải tệp Excel dự án về giao diện"]
+    GuardIntent -- "Xuất tệp Excel Theo Ngữ Cảnh" --> ExportExcel["PHÂN GIẢI PHẠM VI & XUẤT EXCEL CHUẨN HỆ THỐNG\n- Đối chiếu đúng Sprint, Backlog, việc lẻ, chi tiết, bộ lọc hay đề xuất\n- Từ chối trung thực nếu dữ liệu không tồn tại/trống; gắn đặc tả xuất vào lượt chat"]
     ExportExcel --> SaveDual
 
     GuardIntent -- "Đẩy Kho Backlog hoặc Áp dụng Sprint qua Chat" --> AutoTrigger["PHÁT LỆNH THỰC THI TRỰC TIẾP\n- Kiểm tra danh sách công việc đã có trong phiên\n- Gắn cờ kích hoạt thao tác tương ứng"]
@@ -708,6 +710,8 @@ Hệ thống giải quyết triệt để thông qua bộ phân tách loại chu
 | :--- | :--- | :--- |
 | **AiAgentController** | Tiếp nhận SSE theo `sessionId`, khóa phạm vi 3 chiều, khôi phục/xóa phiên & commit Sprint/Kho Backlog | [`AiAgentController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/AiAgentController.cs) |
 | **AiSprintDecompositionService** | Trợ Lý AI có trạng thái: định tuyến ý định, Selective MCP, Thinking trace & prompt engineering | [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs) |
+| **AiExcelExportResolver** | Phân giải thông minh phạm vi xuất Excel (Sprint, Backlog, Việc lẻ, Chi tiết, Đề xuất, Bộ lọc) & kiểm tra tồn tại thực thể | [`AiExcelExportResolver.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiExcelExportResolver.cs) |
+| **ExcelDataService** | Bộ sinh OpenXML `.xlsx` bảng sạch chuẩn ProjectMgmt (màu trạng thái động + bảng Chú thích + hồ sơ chi tiết) | [`excel-data.service.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/core/services/excel-data.service.ts) |
 | **AiIndexedMemoryEngine** | Lập kế hoạch gọi MCP chọn lọc và truy xuất chỉ mục trí nhớ `#mem-1..#mem-n` | [`AiIndexedMemoryEngine.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiIndexedMemoryEngine.cs) |
 | **AiConversationSessionStore** | Lưu trữ & khôi phục phiên đa lượt trong MySQL kèm khóa `(OrganizationId, ProjectId, UserId)` | [`AiConversationSessionStore.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiConversationSessionStore.cs) |
 | **AiSsePayloads & Proposal DTOs** | Lược đồ SSE `tool_call` (`ActionVerb`, `TargetLabel`, `DetailPreview`) và `AiTurnTraceItemDto` | [`AiSsePayloads.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Dtos/Ai/AiSsePayloads.cs) |
@@ -1047,7 +1051,7 @@ Bên cạnh bộ nhớ đề xuất tức thời (Staging Session), hệ thống
 ### 6.1. Quản lý Lịch sử Phiên Phân rã Dự án (Project Session Memory)
 - **Cơ chế hoạt động**: Mỗi phiên hội thoại hoàn chỉnh được lưu đồng bộ vào bảng `AiConversationSessions` (gắn chặt `OrganizationId`, `ProjectId`, `UserId`, `Title`, `TurnCount`, `MemoryCount`, `LastIntent`, `UpdatedAtUtc`) và các mảnh trí nhớ đánh chỉ mục `AiConversationMemoryEntries` (`#mem-1`, `#mem-2`, ...). Bản tóm tắt phiên [`AiSessionSummary`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/IAiTokenUsageTracker.cs) trả về đầy đủ số lượt trao đổi và số mảnh trí nhớ đã lập chỉ mục.
 - **Hệ thống Đánh Chỉ Mục Trí Nhớ (`AiIndexedMemoryEngine.cs` & `#mem-X`)**:
-  - Mỗi lượt hội thoại hoặc câu trả lời phân tích quan trọng được tách thành nút trí nhớ có mã định danh (`AnchorKey = "#mem-1"`, `Category`, `Title`, `Keywords`, `Summary`, `DetailContent`).
+  - Mỗi lượt hội thoại hoặc câu trả lời phân tích quan trọng được tách thành nút trí nhớ có mã định danh (`AnchorKey = "#mem-1"`, `Category`, `Title`, `Keywords`, `Summary`, `DetailContent`). Các lượt xuất Excel còn lưu kèm đặc tả phạm vi riêng (`ExportSpec` trong `AiConversationTurnDto`) để nút tải lại tệp trên từng tin nhắn cũ luôn xuất đúng phạm vi gốc của lượt đó.
   - Ở các lượt hỏi nối tiếp, thay vì nhồi toàn bộ lịch sử trò chuyện thô vào Prompt gây loãng suy luận, [`AiIndexedMemoryEngine.SelectRelevantMemories`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiIndexedMemoryEngine.cs) đối chiếu từ khóa câu hỏi (hoặc tham chiếu trực tiếp `#mem-1`) để **trỏ thẳng vào đúng 1–3 mảnh trí nhớ liên quan nhất**.
 - **Khôi phục & Xóa Phiên Cũ (Session History Restore, Messenger Reverse Pagination & Delete)**:
   - Trên thanh tiêu đề của Modal **Trợ Lý AI** có biểu tượng **Lịch sử phiên (đồng hồ)**.
@@ -1561,7 +1565,8 @@ Dán dòng JSON sau vào terminal và nhấn Enter:
 | **SpecHubTools** | Công cụ đọc và tìm kiếm tài liệu đặc tả Spec Hub | [`SpecHubTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SpecHubTools.cs#L45-L100) |
 | **BacklogTools** | Công cụ truy vấn cấu hình dự án (`project_get_active_config`) và hạng mục Backlog (`backlog_get_stories`) | [`BacklogTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/BacklogTools.cs#L35-L75) |
 | **SprintTools** | Công cụ tính toán vận tốc (Velocity) và hạng mục dở dang theo trạng thái `IsDone` thực tế | [`SprintTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SprintTools.cs#L30-L70) |
-| **TeamTools** | Công cụ phân tích hồ sơ chuyên môn và số giờ làm việc | [`TeamTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/TeamTools.cs#L30-L70) |
+| **TeamTools** | Công cụ phân tích hồ sơ chuyên môn, số giờ làm việc & ánh xạ tên hiển thị an toàn không lộ bí mật (`GetProjectMemberDisplayNamesAsync`) | [`TeamTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/TeamTools.cs#L30-L70) |
+| **AiExcelExportResolver** | Bộ phân giải phạm vi xuất Excel thông minh từ siêu dữ liệu MCP/DB & từ chối xuất khống khi thiếu dữ liệu | [`AiExcelExportResolver.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiExcelExportResolver.cs) |
 
 
 
@@ -1817,8 +1822,8 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
 - **Trả lời**:
   1. **Đẩy trực tiếp vào Kho Product Backlog (`PushToBacklog = true`)**:
      - Khi người dùng yêu cầu phân tách đưa vào Kho Backlog (`recommendedTarget = "backlog"`), bấm nút **"Đẩy vào Kho Backlog"**, hoặc nhắn lệnh trực tiếp trong chat (`triggerAction = "push_backlog"`), API `POST /api/ai/agent/apply` (chỉ yêu cầu quyền `issue.create`) chuyển qua `AiSprintCommitCoordinator.ApplySprintProposalAsync` tạo Epics/Tasks/Subtasks với `SprintId = null` mà không sinh Sprint mới, đồng thời xóa danh sách việc vừa đẩy khỏi Redis và bổ sung tin nhắn xác nhận vào `ConversationHistory` để đoạn chat vẫn liền mạch.
-  2. **Xuất tệp Excel ngay trong hội thoại (`triggerAction = "export_excel"`)**:
-     - Khi người dùng yêu cầu *"xuất file excel giúp tôi"* trong đoạn hội thoại (khác với yêu cầu *"tạo task xây dựng tính năng xuất excel"* được bộ phân loại phân biệt rõ), backend trả về `Intent = "export_excel"` và `TriggerAction = "export_excel"`; Angular [`AiDecomposeModalComponent`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.ts) tự động gọi `ExcelDataService` xuất toàn bộ dữ liệu dự án ra file Excel và hiển thị nút tải lại ngay trong tin nhắn Trợ Lý AI.
+  2. **Xuất tệp Excel đúng ngữ cảnh ngay trong hội thoại (`triggerAction = "export_excel"` & `ExportSpec`)**:
+     - Khi người dùng yêu cầu xuất Excel trong đoạn hội thoại (tách biệt hoàn toàn với yêu cầu *"tạo task xuất excel"*, câu hỏi *"làm sao để xuất"*, yêu cầu xuất định dạng khác như PDF/Word, hay chữ `"excel"` nằm bên trong tài liệu SRS đính kèm dài), backend gọi [`AiExcelExportResolver`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiExcelExportResolver.cs) đối chiếu siêu dữ liệu thực tế từ `BacklogTools`/`TeamTools`: phân giải chuẩn xác phạm vi (`single_sprint`, `sprint_list`, `backlog_only`, `single_task`, `task_detail`, `filtered_tasks`, `ai_proposal`, `project_all`) hoặc đại từ quy chiếu (*"task đó"*, *"sprint đó"*). Nếu đối tượng không tồn tại hoặc bộ lọc rỗng, hệ thống **từ chối xuất khống** (`TriggerAction = "none"`); ngược lại gắn `ExportSpec` riêng vào lượt hội thoại và Angular [`ExcelDataService`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/core/services/excel-data.service.ts) tự động sinh tệp `.xlsx` đúng phạm vi kèm nút tải lại cho riêng tin nhắn đó.
   3. **Rào chắn Phạm vi Ngoài luồng (`out_of_scope_refusal`) & Giao diện Hội thoại 2 phía**:
      - Mọi yêu cầu không liên quan đến công cụ quản lý dự án đều được `ClassifyConversationalIntent` chặn lại với phản hồi lịch sự mà không phá hỏng danh sách công việc đang chuẩn bị trong Redis.
      - Trên giao diện [`ai-decompose-modal.html`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.html) & [`ai-decompose-modal.scss`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.scss), khung trả lời của **Trợ Lý AI** đặt bên trái (loại bỏ hoàn toàn đường viền màu cạnh trái và các thẻ lồng ghép đứt đoạn), tin nhắn của **Tôi** đặt bên phải, tích hợp thống nhất bảng công việc đề xuất ngay dưới phản hồi.
@@ -1844,6 +1849,17 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
   3. **Tinh gọn Giao diện Bên ngoài, Giữ Đầy đủ Trong Chi tiết**:
      - Bảng danh sách đề xuất AI lược bỏ các thẻ trích dẫn xanh trên từng dòng cha/con; tiêu đề Sprint ngoài Backlog lược bỏ mục tiêu Sprint/nhãn trạng thái/bộ đếm việc trùng lặp (do đã có đầy đủ trong modal **Chi tiết Sprint**); toàn bộ không gian ngoài được thu gọn hợp lý để ưu tiên nội dung công việc.
 
+### Câu hỏi 8.8: Trợ Lý AI và Giao diện Hệ thống xử lý xuất Excel đa tình huống, định dạng bảng chuẩn ProjectMgmt (không nhãn công cụ ngoài) như thế nào?
+- **Trả lời**:
+  1. **Lắng nghe & Phân Giải Đúng Phạm Vi Yêu Cầu (`AiExcelExportResolver`)**:
+     - Hệ thống không xuất tràn lan toàn bộ dự án khi người dùng chỉ yêu cầu một phần dữ liệu. Bộ phân giải xử lý 8 phạm vi rõ ràng: `single_sprint` (ví dụ *"xuất Sprint 3"*, *"sprint đang chạy"*, *"sprint đã hoàn thành"*), `sprint_list` (nhiều Sprint), `backlog_only` (*"xuất mỗi kho Backlog"*), `single_task` (*"chỉ xuất 1 task QLDA-5"*), `task_detail` (*"xuất nội dung chi tiết của task QLDA-5"* gồm Thông tin chung, Mô tả, Tiêu chí nghiệm thu AC, Việc con, Trích dẫn Spec & Bình luận — tự động gọi API `getIssue` lấy dữ liệu mới nhất khi xuất từ chat), `filtered_tasks` (theo người phụ trách, trạng thái, ưu tiên, loại việc, `IsBlocked`, Epic), `ai_proposal` (bảng nháp AI hoặc 1 task thứ tự trong đề xuất), và `project_all`.
+     - Khi người dùng nêu Sprint, mã công việc hoặc tên thành viên không có thật, hoặc bộ lọc hẹp trả về `0` công việc, Agent **từ chối xuất khống (`TriggerAction = "none"`)** và phản hồi trung thực kèm gợi ý phạm vi hiện có.
+     - Đặc tả `ExportSpec` được lưu riêng theo từng `AiConversationTurnDto` trong Redis và MySQL, giúp các nút tải lại Excel trên lịch sử hội thoại nhiều lượt luôn giữ đúng phạm vi tại thời điểm lượt đó.
+  2. **Định Dạng Bảng Sạch Chuẩn ProjectMgmt & Bảng Chú Thích Trạng Thái Động (`ExcelDataService`)**:
+     - Xóa bỏ 100% nhãn công cụ ngoài (tuyệt đối không dùng `"Jira"` hay `"Bkav eTask & Jira List"` ở tên file, tiêu đề sheet, bộ lọc UI) và loại bỏ hoàn toàn các banner tối màu (`#0F172A`), nền xanh/tím đậm kiểu AI.
+     - Mọi bảng `.xlsx` sinh trực tiếp bằng OpenXML theo phong cách doanh nghiệp tối giản: nền trắng viền xám nhạt (`#CBD5E1`), tiêu đề cột `#F1F5F9`, cố định dòng tiêu đề + AutoFilter, **chỉ tô màu pastel tự pha kết hợp chữ đậm tương phản tại cột Trạng thái** theo đúng `ProjectStatus.colorHex` đang cấu hình trên quy trình dự án (cộng màu cảnh báo nhạt `#FEE2E2` khi `IsBlocked`), đồng thời tự động sinh bảng **CHÚ THÍCH TRẠNG THÁI & KÝ HIỆU (Legend)** ngay cuối mỗi sheet.
+     - Các nút xuất trực tiếp ngoài AI (Backlog tổng/lựa chọn nhiều dòng/đang lọc, từng Sprint cụ thể, Kho Backlog, Danh sách công việc đã lọc, Ngăn kéo Chi tiết công việc) đều chia sẻ cùng bộ sinh OpenXML sạch chuẩn ProjectMgmt này.
+
 ---
 
 ## 9. Bảng Tổng Hợp Tham Chiếu Mã Nguồn Toàn Bộ Module AI
@@ -1852,6 +1868,7 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
 | :--- | :--- | :--- |
 | **API Endpoints & SSE** | `AiAgentController` | [`AiAgentController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/AiAgentController.cs) |
 | **Agent Pipeline & Selective Routing** | `AiSprintDecompositionService` | [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs) |
+| **Phân Giải Phạm Vi Xuất Excel** | `AiExcelExportResolver` | [`AiExcelExportResolver.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiExcelExportResolver.cs) |
 | **Chỉ Mục Trí Nhớ & Selective MCP** | `AiIndexedMemoryEngine` | [`AiIndexedMemoryEngine.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiIndexedMemoryEngine.cs) |
 | **Kho Phiên Hội Thoại MySQL (3D Scope)** | `AiConversationSessionStore` | [`AiConversationSessionStore.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiConversationSessionStore.cs) |
 | **Thực Thể Phiên & Mảnh Nhớ DB** | `AiConversationSession` & `AiConversationMemoryEntry` | [`AiConversationSession.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Modules.DeliveryIntelligence/Domain/Entities/AiConversationSession.cs) |
@@ -1874,6 +1891,7 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
 | **Standalone MCP Server** | `ProjectMgmt.McpServer` | [`Program.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.McpServer/Program.cs) |
 | **Angular SSE Client** | `AiAgentService` | [`ai-agent.service.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/core/services/ai-agent.service.ts) |
 | **Angular Modal Component** | `AiDecomposeModalComponent` | [`ai-decompose-modal.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.ts) |
+| **Angular Excel OpenXML Engine** | `ExcelDataService` | [`excel-data.service.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/core/services/excel-data.service.ts) |
 | **Angular Modal Template** | `AiDecomposeModal Template` | [`ai-decompose-modal.html`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.html) |
 | **Dashboard Token Profile** | `ProfilePageComponent` | [`profile-page.html`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/identity/profile-page.html) |
 | **API Issue & AI Metadata** | `WorkItemsController` | [`WorkItemsController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/WorkItemsController.cs) |

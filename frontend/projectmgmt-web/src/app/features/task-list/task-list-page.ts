@@ -23,7 +23,7 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
             <span class="material-symbols-outlined text-[24px] text-primary">table_rows</span>
             Danh Sách Công Việc (Task List View)
           </h1>
-          <p class="text-sm text-slate-500">Bảng danh sách công việc trực quan kiểu Bkav eTask & Jira List</p>
+          <p class="text-sm text-slate-500">Bảng danh sách công việc trực quan chuẩn ProjectMgmt</p>
         </div>
 
         <div class="flex items-center gap-3">
@@ -402,13 +402,23 @@ export class TaskListPageComponent {
 
   exportExcel(): void {
     const proj = this.projectService.currentProject();
-    const projectKey = proj.projectKey || 'PROJECT';
+    const projectKey = proj.projectKey || 'ProjectMgmt';
+    const projectName = proj.name || projectKey;
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const filtered = this.filteredItems();
     this.excelService.exportToExcel(
-      this.filteredItems(),
-      `${projectKey}_Task_List_Export_${dateStr}.xlsx`,
+      filtered,
+      `${projectKey}_Danh_Sach_Cong_Viec_${dateStr}.xlsx`,
       this.projectService.sprints(),
-      proj.name || projectKey
+      projectName,
+      {
+        scope: 'filtered_tasks',
+        flatOnly: true,
+        title: `DANH SÁCH CÔNG VIỆC ĐANG LỌC (${filtered.length} MỤC) - ${projectName.toUpperCase()}`,
+        projectName,
+        projectKey,
+        projectStatuses: this.projectService.projectStatuses(),
+      }
     );
   }
 }

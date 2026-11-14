@@ -117,6 +117,7 @@
               @if (canManageSprints()) {
                 <button type="button" class="button button-secondary" (click)="toggleSprintStatus(sprint, $event)"><span class="material-symbols-outlined" aria-hidden="true">{{ sprint.status === 'future' ? 'play_arrow' : (sprint.status === 'active' ? 'check_circle' : 'restart_alt') }}</span><span>{{ sprint.status === 'future' ? 'Bắt đầu' : (sprint.status === 'active' ? 'Hoàn thành' : 'Mở lại') }}</span></button>
               }
+              <button type="button" class="button button-secondary" (click)="exportSprintExcel(sprint, $event)" [title]="'Xuất Excel chỉ riêng ' + sprint.name"><span class="material-symbols-outlined" aria-hidden="true">download</span></button>
               <button type="button" class="button button-primary" (click)="toggleInlineCreate(sprint.id)"><span class="material-symbols-outlined" aria-hidden="true">add</span><span>Tạo việc</span></button>
             </div>
           </div>
@@ -238,7 +239,7 @@
         (cdkDropListDropped)="onSprintDrop($event, 'sp-backlog', 'Backlog Pool')"
         class="sprint-section backlog-pool"
       >
-        <div class="sprint-header"><div class="sprint-info"><span class="material-symbols-outlined text-slate-500" aria-hidden="true">inbox</span><div><h2>Backlog</h2><p>{{ backlogPoolItems.length }} công việc</p></div></div><button type="button" class="button button-primary" (click)="toggleInlineCreate('sp-backlog')"><span class="material-symbols-outlined" aria-hidden="true">add</span><span>Tạo việc</span></button></div>
+        <div class="sprint-header"><div class="sprint-info"><span class="material-symbols-outlined text-slate-500" aria-hidden="true">inbox</span><div><h2>Backlog</h2><p>{{ backlogPoolItems.length }} công việc</p></div></div><div class="sprint-actions"><button type="button" class="button button-secondary" (click)="exportBacklogPoolExcel($event)" title="Xuất Excel chỉ riêng Kho Product Backlog"><span class="material-symbols-outlined" aria-hidden="true">download</span></button><button type="button" class="button button-primary" (click)="toggleInlineCreate('sp-backlog')"><span class="material-symbols-outlined" aria-hidden="true">add</span><span>Tạo việc</span></button></div></div>
         @if (activeInlineSprintId() === 'sp-backlog') {
           <div class="inline-create">
             <select (change)="inlineTaskTypeMap['sp-backlog'] = $any($event.target).value" class="type-select" aria-label="Loại công việc">

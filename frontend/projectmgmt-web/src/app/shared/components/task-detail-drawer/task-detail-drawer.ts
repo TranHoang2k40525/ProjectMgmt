@@ -7,6 +7,7 @@ import { ProjectManagementService, WorkItem, ProjectMember } from '../../../core
 import { IdentityService } from '../../../core/services/identity.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { ConfirmDialogService } from '../../../core/services/confirm-dialog.service';
+import { ExcelDataService } from '../../../core/services/excel-data.service';
 import { RealtimeService } from '../../../core/realtime/realtime.service';
 import { resolveAvatarUrl } from '../../../core/utils/avatar.utils';
 import { extractCiteDocName, filterUnlinkedCitations } from '../../../core/utils/spec-citation.util';
@@ -74,6 +75,9 @@ import { extractCiteDocName, filterUnlinkedCitations } from '../../../core/utils
             </div>
 
             <div class="flex items-center gap-1 shrink-0">
+              <button (click)="exportTaskDetailExcel()" class="w-8 h-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 flex items-center justify-center transition-colors cursor-pointer" title="Xuất chi tiết công việc ra Excel (.xlsx)">
+                <span class="material-symbols-outlined text-[18px]">download</span>
+              </button>
               <button (click)="cloneTask()" class="w-8 h-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 flex items-center justify-center transition-colors cursor-pointer" title="Nhân bản">
                 <span class="material-symbols-outlined text-[18px]">content_copy</span>
               </button>
@@ -779,6 +783,7 @@ export class TaskDetailDrawerComponent implements OnDestroy {
   private readonly identityService = inject(IdentityService);
   private readonly toastService = inject(ToastService);
   private readonly confirmDialog = inject(ConfirmDialogService);
+  private readonly excelService = inject(ExcelDataService);
   private readonly aiApi = inject(AiBreakdownApi, { optional: true });
   private readonly realtimeService = inject(RealtimeService, { optional: true });
   private readonly cdr = inject(ChangeDetectorRef);
@@ -1328,6 +1333,18 @@ export class TaskDetailDrawerComponent implements OnDestroy {
   cancelSubtaskComposer(): void {
     this.newSubtaskTitle.set('');
     this.isSubtaskComposerOpen.set(false);
+  }
+
+  exportTaskDetailExcel(): void {
+    if (!this.task) return;
+    const projName = this.projectService.currentProject()?.name || 'ProjectMgmt Enterprise';
+    const result = this.excelService.exportSingleTaskDetail(
+      this.task,
+      this.projectService.workItems(),
+      projName,
+      this.projectService.projectStatuses()
+    );
+    this.toastService.success('Xuất chi tiết công việc', `Đã tải xuống hồ sơ Excel: ${result.filename}`);
   }
 
   cloneTask(): void {

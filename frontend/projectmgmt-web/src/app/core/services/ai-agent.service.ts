@@ -68,6 +68,38 @@ export interface AiTurnTraceItemDto {
   status: string;
 }
 
+export interface AiExcelExportSpecDto {
+  scope:
+    | 'project_all'
+    | 'single_sprint'
+    | 'sprint_list'
+    | 'backlog_only'
+    | 'single_task'
+    | 'filtered_tasks'
+    | 'task_detail'
+    | 'ai_proposal'
+    | string;
+  title: string;
+  subtitle?: string | null;
+  suggestedFileName?: string | null;
+  sprintIds?: string[];
+  sprintNames?: string[];
+  sprintStatuses?: string[];
+  issueIds?: string[];
+  issueKeys?: string[];
+  assigneeNames?: string[];
+  statusNames?: string[];
+  priorities?: string[];
+  issueTypes?: string[];
+  epicNames?: string[];
+  searchKeyword?: string | null;
+  includeSubtasks?: boolean;
+  includeLegend?: boolean;
+  blockedOnly?: boolean | null;
+  matchedItemCount?: number;
+  summaryDescription?: string | null;
+}
+
 export interface AiConversationTurnDto {
   id: string;
   role: 'user' | 'assistant' | string;
@@ -83,6 +115,7 @@ export interface AiConversationTurnDto {
   thoughts?: string | null;
   referencedMemoryAnchors?: string[];
   traceItems?: AiTurnTraceItemDto[];
+  exportSpec?: AiExcelExportSpecDto | null;
   timestampUtc?: string;
 }
 
@@ -119,6 +152,7 @@ export interface AiSprintProposalDto {
   assistantReply?: string | null;
   recommendedTarget?: 'sprint' | 'backlog' | string | null;
   triggerAction?: 'none' | 'export_excel' | 'push_backlog' | 'apply_sprint' | string | null;
+  exportSpec?: AiExcelExportSpecDto | null;
   conversationHistory?: AiConversationTurnDto[];
   indexedMemories?: AiMemoryAnchorDto[];
   totalConversationTurns?: number;

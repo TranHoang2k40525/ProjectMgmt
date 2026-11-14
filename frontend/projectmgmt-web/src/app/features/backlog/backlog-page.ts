@@ -1300,11 +1300,100 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   // --- Quick Exports ---
   exportExcel(): void {
     const proj = this.projectService.currentProject();
-    const projectKey = proj.projectKey || 'PROJECT';
+    const projectKey = proj.projectKey || 'ProjectMgmt';
+    const projectName = proj.name || projectKey;
+    const statuses = this.projectService.projectStatuses();
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const filename = `${projectKey}_Backlog_Export_${dateStr}.xlsx`;
-    this.excelService.exportToExcel(this.workItems(), filename, this.sprints(), proj.name || projectKey);
+    const selectedIds = this.selectedTaskIds();
+
+    if (selectedIds.length > 0) {
+      const filename = `${projectKey}_Cong_Viec_Chon_${dateStr}.xlsx`;
+      this.excelService.exportWithOptions(this.workItems(), this.sprints(), {
+        scope: 'filtered_tasks',
+        flatOnly: true,
+        filename,
+        title: `DANH SÁCH CÔNG VIỆC ĐÃ CHỌN (${selectedIds.length} MỤC) - ${projectName.toUpperCase()}`,
+        issueIds: selectedIds,
+        includeSubtasks: true,
+        includeLegend: true,
+        projectName,
+        projectKey,
+        projectStatuses: statuses,
+      });
+      this.toastService.success('Xuất Excel thành công', `Đã xuất ${selectedIds.length} công việc đã chọn ra tệp: ${filename}`);
+      return;
+    }
+
+    if (this.hasActiveFilters()) {
+      const filtered = this.filteredWorkItems();
+      const filename = `${projectKey}_Backlog_Loc_${dateStr}.xlsx`;
+      this.excelService.exportWithOptions(filtered, this.sprints(), {
+        scope: 'filtered_tasks',
+        flatOnly: true,
+        filename,
+        title: `DANH SÁCH CÔNG VIỆC THEO BỘ LỌC - ${projectName.toUpperCase()}`,
+        includeSubtasks: true,
+        includeLegend: true,
+        projectName,
+        projectKey,
+        projectStatuses: statuses,
+      });
+      this.toastService.success('Xuất Excel thành công', `Đã xuất danh sách đang lọc (${filtered.length} mục): ${filename}`);
+      return;
+    }
+
+    const filename = `${projectKey}_Bao_Cao_Du_An_${dateStr}.xlsx`;
+    this.excelService.exportWithOptions(this.workItems(), this.sprints(), {
+      scope: 'project_all',
+      filename,
+      includeSubtasks: true,
+      includeLegend: true,
+      projectName,
+      projectKey,
+      projectStatuses: statuses,
+    });
     this.toastService.success('Xuất Excel thành công', `Đã tải xuống bảng Excel: ${filename}`);
+  }
+
+  exportSprintExcel(sprint: Sprint, event?: Event): void {
+    event?.stopPropagation();
+    const proj = this.projectService.currentProject();
+    const projectKey = proj.projectKey || 'ProjectMgmt';
+    const projectName = proj.name || projectKey;
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const safeSprint = (sprint.name || 'Sprint').replace(/[^\w\-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 28) || 'Sprint';
+    const filename = `${projectKey}_${safeSprint}_${dateStr}.xlsx`;
+    this.excelService.exportWithOptions(this.workItems(), this.sprints(), {
+      scope: 'single_sprint',
+      filename,
+      sprintIds: [sprint.id],
+      sprintNames: [sprint.name],
+      includeSubtasks: true,
+      includeLegend: true,
+      projectName,
+      projectKey,
+      projectStatuses: this.projectService.projectStatuses(),
+    });
+    this.toastService.success('Xuất Excel Sprint', `Đã tải xuống báo cáo ${sprint.name}: ${filename}`);
+  }
+
+  exportBacklogPoolExcel(event?: Event): void {
+    event?.stopPropagation();
+    const proj = this.projectService.currentProject();
+    const projectKey = proj.projectKey || 'ProjectMgmt';
+    const projectName = proj.name || projectKey;
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const filename = `${projectKey}_Kho_Backlog_${dateStr}.xlsx`;
+    this.excelService.exportWithOptions(this.workItems(), this.sprints(), {
+      scope: 'backlog_only',
+      filename,
+      includeSubtasks: true,
+      includeLegend: true,
+      projectName,
+      projectKey,
+      projectStatuses: this.projectService.projectStatuses(),
+    });
+    this.toastService.success('Xuất Excel Kho Backlog', `Đã tải xuống bảng Kho Product Backlog: ${filename}`);
   }
 }
 

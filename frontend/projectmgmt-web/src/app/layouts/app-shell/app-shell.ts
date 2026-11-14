@@ -475,14 +475,21 @@ export class AppShellComponent {
 
   exportExcel(): void {
     const proj = this.projectService.currentProject();
-    const projectKey = proj.projectKey || 'PROJECT';
+    const projectKey = proj.projectKey || 'ProjectMgmt';
+    const projectName = proj.name || projectKey;
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const filename = `${projectKey}_WorkItems_Export_${dateStr}.xlsx`;
+    const filename = `${projectKey}_Bao_Cao_Du_An_${dateStr}.xlsx`;
     this.excelService.exportToExcel(
       this.projectService.workItems(),
       filename,
       this.projectService.sprints(),
-      proj.name || projectKey
+      projectName,
+      {
+        scope: 'project_all',
+        projectKey,
+        projectName,
+        projectStatuses: this.projectService.projectStatuses(),
+      }
     );
     this.toastService.success('Xuất Dữ Liệu Excel', `Đã tải xuống bảng Excel: ${filename}`);
   }

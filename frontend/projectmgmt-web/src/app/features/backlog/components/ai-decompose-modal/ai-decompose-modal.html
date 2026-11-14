@@ -258,7 +258,8 @@
 
               @if (turn.actionType === 'export_excel') {
               <button type="button" class="msg-inline-action" data-testid="btn-ai-chat-export-excel"
-                (click)="exportProjectExcelFromChat()">
+                [title]="turn.exportSpec?.summaryDescription || 'Tải lại tệp Excel (.xlsx)'"
+                (click)="exportProjectExcelFromChat(turn.exportSpec)">
                 <span class="material-symbols-outlined" aria-hidden="true">download</span>
                 <span>Tải lại tệp Excel (.xlsx)</span>
               </button>

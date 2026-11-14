@@ -244,6 +244,9 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
                 Thoughts = string.IsNullOrWhiteSpace(cleanThoughts) ? null : cleanThoughts,
                 ReferencedMemoryAnchors = recalledKeys != null && recalledKeys.Count > 0 ? recalledKeys : null,
                 TraceItems = traceItems.ToList(),
+                ExportSpec = string.Equals(actionType, "export_excel", StringComparison.OrdinalIgnoreCase)
+                    ? targetProposal.ExportSpec
+                    : null,
                 TimestampUtc = DateTime.UtcNow
             });
             targetProposal.ConversationHistory = history;
@@ -330,17 +333,19 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
         }
 
         // =========================================================================
-        // ACTION INTENT: Xuất file Excel dự án ngay trong đoạn hội thoại (export_excel)
+        // ACTION INTENT: Xuất file Excel dự án theo đúng ngữ cảnh & phạm vi (export_excel)
         // =========================================================================
         if (intent == "export_excel")
         {
-            await onStepProgress(2, "QUERY_CONTEXT", "Chuẩn bị dữ liệu xuất tệp Excel (.xlsx)", 60, "Đang kiểm tra phạm vi dữ liệu xuất báo cáo...");
+            await onStepProgress(2, "QUERY_CONTEXT", "Phân tích phạm vi & dữ liệu xuất Excel (.xlsx)", 50, "Đang kiểm tra Sprint, Backlog hoặc Công việc được yêu cầu...");
             var excelProposal = BuildPreservedProposalShell(sessionId, scope.ProjectId, targetSprintId, existingProposal);
+
+            var swConfig = Stopwatch.StartNew();
+            var excelConfig = await _backlogTools.ResolveActiveConfigAsync(scope.ProjectId, cancellationToken);
+            swConfig.Stop();
+
             if (string.IsNullOrWhiteSpace(excelProposal.WorkflowName))
             {
-                var swExcel = Stopwatch.StartNew();
-                var excelConfig = await _backlogTools.ResolveActiveConfigAsync(scope.ProjectId, cancellationToken);
-                swExcel.Stop();
                 ApplyConfigMetadata(excelProposal, excelConfig);
                 await RecordTraceAsync(
                     "mcp",
@@ -348,8 +353,8 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
                     "project_get_active_config",
                     "project_get_active_config",
                     new { projectId = scope.ProjectId },
-                    $"Đồng bộ quy chuẩn dự án ({excelConfig.WorkflowName}) để định dạng tệp Excel",
-                    swExcel.ElapsedMilliseconds);
+                    $"Đồng bộ cấu hình trạng thái đang áp dụng ({excelConfig.WorkflowName}) để tô màu và lập chú thích Excel",
+                    swConfig.ElapsedMilliseconds);
             }
             else
             {
@@ -359,21 +364,74 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
                     "Phiên hiện hành",
                     "context_reuse",
                     new { workflow = excelProposal.WorkflowName },
-                    $"Dùng cấu hình quy chuẩn đã nạp ({excelProposal.WorkflowName}), bỏ qua truy vấn lặp",
+                    $"Dùng lại cấu hình quy chuẩn đã nạp ({excelProposal.WorkflowName}), bỏ qua truy vấn lặp",
                     1,
                     emitToolCall: false);
             }
 
-            await EmitThoughtAsync("Xác nhận lệnh xuất tệp Excel (.xlsx) từ dữ liệu dự án đang lưu trong hệ thống.\n");
-            await onStepProgress(5, "FINALIZE_PROPOSAL", "Hoàn tất chuẩn bị tệp Excel (.xlsx)", 100, "Đang kích hoạt tải xuống tệp Excel...");
+            var swMeta = Stopwatch.StartNew();
+            var memberNames = await _teamTools.GetProjectMemberDisplayNamesAsync(scope.ProjectId, scope, cancellationToken);
+            var exportMeta = await _backlogTools.GetExportMetadataAsync(scope.ProjectId, scope, memberNames, cancellationToken);
+            swMeta.Stop();
+
+            if (exportMeta == null)
+            {
+                const string notFoundProjMsg = "Không thể đọc dữ liệu dự án hiện tại để xuất tệp Excel. Vui lòng thử lại sau.";
+                excelProposal.Intent = "export_excel";
+                excelProposal.TriggerAction = "none";
+                excelProposal.ExportSpec = null;
+                FinalizeAssistantTurn(excelProposal, notFoundProjMsg, "export_excel", "none", recalledKeys);
+                await onStepProgress(5, "FINALIZE_PROPOSAL", "Không thể xuất Excel", 100, notFoundProjMsg);
+                await onProposalReady(excelProposal);
+                return;
+            }
+
+            await RecordTraceAsync(
+                "mcp",
+                "Truy vấn MCP",
+                "project_export_metadata",
+                "project_export_metadata",
+                new { projectId = scope.ProjectId, sprintCount = exportMeta.Sprints.Count, issueCount = exportMeta.Issues.Count },
+                $"Đối chiếu yêu cầu xuất Excel với {exportMeta.Sprints.Count} Sprint và {exportMeta.Issues.Count(i => !i.IsEpic)} công việc thực tế",
+                swMeta.ElapsedMilliseconds);
+
+            var resolution = AiExcelExportResolver.Resolve(
+                effectiveUserText,
+                exportMeta,
+                excelConfig,
+                scope,
+                existingProposal,
+                history,
+                indexedMemories);
+
+            await RecordTraceAsync(
+                "guardrail",
+                "Kiểm chuẩn",
+                "Phạm vi Xuất Excel",
+                "excel_export_scope_resolver",
+                new { shouldExport = resolution.ShouldTriggerExport, scope = resolution.ExportSpec?.Scope },
+                resolution.TraceSummary,
+                1,
+                emitToolCall: false);
+
+            await EmitThoughtAsync($"Phân giải phạm vi xuất Excel: {resolution.TraceSummary}.\n");
 
             excelProposal.Intent = "export_excel";
-            excelProposal.TriggerAction = "export_excel";
-            var excelReply = excelProposal.Tasks.Count > 0
-                ? $"Tôi đã kích hoạt xuất tệp Excel (.xlsx) tổng hợp toàn bộ các Sprint và kho Product Backlog đang lưu trong dự án. Lưu ý: {excelProposal.Tasks.Count} công việc đề xuất ({excelProposal.TotalStoryPoints} SP) trong phiên hội thoại này chưa được lưu vào dự án nên chưa có trong tệp. Nếu muốn đưa chúng vào báo cáo, hãy đẩy vào kho Backlog hoặc áp dụng vào Sprint rồi xuất lại. Nếu trình duyệt chặn tải tự động, bạn có thể bấm nút tải lại ngay bên dưới."
-                : "Tôi đã kích hoạt xuất tệp Excel (.xlsx) tổng hợp toàn bộ các Sprint và kho Product Backlog đang lưu trong dự án. Nếu trình duyệt chặn tải tự động, bạn có thể bấm nút tải lại ngay bên dưới.";
+            if (resolution.ShouldTriggerExport && resolution.ExportSpec != null)
+            {
+                excelProposal.ExportSpec = resolution.ExportSpec;
+                excelProposal.TriggerAction = "export_excel";
+                await onStepProgress(5, "FINALIZE_PROPOSAL", "Hoàn tất chuẩn bị tệp Excel (.xlsx)", 100, "Đang kích hoạt tải xuống tệp Excel...");
+                FinalizeAssistantTurn(excelProposal, resolution.ReplyMessage, "export_excel", "export_excel", recalledKeys);
+            }
+            else
+            {
+                excelProposal.ExportSpec = null;
+                excelProposal.TriggerAction = "none";
+                await onStepProgress(5, "FINALIZE_PROPOSAL", "Xác nhận phạm vi xuất Excel", 100, resolution.TraceSummary);
+                FinalizeAssistantTurn(excelProposal, resolution.ReplyMessage, "export_excel", "none", recalledKeys);
+            }
 
-            FinalizeAssistantTurn(excelProposal, excelReply, "export_excel", "export_excel", recalledKeys);
             await onProposalReady(excelProposal);
             return;
         }
@@ -1591,18 +1649,73 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
             return "security_refusal";
         }
 
-        // 1. Kiểm tra yêu cầu Xuất file Excel (export_excel) - tránh nhầm với yêu cầu tạo task/tính năng xuất Excel
-        bool mentionsExcel = lower.Contains("excel") || lower.Contains(".xlsx") || lower.Contains("bảng tính");
-        bool mentionsExportVerb = lower.Contains("xuất") || lower.Contains("tải") || lower.Contains("export") ||
-                                  lower.Contains("download") || lower.Contains("lấy file") || lower.Contains("cho tôi file");
-        bool asksToBuildFeatureOrTask = lower.Contains("tạo task") || lower.Contains("tạo việc") || lower.Contains("thêm task") ||
-                                        lower.Contains("thêm việc") || lower.Contains("sinh task") || lower.Contains("phân tách") ||
-                                        lower.Contains("phân rã") || lower.Contains("tính năng") || lower.Contains("chức năng") ||
-                                        lower.Contains("user story") || lower.Contains("xây dựng") || lower.Contains("triển khai") ||
-                                        lower.Contains("viết api") || lower.Contains("code ");
-        if (mentionsExcel && !asksToBuildFeatureOrTask && (mentionsExportVerb || lower.Length < 40) && lower.Length < 180)
+        bool asksToBuildFeatureOrTask =
+            lower.Contains("tạo task") || lower.Contains("tạo việc") ||
+            lower.Contains("thêm task") || lower.Contains("thêm việc") ||
+            lower.Contains("sinh task") || lower.Contains("tạo story") ||
+            lower.Contains("phân tách") || lower.Contains("phân rã") ||
+            lower.Contains("chia nhỏ") || lower.Contains("lập kế hoạch") ||
+            lower.Contains("tính năng") || lower.Contains("chức năng") ||
+            lower.Contains("user story") || lower.Contains("xây dựng") ||
+            lower.Contains("triển khai") || lower.Contains("phát triển") ||
+            lower.Contains("viết api") || lower.Contains("thiết kế") ||
+            lower.Contains("code ") || lower.Contains("sửa bug") ||
+            lower.Contains("fix lỗi");
+
+        // 1. Kiểm tra yêu cầu Xuất file Excel (export_excel) - nhận diện đa dạng phạm vi (Sprint, Backlog, 1 Task, Chi tiết Task, Bảng đề xuất)
+        //    và tuyệt đối không nhầm với yêu cầu tạo task/tính năng hoặc câu hỏi "làm sao/cách xuất" hoặc khi file SRS đính kèm dài chỉ nhắc tới từ "excel".
+        var exportCandidate = (!string.IsNullOrWhiteSpace(promptText) &&
+                               !promptText.Equals("Tạo Sprint Goal, Tasks và Subtasks chuẩn Scrum.", StringComparison.OrdinalIgnoreCase) &&
+                               !promptText.Equals("Phân tích tài liệu dự án và lập kế hoạch Sprint tiếp theo.", StringComparison.OrdinalIgnoreCase))
+            ? promptText.ToLowerInvariant()
+            : (docText.Length <= 380 ? docText.ToLowerInvariant() : string.Empty);
+
+        if (!string.IsNullOrWhiteSpace(exportCandidate) && exportCandidate.Length <= 420)
         {
-            return "export_excel";
+            bool mentionsExcelFormat = exportCandidate.Contains("excel") || exportCandidate.Contains(".xlsx") ||
+                                       exportCandidate.Contains("xlsx") || exportCandidate.Contains("bảng tính");
+            bool mentionsGenericFile = exportCandidate.Contains("ra file") || exportCandidate.Contains("thành file") ||
+                                       exportCandidate.Contains("xuất file") || exportCandidate.Contains("tải file") ||
+                                       exportCandidate.Contains("lấy file") || exportCandidate.Contains("cho tôi file") ||
+                                       exportCandidate.Contains("export");
+            bool mentionsExportVerb = System.Text.RegularExpressions.Regex.IsMatch(
+                                          exportCandidate,
+                                          @"(?i)\b(xuất|export|download|tải\s*về|tải\s*xuống|tải\s*file|lấy\s*file)\b");
+            bool mentionsProjectExportTarget =
+                exportCandidate.Contains("sprint") || exportCandidate.Contains("backlog") || exportCandidate.Contains("hàng chờ") ||
+                exportCandidate.Contains("task") || exportCandidate.Contains("công việc") || exportCandidate.Contains("việc") ||
+                exportCandidate.Contains("chi tiết") || exportCandidate.Contains("nội dung") || exportCandidate.Contains("đề xuất") ||
+                exportCandidate.Contains("dự án") || exportCandidate.Contains("bug") || exportCandidate.Contains("story") ||
+                exportCandidate.Contains("epic") || System.Text.RegularExpressions.Regex.IsMatch(exportCandidate, @"\b[a-z][a-z0-9]{1,15}-\d+\b");
+            bool mentionsUnsupportedFormat =
+                !mentionsExcelFormat &&
+                (exportCandidate.Contains(".pdf") || System.Text.RegularExpressions.Regex.IsMatch(exportCandidate, @"\b(pdf|word|docx|pptx|powerpoint)\b"));
+            bool isHowToOrCapabilityQuestion =
+                exportCandidate.Contains("làm sao") || exportCandidate.Contains("cách nào") ||
+                exportCandidate.Contains("hướng dẫn") || exportCandidate.Contains("làm thế nào") ||
+                exportCandidate.Contains("có hỗ trợ") || exportCandidate.Contains("tại sao") ||
+                exportCandidate.Contains("vì sao") || exportCandidate.Contains("hỗ trợ những");
+            bool asksToEditOrCritique =
+                exportCandidate.Contains("đổi sang") || exportCandidate.Contains("chuyển sang") ||
+                exportCandidate.Contains("nhận xét") || exportCandidate.Contains("đánh giá");
+
+            if (!asksToBuildFeatureOrTask && !asksToEditOrCritique)
+            {
+                // Khi user yêu cầu xuất sang định dạng chưa hỗ trợ (PDF, Word, PPTX...) mà không kèm Excel,
+                // điều hướng sang hỏi đáp (project_qa) để AI giải thích trung thực thay vì rơi xuống lập kế hoạch Sprint.
+                if (mentionsUnsupportedFormat && mentionsExportVerb)
+                {
+                    return "project_qa";
+                }
+
+                if (!isHowToOrCapabilityQuestion && !mentionsUnsupportedFormat &&
+                    ((mentionsExcelFormat && (mentionsExportVerb || exportCandidate.Length < 45)) ||
+                     (mentionsGenericFile && mentionsExportVerb) ||
+                     (mentionsExportVerb && mentionsProjectExportTarget)))
+                {
+                    return "export_excel";
+                }
+            }
         }
 
         // 2. Kiểm tra lệnh hành động trực tiếp trên đề xuất hiện có (push_backlog / apply_sprint)

@@ -268,4 +268,60 @@ public class TeamTools
     {
         return await GetDevCapacitiesAsync(scope.ProjectId, scope, ct);
     }
+
+    /// <summary>
+    /// Trả về từ điển tên hiển thị an toàn của các thành viên thuộc tổ chức/dự án (chỉ gồm UserId và DisplayName).
+    /// </summary>
+    public async Task<Dictionary<Guid, string>> GetProjectMemberDisplayNamesAsync(
+        Guid projectId,
+        IProjectScopeContext scope,
+        CancellationToken ct = default)
+    {
+        if (projectId == Guid.Empty)
+        {
+            return new Dictionary<Guid, string>();
+        }
+
+        ProjectScopeGuard.ValidateProject(scope, projectId);
+
+        var project = await _planning.Projects.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == projectId && !p.IsDeleted, ct);
+        if (project == null)
+        {
+            return new Dictionary<Guid, string>();
+        }
+
+        ProjectScopeGuard.Validate(scope, project.OrgId, projectId);
+
+        var memberUserIds = await _identity.UserRoles.AsNoTracking()
+            .Where(ur => (ur.ScopeType == "Project" && ur.ScopeId == projectId) ||
+                         (ur.ScopeType == "Organization" && ur.ScopeId == project.OrgId))
+            .Select(ur => ur.UserId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        if (project.LeadUserId != Guid.Empty && !memberUserIds.Contains(project.LeadUserId))
+        {
+            memberUserIds.Add(project.LeadUserId);
+        }
+
+        if (memberUserIds.Count == 0)
+        {
+            return new Dictionary<Guid, string>();
+        }
+
+        var activeUserIds = await _identity.Users.AsNoTracking()
+            .Where(u => memberUserIds.Contains(u.Id) && u.IsActive)
+            .Select(u => u.Id)
+            .ToListAsync(ct);
+
+        var profiles = await _identity.UserProfiles.AsNoTracking()
+            .Where(p => activeUserIds.Contains(p.UserId))
+            .Select(p => new { p.UserId, p.DisplayName })
+            .ToListAsync(ct);
+
+        return profiles
+            .GroupBy(p => p.UserId)
+            .ToDictionary(g => g.Key, g => g.First().DisplayName);
+    }
 }
