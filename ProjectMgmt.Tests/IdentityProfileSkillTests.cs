@@ -202,7 +202,7 @@ public class FakeProfileRepository : IProfileRepository
         return Task.FromResult(AvatarResult);
     }
 
-    public Task<IReadOnlyList<ActiveUserProfile>> GetAllActiveProfilesAsync(CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<ActiveUserProfile>> GetAllActiveProfilesAsync()
     {
         var list = new List<ActiveUserProfile>();
         if (Details != null)

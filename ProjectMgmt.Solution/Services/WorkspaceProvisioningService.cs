@@ -175,18 +175,16 @@ public class WorkspaceProvisioningService : IWorkspaceProvisioningService
     {
         var planningConnection = _planningContext.Database.GetDbConnection();
         var identityConnection = _identityContext.Database.GetDbConnection();
-        if (!ReferenceEquals(planningConnection, identityConnection))
-        {
-            throw new InvalidOperationException(
-                "Planning và IdentityExperience phải dùng cùng DbConnection trong provisioning transaction.");
-        }
+        var sameConnection = ReferenceEquals(planningConnection, identityConnection);
 
         var strategy = _planningContext.Database.CreateExecutionStrategy();
         return strategy.ExecuteAsync(async () =>
         {
             await using var transaction = await _planningContext.Database.BeginTransactionAsync();
-            await using var identityTransaction = await _identityContext.Database.UseTransactionAsync(
-                transaction.GetDbTransaction());
+            if (sameConnection)
+            {
+                await _identityContext.Database.UseTransactionAsync(transaction.GetDbTransaction());
+            }
 
             var result = await operation();
             if (result.IsFailure)

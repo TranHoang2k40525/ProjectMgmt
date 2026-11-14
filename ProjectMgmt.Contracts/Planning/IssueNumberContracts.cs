@@ -6,5 +6,5 @@ namespace ProjectMgmt.ProjectManagement.Contracts;
 /// </summary>
 public interface IIssueNumberGenerator
 {
-    Task<int> ReserveNextAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<int> ReserveNextAsync(Guid projectId);
 }

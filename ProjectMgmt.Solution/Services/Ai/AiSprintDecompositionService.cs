@@ -1,0 +1,3208 @@
+namespace ProjectMgmt.Solution.Services.Ai;
+
+using System.Diagnostics;
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Planning.Infrastructure;
+using ProjectMgmt.Core.Ai;
+using ProjectMgmt.Core.Security;
+using ProjectMgmt.Core.Tracing;
+using ProjectMgmt.Core.VectorSearch;
+using ProjectMgmt.Solution.Dtos.Ai;
+using ProjectMgmt.Solution.McpServers;
+
+public interface IAiSprintDecompositionService
+{
+    Task ExecutePipelineAsync(
+        string sessionId,
+        IProjectScopeContext scope,
+        Guid? targetSprintId,
+        string extractedDocumentContent,
+        string? userPrompt,
+        Func<int, string, string, int, string, Task> onStepProgress,
+        Func<string, object?, string, long?, Task> onToolCall,
+        Func<string, Task> onThoughtDelta,
+        Func<AiSprintProposalDto, Task> onProposalReady,
+        string? model = null,
+        CancellationToken cancellationToken = default,
+        AiSprintProposalDto? existingProposal = null);
+
+    Task<ProposedTaskDto> RegenerateSingleTaskAsync(
+        AiSprintProposalDto proposal,
+        string taskId,
+        string userFeedback,
+        IProjectScopeContext scope,
+        CancellationToken cancellationToken = default);
+
+    Task<AiSprintProposalDto> RegenerateFullProposalAsync(
+        AiSprintProposalDto proposal,
+        string userFeedback,
+        IProjectScopeContext scope,
+        CancellationToken cancellationToken = default) => Task.FromResult(proposal);
+}
+
+public class AiSprintDecompositionService : IAiSprintDecompositionService
+{
+    private readonly IAiModelClient _aiClient;
+    private readonly IVectorSearchService _vectorSearch;
+    private readonly IAiTraceService _traceService;
+    private readonly PlanningDbContext _planningDb;
+    private readonly SpecHubTools _specHubTools;
+    private readonly BacklogTools _backlogTools;
+    private readonly SprintTools _sprintTools;
+    private readonly TeamTools _teamTools;
+    private readonly IPromptTemplateService _promptTemplates;
+    private readonly ILogger<AiSprintDecompositionService> _logger;
+
+    public AiSprintDecompositionService(
+        IAiModelClient aiClient,
+        IVectorSearchService vectorSearch,
+        IAiTraceService traceService,
+        PlanningDbContext planningDb,
+        SpecHubTools specHubTools,
+        BacklogTools backlogTools,
+        SprintTools sprintTools,
+        TeamTools teamTools,
+        IPromptTemplateService promptTemplates,
+        ILogger<AiSprintDecompositionService> logger)
+    {
+        _aiClient = aiClient;
+        _vectorSearch = vectorSearch;
+        _traceService = traceService;
+        _planningDb = planningDb;
+        _specHubTools = specHubTools;
+        _backlogTools = backlogTools;
+        _sprintTools = sprintTools;
+        _teamTools = teamTools;
+        _promptTemplates = promptTemplates;
+        _logger = logger;
+    }
+
+    public async Task ExecutePipelineAsync(
+        string sessionId,
+        IProjectScopeContext scope,
+        Guid? targetSprintId,
+        string extractedDocumentContent,
+        string? userPrompt,
+        Func<int, string, string, int, string, Task> onStepProgress,
+        Func<string, object?, string, long?, Task> onToolCall,
+        Func<string, Task> onThoughtDelta,
+        Func<AiSprintProposalDto, Task> onProposalReady,
+        string? model = null,
+        CancellationToken cancellationToken = default,
+        AiSprintProposalDto? existingProposal = null)
+    {
+        await _traceService.StartTraceAsync(
+            sessionId,
+            scope.ProjectId,
+            scope.UserId,
+            "AiSprintDecomposition",
+            new Dictionary<string, string>
+            {
+                ["projectId"] = scope.ProjectId.ToString(),
+                ["provider"] = _aiClient.ProviderName
+            },
+            cancellationToken);
+
+        // Sanitize inputs via InputGuardrail (Zero-Secret-Leakage & Prompt Injection Defense)
+        var promptGuardrail = string.IsNullOrWhiteSpace(userPrompt)
+            ? new InputGuardrailResult(string.Empty, 0, false)
+            : InputGuardrail.Sanitize(userPrompt);
+        var docGuardrail = InputGuardrail.SanitizeDocumentContent(extractedDocumentContent ?? string.Empty);
+
+        var promptHasViolation = !string.IsNullOrWhiteSpace(userPrompt) &&
+                                 (InputGuardrail.ContainsPromptInjectionOrExfiltration(userPrompt, out _) ||
+                                  InputGuardrail.ContainsUnsafeScript(userPrompt) ||
+                                  promptGuardrail.InjectionNeutralized);
+
+        var docHadRawInjection = docGuardrail.InjectionNeutralized ||
+                                 (!string.IsNullOrWhiteSpace(extractedDocumentContent) &&
+                                  extractedDocumentContent.Contains("[Cảnh báo bảo mật:", StringComparison.Ordinal));
+
+        var remainingDocText = System.Text.RegularExpressions.Regex.Replace(
+            docGuardrail.SanitizedText,
+            @"\[(?:Cảnh báo bảo mật|MASKED_SECRET)[^\]]*\]",
+            string.Empty,
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        var docHasSubstantiveContent = remainingDocText.Count(char.IsLetterOrDigit) >= 20;
+
+        // Chỉ từ chối toàn bộ luồng nếu câu lệnh người dùng vi phạm hoặc tài liệu hoàn toàn chỉ chứa payload độc hại
+        var securityViolationDetected = promptHasViolation ||
+                                        (docHadRawInjection && !docHasSubstantiveContent && string.IsNullOrWhiteSpace(userPrompt));
+
+        var sanitizedDoc = docGuardrail.SanitizedText;
+        var sanitizedPrompt = string.IsNullOrWhiteSpace(userPrompt) ? null : promptGuardrail.SanitizedText;
+        var cleanDocForIntent = AiIndexedMemoryEngine.StripExtractorHeader(sanitizedDoc);
+        if (!string.IsNullOrWhiteSpace(sanitizedPrompt) &&
+            string.Equals(cleanDocForIntent, sanitizedPrompt.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            cleanDocForIntent = string.Empty;
+        }
+
+        var pipelineWarnings = AiDocumentTextExtractor.ExtractDocumentWarnings(extractedDocumentContent);
+        if (docHadRawInjection && !securityViolationDetected)
+        {
+            const string indirectWarning = "Phát hiện và đã vô hiệu hóa các chỉ dẫn khả nghi trong tài liệu đầu vào để bảo vệ hệ thống (Indirect Prompt Injection Guard).";
+            if (!pipelineWarnings.Contains(indirectWarning, StringComparer.Ordinal))
+            {
+                pipelineWarnings.Add(indirectWarning);
+            }
+        }
+
+        var effectiveUserText = !string.IsNullOrWhiteSpace(sanitizedPrompt)
+            ? sanitizedPrompt.Trim()
+            : cleanDocForIntent;
+
+        var turnSw = Stopwatch.StartNew();
+
+        var history = existingProposal?.ConversationHistory != null
+            ? new List<AiConversationTurnDto>(existingProposal.ConversationHistory)
+            : new List<AiConversationTurnDto>();
+
+        var indexedMemories = existingProposal?.IndexedMemories != null
+            ? existingProposal.IndexedMemories.Select(CloneMemoryAnchor).ToList()
+            : new List<AiMemoryAnchorDto>();
+
+        var traceItems = new List<AiTurnTraceItemDto>();
+        var thoughtBuffer = new System.Text.StringBuilder();
+
+        async Task EmitThoughtAsync(string delta)
+        {
+            if (string.IsNullOrEmpty(delta)) return;
+            thoughtBuffer.Append(delta);
+            await onThoughtDelta(delta);
+        }
+
+        async Task RecordTraceAsync(
+            string kind,
+            string actionVerb,
+            string target,
+            string toolName,
+            object? args,
+            string summaryVi,
+            long? durationMs,
+            string? detail = null,
+            bool emitToolCall = true)
+        {
+            traceItems.Add(new AiTurnTraceItemDto
+            {
+                Kind = kind,
+                ActionVerb = actionVerb,
+                Target = target,
+                Summary = summaryVi,
+                Detail = detail,
+                DurationMs = durationMs,
+                Status = "done"
+            });
+
+            if (emitToolCall)
+            {
+                await onToolCall(toolName, args, summaryVi, durationMs);
+            }
+        }
+
+        string BuildThinkingSummary(long elapsedMs, List<AiTurnTraceItemDto> items, int mcpCount, int recalledCount)
+        {
+            var secs = Math.Max(0.1, elapsedMs / 1000.0).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+            var parts = new List<string> { $"Đã suy nghĩ xong trong {secs}s", $"{items.Count} thao tác" };
+            if (recalledCount > 0) parts.Add($"{recalledCount} chỉ mục nhớ");
+            if (mcpCount > 0) parts.Add($"{mcpCount} MCP");
+            return string.Join(" · ", parts);
+        }
+
+        void FinalizeAssistantTurn(
+            AiSprintProposalDto targetProposal,
+            string reply,
+            string turnIntent,
+            string actionType,
+            List<string>? recalledKeys)
+        {
+            targetProposal.OrganizationId ??= scope.OrganizationId;
+            targetProposal.UserId ??= scope.UserId;
+            targetProposal.AssistantReply = reply;
+            targetProposal.IndexedMemories = indexedMemories;
+
+            AiIndexedMemoryEngine.UpdateIndexedMemories(
+                targetProposal,
+                sanitizedPrompt,
+                cleanDocForIntent,
+                reply,
+                turnIntent);
+            indexedMemories = targetProposal.IndexedMemories;
+
+            turnSw.Stop();
+            var mcpCount = traceItems.Count(t => t.Kind == "mcp");
+            var thinkingSummary = BuildThinkingSummary(turnSw.ElapsedMilliseconds, traceItems, mcpCount, recalledKeys?.Count ?? 0);
+            var cleanThoughts = thoughtBuffer.ToString().Trim();
+
+            history.Add(new AiConversationTurnDto
+            {
+                Id = $"assistant_{DateTime.UtcNow.Ticks}",
+                Role = "assistant",
+                Content = reply,
+                Intent = turnIntent,
+                ActionType = actionType,
+                TaskCount = targetProposal.Tasks.Count,
+                TotalStoryPoints = targetProposal.TotalStoryPoints,
+                ThinkingSummary = thinkingSummary,
+                DurationMs = turnSw.ElapsedMilliseconds,
+                Thoughts = string.IsNullOrWhiteSpace(cleanThoughts) ? null : cleanThoughts,
+                ReferencedMemoryAnchors = recalledKeys != null && recalledKeys.Count > 0 ? recalledKeys : null,
+                TraceItems = traceItems.ToList(),
+                ExportSpec = string.Equals(actionType, "export_excel", StringComparison.OrdinalIgnoreCase)
+                    ? targetProposal.ExportSpec
+                    : null,
+                TimestampUtc = DateTime.UtcNow
+            });
+            targetProposal.ConversationHistory = history;
+        }
+
+        var intent = securityViolationDetected
+            ? "security_refusal"
+            : ClassifyConversationalIntent(sanitizedPrompt, cleanDocForIntent, existingProposal);
+        var hasAttachedDoc = !string.IsNullOrWhiteSpace(cleanDocForIntent);
+        var contextPlan = AiIndexedMemoryEngine.PlanContextExecution(
+            intent,
+            effectiveUserText,
+            cleanDocForIntent,
+            hasAttachedDoc,
+            existingProposal,
+            indexedMemories,
+            history);
+
+        var recalledKeys = contextPlan.RecalledMemories.Select(m => m.AnchorKey).ToList();
+
+        traceItems.Add(new AiTurnTraceItemDto
+        {
+            Kind = "step",
+            ActionVerb = "Phân tích",
+            Target = "Định tuyến Ý định",
+            Summary = $"Xác định ý định '{intent}' ({(contextPlan.UseMemoryOnly || contextPlan.IsGreetingOrHelp ? "không cần gọi thừa MCP ngoài" : "nạp ngữ cảnh chọn lọc")})",
+            DurationMs = 1,
+            Status = "done"
+        });
+
+        var userTurn = new AiConversationTurnDto
+        {
+            Id = $"user_{DateTime.UtcNow.Ticks}",
+            Role = "user",
+            Content = !string.IsNullOrWhiteSpace(sanitizedPrompt)
+                ? sanitizedPrompt.Trim()
+                : (sanitizedDoc.Length > 180 ? sanitizedDoc[..180] + "..." : sanitizedDoc),
+            FullContent = string.Join("\n\n", new[] { sanitizedDoc, sanitizedPrompt }.Where(s => !string.IsNullOrWhiteSpace(s))),
+            Intent = intent,
+            TimestampUtc = DateTime.UtcNow
+        };
+        history.Add(userTurn);
+
+        // =========================================================================
+        // GUARDRAIL BẢO MẬT: Từ chối Prompt Injection, rò rỉ bí mật hoặc truy xuất chéo tổ chức
+        // =========================================================================
+        if (intent == "security_refusal")
+        {
+            await onStepProgress(2, "SECURITY_GUARDRAIL", "Kiểm tra An toàn Thông tin & Cách ly Tổ chức", 60, "Phát hiện yêu cầu vi phạm quy tắc bảo mật hệ thống...");
+            await EmitThoughtAsync("Phát hiện dấu hiệu ghi đè chỉ dẫn hệ thống (Prompt Injection), yêu cầu trích xuất bí mật/cấu hình nội bộ hoặc truy cập dữ liệu tổ chức khác. Kích hoạt từ chối an toàn (0 MCP, 0 LLM).\n");
+            await RecordTraceAsync("guardrail", "Ngăn chặn", "Security & Tenant Guardrail", "security_guardrail", new { intent }, "Từ chối yêu cầu không an toàn hoặc vượt phạm vi phân quyền tổ chức (0 MCP call)", 1, emitToolCall: false);
+            await onStepProgress(5, "FINALIZE_PROPOSAL", "Hoàn tất phản hồi an toàn", 100, "Đã từ chối yêu cầu vi phạm bảo mật.");
+
+            var securityReply = "Yêu cầu vừa rồi bị từ chối bởi cơ chế Bảo mật Hệ thống & Cách ly Dữ liệu: tôi không thể bỏ qua quy tắc vận hành, không tiết lộ chỉ dẫn hệ thống, khóa bí mật, chuỗi kết nối, thông tin tài khoản/mật khẩu hoặc truy xuất dữ liệu của tổ chức và dự án khác. Vui lòng trao đổi các nội dung quản lý công việc hợp lệ trong phạm vi dự án hiện tại.";
+
+            var secProposal = BuildPreservedProposalShell(sessionId, scope.ProjectId, targetSprintId, existingProposal);
+            secProposal.Intent = "security_refusal";
+            secProposal.TriggerAction = "none";
+            FinalizeAssistantTurn(secProposal, securityReply, "security_refusal", "none", recalledKeys);
+
+            await onProposalReady(secProposal);
+            return;
+        }
+
+        // =========================================================================
+        // GUARDRAIL: Từ chối các yêu cầu ngoài luồng (Out-of-Scope Project Management Guardrail)
+        // =========================================================================
+        if (intent == "out_of_scope_refusal")
+        {
+            await onStepProgress(2, "DOMAIN_GUARDRAIL", "Kiểm tra phạm vi nghiệp vụ Quản lý Dự án", 60, "Yêu cầu không thuộc phạm vi quản lý dự án...");
+            await EmitThoughtAsync("Phát hiện yêu cầu nằm ngoài phạm vi công cụ Quản lý Dự án. Thực hiện từ chối lịch sự theo quy tắc Domain Guardrail (0 MCP call).\n");
+            await RecordTraceAsync("guardrail", "Kiểm tra", "Domain Guardrail", "domain_guardrail", new { intent }, "Từ chối yêu cầu nằm ngoài phạm vi Quản lý Dự án (không gọi MCP)", 1, emitToolCall: false);
+            await onStepProgress(5, "FINALIZE_PROPOSAL", "Hoàn tất phản hồi Trợ Lý AI", 100, "Đã từ chối yêu cầu ngoài luồng.");
+
+            var refusalReply = "Tôi là Trợ Lý AI chuyên biệt cho hệ thống Quản lý Dự án. Tôi chỉ hỗ trợ các nghiệp vụ thuộc phạm vi quản lý dự án như: phân tích tài liệu đặc tả (Spec Hub), lập kế hoạch Sprint, khởi tạo và đẩy công việc vào kho Product Backlog, phân bổ nhân sự theo năng lực, tra cứu tiến độ Scrum và xuất báo cáo Excel cho dự án. Yêu cầu vừa rồi nằm ngoài phạm vi công cụ quản lý dự án nên tôi xin phép từ chối thực hiện.";
+
+            var refusalProposal = BuildPreservedProposalShell(sessionId, scope.ProjectId, targetSprintId, existingProposal);
+            refusalProposal.Intent = "out_of_scope_refusal";
+            refusalProposal.TriggerAction = "none";
+            FinalizeAssistantTurn(refusalProposal, refusalReply, "out_of_scope_refusal", "none", recalledKeys);
+
+            await onProposalReady(refusalProposal);
+            return;
+        }
+
+        // =========================================================================
+        // ACTION INTENT: Xuất file Excel dự án theo đúng ngữ cảnh & phạm vi (export_excel)
+        // =========================================================================
+        if (intent == "export_excel")
+        {
+            await onStepProgress(2, "QUERY_CONTEXT", "Phân tích phạm vi & dữ liệu xuất Excel (.xlsx)", 50, "Đang kiểm tra Sprint, Backlog hoặc Công việc được yêu cầu...");
+            var excelProposal = BuildPreservedProposalShell(sessionId, scope.ProjectId, targetSprintId, existingProposal);
+
+            var swConfig = Stopwatch.StartNew();
+            var excelConfig = await _backlogTools.ResolveActiveConfigAsync(scope.ProjectId, cancellationToken);
+            swConfig.Stop();
+
+            if (string.IsNullOrWhiteSpace(excelProposal.WorkflowName))
+            {
+                ApplyConfigMetadata(excelProposal, excelConfig);
+                await RecordTraceAsync(
+                    "mcp",
+                    "Truy vấn MCP",
+                    "project_get_active_config",
+                    "project_get_active_config",
+                    new { projectId = scope.ProjectId },
+                    $"Đồng bộ cấu hình trạng thái đang áp dụng ({excelConfig.WorkflowName}) để tô màu và lập chú thích Excel",
+                    swConfig.ElapsedMilliseconds);
+            }
+            else
+            {
+                await RecordTraceAsync(
+                    "memory",
+                    "Tận dụng ngữ cảnh",
+                    "Phiên hiện hành",
+                    "context_reuse",
+                    new { workflow = excelProposal.WorkflowName },
+                    $"Dùng lại cấu hình quy chuẩn đã nạp ({excelProposal.WorkflowName}), bỏ qua truy vấn lặp",
+                    1,
+                    emitToolCall: false);
+            }
+
+            var swMeta = Stopwatch.StartNew();
+            var memberNames = await _teamTools.GetProjectMemberDisplayNamesAsync(scope.ProjectId, scope, cancellationToken);
+            var exportMeta = await _backlogTools.GetExportMetadataAsync(scope.ProjectId, scope, memberNames, cancellationToken);
+            swMeta.Stop();
+
+            if (exportMeta == null)
+            {
+                const string notFoundProjMsg = "Không thể đọc dữ liệu dự án hiện tại để xuất tệp Excel. Vui lòng thử lại sau.";
+                excelProposal.Intent = "export_excel";
+                excelProposal.TriggerAction = "none";
+                excelProposal.ExportSpec = null;
+                FinalizeAssistantTurn(excelProposal, notFoundProjMsg, "export_excel", "none", recalledKeys);
+                await onStepProgress(5, "FINALIZE_PROPOSAL", "Không thể xuất Excel", 100, notFoundProjMsg);
+                await onProposalReady(excelProposal);
+                return;
+            }
+
+            await RecordTraceAsync(
+                "mcp",
+                "Truy vấn MCP",
+                "project_export_metadata",
+                "project_export_metadata",
+                new { projectId = scope.ProjectId, sprintCount = exportMeta.Sprints.Count, issueCount = exportMeta.Issues.Count },
+                $"Đối chiếu yêu cầu xuất Excel với {exportMeta.Sprints.Count} Sprint và {exportMeta.Issues.Count(i => !i.IsEpic)} công việc thực tế",
+                swMeta.ElapsedMilliseconds);
+
+            var resolution = AiExcelExportResolver.Resolve(
+                effectiveUserText,
+                exportMeta,
+                excelConfig,
+                scope,
+                existingProposal,
+                history,
+                indexedMemories);
+
+            await RecordTraceAsync(
+                "guardrail",
+                "Kiểm chuẩn",
+                "Phạm vi Xuất Excel",
+                "excel_export_scope_resolver",
+                new { shouldExport = resolution.ShouldTriggerExport, scope = resolution.ExportSpec?.Scope },
+                resolution.TraceSummary,
+                1,
+                emitToolCall: false);
+
+            await EmitThoughtAsync($"Phân giải phạm vi xuất Excel: {resolution.TraceSummary}.\n");
+
+            excelProposal.Intent = "export_excel";
+            if (resolution.ShouldTriggerExport && resolution.ExportSpec != null)
+            {
+                excelProposal.ExportSpec = resolution.ExportSpec;
+                excelProposal.TriggerAction = "export_excel";
+                await onStepProgress(5, "FINALIZE_PROPOSAL", "Hoàn tất chuẩn bị tệp Excel (.xlsx)", 100, "Đang kích hoạt tải xuống tệp Excel...");
+                FinalizeAssistantTurn(excelProposal, resolution.ReplyMessage, "export_excel", "export_excel", recalledKeys);
+            }
+            else
+            {
+                excelProposal.ExportSpec = null;
+                excelProposal.TriggerAction = "none";
+                await onStepProgress(5, "FINALIZE_PROPOSAL", "Xác nhận phạm vi xuất Excel", 100, resolution.TraceSummary);
+                FinalizeAssistantTurn(excelProposal, resolution.ReplyMessage, "export_excel", "none", recalledKeys);
+            }
+
+            await onProposalReady(excelProposal);
+            return;
+        }
+
+        // =========================================================================
+        // ACTION INTENT: Đẩy thẳng đề xuất hiện có vào Kho Backlog hoặc Sprint qua hội thoại
+        // =========================================================================
+        if ((intent == "push_backlog" || intent == "apply_sprint") && existingProposal != null && existingProposal.Tasks.Count > 0)
+        {
+            await onStepProgress(3, "EVALUATE_CAPACITY", "Xác nhận danh sách công việc trong phiên hội thoại", 65, "Đang kiểm tra tính hợp lệ trước khi lưu trữ...");
+            var actionProposal = BuildPreservedProposalShell(sessionId, scope.ProjectId, targetSprintId, existingProposal);
+            var isBacklog = intent == "push_backlog";
+            actionProposal.Intent = intent;
+            actionProposal.RecommendedTarget = isBacklog ? "backlog" : "sprint";
+            actionProposal.TriggerAction = isBacklog ? "push_backlog" : "apply_sprint";
+            var actionReply = isBacklog
+                ? $"Tôi đã chuyển mục tiêu lưu trữ sang kho Product Backlog và kích hoạt đẩy {actionProposal.Tasks.Count} công việc ({actionProposal.TotalStoryPoints} SP) vào kho Backlog của dự án."
+                : $"Tôi đã kích hoạt áp dụng {actionProposal.Tasks.Count} công việc ({actionProposal.TotalStoryPoints} SP) vào Sprint tiếp theo của dự án.";
+
+            await RecordTraceAsync(
+                "step",
+                "Điều phối",
+                isBacklog ? "Kho Product Backlog" : "Sprint mục tiêu",
+                isBacklog ? "push_backlog_trigger" : "apply_sprint_trigger",
+                new { taskCount = actionProposal.Tasks.Count, storyPoints = actionProposal.TotalStoryPoints },
+                actionReply,
+                1,
+                emitToolCall: false);
+
+            FinalizeAssistantTurn(actionProposal, actionReply, intent, actionProposal.TriggerAction, recalledKeys);
+            await onStepProgress(5, "FINALIZE_PROPOSAL", "Hoàn tất điều phối", 100, actionReply);
+            await onProposalReady(actionProposal);
+            return;
+        }
+
+        // =========================================================================
+        // RECALL CHỈ MỤC TRÍ NHỚ PHIÊN (#mem-X) NẾU PHÙ HỢP
+        // =========================================================================
+        if (contextPlan.RecalledMemories.Count > 0)
+        {
+            var anchorListText = string.Join(", ", contextPlan.RecalledMemories.Select(m => m.AnchorKey));
+            var detailPreview = string.Join("\n", contextPlan.RecalledMemories.Select(m => $"{m.AnchorKey} ({m.Title}): {m.Summary}"));
+            await RecordTraceAsync(
+                "memory",
+                "Trỏ trí nhớ",
+                anchorListText,
+                "memory_recall",
+                new { anchors = contextPlan.RecalledMemories.Select(m => m.AnchorKey).ToArray() },
+                $"Trỏ trực tiếp chỉ mục trí nhớ phiên ({anchorListText}) thay vì nạp toàn bộ hội thoại cũ",
+                1,
+                detail: detailPreview);
+            await EmitThoughtAsync($"Đã trỏ chỉ mục trí nhớ phiên: {anchorListText} để kế thừa ngữ cảnh trọng tâm.\n");
+        }
+
+        // =========================================================================
+        // FAST PATH: CHÀO HỎI / TRẢ LỜI TỪ TRÍ NHỚ MÀ KHÔNG GỌI THỪA MCP SERVER
+        // =========================================================================
+        if (intent == "project_qa" && (contextPlan.IsGreetingOrHelp || contextPlan.UseMemoryOnly))
+        {
+            await onStepProgress(
+                4,
+                "PROJECT_CONSULTATION",
+                contextPlan.IsGreetingOrHelp ? "Soạn câu trả lời hướng dẫn sử dụng" : "Tổng hợp câu trả lời từ chỉ mục trí nhớ phiên",
+                85,
+                contextPlan.IsGreetingOrHelp
+                    ? "Trợ Lý AI đang trả lời trực tiếp (0 truy vấn MCP)..."
+                    : "Đang trỏ dữ liệu đã ghi nhớ trong phiên để trả lời đúng trọng tâm...");
+
+            var fastQaReply = await BuildFocusedProjectQaAnswerAsync(
+                effectiveUserText,
+                contextPlan,
+                activeConfig: null,
+                backlogStoriesJson: null,
+                sprintHistoryJson: null,
+                teamCapacitiesJson: null,
+                specHubExcerptsText: null,
+                projectDocs: [],
+                history,
+                indexedMemories,
+                existingProposal,
+                scope,
+                model,
+                cancellationToken);
+
+            await RecordTraceAsync(
+                "reasoning",
+                "Tổng hợp",
+                contextPlan.IsGreetingOrHelp ? "Trả lời trực tiếp" : "Ngữ cảnh trí nhớ",
+                "focused_answer",
+                new { mcpCalls = 0 },
+                "Trả lời đúng trọng tâm câu hỏi mà không cần truy vấn dư thừa MCP Server",
+                turnSw.ElapsedMilliseconds,
+                emitToolCall: false);
+
+            var fastQaProposal = BuildPreservedProposalShell(sessionId, scope.ProjectId, targetSprintId, existingProposal);
+            fastQaProposal.Intent = "project_qa";
+            fastQaProposal.TriggerAction = "none";
+            FinalizeAssistantTurn(fastQaProposal, fastQaReply, "project_qa", "none", recalledKeys);
+
+            await onStepProgress(5, "FINALIZE_PROPOSAL", "Hoàn tất phản hồi Trợ Lý AI", 100, "Đã hoàn tất câu trả lời.");
+            await onProposalReady(fastQaProposal);
+            return;
+        }
+
+        // =========================================================================
+        // STEP 2: Truy vấn Ngữ cảnh Có Chọn Lọc (Chỉ gọi MCP Tools thực sự cần thiết)
+        // =========================================================================
+        var sw = Stopwatch.StartNew();
+        var relevantDocs = string.Empty;
+        var specHubExcerpts = new System.Text.StringBuilder();
+        var projectDocsList = new List<(Guid Id, string Name)>();
+        string? backlogStories = null;
+        string? sprintHistory = null;
+        string? teamCapacities = null;
+
+        if (contextPlan.NeedsSpecHub || contextPlan.NeedsBacklog || contextPlan.NeedsSprintHistory)
+        {
+            await onStepProgress(2, "QUERY_CONTEXT", "Truy vấn Ngữ cảnh Dự án có chọn lọc", 35, "Chỉ gọi các công cụ MCP cần thiết cho câu hỏi và mục tiêu hiện tại...");
+        }
+
+        if (contextPlan.NeedsSpecHub)
+        {
+            sw.Restart();
+            relevantDocs = await _specHubTools.SearchRelevantSpecsAsync(scope, contextPlan.SpecSearchKeyword, 5, cancellationToken);
+            sw.Stop();
+            await RecordTraceAsync(
+                "mcp",
+                "Truy vấn MCP",
+                "spec_hub_search",
+                "spec_hub_search",
+                new { query = contextPlan.SpecSearchKeyword },
+                $"Tìm kiếm đặc tả Spec Hub theo từ khóa \"{contextPlan.SpecSearchKeyword}\"",
+                sw.ElapsedMilliseconds);
+
+            try
+            {
+                var rawDocs = await _planningDb.ProjectDocuments.AsNoTracking()
+                    .Where(d => d.ProjectId == scope.ProjectId && !d.IsDirectory)
+                    .OrderByDescending(d => d.UpdatedAt)
+                    .Take(10)
+                    .Select(d => new { d.Id, Name = string.IsNullOrEmpty(d.Name) ? d.Title : d.Name, d.Extension })
+                    .ToListAsync(cancellationToken);
+
+                var queryTerms = contextPlan.SpecSearchKeyword
+                    .Split(new[] { ' ', ',', '.', ';', '-', '_' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Where(w => w.Length >= 3)
+                    .ToArray();
+
+                var rankedDocs = rawDocs
+                    .Where(d =>
+                    {
+                        var ext = (d.Extension ?? string.Empty).ToLowerInvariant();
+                        return ext is not (".png" or ".jpg" or ".jpeg" or ".gif" or ".webp");
+                    })
+                    .OrderByDescending(d => queryTerms.Count(qt => d.Name.Contains(qt, StringComparison.OrdinalIgnoreCase)))
+                    .Take(Math.Max(1, contextPlan.MaxSpecDocsToRead))
+                    .ToList();
+
+                projectDocsList = rankedDocs.Select(d => (d.Id, d.Name)).ToList();
+
+                foreach (var doc in rankedDocs)
+                {
+                    sw.Restart();
+                    var docJson = await _specHubTools.ReadDocumentAsync(doc.Id, scope, cancellationToken);
+                    sw.Stop();
+                    await RecordTraceAsync(
+                        "mcp",
+                        "Đọc Spec Hub",
+                        doc.Name,
+                        "spec_hub_read_document",
+                        new { documentId = doc.Id, fileName = doc.Name },
+                        $"Đọc phân đoạn tài liệu đặc tả liên quan: {doc.Name}",
+                        sw.ElapsedMilliseconds);
+
+                    if (!string.IsNullOrWhiteSpace(docJson))
+                    {
+                        var snippet = docJson.Length > 2500 ? docJson[..2500] + "..." : docJson;
+                        specHubExcerpts.AppendLine($"--- Tài liệu Spec Hub: {doc.Name} ---");
+                        specHubExcerpts.AppendLine(InputGuardrail.Sanitize(snippet).SanitizedText);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[AiSprintDecomposition] Không thể đọc thêm tài liệu Spec Hub chọn lọc");
+            }
+        }
+
+        if (contextPlan.NeedsBacklog)
+        {
+            sw.Restart();
+            backlogStories = await _backlogTools.GetActiveStoriesAsync(scope, cancellationToken);
+            sw.Stop();
+            await RecordTraceAsync(
+                "mcp",
+                "Truy vấn MCP",
+                "backlog_get_stories",
+                "backlog_get_stories",
+                new { projectId = scope.ProjectId },
+                "Lấy danh sách các hạng mục đang có trong Product Backlog",
+                sw.ElapsedMilliseconds);
+        }
+
+        if (contextPlan.NeedsSprintHistory)
+        {
+            sw.Restart();
+            sprintHistory = await _sprintTools.GetSprintHistoryAndVelocityAsync(scope, cancellationToken);
+            sw.Stop();
+            await RecordTraceAsync(
+                "mcp",
+                "Truy vấn MCP",
+                "sprint_get_history_and_velocity",
+                "sprint_get_history_and_velocity",
+                new { projectId = scope.ProjectId },
+                "Truy xuất vận tốc Scrum và các hạng mục dở dang từ Sprint trước",
+                sw.ElapsedMilliseconds);
+        }
+
+        // =========================================================================
+        // STEP 3: Đánh giá Năng lực Đội ngũ & Cấu hình Dự án (Khi thực sự cần)
+        // =========================================================================
+        if (contextPlan.NeedsTeamCapacity)
+        {
+            await onStepProgress(3, "EVALUATE_CAPACITY", "Đánh giá Năng lực Đội ngũ & Kỹ năng", 55, "Đang thống kê số lượng thành viên, kỹ năng và giờ làm khả dụng...");
+            sw.Restart();
+            teamCapacities = await _teamTools.GetDevCapacitiesAsync(scope, cancellationToken);
+            sw.Stop();
+            await RecordTraceAsync(
+                "mcp",
+                "Truy vấn MCP",
+                "team_get_dev_capacities",
+                "team_get_dev_capacities",
+                new { projectId = scope.ProjectId },
+                "Phân tích kỹ năng và số giờ khả dụng của thành viên đội Scrum",
+                sw.ElapsedMilliseconds);
+        }
+
+        ProjectActiveConfig? activeConfig = null;
+        if (contextPlan.NeedsActiveConfig || intent is "sprint_plan" or "backlog_plan" or "refine_proposal")
+        {
+            sw.Restart();
+            activeConfig = await _backlogTools.ResolveActiveConfigAsync(scope.ProjectId, cancellationToken);
+            if (contextPlan.NeedsActiveConfig)
+            {
+                await _backlogTools.GetActiveConfigAsync(scope.ProjectId, scope, cancellationToken);
+                sw.Stop();
+                await RecordTraceAsync(
+                    "mcp",
+                    "Truy vấn MCP",
+                    "project_get_active_config",
+                    "project_get_active_config",
+                    new { projectId = scope.ProjectId },
+                    $"Truy xuất cấu hình áp dụng thực tế ({activeConfig.WorkflowName}: {activeConfig.Statuses.Count} trạng thái, {activeConfig.Priorities.Count} mức ưu tiên, {activeConfig.Labels.Count} nhãn)",
+                    sw.ElapsedMilliseconds);
+            }
+            else
+            {
+                sw.Stop();
+            }
+        }
+
+        // =========================================================================
+        // INTENT: Tra cứu / Hỏi đáp thông tin dự án (project_qa) - Đúng trọng tâm
+        // =========================================================================
+        if (specHubExcerpts.Length > 0 || !string.IsNullOrWhiteSpace(relevantDocs))
+        {
+            foreach (var specWarn in AiDocumentTextExtractor.ExtractDocumentWarnings(specHubExcerpts + "\n" + relevantDocs))
+            {
+                if (!pipelineWarnings.Contains(specWarn, StringComparer.Ordinal))
+                {
+                    pipelineWarnings.Add(specWarn);
+                }
+            }
+        }
+
+        if (intent == "project_qa")
+        {
+            await onStepProgress(4, "PROJECT_CONSULTATION", "Tổng hợp câu trả lời đúng trọng tâm", 80, "Đang tổng hợp từ dữ liệu đã truy xuất có chọn lọc...");
+            var qaReply = await BuildFocusedProjectQaAnswerAsync(
+                effectiveUserText,
+                contextPlan,
+                activeConfig,
+                backlogStories,
+                sprintHistory,
+                teamCapacities,
+                specHubExcerpts.ToString(),
+                projectDocsList,
+                history,
+                indexedMemories,
+                existingProposal,
+                scope,
+                model,
+                cancellationToken);
+
+            await RecordTraceAsync(
+                "reasoning",
+                "Tổng hợp",
+                "Trả lời trọng tâm",
+                "qa_synthesis",
+                new { retrievedSources = traceItems.Count(t => t.Kind == "mcp") },
+                "Tổng hợp câu trả lời ngắn gọn đúng câu hỏi của người dùng",
+                null,
+                emitToolCall: false);
+
+            var qaProposal = BuildPreservedProposalShell(sessionId, scope.ProjectId, targetSprintId, existingProposal);
+            if (activeConfig != null) ApplyConfigMetadata(qaProposal, activeConfig);
+            foreach (var pw in pipelineWarnings)
+            {
+                if (!qaProposal.Warnings.Contains(pw, StringComparer.Ordinal))
+                {
+                    qaProposal.Warnings.Add(pw);
+                }
+            }
+            if (pipelineWarnings.Count > 0 && !qaReply.Contains("ảnh quét", StringComparison.OrdinalIgnoreCase) && !qaReply.Contains("Cảnh báo", StringComparison.OrdinalIgnoreCase))
+            {
+                qaReply = $"{qaReply}\n\nLưu ý tài liệu: {string.Join(" ", pipelineWarnings)}".Trim();
+            }
+            qaProposal.Intent = "project_qa";
+            qaProposal.TriggerAction = "none";
+            FinalizeAssistantTurn(qaProposal, qaReply, "project_qa", "none", recalledKeys);
+
+            await onStepProgress(5, "FINALIZE_PROPOSAL", "Hoàn tất phản hồi tra cứu dự án", 100, "Đã trả lời dựa trên dữ liệu thực tế.");
+            await onProposalReady(qaProposal);
+            return;
+        }
+
+        // =========================================================================
+        // STEP 4: Phân rã hoặc Tinh chỉnh Sprint Goal, Epics & Tasks (75%)
+        // =========================================================================
+        activeConfig ??= await _backlogTools.ResolveActiveConfigAsync(scope.ProjectId, cancellationToken);
+        await onStepProgress(4, "DECOMPOSE_SPRINT", "Suy luận cấu trúc kế hoạch & phân bổ công việc", 75, "Mô hình AI đang suy luận từ ngữ cảnh và dữ liệu vừa thu thập...");
+
+        var workflowStatusesList = activeConfig.Statuses.Select(s => s.Name).ToList();
+        var issueTypesList = activeConfig.ParentWorkItemTypes.Select(t => t.Name).ToList();
+        var prioritiesList = activeConfig.Priorities.Select(p => p.Name).ToList();
+        var labelsList = activeConfig.Labels.Select(l => l.Name).ToList();
+
+        var conversationContextText = FormatConversationHistoryForPrompt(
+            history,
+            indexedMemories,
+            contextPlan.RecalledMemories,
+            existingProposal,
+            includeProposalTaskDetails: intent == "refine_proposal" || (existingProposal?.Tasks?.Count ?? 0) > 0);
+
+        var userVariables = new Dictionary<string, string>
+        {
+            ["DOC_CONTENT"] = string.IsNullOrWhiteSpace(conversationContextText)
+                ? sanitizedDoc
+                : $"{sanitizedDoc}\n\n{conversationContextText}".Trim(),
+            ["SPEC_HUB_DOCS"] = !string.IsNullOrWhiteSpace(relevantDocs) ? relevantDocs : "(Không cần nạp Spec Hub ở lượt này)",
+            ["SPEC_HUB_EXCERPTS"] = specHubExcerpts.Length > 0 ? specHubExcerpts.ToString() : string.Empty,
+            ["PM_DIRECTION"] = sanitizedPrompt ?? "Lập kế hoạch Sprint tiếp theo tối ưu năng lực nhóm và bám sát tài liệu đặc tả.",
+            ["SPRINT_HISTORY"] = !string.IsNullOrWhiteSpace(sprintHistory) ? sprintHistory : "(Không yêu cầu lịch sử Sprint ở lượt tinh chỉnh này)",
+            ["TEAM_CAPACITIES"] = !string.IsNullOrWhiteSpace(teamCapacities) ? teamCapacities : "(Giữ nguyên phân công hiện tại hoặc phân bổ linh hoạt theo phiên)",
+            ["BACKLOG_STORIES"] = !string.IsNullOrWhiteSpace(backlogStories) ? backlogStories : "(Không cần truy vấn lại Backlog ở lượt này)",
+            ["PROJECT_WORKFLOW_NAME"] = activeConfig.WorkflowName,
+            ["PROJECT_WORKFLOW_TYPE"] = activeConfig.WorkflowType,
+            ["PROJECT_INITIAL_STATUS"] = activeConfig.InitialStatusName,
+            ["PROJECT_WORKFLOW_STATUSES"] = workflowStatusesList.Count > 0 ? string.Join(", ", workflowStatusesList) : activeConfig.InitialStatusName,
+            ["PROJECT_WORKFLOW_SUMMARY"] = activeConfig.FormatWorkflowPromptSection(),
+            ["PROJECT_ISSUE_TYPES"] = activeConfig.FormatIssueTypesPromptSection(),
+            ["PROJECT_PARENT_ISSUE_TYPES"] = issueTypesList.Count > 0 ? string.Join(", ", issueTypesList) : "Story, Task, Bug",
+            ["PROJECT_PRIORITIES"] = activeConfig.FormatPrioritiesPromptSection(),
+            ["PROJECT_PRIORITY_NAMES"] = prioritiesList.Count > 0 ? string.Join(", ", prioritiesList) : "Urgent, High, Medium, Low",
+            ["PROJECT_DEFAULT_PRIORITY"] = activeConfig.GetDefaultPriorityName(),
+            ["PROJECT_LABELS"] = activeConfig.FormatLabelsPromptSection(),
+            ["SPEC_HUB_FILE_NAMES"] = projectDocsList.Count > 0 ? string.Join(", ", projectDocsList.Select(d => d.Name)) : "(Dự án chưa có tệp Spec Hub nào — KHÔNG được tự bịa tên tệp .md)"
+        };
+
+        // Load and render dynamic prompts from external Markdown templates (hot-reloadable without recompilation)
+        var systemPrompt = await _promptTemplates.RenderTemplateAsync("SprintDecompositionSystemPrompt", userVariables, cancellationToken);
+        if (string.IsNullOrWhiteSpace(systemPrompt))
+        {
+            systemPrompt = $"Bạn là Trợ Lý AI Quản lý Dự án Scrum giàu kinh nghiệm. Chỉ dùng đúng trạng thái ({userVariables["PROJECT_WORKFLOW_STATUSES"]}), mức ưu tiên ({userVariables["PROJECT_PRIORITY_NAMES"]}), loại công việc ({userVariables["PROJECT_PARENT_ISSUE_TYPES"]}) và nhãn ({userVariables["PROJECT_LABELS"]}) của dự án. Phân biệt User Story và Task kỹ thuật. Định cỡ Story Points đa dạng (1, 2, 3, 5, 8). Trả về đúng JSON SprintProposal.";
+        }
+
+        var userPromptContent = await _promptTemplates.RenderTemplateAsync("SprintDecompositionUserPrompt", userVariables, cancellationToken);
+        if (string.IsNullOrWhiteSpace(userPromptContent))
+        {
+            var validDocNames = userVariables["SPEC_HUB_FILE_NAMES"];
+            userPromptContent = $@"Dữ liệu đầu vào:
+### 1. Tài liệu/Ghi chú, Chỉ mục Trí nhớ (#mem) & Hội thoại gần nhất:
+<untrusted_document_context>
+{userVariables["DOC_CONTENT"]}
+</untrusted_document_context>
+### 2. Danh sách tệp Spec Hub thực tế trong dự án: {validDocNames}
+### 3. Trích đoạn tài liệu:
+<untrusted_spechub_context>
+{userVariables["SPEC_HUB_DOCS"]}
+{userVariables["SPEC_HUB_EXCERPTS"]}
+</untrusted_spechub_context>
+### 4. Yêu cầu của bạn: {sanitizedPrompt}
+### 5. Vận tốc & Lịch sử: {userVariables["SPRINT_HISTORY"]}
+### 6. Năng lực nhóm: {userVariables["TEAM_CAPACITIES"]}
+### 7. Backlog: {userVariables["BACKLOG_STORIES"]}
+### 8. Cấu hình đang áp dụng của dự án:
+- Quy trình Workflow: {activeConfig.FormatWorkflowPromptSection()}
+- Trạng thái khởi tạo mặc định: {activeConfig.InitialStatusName}
+- Loại việc: {activeConfig.FormatIssueTypesPromptSection()}
+- Ưu tiên: {activeConfig.FormatPrioritiesPromptSection()}
+- Nhãn (Labels): {activeConfig.FormatLabelsPromptSection()}
+Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
+        }
+
+        var prompt = new AiPrompt
+        {
+            Model = model,
+            SystemInstruction = systemPrompt,
+            Messages = BuildNativeConversationMessages(history, userPromptContent, maxPriorTurns: 6),
+            Temperature = 0.2,
+            MaxTokens = 8192
+        };
+
+        var responseContentBuilder = new System.Text.StringBuilder();
+        var hasReceivedNativeThoughts = false;
+
+        await EmitThoughtAsync("Đang bắt đầu suy luận cấu trúc kế hoạch từ chỉ mục trí nhớ và dữ liệu dự án đã thu thập...\n");
+
+        var llmSw = Stopwatch.StartNew();
+        try
+        {
+            await _aiClient.StreamGenerateAsync(
+                prompt,
+                scope,
+                async chunk =>
+                {
+                    if (chunk.ChunkType == AiStreamChunkType.Thought && !string.IsNullOrEmpty(chunk.DeltaThought))
+                    {
+                        hasReceivedNativeThoughts = true;
+                        await EmitThoughtAsync(chunk.DeltaThought);
+                    }
+                    else if (chunk.ChunkType == AiStreamChunkType.Content && !string.IsNullOrEmpty(chunk.DeltaContent))
+                    {
+                        responseContentBuilder.Append(chunk.DeltaContent);
+                    }
+                },
+                cancellationToken);
+
+            if (!hasReceivedNativeThoughts)
+            {
+                await EmitThoughtAsync("Đã hoàn thành bóc tách mục tiêu, phân bổ Story Points và đối chiếu tiêu chí nghiệm thu.\n");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[AiSprintDecomposition] Luồng stream AI ghi nhận ngoại lệ: {Message}, tiến hành lập đề xuất từ ngữ cảnh đặc tả", ex.Message);
+        }
+        llmSw.Stop();
+
+        await RecordTraceAsync(
+            "reasoning",
+            "Suy luận AI",
+            model ?? _aiClient.ProviderName,
+            "llm_reasoning",
+            new { model = model ?? _aiClient.ProviderName },
+            $"Hoàn tất suy luận kế hoạch với mô hình {(string.IsNullOrWhiteSpace(model) ? _aiClient.ProviderName : model)}",
+            llmSw.ElapsedMilliseconds,
+            emitToolCall: false);
+
+        // =========================================================================
+        // STEP 5: Tự kiểm tra (Self-Check Critique Agent) & Lưu Staging (100%)
+        // =========================================================================
+        await onStepProgress(5, "FINALIZE_PROPOSAL", "Tự kiểm tra (Self-Check) & Lưu Staging", 100, "Đang đối chiếu tiêu chí nghiệm thu, cân bằng tải và lưu trữ đề xuất...");
+        await EmitThoughtAsync("Tự kiểm tra (Self-Check Agent): Xác nhận Workflow, Priority, Issue Type hợp lệ và bảo toàn nguồn Backlog.\n");
+
+        var rawAiOutput = responseContentBuilder.ToString();
+        _logger.LogInformation("[AiSprintDecomposition] Phản hồi thô từ LLM đạt {Length} ký tự. Bắt đầu phân tích cấu trúc.", rawAiOutput.Length);
+        var proposal = ParseAiOutputToProposal(rawAiOutput, sessionId, scope.ProjectId, targetSprintId, sanitizedDoc, sanitizedPrompt, projectDocsList, activeConfig, intent == "refine_proposal" ? existingProposal : null);
+        foreach (var pw in pipelineWarnings)
+        {
+            if (!proposal.Warnings.Contains(pw, StringComparer.Ordinal))
+            {
+                proposal.Warnings.Add(pw);
+            }
+        }
+        _logger.LogInformation("[AiSprintDecomposition] Phân tích hoàn tất: {TaskCount} tasks, {StoryPoints} SP, {WarningCount} cảnh báo.", proposal.Tasks.Count, proposal.TotalStoryPoints, proposal.Warnings.Count);
+
+        if (!string.IsNullOrWhiteSpace(teamCapacities))
+        {
+            EnrichProposalWithTeamMembers(proposal, teamCapacities);
+        }
+
+        await RecordTraceAsync(
+            "step",
+            "Kiểm chuẩn",
+            activeConfig.WorkflowName,
+            "self_check_critique",
+            new { tasks = proposal.Tasks.Count, storyPoints = proposal.TotalStoryPoints },
+            $"Xác thực {proposal.Tasks.Count} việc ({proposal.TotalStoryPoints} SP) khớp quy chuẩn '{activeConfig.WorkflowName}'",
+            1,
+            emitToolCall: false);
+
+        var isBacklogTarget = intent == "backlog_plan" || IsBacklogTargetRequested(effectiveUserText);
+        var isExplicitSprintTarget = intent == "sprint_plan" || IsSprintTargetExplicitlyRequested(effectiveUserText);
+        proposal.Intent = intent;
+        proposal.RecommendedTarget = isBacklogTarget
+            ? "backlog"
+            : (isExplicitSprintTarget ? "sprint" : (existingProposal?.RecommendedTarget ?? "sprint"));
+        proposal.TriggerAction = "none";
+
+        var finalReply = !string.IsNullOrWhiteSpace(proposal.AssistantReply)
+            ? proposal.AssistantReply
+            : isBacklogTarget
+                ? $"Tôi đã chuẩn bị {proposal.Tasks.Count} hạng mục công việc ({proposal.TotalStoryPoints} SP · {proposal.TotalEstimatedHours} giờ) theo quy chuẩn '{activeConfig.WorkflowName}' sẵn sàng đẩy vào kho Product Backlog."
+                : intent == "refine_proposal"
+                    ? $"Tôi đã cập nhật lại kế hoạch theo yêu cầu của bạn: hiện có {proposal.Tasks.Count} công việc ({proposal.TotalStoryPoints} SP · {proposal.TotalEstimatedHours} giờ) với mục tiêu \"{proposal.SprintGoal}\"."
+                    : $"Tôi đã hoàn tất lập kế hoạch {proposal.Tasks.Count} công việc ({proposal.TotalStoryPoints} SP · {proposal.TotalEstimatedHours} giờ) cho mục tiêu: \"{proposal.SprintGoal}\".";
+
+        if (proposal.Warnings.Count > 0 &&
+            !finalReply.Contains("lưu ý", StringComparison.OrdinalIgnoreCase) &&
+            !finalReply.Contains("cảnh báo", StringComparison.OrdinalIgnoreCase) &&
+            !finalReply.Contains("giới hạn token", StringComparison.OrdinalIgnoreCase))
+        {
+            finalReply = $"{finalReply}\n\nLưu ý hệ thống: {string.Join(" ", proposal.Warnings)}".Trim();
+        }
+
+        FinalizeAssistantTurn(proposal, finalReply, intent, "none", recalledKeys);
+
+        await onProposalReady(proposal);
+    }
+
+    public async Task<AiSprintProposalDto> RegenerateFullProposalAsync(
+        AiSprintProposalDto proposal,
+        string userFeedback,
+        IProjectScopeContext scope,
+        CancellationToken cancellationToken = default)
+    {
+        if (InputGuardrail.ContainsPromptInjectionOrExfiltration(userFeedback, out _) ||
+            InputGuardrail.ContainsUnsafeScript(userFeedback))
+        {
+            proposal.ConversationHistory ??= [];
+            proposal.ConversationHistory.Add(new AiConversationTurnDto
+            {
+                Id = $"user_{DateTime.UtcNow.Ticks}",
+                Role = "user",
+                Content = "[Yêu cầu vi phạm chính sách an toàn]",
+                Intent = "security_refusal",
+                TimestampUtc = DateTime.UtcNow
+            });
+            proposal.Intent = "security_refusal";
+            proposal.AssistantReply = "Yêu cầu bị từ chối bởi bộ kiểm chuẩn an toàn: không cho phép ghi đè chỉ dẫn bảo mật, truy xuất bí mật hoặc chèn mã độc.";
+            proposal.ConversationHistory.Add(new AiConversationTurnDto
+            {
+                Id = $"assistant_{DateTime.UtcNow.Ticks}",
+                Role = "assistant",
+                Content = proposal.AssistantReply,
+                Intent = "security_refusal",
+                ActionType = "none",
+                TaskCount = proposal.Tasks.Count,
+                TotalStoryPoints = proposal.TotalStoryPoints,
+                TimestampUtc = DateTime.UtcNow
+            });
+            return proposal;
+        }
+
+        var sanitizedFeedback = InputGuardrail.Sanitize(userFeedback ?? string.Empty).SanitizedText;
+        var currentTasksJson = JsonSerializer.Serialize(proposal.Tasks);
+        var teamCapacities = await _teamTools.GetDevCapacitiesAsync(scope, cancellationToken);
+        var activeConfig = await _backlogTools.ResolveActiveConfigAsync(scope.ProjectId, cancellationToken);
+        var projectDocsList = await LoadProjectDocMetasAsync(scope.ProjectId, cancellationToken);
+
+        var fullVariables = new Dictionary<string, string>
+        {
+            ["SPRINT_GOAL"] = proposal.SprintGoal,
+            ["CURRENT_TASKS_JSON"] = currentTasksJson,
+            ["TEAM_CAPACITIES"] = teamCapacities,
+            ["USER_FEEDBACK"] = sanitizedFeedback,
+            ["PROJECT_WORKFLOW_SUMMARY"] = activeConfig.FormatWorkflowPromptSection(),
+            ["PROJECT_INITIAL_STATUS"] = activeConfig.InitialStatusName,
+            ["PROJECT_ISSUE_TYPES"] = activeConfig.FormatIssueTypesPromptSection(),
+            ["PROJECT_PRIORITIES"] = activeConfig.FormatPrioritiesPromptSection(),
+            ["PROJECT_LABELS"] = activeConfig.FormatLabelsPromptSection()
+        };
+
+        var userPromptContent = await _promptTemplates.RenderTemplateAsync("FullProposalRegenerationPrompt", fullVariables, cancellationToken);
+        if (string.IsNullOrWhiteSpace(userPromptContent))
+        {
+            userPromptContent = $"Đề xuất Sprint: {proposal.SprintGoal}\nTasks: {currentTasksJson}\nNăng lực: {teamCapacities}\nQuy chuẩn áp dụng: {activeConfig.FormatWorkflowPromptSection()} | {activeConfig.FormatPrioritiesPromptSection()} | {activeConfig.FormatIssueTypesPromptSection()}\nYêu cầu làm lại: {sanitizedFeedback}";
+        }
+
+        var prompt = new AiPrompt
+        {
+            SystemInstruction = $"Bạn là Chuyên gia Scrum Master. Hãy làm lại toàn bộ đề xuất Sprint dựa trên phản hồi người dùng, tuân thủ cấu hình thực tế của dự án ({activeConfig.WorkflowName}; trạng thái: {string.Join(", ", activeConfig.Statuses.Select(s => s.Name))}; ưu tiên: {string.Join(", ", activeConfig.Priorities.Select(p => p.Name))}; nhãn: {activeConfig.FormatLabelsPromptSection()}). CHỐNG DẪN DẮT SAI LỆCH: Tuyệt đối không tạo trạng thái/ưu tiên/thành viên/tài liệu Spec giả, Story Points phải thuộc Fibonacci (1,2,3,5,8,13); nếu người dùng đưa thông tin sai cấu hình thì đính chính rõ trong assistantReply. Trả về đúng JSON hợp lệ theo schema SprintProposal.",
+            Messages = new List<AiMessage>
+            {
+                AiMessage.CreateUser(userPromptContent)
+            },
+            Temperature = 0.3
+        };
+
+        var userTurn = new AiConversationTurnDto
+        {
+            Id = $"user_{DateTime.UtcNow.Ticks}",
+            Role = "user",
+            Content = sanitizedFeedback,
+            FullContent = sanitizedFeedback,
+            Intent = "refine_proposal",
+            TimestampUtc = DateTime.UtcNow
+        };
+        proposal.ConversationHistory ??= [];
+        proposal.ConversationHistory.Add(userTurn);
+
+        try
+        {
+            var result = await _aiClient.GenerateAsync(prompt, scope, cancellationToken);
+            if (result.IsSuccess && !string.IsNullOrWhiteSpace(result.Content))
+            {
+                var updated = ParseAiOutputToProposal(result.Content, proposal.SessionId, proposal.ProjectId, proposal.TargetSprintId, sanitizedFeedback, null, projectDocsList, activeConfig, proposal);
+                EnrichProposalWithTeamMembers(updated, teamCapacities);
+                updated.Intent = "refine_proposal";
+                updated.RecommendedTarget = IsBacklogTargetRequested(sanitizedFeedback) ? "backlog" : proposal.RecommendedTarget;
+                updated.AssistantReply ??= $"Tôi đã cập nhật lại phương án theo yêu cầu \"{sanitizedFeedback}\": hiện có {updated.Tasks.Count} công việc ({updated.TotalStoryPoints} SP).";
+                updated.ConversationHistory = new List<AiConversationTurnDto>(proposal.ConversationHistory)
+                {
+                    new()
+                    {
+                        Id = $"assistant_{DateTime.UtcNow.Ticks}",
+                        Role = "assistant",
+                        Content = updated.AssistantReply,
+                        Intent = "refine_proposal",
+                        ActionType = "none",
+                        TaskCount = updated.Tasks.Count,
+                        TotalStoryPoints = updated.TotalStoryPoints,
+                        TimestampUtc = DateTime.UtcNow
+                    }
+                };
+                return updated;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[RegenerateFullProposal] Không thể sinh lại toàn bộ qua model AI, áp dụng điều chỉnh cục bộ");
+        }
+
+        proposal.SprintGoal = $"{proposal.SprintGoal} ({sanitizedFeedback})";
+        foreach (var task in proposal.Tasks)
+        {
+            task.Description = $"{task.Description}\n[Cập nhật theo yêu cầu: {sanitizedFeedback}]";
+        }
+        proposal.Intent = "refine_proposal";
+        if (IsBacklogTargetRequested(sanitizedFeedback))
+        {
+            proposal.RecommendedTarget = "backlog";
+        }
+        proposal.AssistantReply = $"Tôi đã điều chỉnh danh sách công việc theo yêu cầu: \"{sanitizedFeedback}\".";
+        proposal.ConversationHistory.Add(new AiConversationTurnDto
+        {
+            Id = $"assistant_{DateTime.UtcNow.Ticks}",
+            Role = "assistant",
+            Content = proposal.AssistantReply,
+            Intent = "refine_proposal",
+            ActionType = "none",
+            TaskCount = proposal.Tasks.Count,
+            TotalStoryPoints = proposal.TotalStoryPoints,
+            TimestampUtc = DateTime.UtcNow
+        });
+        return proposal;
+    }
+
+    public async Task<ProposedTaskDto> RegenerateSingleTaskAsync(
+        AiSprintProposalDto proposal,
+        string taskId,
+        string userFeedback,
+        IProjectScopeContext scope,
+        CancellationToken cancellationToken = default)
+    {
+        var existingTask = proposal.Tasks.FirstOrDefault(t => t.Id == taskId);
+        if (existingTask == null)
+        {
+            throw new InvalidOperationException($"Không tìm thấy Task với Id '{taskId}' trong đề xuất hiện tại.");
+        }
+
+        if (InputGuardrail.ContainsPromptInjectionOrExfiltration(userFeedback, out _) ||
+            InputGuardrail.ContainsUnsafeScript(userFeedback))
+        {
+            return existingTask;
+        }
+
+        var safeFeedback = InputGuardrail.Sanitize(userFeedback ?? string.Empty).SanitizedText;
+        var teamCapacities = await _teamTools.GetDevCapacitiesAsync(scope, cancellationToken);
+        var activeConfig = await _backlogTools.ResolveActiveConfigAsync(scope.ProjectId, cancellationToken);
+        var projectDocsList = await LoadProjectDocMetasAsync(scope.ProjectId, cancellationToken);
+        var singleVariables = new Dictionary<string, string>
+        {
+            ["SPRINT_GOAL"] = proposal.SprintGoal,
+            ["TASK_TITLE"] = existingTask.Title,
+            ["TASK_TYPE"] = existingTask.Type,
+            ["TASK_DESCRIPTION"] = existingTask.Description,
+            ["TASK_AC"] = string.Join("; ", existingTask.AcceptanceCriteria),
+            ["TASK_SP"] = existingTask.StoryPoints.ToString(),
+            ["TASK_HOURS"] = existingTask.EstimatedHours.ToString(),
+            ["TASK_ASSIGNEE"] = existingTask.AssigneeName ?? "Chưa gán",
+            ["TEAM_CAPACITIES"] = teamCapacities,
+            ["PROJECT_WORKFLOW_SUMMARY"] = activeConfig.FormatWorkflowPromptSection(),
+            ["PROJECT_INITIAL_STATUS"] = activeConfig.InitialStatusName,
+            ["PROJECT_ISSUE_TYPES"] = activeConfig.FormatIssueTypesPromptSection(),
+            ["PROJECT_PRIORITIES"] = activeConfig.FormatPrioritiesPromptSection(),
+            ["PROJECT_LABELS"] = activeConfig.FormatLabelsPromptSection(),
+            ["USER_FEEDBACK"] = safeFeedback
+        };
+
+        var userPromptContent = await _promptTemplates.RenderTemplateAsync("SingleTaskRegenerationPrompt", singleVariables, cancellationToken);
+        if (string.IsNullOrWhiteSpace(userPromptContent))
+        {
+            userPromptContent = $"Sprint Goal: {proposal.SprintGoal}\nTask: {existingTask.Title}\nCấu hình dự án: {activeConfig.FormatWorkflowPromptSection()} | {activeConfig.FormatPrioritiesPromptSection()}\nFeedback: {safeFeedback}";
+        }
+
+        var prompt = new AiPrompt
+        {
+            SystemInstruction = $"Bạn là trợ lý Scrum Master. Tinh chỉnh lại một Task cụ thể theo phản hồi người dùng, tuân thủ trạng thái ({activeConfig.InitialStatusName}, ...), ưu tiên ({string.Join(", ", activeConfig.Priorities.Select(p => p.Name))}) và loại việc ({string.Join(", ", activeConfig.ParentWorkItemTypes.Select(t => t.Name))}). CHỐNG DẪN DẮT SAI LỆCH: Story Points thuộc dãy Fibonacci (1,2,3,5,8,13), chỉ chọn nhân sự thật trong team và tài liệu Spec Hub thật. Trả về đúng JSON của một đối tượng Task.",
+            Messages = new List<AiMessage>
+            {
+                AiMessage.CreateUser(userPromptContent)
+            },
+            Temperature = 0.2
+        };
+
+        try
+        {
+            var result = await _aiClient.GenerateAsync(prompt, scope, cancellationToken);
+            if (result.IsSuccess && !string.IsNullOrWhiteSpace(result.Content))
+            {
+                var revisedTask = ParseSingleTask(result.Content, existingTask, activeConfig, projectDocsList, teamCapacities, safeFeedback);
+                var index = proposal.Tasks.IndexOf(existingTask);
+                proposal.Tasks[index] = revisedTask;
+                return revisedTask;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[RegenerateTask] Không thể sinh lại task qua AI, áp dụng chỉnh sửa mô tả");
+        }
+
+        if (!string.IsNullOrWhiteSpace(safeFeedback))
+        {
+            existingTask.Description = $"{existingTask.Description}\n[Yêu cầu cập nhật: {safeFeedback}]".Trim();
+        }
+        return existingTask;
+    }
+
+    internal static AiSprintProposalDto ParseAiOutputToProposal(
+        string rawJson,
+        string sessionId,
+        Guid projectId,
+        Guid? targetSprintId,
+        string sourceDoc,
+        string? userPrompt = null,
+        IReadOnlyList<(Guid Id, string Name)>? availableDocs = null,
+        ProjectActiveConfig? activeConfig = null,
+        AiSprintProposalDto? preserveOnFailure = null)
+    {
+        const string truncationWarning = "Tài liệu có quy mô lớn nên một phần danh sách cuối đã được tự động gói gọn để đảm bảo giới hạn Token; bạn có thể yêu cầu Trợ Lý AI phân rã tiếp phần còn lại trong lượt chat kế tiếp.";
+        var wasRepairedFromTruncation = false;
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(rawJson))
+            {
+                var cleaned = ExtractJsonObject(rawJson);
+                System.Text.Json.Nodes.JsonNode? docNode;
+                try
+                {
+                    docNode = System.Text.Json.Nodes.JsonNode.Parse(cleaned);
+                }
+                catch (JsonException)
+                {
+                    if (!TryRepairTruncatedJson(rawJson, out var repairedJson))
+                    {
+                        throw;
+                    }
+                    wasRepairedFromTruncation = true;
+                    docNode = System.Text.Json.Nodes.JsonNode.Parse(repairedJson);
+                }
+
+                if (docNode is System.Text.Json.Nodes.JsonObject obj)
+                {
+                    var proposal = new AiSprintProposalDto
+                    {
+                        SessionId = sessionId,
+                        ProjectId = projectId,
+                        TargetSprintId = targetSprintId,
+                        SprintGoal = SafeText(obj["sprintGoal"]?.GetValue<string>() ?? obj["goal"]?.GetValue<string>(), "Hoàn thiện các mục tiêu Sprint theo đặc tả"),
+                        Rationale = SafeText(obj["rationale"]?.GetValue<string>(), "Phân rã công việc theo chuẩn Scrum và năng lực đội ngũ."),
+                        AssistantReply = CleanOptionalText(obj["assistantReply"]?.GetValue<string>() ?? obj["reply"]?.GetValue<string>()),
+                        RecommendedTarget = (obj["recommendedTarget"]?.GetValue<string>() ?? "sprint").Equals("backlog", StringComparison.OrdinalIgnoreCase) ? "backlog" : "sprint",
+                        Tags = new List<string> { "#SprintPlan", "#Scrum", "#SpecHub" }
+                    };
+                    ApplyConfigMetadata(proposal, activeConfig);
+
+                    var tagsArray = obj["tags"]?.AsArray();
+                    if (tagsArray != null && tagsArray.Count > 0)
+                    {
+                        proposal.Tags = tagsArray
+                            .Select(t => t?.GetValue<string>()?.Trim())
+                            .Where(t => !string.IsNullOrEmpty(t))
+                            .Select(t => t!.StartsWith('#') ? t! : $"#{t}")
+                            .Distinct()
+                            .ToList()!;
+                    }
+
+                    var tasksArray = (obj["tasks"] ?? obj["proposedTasks"])?.AsArray();
+                    if (tasksArray != null && tasksArray.Count > 0)
+                    {
+                        var taskIndex = 1;
+                        foreach (var taskElem in tasksArray)
+                        {
+                            if (taskElem is not System.Text.Json.Nodes.JsonObject tObj) continue;
+
+                            var taskTitle = SafeText(tObj["title"]?.GetValue<string>(), $"Công việc #{taskIndex}");
+                            var taskDesc = SafeText(tObj["description"]?.GetValue<string>(), taskTitle);
+
+                            // Tránh trường hợp Description bị nhét nguyên văn toàn bộ tài liệu thô
+                            if (!string.IsNullOrWhiteSpace(sourceDoc) && taskDesc.Length > 500 && taskDesc.Contains(sourceDoc[..Math.Min(100, sourceDoc.Length)]))
+                            {
+                                taskDesc = $"Triển khai các hạng mục kỹ thuật và nghiệp vụ cho '{taskTitle}' theo yêu cầu đặc tả.";
+                            }
+
+                            decimal sp = 3;
+                            if (tObj["storyPoints"] != null)
+                            {
+                                if (tObj["storyPoints"]!.AsValue().TryGetValue<decimal>(out var val)) sp = val;
+                                else if (decimal.TryParse(tObj["storyPoints"]!.ToString(), out var strVal)) sp = strVal;
+                            }
+                            sp = NormalizeFibonacciSp(sp <= 0 ? 3m : sp, maxSp: 13);
+
+                            decimal hours = sp * 4;
+                            if (tObj["estimatedHours"] != null)
+                            {
+                                if (tObj["estimatedHours"]!.AsValue().TryGetValue<decimal>(out var hVal)) hours = hVal;
+                                else if (decimal.TryParse(tObj["estimatedHours"]!.ToString(), out var strHVal)) hours = strHVal;
+                            }
+                            hours = Math.Clamp(hours <= 0 ? sp * 4m : hours, 1m, 120m);
+
+                            var candidateTaskId = tObj["id"]?.GetValue<string>()?.Trim();
+                            Guid? sourceBacklogIssueId = null;
+                            var rawBacklogId = tObj["sourceBacklogIssueId"]?.GetValue<string>();
+                            if (!string.IsNullOrWhiteSpace(rawBacklogId) && Guid.TryParse(rawBacklogId.Trim(), out var parsedBacklogId))
+                            {
+                                sourceBacklogIssueId = parsedBacklogId;
+                            }
+                            var sourceBacklogIssueKey = tObj["sourceBacklogIssueKey"]?.GetValue<string>()?.Trim();
+                            if (string.IsNullOrWhiteSpace(sourceBacklogIssueKey)) sourceBacklogIssueKey = null;
+
+                            if ((sourceBacklogIssueId == null || string.IsNullOrWhiteSpace(sourceBacklogIssueKey)) &&
+                                preserveOnFailure?.Tasks != null && preserveOnFailure.Tasks.Count > 0)
+                            {
+                                var matchedSource = preserveOnFailure.Tasks.FirstOrDefault(prev =>
+                                    (!string.IsNullOrWhiteSpace(candidateTaskId) &&
+                                     prev.Id.Equals(candidateTaskId, StringComparison.OrdinalIgnoreCase)) ||
+                                    (!string.IsNullOrWhiteSpace(sourceBacklogIssueKey) &&
+                                     string.Equals(prev.SourceBacklogIssueKey, sourceBacklogIssueKey, StringComparison.OrdinalIgnoreCase)) ||
+                                    prev.Title.Trim().Equals(taskTitle, StringComparison.OrdinalIgnoreCase));
+                                if (matchedSource != null)
+                                {
+                                    sourceBacklogIssueId ??= matchedSource.SourceBacklogIssueId;
+                                    sourceBacklogIssueKey ??= matchedSource.SourceBacklogIssueKey;
+                                }
+                            }
+
+                            var rawType = tObj["type"]?.GetValue<string>() ?? "Story";
+                            var rawPriority = tObj["priority"]?.GetValue<string>() ?? activeConfig?.GetDefaultPriorityName() ?? "High";
+                            var rawStatus = tObj["status"]?.GetValue<string>() ?? activeConfig?.InitialStatusName ?? "To Do";
+
+                            var taskDto = new ProposedTaskDto
+                            {
+                                Id = !string.IsNullOrWhiteSpace(candidateTaskId) ? candidateTaskId : $"task_{taskIndex:D2}",
+                                SourceBacklogIssueId = sourceBacklogIssueId,
+                                SourceBacklogIssueKey = sourceBacklogIssueKey,
+                                EpicTitle = tObj["epicTitle"]?.GetValue<string>() ?? tObj["epic"]?.GetValue<string>() ?? "Core Development",
+                                Title = taskTitle,
+                                Description = taskDesc,
+                                Type = activeConfig != null ? activeConfig.ResolveIssueTypeName(rawType) : rawType,
+                                Priority = activeConfig != null ? activeConfig.ResolvePriorityName(rawPriority) : rawPriority,
+                                Status = activeConfig != null ? activeConfig.ResolveStatusName(rawStatus) : rawStatus,
+                                StoryPoints = sp,
+                                EstimatedHours = hours,
+                                RemainingHours = hours,
+                                AssigneeName = tObj["assigneeName"]?.GetValue<string>() ?? tObj["assignee"]?.GetValue<string>(),
+                                AiRationale = tObj["aiRationale"]?.GetValue<string>() ?? "Phân rã theo kiến trúc và khả năng hoàn thành trong Sprint."
+                            };
+
+                            // Labels/Tags của Task (hỗ trợ cả labels và tags)
+                            var labelsNode = (tObj["labels"] ?? tObj["tags"])?.AsArray();
+                            if (labelsNode != null && labelsNode.Count > 0)
+                            {
+                                taskDto.Tags = labelsNode.Select(x => x?.GetValue<string>()?.Trim()).Where(x => !string.IsNullOrEmpty(x)).Select(x => x!.TrimStart('#')).Distinct(StringComparer.OrdinalIgnoreCase).ToList()!;
+                            }
+                            else if (activeConfig != null && activeConfig.Labels.Count > 0)
+                            {
+                                taskDto.Tags = [];
+                            }
+                            else
+                            {
+                                taskDto.Tags = new List<string> { taskDto.Type, "SprintTask" };
+                            }
+
+                            // Acceptance Criteria
+                            var acNode = tObj["acceptanceCriteria"];
+                            if (acNode is System.Text.Json.Nodes.JsonArray acArr)
+                            {
+                                taskDto.AcceptanceCriteria = acArr.Select(x => x?.GetValue<string>()?.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList()!;
+                            }
+                            else if (acNode != null)
+                            {
+                                taskDto.AcceptanceCriteria = acNode.ToString().Split(new[] { '\n', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+                            }
+                            if (taskDto.AcceptanceCriteria.Count == 0)
+                            {
+                                taskDto.AcceptanceCriteria = new List<string> { $"Hoàn thành nghiệp vụ '{taskTitle}'", "Đảm bảo vượt qua kiểm thử tự động và review code" };
+                            }
+
+                            // Document Citations
+                            var citeNode = tObj["documentCitations"] ?? tObj["citations"];
+                            if (citeNode is System.Text.Json.Nodes.JsonArray cArr)
+                            {
+                                taskDto.DocumentCitations = cArr.Select(x => x?.GetValue<string>()?.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList()!;
+                            }
+                            else if (citeNode != null)
+                            {
+                                taskDto.DocumentCitations = citeNode.ToString().Split(new[] { '\n', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+                            }
+
+                            // Chuẩn hóa trích dẫn Spec Hub thực tế (Chống bịa đặt tên tệp không tồn tại)
+                            var (normalizedTaskDocId, normalizedTaskCites) = NormalizeSpecHubCitations(
+                                taskDto.DocumentCitations,
+                                availableDocs,
+                                fallbackDocIndex: taskIndex - 1);
+                            taskDto.DocumentId = normalizedTaskDocId;
+                            taskDto.DocumentCitations = normalizedTaskCites;
+
+                            // Subtasks (hỗ trợ cả mảng object lẫn mảng string)
+                            var subNode = tObj["subtasks"] ?? tObj["subTasks"];
+                            if (subNode is System.Text.Json.Nodes.JsonArray sArr && sArr.Count > 0)
+                            {
+                                var subIdx = 1;
+                                foreach (var sElem in sArr)
+                                {
+                                    if (sElem is System.Text.Json.Nodes.JsonObject sObj)
+                                    {
+                                        var subTitle = SafeText(sObj["title"]?.GetValue<string>(), $"Công việc con #{subIdx}");
+                                        var subHours = 4m;
+                                        if (sObj["estimatedHours"] != null && sObj["estimatedHours"]!.AsValue().TryGetValue<decimal>(out var sh)) subHours = sh;
+                                        subHours = Math.Clamp(subHours <= 0 ? 4m : subHours, 0.5m, 80m);
+
+                                        var subRawPriority = sObj["priority"]?.GetValue<string>() ?? taskDto.Priority;
+                                        var subRawStatus = sObj["status"]?.GetValue<string>() ?? taskDto.Status;
+                                        var subSp = 1;
+                                        if (sObj["storyPoints"] != null)
+                                        {
+                                            if (sObj["storyPoints"]!.AsValue().TryGetValue<int>(out var spInt)) subSp = spInt;
+                                            else if (sObj["storyPoints"]!.AsValue().TryGetValue<decimal>(out var spDec)) subSp = (int)Math.Max(1, Math.Round(spDec));
+                                            else if (decimal.TryParse(sObj["storyPoints"]!.ToString(), out var spParsed)) subSp = (int)Math.Max(1, Math.Round(spParsed));
+                                        }
+                                        subSp = (int)NormalizeFibonacciSp(subSp <= 0 ? 1m : subSp, maxSp: 5);
+
+                                        var subRawCites = ParseCitationArray(sObj["documentCitations"] ?? sObj["citations"]);
+                                        var (subDocId, subNormCites) = subRawCites.Count > 0
+                                            ? NormalizeSpecHubCitations(subRawCites, availableDocs, fallbackDocIndex: -1)
+                                            : (taskDto.DocumentId, taskDto.DocumentCitations.ToList());
+                                        if (subDocId == null && taskDto.DocumentId != null && subNormCites.Count == 0)
+                                        {
+                                            subDocId = taskDto.DocumentId;
+                                            subNormCites = taskDto.DocumentCitations.ToList();
+                                        }
+
+                                        var subDto = new ProposedSubTaskDto
+                                        {
+                                            Id = sObj["id"]?.GetValue<string>() ?? $"{taskDto.Id}_{subIdx}",
+                                            Title = subTitle,
+                                            Role = SafeText(sObj["role"]?.GetValue<string>(), "Backend"),
+                                            EstimatedHours = subHours,
+                                            StoryPoints = subSp,
+                                            Priority = activeConfig != null ? activeConfig.ResolvePriorityName(subRawPriority) : subRawPriority,
+                                            Status = activeConfig != null ? activeConfig.ResolveStatusName(subRawStatus) : subRawStatus,
+                                            AssigneeName = sObj["assigneeName"]?.GetValue<string>() ?? taskDto.AssigneeName,
+                                            Description = SafeText(sObj["description"]?.GetValue<string>(), $"Triển khai {subTitle} theo đặc tả kỹ thuật."),
+                                            DocumentId = subDocId,
+                                            DocumentCitations = subNormCites
+                                        };
+
+                                        var subAcNode = sObj["acceptanceCriteria"];
+                                        if (subAcNode is System.Text.Json.Nodes.JsonArray sAcArr)
+                                        {
+                                            subDto.AcceptanceCriteria = sAcArr.Select(x => x?.GetValue<string>()?.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList()!;
+                                        }
+                                        if (subDto.AcceptanceCriteria.Count == 0)
+                                        {
+                                            subDto.AcceptanceCriteria = new List<string> { $"Hoàn thành {subTitle} đúng tiêu chuẩn kỹ thuật." };
+                                        }
+
+                                        taskDto.Subtasks.Add(subDto);
+                                    }
+                                    else if (sElem != null)
+                                    {
+                                        // Trường hợp LLM trả về mảng chuỗi string["Bước 1", "Bước 2"]
+                                        var strTitle = sElem.GetValue<string>()?.Trim();
+                                        if (!string.IsNullOrEmpty(strTitle))
+                                        {
+                                            taskDto.Subtasks.Add(new ProposedSubTaskDto
+                                            {
+                                                Id = $"{taskDto.Id}_{subIdx}",
+                                                Title = strTitle,
+                                                Role = strTitle.Contains("UI", StringComparison.OrdinalIgnoreCase) || strTitle.Contains("Giao diện", StringComparison.OrdinalIgnoreCase) || strTitle.Contains("Component", StringComparison.OrdinalIgnoreCase) ? "Frontend"
+                                                     : strTitle.Contains("Test", StringComparison.OrdinalIgnoreCase) || strTitle.Contains("Kiểm thử", StringComparison.OrdinalIgnoreCase) ? "QA" : "Backend",
+                                                EstimatedHours = 4,
+                                                StoryPoints = 1,
+                                                Priority = taskDto.Priority,
+                                                Status = taskDto.Status,
+                                                Description = $"Triển khai '{strTitle}' theo kiến trúc giải pháp và đặc tả tài liệu.",
+                                                AssigneeName = taskDto.AssigneeName,
+                                                DocumentId = taskDto.DocumentId,
+                                                DocumentCitations = taskDto.DocumentCitations.ToList(),
+                                                AcceptanceCriteria = new List<string> { $"Nghiệm thu hoàn tất '{strTitle}'" }
+                                            });
+                                        }
+                                    }
+                                    subIdx++;
+                                }
+                            }
+
+                            proposal.Tasks.Add(taskDto);
+                            taskIndex++;
+                        }
+
+                        proposal.TotalStoryPoints = proposal.Tasks.Sum(t => t.StoryPoints);
+                        proposal.TotalEstimatedHours = proposal.Tasks.Sum(t => t.EstimatedHours);
+                        if (wasRepairedFromTruncation &&
+                            !proposal.Warnings.Contains(truncationWarning, StringComparer.Ordinal))
+                        {
+                            proposal.Warnings.Add(truncationWarning);
+                        }
+                        return proposal;
+                    }
+                    else if (preserveOnFailure != null && preserveOnFailure.Tasks.Count > 0)
+                    {
+                        var preservedFromReply = BuildPreservedProposalShell(sessionId, projectId, targetSprintId, preserveOnFailure);
+                        preservedFromReply.AssistantReply = !string.IsNullOrWhiteSpace(proposal.AssistantReply)
+                            ? proposal.AssistantReply
+                            : "Tôi đã giữ nguyên danh sách công việc hiện có để tránh mất dữ liệu. Bạn có thể mô tả cụ thể hơn thay đổi mong muốn hoặc nhấn chỉnh sửa trực tiếp trong bảng.";
+                        var goalOverride = obj["sprintGoal"]?.GetValue<string>()?.Trim();
+                        if (!string.IsNullOrWhiteSpace(goalOverride))
+                        {
+                            preservedFromReply.SprintGoal = goalOverride;
+                        }
+                        if (wasRepairedFromTruncation &&
+                            !preservedFromReply.Warnings.Contains(truncationWarning, StringComparer.Ordinal))
+                        {
+                            preservedFromReply.Warnings.Add(truncationWarning);
+                        }
+                        return preservedFromReply;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Tránh nuốt lỗi im lặng - log chi tiết để theo dõi và khắc phục
+            Console.WriteLine($"[AiSprintDecomposition] Lỗi bóc tách JSON đề xuất: {ex.Message}");
+        }
+
+        if (preserveOnFailure != null && preserveOnFailure.Tasks.Count > 0)
+        {
+            var preserved = BuildPreservedProposalShell(sessionId, projectId, targetSprintId, preserveOnFailure);
+            preserved.AssistantReply = "Tôi chưa nhận được cấu trúc cập nhật mới từ mô hình AI nên đã giữ nguyên danh sách công việc hiện có để tránh mất dữ liệu. Bạn có thể mô tả cụ thể hơn thay đổi mong muốn hoặc nhấn chỉnh sửa trực tiếp trong bảng.";
+            return preserved;
+        }
+
+        return CreateFallbackProposal(sessionId, projectId, targetSprintId, sourceDoc, userPrompt, availableDocs, activeConfig);
+    }
+
+    /// <summary>
+    /// Xây dựng chuỗi AiMessage đa lượt thực thụ (luân phiên User - Assistant - User) để LLM hiểu trọn vẹn mạch hội thoại trước đó
+    /// và giải quyết chính xác các đại từ/ngữ cảnh quy chiếu trước khi nhận prompt có cấu trúc của lượt hiện tại.
+    /// </summary>
+    private static List<AiMessage> BuildNativeConversationMessages(
+        IReadOnlyList<AiConversationTurnDto>? history,
+        string currentStructuredUserPrompt,
+        int maxPriorTurns = 6)
+    {
+        if (history == null || history.Count <= 1)
+        {
+            return [AiMessage.CreateUser(currentStructuredUserPrompt)];
+        }
+
+        var priorSlice = history
+            .Take(history.Count - 1)
+            .Where(t => !string.IsNullOrWhiteSpace(t.Content))
+            .TakeLast(maxPriorTurns)
+            .ToList();
+
+        if (priorSlice.Count == 0)
+        {
+            return [AiMessage.CreateUser(currentStructuredUserPrompt)];
+        }
+
+        var coalesced = new List<(bool IsUser, string Text)>();
+        for (int i = 0; i < priorSlice.Count; i++)
+        {
+            var turn = priorSlice[i];
+            var isUser = !string.Equals(turn.Role, "assistant", StringComparison.OrdinalIgnoreCase);
+            var maxLen = i >= priorSlice.Count - 2 ? 1200 : 450;
+            var body = turn.Content.Replace("\r\n", "\n").Trim();
+            if (body.Length > maxLen)
+            {
+                body = $"{body[..maxLen].TrimEnd()}\n...[đã rút gọn]";
+            }
+
+            string formatted;
+            if (!isUser)
+            {
+                var meta = !string.IsNullOrWhiteSpace(turn.Intent) ? $"[Intent: {turn.Intent}" : "[Trợ lý";
+                if (turn.TaskCount.HasValue && turn.TaskCount.Value > 0)
+                {
+                    meta += $", {turn.TaskCount.Value} tasks/{turn.TotalStoryPoints ?? 0m} SP";
+                }
+                meta += "] ";
+                formatted = $"{meta}{body}";
+            }
+            else if (!string.IsNullOrWhiteSpace(turn.FileName))
+            {
+                formatted = $"[Tệp đính kèm: {turn.FileName}] {body}";
+            }
+            else
+            {
+                formatted = body;
+            }
+
+            if (coalesced.Count > 0 && coalesced[^1].IsUser == isUser)
+            {
+                coalesced[^1] = (isUser, $"{coalesced[^1].Text}\n\n{formatted}");
+            }
+            else
+            {
+                coalesced.Add((isUser, formatted));
+            }
+        }
+
+        // Các nhà cung cấp (Gemini, Claude) yêu cầu lượt đầu tiên trong Messages phải là User
+        while (coalesced.Count > 0 && !coalesced[0].IsUser)
+        {
+            coalesced.RemoveAt(0);
+        }
+
+        var finalCurrentUserPrompt = currentStructuredUserPrompt;
+        if (coalesced.Count > 0 && coalesced[^1].IsUser)
+        {
+            var trailingUser = coalesced[^1].Text;
+            coalesced.RemoveAt(coalesced.Count - 1);
+            finalCurrentUserPrompt = $"[Ngữ cảnh câu hỏi trước chưa hoàn tất của người dùng: \"{trailingUser}\"]\n\n{currentStructuredUserPrompt}";
+        }
+
+        var messages = new List<AiMessage>(coalesced.Count + 1);
+        foreach (var entry in coalesced)
+        {
+            messages.Add(entry.IsUser
+                ? AiMessage.CreateUser(entry.Text)
+                : AiMessage.CreateAssistant(entry.Text));
+        }
+
+        messages.Add(AiMessage.CreateUser(finalCurrentUserPrompt));
+        return messages;
+    }
+
+    private static bool IsSprintTargetExplicitlyRequested(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text) || IsBacklogTargetRequested(text))
+        {
+            return false;
+        }
+
+        var lower = text.ToLowerInvariant();
+        return lower.Contains("sang sprint") ||
+               lower.Contains("vào sprint") ||
+               lower.Contains("cho sprint") ||
+               lower.Contains("lập sprint") ||
+               lower.Contains("lên kế hoạch sprint");
+    }
+
+    private static void ApplyConfigMetadata(AiSprintProposalDto proposal, ProjectActiveConfig? activeConfig)
+    {
+        if (activeConfig == null) return;
+        proposal.WorkflowName = activeConfig.WorkflowName;
+        proposal.InitialStatus = activeConfig.InitialStatusName;
+        proposal.AppliedWorkflowStatuses = activeConfig.Statuses.Select(s => s.Name).ToList();
+        proposal.AppliedPriorities = activeConfig.Priorities.Select(p => p.Name).ToList();
+        proposal.AppliedIssueTypes = activeConfig.ParentWorkItemTypes.Select(t => t.Name).ToList();
+        proposal.AppliedLabels = activeConfig.Labels.Select(l => l.Name).ToList();
+    }
+
+    public static string ClassifyConversationalIntent(
+        string? userPrompt,
+        string? docContent,
+        AiSprintProposalDto? existingProposal)
+    {
+        var promptText = (userPrompt ?? string.Empty).Trim();
+        var docText = AiIndexedMemoryEngine.StripExtractorHeader(docContent);
+        if (!string.IsNullOrWhiteSpace(promptText) &&
+            string.Equals(docText, promptText, StringComparison.OrdinalIgnoreCase))
+        {
+            docText = string.Empty;
+        }
+
+        // Nếu prompt là câu mặc định tự động của client khi gửi tài liệu, lấy docText làm nội dung phân tích chính
+        var combined = (!string.IsNullOrWhiteSpace(promptText) &&
+                        !promptText.Equals("Tạo Sprint Goal, Tasks và Subtasks chuẩn Scrum.", StringComparison.OrdinalIgnoreCase) &&
+                        !promptText.Equals("Phân tích tài liệu dự án và lập kế hoạch Sprint tiếp theo.", StringComparison.OrdinalIgnoreCase))
+            ? (string.IsNullOrWhiteSpace(docText) || docText == promptText ? promptText : $"{promptText}\n{docText}")
+            : (!string.IsNullOrWhiteSpace(docText) ? docText : promptText);
+
+        var lower = combined.ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(lower))
+        {
+            return "sprint_plan";
+        }
+
+        // 0. Kiểm tra Prompt Injection, đánh cắp cấu hình/bí mật hoặc truy xuất chéo tổ chức (Security Guardrail)
+        if (InputGuardrail.ContainsPromptInjectionOrExfiltration(combined, out _) ||
+            InputGuardrail.ContainsUnsafeScript(combined) ||
+            combined.Contains("[GUARDRAIL_FILTERED]", StringComparison.Ordinal))
+        {
+            return "security_refusal";
+        }
+
+        bool asksToBuildFeatureOrTask =
+            lower.Contains("tạo task") || lower.Contains("tạo việc") ||
+            lower.Contains("thêm task") || lower.Contains("thêm việc") ||
+            lower.Contains("sinh task") || lower.Contains("tạo story") ||
+            lower.Contains("phân tách") || lower.Contains("phân rã") ||
+            lower.Contains("chia nhỏ") || lower.Contains("lập kế hoạch") ||
+            lower.Contains("tính năng") || lower.Contains("chức năng") ||
+            lower.Contains("user story") || lower.Contains("xây dựng") ||
+            lower.Contains("triển khai") || lower.Contains("phát triển") ||
+            lower.Contains("viết api") || lower.Contains("thiết kế") ||
+            lower.Contains("code ") || lower.Contains("sửa bug") ||
+            lower.Contains("fix lỗi");
+
+        // 1. Kiểm tra yêu cầu Xuất file Excel (export_excel) - nhận diện đa dạng phạm vi (Sprint, Backlog, 1 Task, Chi tiết Task, Bảng đề xuất)
+        //    và tuyệt đối không nhầm với yêu cầu tạo task/tính năng hoặc câu hỏi "làm sao/cách xuất" hoặc khi file SRS đính kèm dài chỉ nhắc tới từ "excel".
+        var exportCandidate = (!string.IsNullOrWhiteSpace(promptText) &&
+                               !promptText.Equals("Tạo Sprint Goal, Tasks và Subtasks chuẩn Scrum.", StringComparison.OrdinalIgnoreCase) &&
+                               !promptText.Equals("Phân tích tài liệu dự án và lập kế hoạch Sprint tiếp theo.", StringComparison.OrdinalIgnoreCase))
+            ? promptText.ToLowerInvariant()
+            : (docText.Length <= 380 ? docText.ToLowerInvariant() : string.Empty);
+
+        if (!string.IsNullOrWhiteSpace(exportCandidate) && exportCandidate.Length <= 420)
+        {
+            bool mentionsExcelFormat = exportCandidate.Contains("excel") || exportCandidate.Contains(".xlsx") ||
+                                       exportCandidate.Contains("xlsx") || exportCandidate.Contains("bảng tính");
+            bool mentionsGenericFile = exportCandidate.Contains("ra file") || exportCandidate.Contains("thành file") ||
+                                       exportCandidate.Contains("xuất file") || exportCandidate.Contains("tải file") ||
+                                       exportCandidate.Contains("lấy file") || exportCandidate.Contains("cho tôi file") ||
+                                       exportCandidate.Contains("export");
+            bool mentionsExportVerb = System.Text.RegularExpressions.Regex.IsMatch(
+                                          exportCandidate,
+                                          @"(?i)\b(xuất|export|download|tải\s*về|tải\s*xuống|tải\s*file|lấy\s*file)\b");
+            bool mentionsProjectExportTarget =
+                exportCandidate.Contains("sprint") || exportCandidate.Contains("backlog") || exportCandidate.Contains("hàng chờ") ||
+                exportCandidate.Contains("task") || exportCandidate.Contains("công việc") || exportCandidate.Contains("việc") ||
+                exportCandidate.Contains("chi tiết") || exportCandidate.Contains("nội dung") || exportCandidate.Contains("đề xuất") ||
+                exportCandidate.Contains("dự án") || exportCandidate.Contains("bug") || exportCandidate.Contains("story") ||
+                exportCandidate.Contains("epic") || System.Text.RegularExpressions.Regex.IsMatch(exportCandidate, @"\b[a-z][a-z0-9]{1,15}-\d+\b");
+            bool mentionsUnsupportedFormat =
+                !mentionsExcelFormat &&
+                (exportCandidate.Contains(".pdf") || System.Text.RegularExpressions.Regex.IsMatch(exportCandidate, @"\b(pdf|word|docx|pptx|powerpoint)\b"));
+            bool isHowToOrCapabilityQuestion =
+                exportCandidate.Contains("làm sao") || exportCandidate.Contains("cách nào") ||
+                exportCandidate.Contains("hướng dẫn") || exportCandidate.Contains("làm thế nào") ||
+                exportCandidate.Contains("có hỗ trợ") || exportCandidate.Contains("tại sao") ||
+                exportCandidate.Contains("vì sao") || exportCandidate.Contains("hỗ trợ những");
+            bool asksToEditOrCritique =
+                exportCandidate.Contains("đổi sang") || exportCandidate.Contains("chuyển sang") ||
+                exportCandidate.Contains("nhận xét") || exportCandidate.Contains("đánh giá");
+
+            if (!asksToBuildFeatureOrTask && !asksToEditOrCritique)
+            {
+                // Khi user yêu cầu xuất sang định dạng chưa hỗ trợ (PDF, Word, PPTX...) mà không kèm Excel,
+                // điều hướng sang hỏi đáp (project_qa) để AI giải thích trung thực thay vì rơi xuống lập kế hoạch Sprint.
+                if (mentionsUnsupportedFormat && mentionsExportVerb)
+                {
+                    return "project_qa";
+                }
+
+                if (!isHowToOrCapabilityQuestion && !mentionsUnsupportedFormat &&
+                    ((mentionsExcelFormat && (mentionsExportVerb || exportCandidate.Length < 45)) ||
+                     (mentionsGenericFile && mentionsExportVerb) ||
+                     (mentionsExportVerb && mentionsProjectExportTarget)))
+                {
+                    return "export_excel";
+                }
+            }
+        }
+
+        // 2. Kiểm tra lệnh hành động trực tiếp trên đề xuất hiện có (push_backlog / apply_sprint)
+        bool hasExistingTasks = existingProposal?.Tasks != null && existingProposal.Tasks.Count > 0;
+        bool isPureInquiryQuestion = lower.Contains("tại sao") || lower.Contains("vì sao") ||
+                                     lower.Contains("có nên") || lower.Contains("lý do") ||
+                                     lower.Contains("là gì") || lower.Contains("nghĩa là") ||
+                                     lower.Contains("bao nhiêu") || lower.Contains("những gì") ||
+                                     lower.Contains("như thế nào") || lower.Contains("khi nào") ||
+                                     lower.Contains("ở đâu") || lower.Contains("ai sẽ") ||
+                                     lower.Contains("ai đang");
+        if (hasExistingTasks && lower.Length < 180)
+        {
+            bool asksToCreateOrModify = lower.Contains("thêm ") || lower.Contains("tạo ") || lower.Contains("sinh ") ||
+                                        lower.Contains("phân tách") || lower.Contains("phân rã") || lower.Contains("chia nhỏ") ||
+                                        lower.Contains("sửa ") || lower.Contains("xóa ") || lower.Contains("làm lại") ||
+                                        lower.Contains("đổi ") || lower.Contains("cập nhật");
+
+            if (!asksToCreateOrModify && !isPureInquiryQuestion)
+            {
+                if ((lower.Contains("đẩy") || lower.Contains("đưa") || lower.Contains("lưu") || lower.Contains("chuyển") || lower.Contains("cho vào")) &&
+                    lower.Contains("backlog"))
+                {
+                    return "push_backlog";
+                }
+
+                if ((lower.Contains("áp dụng") || lower.Contains("commit") || lower.Contains("đưa vào sprint") || lower.Contains("đẩy vào sprint")) &&
+                    lower.Contains("sprint"))
+                {
+                    return "apply_sprint";
+                }
+            }
+        }
+
+        // 3. Kiểm tra Out-of-Scope Guardrail (Từ chối các yêu cầu ngoài luồng không liên quan đến Quản lý Dự án)
+        string[] offTopicKeywords =
+        [
+            "thời tiết", "weather", "nấu ăn", "công thức nấu", "nấu phở", "ăn phở", "quán ăn", "ăn gì", "ăn trưa",
+            "nấu cơm", "món ngon", "bóng đá", "world cup", "ngoại hạng anh", "champions league", "xổ số", "lô đề", "vietlott",
+            "chứng khoán", "cổ phiếu", "bitcoin", "crypto", "forex", "tử vi", "bói toán", "cung hoàng đạo",
+            "làm thơ", "viết thơ", "bài thơ", "sáng tác thơ", "chuyện cười", "kể chuyện", "truyện cổ tích",
+            "bài hát", "lời bài hát", "ca sĩ", "xem phim", "tán tỉnh", "tư vấn tình cảm", "thất tình",
+            "giải phương trình", "đạo hàm", "tích phân", "lịch sử thế giới", "thủ đô của", "tổng thống",
+            "đặt vé máy bay", "đặt phòng khách sạn", "du lịch bụi", "du lịch"
+        ];
+
+        string[] projectManagementKeywords =
+        [
+            "sprint", "backlog", "công việc", "đầu việc", "giao việc", "tạo việc", "thêm việc",
+            "subtask", "sub-task", "lỗi",
+            "story", "user story", "spec", "tài liệu", "đặc tả", "cuộc họp", "biên bản", "họp",
+            "kế hoạch", "phân rã", "phân tách", "bóc tách", "gán", "assign", "thành viên", "nhân sự",
+            "giao cho", "developer", "tester", "frontend", "backend", "fullstack", "devops",
+            "scrum", "agile", "kanban", "velocity", "vận tốc", "story point", "ưu tiên", "priority",
+            "trạng thái", "status", "workflow", "quy trình", "nhãn", "label", "tiêu chí", "nghiệm thu",
+            "acceptance", "excel", "xlsx", "csv", "báo cáo", "report", "dự án", "project", "qlda", "tiến độ",
+            "deadline", "quá hạn", "overdue", "rollover", "kế thừa", "review", "retro", "estimate", "ước lượng",
+            "giờ công", "số giờ", "capacity", "năng lực", "database", "redis", "signalr",
+            "component", "module", "phân hệ", "tính năng", "chức năng", "feature", "hệ thống",
+            "requirement", "yêu cầu", "kiến trúc", "thiết kế", "triển khai", "kiểm thử",
+            "bảo mật", "security", "endpoint", "controller", "service", "nhóm", "team",
+            "đẩy", "áp dụng", "trợ lý", "hướng dẫn"
+        ];
+
+        bool hasShortPmToken = System.Text.RegularExpressions.Regex.IsMatch(
+            lower,
+            @"(?i)\b(task|tasks|bug|bugs|epic|epics|plan|sp|ui|ux|db|qa|dev|tag|tags|api|sql|srs|brd|prd|test|tests|code)\b");
+        bool hasOffTopic = offTopicKeywords.Any(kw => lower.Contains(kw, StringComparison.Ordinal));
+        bool hasPmDomain = hasShortPmToken || projectManagementKeywords.Any(kw => lower.Contains(kw, StringComparison.Ordinal));
+        bool hasActiveConversation = existingProposal?.ConversationHistory != null && existingProposal.ConversationHistory.Count > 0;
+        bool isGreetingOrHelp = AiIndexedMemoryEngine.IsGreetingOrCapabilityQuestion(lower) &&
+                                !AiIndexedMemoryEngine.ContainsProjectDataKeyword(lower);
+        bool hasMemoryRecallRef = (existingProposal != null || hasActiveConversation) &&
+                                  (lower.Contains("#mem-") || lower.Contains("mem-") ||
+                                   lower.Contains("vừa nãy") || lower.Contains("lúc nãy") ||
+                                   lower.Contains("hồi nãy") || lower.Contains("vừa rồi") ||
+                                   lower.Contains("nhắc lại") || lower.Contains("trí nhớ") ||
+                                   lower.Contains("trên kia") || lower.Contains("đã bàn") ||
+                                   lower.Contains("trước đó"));
+        bool hasFollowUpRef = AiIndexedMemoryEngine.IsConversationalFollowUp(lower) ||
+                              (hasActiveConversation &&
+                               (lower.Contains("cái này") || lower.Contains("cái đó") ||
+                                lower.Contains("việc này") || lower.Contains("việc đó") ||
+                                lower.Contains("với nó") || lower.Contains("cho nó") ||
+                                lower.Contains("của nó") || lower.Contains("nó ") ||
+                                lower.EndsWith(" nó") || lower.Contains("phần ") ||
+                                lower.Contains("ý ") || lower.Contains("ổn chưa") ||
+                                lower.Contains("hợp lý chưa") || lower.Contains("còn thiếu") ||
+                                lower.Contains("đổi thành") || lower.Contains("chuyển sang")));
+        bool hasImperativeQaVerb = lower.Contains("tóm tắt") || lower.Contains("liệt kê") ||
+                                   lower.Contains("phân tích") || lower.Contains("đánh giá") ||
+                                   lower.Contains("so sánh") || lower.Contains("giải thích") ||
+                                   lower.Contains("làm rõ") || lower.Contains("rà soát") ||
+                                   lower.Contains("kiểm tra") || lower.Contains("tổng hợp") ||
+                                   lower.Contains("đếm") || lower.Contains("thống kê") ||
+                                   lower.Contains("nhận xét") || lower.Contains("cho xem") ||
+                                   lower.Contains("hiển thị") || lower.Contains("tra cứu");
+        bool asksToModifyProposal = hasExistingTasks && !isPureInquiryQuestion &&
+                                    (lower.Contains("sửa") || lower.Contains("đổi") ||
+                                     lower.Contains("thêm") || lower.Contains("xóa") ||
+                                     lower.Contains("bỏ ") || lower.Contains("gỡ ") ||
+                                     lower.Contains("tách") || lower.Contains("chia nhỏ") ||
+                                     lower.Contains("gộp") || lower.Contains("tăng") ||
+                                     lower.Contains("giảm") || lower.Contains("gán") ||
+                                     lower.Contains("chuyển sang") || lower.Contains("làm lại") ||
+                                     lower.Contains("cập nhật") || lower.Contains("bổ sung"));
+
+        string[] strictCreativePersonalKeywords =
+        [
+            "làm thơ", "viết thơ", "bài thơ", "sáng tác thơ", "thơ tình",
+            "lời bài hát", "sáng tác nhạc", "kể chuyện cười", "truyện cổ tích",
+            "tử vi", "bói toán", "cung hoàng đạo", "xổ số", "lô đề", "vietlott",
+            "công thức nấu", "nấu phở", "nấu ăn", "tư vấn tình cảm", "thất tình",
+            "giải phương trình", "đạo hàm", "tích phân"
+        ];
+
+        bool hasStrictCreativeNonPm = strictCreativePersonalKeywords.Any(kw => lower.Contains(kw, StringComparison.Ordinal));
+        bool hasGenuineDeliveryAction = asksToBuildFeatureOrTask ||
+                                        lower.Contains("biên bản") || lower.Contains("đặc tả") ||
+                                        lower.Contains("spec hub") || lower.Contains("spec ") ||
+                                        lower.Contains("phân bổ") || lower.Contains("backlog");
+        if (hasStrictCreativeNonPm && !hasGenuineDeliveryAction)
+        {
+            return "out_of_scope_refusal";
+        }
+
+        if (hasOffTopic && !hasPmDomain)
+        {
+            return "out_of_scope_refusal";
+        }
+
+        if (isGreetingOrHelp && !hasOffTopic)
+        {
+            return "project_qa";
+        }
+
+        if (!hasPmDomain && !hasMemoryRecallRef && !hasFollowUpRef &&
+            !(hasActiveConversation && (hasImperativeQaVerb || asksToModifyProposal)) &&
+            lower.Length < 260)
+        {
+            return "out_of_scope_refusal";
+        }
+
+        // 4. Kiểm tra câu hỏi tra cứu thông tin dự án (project_qa)
+        bool isQuestionPattern = lower.Contains('?') ||
+                                 hasMemoryRecallRef ||
+                                 isPureInquiryQuestion ||
+                                 lower.Contains("những ai") ||
+                                 lower.Contains("cho hỏi") ||
+                                 lower.Contains("cho tôi biết") ||
+                                 lower.Contains("nhắc lại") ||
+                                 lower.Contains("xem lại") ||
+                                 lower.StartsWith("xem ", StringComparison.Ordinal) ||
+                                 lower.Contains("danh sách ") ||
+                                 lower.Contains("tình hình ") ||
+                                 lower.Contains("tổng quan") ||
+                                 lower.Contains("có mấy") ||
+                                 lower.Contains("có những") ||
+                                 lower.Contains("gồm những") ||
+                                 lower.Contains("đang dùng workflow") ||
+                                 lower.Contains("mức ưu tiên nào") ||
+                                 (hasFollowUpRef && !asksToModifyProposal);
+
+        bool asksForDecomposition = lower.Contains("lập kế hoạch") ||
+                                    lower.Contains("phân tách") ||
+                                    lower.Contains("phân rã") ||
+                                    lower.Contains("bóc tách") ||
+                                    lower.Contains("sinh task") ||
+                                    lower.Contains("tạo task") ||
+                                    lower.Contains("tạo việc") ||
+                                    lower.Contains("thêm task") ||
+                                    lower.Contains("thêm việc") ||
+                                    lower.Contains("chia nhỏ") ||
+                                    lower.Contains("làm lại") ||
+                                    lower.Contains("biên bản họp") ||
+                                    lower.Contains("nội dung cuộc họp");
+
+        if ((isQuestionPattern || hasImperativeQaVerb) && !asksForDecomposition && !asksToModifyProposal && lower.Length < 500)
+        {
+            return "project_qa";
+        }
+
+        // 5. Nếu trong phiên đã có đề xuất và người dùng điều chỉnh chi tiết (nhưng không yêu cầu lập danh sách mới tinh cho Backlog)
+        bool asksForFreshBacklog = IsBacklogTargetRequested(lower) && !asksToModifyProposal;
+        if (hasExistingTasks && asksToModifyProposal && !asksForDecomposition && !asksForFreshBacklog)
+        {
+            return "refine_proposal";
+        }
+
+        // 6. Nếu người dùng yêu cầu lên danh sách công việc cho kho Backlog
+        if (IsBacklogTargetRequested(lower))
+        {
+            return "backlog_plan";
+        }
+
+        // 7. Nếu trong phiên đã có đề xuất và người dùng gửi yêu cầu điều chỉnh tiếp theo
+        if (hasExistingTasks && lower.Length < 600)
+        {
+            return "refine_proposal";
+        }
+
+        return "sprint_plan";
+    }
+
+    private static bool IsBacklogTargetRequested(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        var lower = text.ToLowerInvariant();
+        return lower.Contains("vào kho backlog") ||
+               lower.Contains("vào backlog") ||
+               lower.Contains("đẩy vào backlog") ||
+               lower.Contains("thêm vào backlog") ||
+               lower.Contains("lưu vào backlog") ||
+               lower.Contains("cho kho backlog") ||
+               lower.Contains("tạo backlog");
+    }
+
+    private static AiSprintProposalDto BuildPreservedProposalShell(
+        string sessionId,
+        Guid projectId,
+        Guid? targetSprintId,
+        AiSprintProposalDto? existingProposal)
+    {
+        if (existingProposal != null)
+        {
+            return new AiSprintProposalDto
+            {
+                SessionId = sessionId,
+                OrganizationId = existingProposal.OrganizationId,
+                ProjectId = projectId,
+                UserId = existingProposal.UserId,
+                TargetSprintId = targetSprintId ?? existingProposal.TargetSprintId,
+                SprintGoal = existingProposal.SprintGoal,
+                Rationale = existingProposal.Rationale,
+                RecommendedTarget = existingProposal.RecommendedTarget,
+                Tags = new List<string>(existingProposal.Tags ?? []),
+                TotalEstimatedHours = existingProposal.TotalEstimatedHours,
+                TotalStoryPoints = existingProposal.TotalStoryPoints,
+                WorkflowName = existingProposal.WorkflowName,
+                InitialStatus = existingProposal.InitialStatus,
+                AppliedWorkflowStatuses = new List<string>(existingProposal.AppliedWorkflowStatuses ?? []),
+                AppliedPriorities = new List<string>(existingProposal.AppliedPriorities ?? []),
+                AppliedIssueTypes = new List<string>(existingProposal.AppliedIssueTypes ?? []),
+                AppliedLabels = new List<string>(existingProposal.AppliedLabels ?? []),
+                Tasks = new List<ProposedTaskDto>(existingProposal.Tasks ?? []),
+                IndexedMemories = existingProposal.IndexedMemories?.Select(CloneMemoryAnchor).ToList() ?? [],
+                CreatedAtUtc = existingProposal.CreatedAtUtc
+            };
+        }
+
+        return new AiSprintProposalDto
+        {
+            SessionId = sessionId,
+            ProjectId = projectId,
+            TargetSprintId = targetSprintId,
+            SprintGoal = string.Empty,
+            Rationale = string.Empty,
+            Tasks = []
+        };
+    }
+
+    private static AiMemoryAnchorDto CloneMemoryAnchor(AiMemoryAnchorDto m) => new()
+    {
+        AnchorKey = m.AnchorKey,
+        TurnIndex = m.TurnIndex,
+        Category = m.Category,
+        Title = m.Title,
+        Keywords = m.Keywords,
+        Summary = m.Summary,
+        DetailContent = m.DetailContent,
+        CreatedAtUtc = m.CreatedAtUtc
+    };
+
+    private static string FormatConversationHistoryForPrompt(
+        IReadOnlyList<AiConversationTurnDto> history,
+        IReadOnlyList<AiMemoryAnchorDto> allMemories,
+        IReadOnlyList<AiMemoryAnchorDto> recalledMemories,
+        AiSprintProposalDto? existingProposal,
+        bool includeProposalTaskDetails = true) =>
+        AiIndexedMemoryEngine.FormatIndexedContextForPrompt(
+            history,
+            allMemories,
+            recalledMemories,
+            existingProposal,
+            includeProposalTaskDetails);
+
+    private async Task<string> BuildFocusedProjectQaAnswerAsync(
+        string question,
+        AiContextExecutionPlan contextPlan,
+        ProjectActiveConfig? activeConfig,
+        string? backlogStoriesJson,
+        string? sprintHistoryJson,
+        string? teamCapacitiesJson,
+        string? specHubExcerptsText,
+        IReadOnlyList<(Guid Id, string Name)> projectDocs,
+        IReadOnlyList<AiConversationTurnDto> history,
+        IReadOnlyList<AiMemoryAnchorDto> indexedMemories,
+        AiSprintProposalDto? existingProposal,
+        IProjectScopeContext scope,
+        string? model,
+        CancellationToken ct)
+    {
+        var memoryContext = FormatConversationHistoryForPrompt(
+            history,
+            indexedMemories,
+            contextPlan.RecalledMemories,
+            existingProposal,
+            includeProposalTaskDetails: (existingProposal?.Tasks?.Count ?? 0) > 0 &&
+                (contextPlan.UseMemoryOnly ||
+                 AiIndexedMemoryEngine.MentionsProposalOrWorkItem(question.ToLowerInvariant()) ||
+                 existingProposal!.Tasks.Count <= 25));
+
+        var retrievedSections = new System.Text.StringBuilder();
+
+        if (!contextPlan.IsGreetingOrHelp)
+        {
+            if (activeConfig != null && contextPlan.NeedsActiveConfig)
+            {
+                var statuses = string.Join(" -> ", activeConfig.Statuses.Select(s => s.Name));
+                var priorities = string.Join(", ", activeConfig.Priorities.Select(p => p.Name));
+                var issueTypes = string.Join(", ", activeConfig.ParentWorkItemTypes.Select(t => t.Name));
+                var labels = activeConfig.Labels.Count > 0
+                    ? string.Join(", ", activeConfig.Labels.Select(l => l.Name))
+                    : "Chưa định nghĩa nhãn";
+
+                retrievedSections.AppendLine($"- Quy trình Workflow áp dụng: {activeConfig.WorkflowName} ({statuses}), khởi tạo mặc định: {activeConfig.InitialStatusName}");
+                retrievedSections.AppendLine($"- Mức ưu tiên áp dụng: {priorities}");
+                retrievedSections.AppendLine($"- Loại công việc áp dụng: {issueTypes}");
+                retrievedSections.AppendLine($"- Nhãn dự án: {labels}");
+            }
+
+            if (contextPlan.NeedsSpecHub)
+            {
+                var docNames = projectDocs.Count > 0
+                    ? string.Join(", ", projectDocs.Select(d => d.Name))
+                    : "Chưa có tài liệu trong Spec Hub";
+                retrievedSections.AppendLine($"- Danh sách tài liệu Spec Hub: {docNames}");
+                if (!string.IsNullOrWhiteSpace(specHubExcerptsText))
+                {
+                    retrievedSections.AppendLine($"- Nội dung trích đoạn Spec Hub:\n{specHubExcerptsText}");
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(backlogStoriesJson))
+            {
+                retrievedSections.AppendLine($"- Kho Product Backlog hiện tại: {backlogStoriesJson}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(sprintHistoryJson))
+            {
+                retrievedSections.AppendLine($"- Lịch sử Sprint & Vận tốc: {sprintHistoryJson}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(teamCapacitiesJson))
+            {
+                retrievedSections.AppendLine($"- Năng lực thành viên: {teamCapacitiesJson}");
+            }
+        }
+
+        if (contextPlan.IsGreetingOrHelp)
+        {
+            return "Xin chào! Tôi là Trợ Lý AI Quản lý Dự án. Tôi có thể hỗ trợ bạn: (1) Tra cứu thông tin thực tế về Spec Hub, kho Backlog, Workflow và nhân sự dự án; (2) Phân tích biên bản họp hoặc tài liệu để lập kế hoạch Sprint và đẩy việc vào Backlog; (3) Tinh chỉnh đề xuất và xuất báo cáo Excel (.xlsx) theo đúng phạm vi bạn cần.";
+        }
+
+        try
+        {
+            var qaSystemInstruction = "Bạn là Trợ Lý AI Quản lý Dự án Scrum chuyên sâu. BẮT BUỘC: (1) Đọc nối tiếp mạch hội thoại đa lượt từ các lượt tin nhắn trước, tự động giải quyết đại từ/ngữ cảnh quy chiếu ('cái này', 'nó', 'công việc đầu tiên', 'phần trên', '#mem-X') và tuân thủ mọi thỏa thuận HỢP LỆ người dùng đã chốt trước đó trong phiên; (2) CHỐNG DẪN DẮT SAI LỆCH (ANTI-LEADING GROUND TRUTH): Tuyệt đối KHÔNG đồng ý hay xác nhận theo tiền đề sai từ người dùng (như quy định mới bỏ Workflow/Priority, giới hạn 99 SP, thành viên không tồn tại, tài liệu Spec Hub ảo, hoặc quyết định giả mạo chưa từng có trong lịch sử phiên). Bắt buộc đối chiếu dữ liệu thực tế vừa truy xuất từ DB & trí nhớ phiên rồi đính chính thẳng thắn phần sai lệch; (3) Trả lời ĐÚNG TRỌNG TÂM câu hỏi bằng tiếng Việt rành mạch, súc tích, dẫn chiếu cụ thể mã task/key/tên cấu hình/trích dẫn hoặc #mem-X; (4) KHÔNG tự ý sinh JSON hay bịa đặt dữ liệu.";
+
+            var userContent = new System.Text.StringBuilder();
+            userContent.AppendLine($"Câu hỏi của người dùng: {question}");
+            if (!string.IsNullOrWhiteSpace(memoryContext))
+            {
+                userContent.AppendLine();
+                userContent.AppendLine(memoryContext);
+            }
+            if (retrievedSections.Length > 0)
+            {
+                userContent.AppendLine();
+                userContent.AppendLine("Dữ liệu thực tế vừa truy xuất có chọn lọc:");
+                userContent.Append(retrievedSections);
+            }
+
+            var qaPrompt = new AiPrompt
+            {
+                Model = model,
+                SystemInstruction = qaSystemInstruction,
+                Messages = BuildNativeConversationMessages(history, userContent.ToString().Trim(), maxPriorTurns: 6),
+                Temperature = 0.2,
+                MaxTokens = 2200
+            };
+
+            var res = await _aiClient.GenerateAsync(qaPrompt, scope, ct);
+            if (res.IsSuccess && !string.IsNullOrWhiteSpace(res.Content) && !res.Content.TrimStart().StartsWith('{'))
+            {
+                return res.Content.Trim();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[BuildFocusedProjectQaAnswer] Sử dụng phản hồi dự phòng ngắn gọn");
+        }
+
+        if (contextPlan.IsGreetingOrHelp)
+        {
+            return "Chào bạn! Tôi là Trợ Lý AI Quản lý Dự án. Tôi có thể giúp bạn: (1) Tra cứu thông tin thực tế về Spec Hub, kho Backlog, Workflow và nhân sự dự án; (2) Phân tích biên bản họp để lập kế hoạch Sprint hoặc đẩy việc vào Backlog; (3) Tinh chỉnh đề xuất và xuất báo cáo Excel cho dự án.";
+        }
+
+        if (contextPlan.UseMemoryOnly && contextPlan.RecalledMemories.Count > 0)
+        {
+            return string.Join("\n", contextPlan.RecalledMemories.Select(m => $"- [{m.AnchorKey}] {m.Title}: {m.Summary}"));
+        }
+
+        if (activeConfig != null)
+        {
+            var statuses = string.Join(" -> ", activeConfig.Statuses.Select(s => s.Name));
+            var priorities = string.Join(", ", activeConfig.Priorities.Select(p => p.Name));
+            return $"Thông tin cấu hình hiện hành của dự án ({activeConfig.WorkflowName}):\n- Trạng thái: {statuses} (Khởi tạo: {activeConfig.InitialStatusName})\n- Mức ưu tiên: {priorities}";
+        }
+
+        return "Tôi đã tiếp nhận câu hỏi của bạn dựa trên ngữ cảnh hiện có của phiên làm việc.";
+    }
+
+    private static AiSprintProposalDto CreateFallbackProposal(
+        string sessionId,
+        Guid projectId,
+        Guid? targetSprintId,
+        string sourceDoc,
+        string? userPrompt = null,
+        IReadOnlyList<(Guid Id, string Name)>? availableDocs = null,
+        ProjectActiveConfig? activeConfig = null)
+    {
+        var initialStatus = activeConfig?.InitialStatusName ?? "To Do";
+        var highPrio = activeConfig?.ResolvePriorityName("High") ?? "High";
+        var defaultPrio = activeConfig?.GetDefaultPriorityName() ?? "Medium";
+        var storyType = activeConfig?.ResolveIssueTypeName("Story") ?? "Story";
+        var taskType = activeConfig?.ResolveIssueTypeName("Task") ?? "Task";
+        var cleanDoc = (sourceDoc ?? string.Empty).Trim();
+        var lines = cleanDoc.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        // Lọc bỏ triệt để các tiêu đề meta, chỉ dẫn hoặc dòng ghi chú thô của người dùng
+        var firstMeaningfulLine = lines.FirstOrDefault(l =>
+            l.Length > 8 &&
+            !l.StartsWith('#') &&
+            !l.StartsWith("---") &&
+            !l.Contains("GHI CHÚ", StringComparison.OrdinalIgnoreCase) &&
+            !l.Contains("YÊU CẦU BỔ SUNG", StringComparison.OrdinalIgnoreCase) &&
+            !l.Contains("Phân tích tài liệu đặc tả", StringComparison.OrdinalIgnoreCase))
+            ?? "Triển khai tính năng cốt lõi theo đặc tả hệ thống";
+
+        var featureName = firstMeaningfulLine.Length > 60 ? firstMeaningfulLine[..60] + "..." : firstMeaningfulLine;
+        featureName = featureName.Trim(' ', ':', '-', '.');
+
+        var goal = !string.IsNullOrWhiteSpace(userPrompt) && userPrompt.Length > 10
+            ? userPrompt.Trim()
+            : $"Hoàn thiện module tính năng cốt lõi và đảm bảo chất lượng kiểm thử: {featureName}";
+
+        var doc1 = availableDocs != null && availableDocs.Count > 0 ? availableDocs[0] : (Id: (Guid?)null, Name: "SRS-Quan-Ly-Sprint-Va-Kanban-Realtime.md");
+        var doc2 = availableDocs != null && availableDocs.Count > 1 ? availableDocs[1] : doc1;
+        var doc3 = availableDocs != null && availableDocs.Count > 2 ? availableDocs[2] : doc1;
+
+        var cite1 = $"{doc1.Name} - Mục Phần II: Đặc tả chức năng và quy tắc nghiệp vụ";
+        var cite2 = $"{doc2.Name} - Mục 5.1: Danh tính và quyền";
+        var cite3 = $"{doc3.Name} - Mục 2.1: Phạm vi sản phẩm";
+
+        var task1Title = $"Xây dựng kiến trúc xử lý nghiệp vụ và RESTful API cho {featureName}";
+
+        var proposal = new AiSprintProposalDto
+        {
+            SessionId = sessionId,
+            ProjectId = projectId,
+            TargetSprintId = targetSprintId,
+            SprintGoal = goal,
+            Rationale = "Phân bổ công việc dựa trên phân tích đặc tả yêu cầu dự án và năng lực khả dụng của đội ngũ.",
+            Tags = new List<string> { "#SprintPlan", "#Scrum", "#SpecHub", "#FullStack" },
+            TotalStoryPoints = 13,
+            TotalEstimatedHours = 40,
+            Tasks = new List<ProposedTaskDto>
+            {
+                new()
+                {
+                    Id = "task_01",
+                    EpicTitle = "Core Feature Implementation",
+                    Title = task1Title,
+                    Description = $"Thiết kế kiến trúc giải pháp, cấu hình dữ liệu và xây dựng các luồng xử lý nghiệp vụ cho '{featureName}'.",
+                    Type = storyType,
+                    Priority = highPrio,
+                    Status = initialStatus,
+                    StoryPoints = 5,
+                    EstimatedHours = 16,
+                    Tags = new List<string> { "Backend", "API" },
+                    AcceptanceCriteria = new List<string>
+                    {
+                        "API phản hồi đúng định dạng JSON",
+                        "Kiểm tra xác thực JWT và phân quyền",
+                        "Xử lý ngoại lệ toàn diện"
+                    },
+                    DocumentId = doc1.Id,
+                    DocumentCitations = new List<string> { cite1 },
+                    AiRationale = "Cần thiết lập trước để các task giao diện frontend tích hợp.",
+                    Subtasks = new List<ProposedSubTaskDto>
+                    {
+                        new()
+                        {
+                            Id = "sub_01_1",
+                            Title = "Backend API & DbContext",
+                            Role = "Backend",
+                            EstimatedHours = 8,
+                            StoryPoints = 1,
+                            Priority = highPrio,
+                            Status = initialStatus,
+                            Description = "Thiết kế các API Endpoints và cấu hình Entity Framework Core DbContext mapping theo tài liệu kiến trúc.",
+                            AcceptanceCriteria = new List<string>
+                            {
+                                "Định nghĩa đầy đủ DbContext và Migration không lỗi",
+                                "API trả về chuẩn DTO và mã phản hồi HTTP chính xác"
+                            },
+                            DocumentId = doc1.Id,
+                            DocumentCitations = new List<string> { cite1 }
+                        },
+                        new()
+                        {
+                            Id = "sub_01_2",
+                            Title = "Unit Tests & Integration",
+                            Role = "QA",
+                            EstimatedHours = 8,
+                            StoryPoints = 1,
+                            Priority = defaultPrio,
+                            Status = initialStatus,
+                            Description = "Viết kịch bản kiểm thử đơn vị xUnit và kiểm thử tích hợp cho luồng xử lý Backend.",
+                            AcceptanceCriteria = new List<string>
+                            {
+                                "Độ bao phủ kiểm thử đạt trên 80% mã nguồn mới",
+                                "Toàn bộ bài test kiểm thử tích hợp vượt qua thành công"
+                            },
+                            DocumentId = doc1.Id,
+                            DocumentCitations = new List<string> { cite1 }
+                        }
+                    }
+                },
+                new()
+                {
+                    Id = "task_02",
+                    EpicTitle = "User Interface & Experience",
+                    Title = "Xây dựng giao diện tương tác người dùng",
+                    Description = "Phát triển component giao diện Angular tương thích đa màn hình.",
+                    Type = storyType,
+                    Priority = highPrio,
+                    Status = initialStatus,
+                    StoryPoints = 5,
+                    EstimatedHours = 16,
+                    Tags = new List<string> { "Frontend", "Angular" },
+                    AcceptanceCriteria = new List<string>
+                    {
+                        "Giao diện responsive không bị tràn lề",
+                        "100% icon sử dụng Google Material Symbols Outlined",
+                        "Không sử dụng raw keyboard emojis"
+                    },
+                    DocumentId = doc2.Id,
+                    DocumentCitations = new List<string> { cite2 },
+                    AiRationale = "Mang lại trải nghiệm người dùng chuẩn doanh nghiệp.",
+                    Subtasks = new List<ProposedSubTaskDto>
+                    {
+                        new()
+                        {
+                            Id = "sub_02_1",
+                            Title = "Angular Component & Signal state",
+                            Role = "Frontend",
+                            EstimatedHours = 10,
+                            StoryPoints = 1,
+                            Priority = highPrio,
+                            Status = initialStatus,
+                            Description = "Triển khai Angular standalone component và quản lý trạng thái bằng Signal state phản ứng linh hoạt.",
+                            AcceptanceCriteria = new List<string>
+                            {
+                                "Không phát sinh re-render thừa khi thay đổi tín hiệu Signal",
+                                "Tuân thủ tiêu chuẩn giao diện Material Symbols Outlined"
+                            },
+                            DocumentId = doc2.Id,
+                            DocumentCitations = new List<string> { cite2 }
+                        },
+                        new()
+                        {
+                            Id = "sub_02_2",
+                            Title = "E2E Playwright validation",
+                            Role = "QA",
+                            EstimatedHours = 6,
+                            StoryPoints = 1,
+                            Priority = defaultPrio,
+                            Status = initialStatus,
+                            Description = "Viết kịch bản kiểm thử đầu cuối E2E với Playwright kiểm tra luồng người dùng và độ phản hồi.",
+                            AcceptanceCriteria = new List<string>
+                            {
+                                "Kịch bản tự động hóa chạy ổn định trong chế độ headless",
+                                "Bắt trọn vẹn các case ngoại lệ và kiểm tra giao diện chia đôi màn hình"
+                            },
+                            DocumentId = doc2.Id,
+                            DocumentCitations = new List<string> { cite2 }
+                        }
+                    }
+                },
+                new()
+                {
+                    Id = "task_03",
+                    EpicTitle = "Quality Assurance & Security",
+                    Title = "Kiểm thử bảo mật và rà soát Zero-Secret-Leakage",
+                    Description = "Audit bảo mật và chạy toàn bộ test suite.",
+                    Type = taskType,
+                    Priority = defaultPrio,
+                    Status = initialStatus,
+                    StoryPoints = 3,
+                    EstimatedHours = 8,
+                    Tags = new List<string> { "Security", "QA" },
+                    AcceptanceCriteria = new List<string>
+                    {
+                        "Không có secret/key/URL/IP hardcode trong repo",
+                        "Kiểm thử bảo mật vượt qua 100%"
+                    },
+                    DocumentId = doc3.Id,
+                    DocumentCitations = new List<string> { cite3 },
+                    AiRationale = "Đảm bảo tuân thủ tiêu chuẩn an toàn thông tin tối cao của tổ chức.",
+                    Subtasks = new List<ProposedSubTaskDto>
+                    {
+                        new()
+                        {
+                            Id = "sub_03_1",
+                            Title = "Security static scan",
+                            Role = "DevOps",
+                            EstimatedHours = 4,
+                            StoryPoints = 1,
+                            Priority = highPrio,
+                            Status = initialStatus,
+                            Description = "Quét tự động toàn bộ source code kiểm tra leak secret và kiểm tra cấu hình an toàn.",
+                            AcceptanceCriteria = new List<string>
+                            {
+                                "Không tìm thấy token/key/mật khẩu trong code",
+                                "Tệp appsettings.Local.json và .env nằm trong .gitignore"
+                            },
+                            DocumentId = doc3.Id,
+                            DocumentCitations = new List<string> { cite3 }
+                        },
+                        new()
+                        {
+                            Id = "sub_03_2",
+                            Title = "Regression tests",
+                            Role = "QA",
+                            EstimatedHours = 4,
+                            StoryPoints = 1,
+                            Priority = defaultPrio,
+                            Status = initialStatus,
+                            Description = "Chạy kiểm thử hồi quy toàn diện các tính năng đã phát hành của Sprint.",
+                            AcceptanceCriteria = new List<string>
+                            {
+                                "100% test case hồi quy đạt pass",
+                                "Thời gian chạy bộ kiểm thử dưới 5 phút"
+                            },
+                            DocumentId = doc3.Id,
+                            DocumentCitations = new List<string> { cite3 }
+                        }
+                    }
+                }
+            }
+        };
+
+        ApplyConfigMetadata(proposal, activeConfig);
+        proposal.TotalStoryPoints = proposal.Tasks.Sum(t => t.StoryPoints);
+        proposal.TotalEstimatedHours = proposal.Tasks.Sum(t => t.EstimatedHours);
+        return proposal;
+    }
+
+    private static string ExtractJsonObject(string raw)
+    {
+        var cleaned = raw.Trim();
+        if (cleaned.StartsWith("```json", StringComparison.OrdinalIgnoreCase)) cleaned = cleaned[7..];
+        if (cleaned.StartsWith("```")) cleaned = cleaned[3..];
+        if (cleaned.EndsWith("```")) cleaned = cleaned[..^3];
+        cleaned = cleaned.Trim();
+
+        var firstBrace = cleaned.IndexOf('{');
+        var lastBrace = cleaned.LastIndexOf('}');
+        if (firstBrace >= 0 && lastBrace > firstBrace)
+        {
+            return cleaned.Substring(firstBrace, lastBrace - firstBrace + 1);
+        }
+        return cleaned;
+    }
+
+    private sealed class JsonRepairFrame
+    {
+        public char Kind { get; init; }
+        public int Phase { get; set; }
+        public int CompletedObjectItems { get; set; }
+    }
+
+    /// <summary>
+    /// Phục hồi chuỗi JSON đề xuất Sprint bị cắt cụt giữa chừng khi chạm giới hạn MaxTokens:
+    /// lùi về ranh giới phần tử hoàn chỉnh gần nhất, đóng chuỗi đang mở (nếu hợp lệ) và đóng các ngoặc `]`/`}` còn thiếu theo stack cú pháp.
+    /// </summary>
+    internal static bool TryRepairTruncatedJson(string? rawJson, out string repairedJson)
+    {
+        repairedJson = string.Empty;
+        if (string.IsNullOrWhiteSpace(rawJson))
+        {
+            return false;
+        }
+
+        var cleaned = rawJson.Trim();
+        if (cleaned.StartsWith("```json", StringComparison.OrdinalIgnoreCase)) cleaned = cleaned[7..];
+        else if (cleaned.StartsWith("```")) cleaned = cleaned[3..];
+        if (cleaned.EndsWith("```")) cleaned = cleaned[..^3];
+        cleaned = cleaned.Trim();
+
+        var firstBrace = cleaned.IndexOf('{');
+        if (firstBrace < 0)
+        {
+            return false;
+        }
+
+        var candidate = cleaned[firstBrace..].TrimEnd();
+        var stack = new List<JsonRepairFrame>();
+        var checkpoints = new List<(int CutIndex, string Suffix, bool IsContainerEnd)>();
+
+        bool inString = false;
+        bool escaped = false;
+        bool currentStringIsValue = false;
+        int openCurly = 0, closeCurly = 0, openBracket = 0, closeBracket = 0;
+
+        static string BuildSuffix(List<JsonRepairFrame> frames)
+        {
+            if (frames.Count == 0) return string.Empty;
+            var chars = new char[frames.Count];
+            for (int k = 0; k < frames.Count; k++)
+            {
+                chars[k] = frames[frames.Count - 1 - k].Kind == '{' ? '}' : ']';
+            }
+            return new string(chars);
+        }
+
+        static bool CanParseValidObject(string json)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                return doc.RootElement.ValueKind == JsonValueKind.Object;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        int i = 0;
+        bool syntaxAbort = false;
+        while (i < candidate.Length)
+        {
+            char ch = candidate[i];
+            if (inString)
+            {
+                if (escaped)
+                {
+                    escaped = false;
+                    i++;
+                    continue;
+                }
+                if (ch == '\\')
+                {
+                    escaped = true;
+                    i++;
+                    continue;
+                }
+                if (ch == '"')
+                {
+                    inString = false;
+                    if (stack.Count > 0)
+                    {
+                        var top = stack[^1];
+                        if (top.Kind == '{')
+                        {
+                            if (top.Phase == 0) top.Phase = 1;
+                            else if (top.Phase == 2)
+                            {
+                                top.Phase = 3;
+                                checkpoints.Add((i + 1, BuildSuffix(stack), false));
+                            }
+                        }
+                        else
+                        {
+                            top.Phase = 1;
+                            checkpoints.Add((i + 1, BuildSuffix(stack), false));
+                        }
+                    }
+                    i++;
+                    continue;
+                }
+                i++;
+                continue;
+            }
+
+            if (char.IsWhiteSpace(ch))
+            {
+                i++;
+                continue;
+            }
+
+            if (ch == '"')
+            {
+                if (stack.Count == 0) { syntaxAbort = true; break; }
+                var top = stack[^1];
+                currentStringIsValue = top.Kind == '[' || (top.Kind == '{' && top.Phase == 2);
+                inString = true;
+                escaped = false;
+                i++;
+                continue;
+            }
+
+            if (ch == '{')
+            {
+                if (stack.Count > 0)
+                {
+                    var top = stack[^1];
+                    if (!((top.Kind == '[' && top.Phase == 0) || (top.Kind == '{' && top.Phase == 2)))
+                    {
+                        syntaxAbort = true;
+                        break;
+                    }
+                }
+                openCurly++;
+                stack.Add(new JsonRepairFrame { Kind = '{', Phase = 0 });
+                i++;
+                continue;
+            }
+
+            if (ch == '[')
+            {
+                if (stack.Count == 0) { syntaxAbort = true; break; }
+                var top = stack[^1];
+                if (!((top.Kind == '[' && top.Phase == 0) || (top.Kind == '{' && top.Phase == 2)))
+                {
+                    syntaxAbort = true;
+                    break;
+                }
+                openBracket++;
+                stack.Add(new JsonRepairFrame { Kind = '[', Phase = 0 });
+                checkpoints.Add((i + 1, BuildSuffix(stack), true));
+                i++;
+                continue;
+            }
+
+            if (ch == ':')
+            {
+                if (stack.Count == 0 || stack[^1].Kind != '{' || stack[^1].Phase != 1)
+                {
+                    syntaxAbort = true;
+                    break;
+                }
+                stack[^1].Phase = 2;
+                i++;
+                continue;
+            }
+
+            if (ch == ',')
+            {
+                if (stack.Count == 0) { syntaxAbort = true; break; }
+                var top = stack[^1];
+                if ((top.Kind == '{' && top.Phase == 3) || (top.Kind == '[' && top.Phase == 1))
+                {
+                    top.Phase = 0;
+                    i++;
+                    continue;
+                }
+                syntaxAbort = true;
+                break;
+            }
+
+            if (ch == '}')
+            {
+                closeCurly++;
+                if (stack.Count == 0 || stack[^1].Kind != '{' || (stack[^1].Phase != 0 && stack[^1].Phase != 3))
+                {
+                    syntaxAbort = true;
+                    break;
+                }
+                stack.RemoveAt(stack.Count - 1);
+                if (stack.Count > 0)
+                {
+                    var parent = stack[^1];
+                    if (parent.Kind == '{') parent.Phase = 3;
+                    else
+                    {
+                        parent.Phase = 1;
+                        parent.CompletedObjectItems++;
+                    }
+                    checkpoints.Add((i + 1, BuildSuffix(stack), true));
+                }
+                else
+                {
+                    checkpoints.Add((i + 1, string.Empty, true));
+                    break;
+                }
+                i++;
+                continue;
+            }
+
+            if (ch == ']')
+            {
+                closeBracket++;
+                if (stack.Count == 0 || stack[^1].Kind != '[' || (stack[^1].Phase != 0 && stack[^1].Phase != 1))
+                {
+                    syntaxAbort = true;
+                    break;
+                }
+                stack.RemoveAt(stack.Count - 1);
+                if (stack.Count > 0)
+                {
+                    var parent = stack[^1];
+                    parent.Phase = parent.Kind == '{' ? 3 : 1;
+                    checkpoints.Add((i + 1, BuildSuffix(stack), true));
+                }
+                i++;
+                continue;
+            }
+
+            if (stack.Count > 0)
+            {
+                var top = stack[^1];
+                if (!((top.Kind == '[' && top.Phase == 0) || (top.Kind == '{' && top.Phase == 2)))
+                {
+                    syntaxAbort = true;
+                    break;
+                }
+            }
+
+            int tokenStart = i;
+            while (i < candidate.Length && candidate[i] != ',' && candidate[i] != '}' && candidate[i] != ']' && !char.IsWhiteSpace(candidate[i]))
+            {
+                i++;
+            }
+            var literal = candidate[tokenStart..i];
+            bool isCompletePrimitive =
+                literal == "true" || literal == "false" || literal == "null" ||
+                (decimal.TryParse(literal, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out _)
+                 && !literal.EndsWith('.') && !literal.EndsWith('-') && !literal.EndsWith('+'));
+            if (!isCompletePrimitive)
+            {
+                break;
+            }
+
+            if (stack.Count > 0)
+            {
+                var top = stack[^1];
+                top.Phase = top.Kind == '{' ? 3 : 1;
+                checkpoints.Add((i, BuildSuffix(stack), false));
+            }
+        }
+
+        bool isTruncated = stack.Count > 0 || inString || openCurly > closeCurly || openBracket > closeBracket;
+        if (!isTruncated && !syntaxAbort)
+        {
+            return false;
+        }
+
+        string? closedOpenStringCandidate = null;
+        if (!syntaxAbort && inString && currentStringIsValue && stack.Count > 0)
+        {
+            var trimmed = candidate;
+            if (escaped && trimmed.Length > 0)
+            {
+                trimmed = trimmed[..^1];
+            }
+            else
+            {
+                // Tránh cắt dở chuỗi unicode escape \uXX cuối cùng
+                var tailCount = Math.Min(6, trimmed.Length);
+                var uIdx = trimmed.LastIndexOf("\\u", trimmed.Length - 1, tailCount, StringComparison.Ordinal);
+                if (uIdx >= 0 && trimmed.Length - uIdx < 6)
+                {
+                    trimmed = trimmed[..uIdx];
+                }
+            }
+            closedOpenStringCandidate = trimmed + "\"" + BuildSuffix(stack);
+        }
+
+        bool preferCompletedSibling = stack.Count >= 2 &&
+                                      stack[^1].Kind == '{' &&
+                                      stack[^2].Kind == '[' &&
+                                      stack[^2].CompletedObjectItems > 0;
+
+        if (!preferCompletedSibling && closedOpenStringCandidate != null && CanParseValidObject(closedOpenStringCandidate))
+        {
+            repairedJson = closedOpenStringCandidate;
+            return true;
+        }
+
+        for (int idx = checkpoints.Count - 1; idx >= 0; idx--)
+        {
+            var cp = checkpoints[idx];
+            if (preferCompletedSibling && !cp.IsContainerEnd)
+            {
+                continue;
+            }
+
+            var assembled = candidate[..cp.CutIndex] + cp.Suffix;
+            if (CanParseValidObject(assembled))
+            {
+                repairedJson = assembled;
+                return true;
+            }
+        }
+
+        for (int idx = checkpoints.Count - 1; idx >= 0; idx--)
+        {
+            var cp = checkpoints[idx];
+            var assembled = candidate[..cp.CutIndex] + cp.Suffix;
+            if (CanParseValidObject(assembled))
+            {
+                repairedJson = assembled;
+                return true;
+            }
+        }
+
+        if (closedOpenStringCandidate != null && CanParseValidObject(closedOpenStringCandidate))
+        {
+            repairedJson = closedOpenStringCandidate;
+            return true;
+        }
+
+        return false;
+    }
+
+    private sealed class TeamMemberProfile
+    {
+        public Guid UserId { get; set; }
+        public string DisplayName { get; set; } = string.Empty;
+        public string JobTitle { get; set; } = string.Empty;
+        public List<string> Roles { get; set; } = new();
+        public List<string> Skills { get; set; } = new();
+        public decimal RemainingHours { get; set; } = 40.0m;
+    }
+
+    private static void EnrichProposalWithTeamMembers(AiSprintProposalDto proposal, string teamCapacitiesJson)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(teamCapacitiesJson);
+            if (!doc.RootElement.TryGetProperty("Capacities", out var capArray) || capArray.ValueKind != JsonValueKind.Array)
+            {
+                return;
+            }
+
+            var members = new List<TeamMemberProfile>();
+            foreach (var item in capArray.EnumerateArray())
+            {
+                if (item.TryGetProperty("UserId", out var idProp) &&
+                    Guid.TryParse(idProp.GetString(), out var userId) &&
+                    item.TryGetProperty("DisplayName", out var nameProp))
+                {
+                    var name = nameProp.GetString();
+                    if (!string.IsNullOrWhiteSpace(name))
+                    {
+                        var profile = new TeamMemberProfile
+                        {
+                            UserId = userId,
+                            DisplayName = name,
+                            JobTitle = item.TryGetProperty("JobTitle", out var jt) ? jt.GetString() ?? string.Empty : string.Empty,
+                            RemainingHours = item.TryGetProperty("RemainingAvailableHours", out var rh) && rh.TryGetDecimal(out var d) ? d : 40.0m
+                        };
+
+                        if (item.TryGetProperty("Roles", out var rProp) && rProp.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var r in rProp.EnumerateArray())
+                            {
+                                if (r.GetString() is { } rStr) profile.Roles.Add(rStr);
+                            }
+                        }
+
+                        if (item.TryGetProperty("Skills", out var sProp) && sProp.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var s in sProp.EnumerateArray())
+                            {
+                                if (s.GetString() is { } sStr) profile.Skills.Add(sStr);
+                            }
+                        }
+
+                        members.Add(profile);
+                    }
+                }
+            }
+
+            if (members.Count == 0) return;
+
+            // 1. Diversify Story Points across Fibonacci (1, 2, 3, 5, 8) if model returned all identical SP
+            var distinctSp = proposal.Tasks.Select(t => t.StoryPoints).Distinct().ToList();
+            if (distinctSp.Count == 1 && proposal.Tasks.Count > 1)
+            {
+                int[] fibRotation = [3, 5, 2, 8, 3, 5];
+                for (var i = 0; i < proposal.Tasks.Count; i++)
+                {
+                    var t = proposal.Tasks[i];
+                    var text = (t.Title + " " + t.Description).ToLowerInvariant();
+                    if (text.Contains("kiến trúc") || text.Contains("hạ tầng") || text.Contains("realtime") || text.Contains("toàn diện"))
+                    {
+                        t.StoryPoints = 5;
+                        t.EstimatedHours = 16;
+                    }
+                    else if (text.Contains("kiểm thử") || text.Contains("test") || text.Contains("cấu hình") || text.Contains("nhỏ"))
+                    {
+                        t.StoryPoints = 2;
+                        t.EstimatedHours = 6;
+                    }
+                    else if (text.Contains("giao diện") || text.Contains("bảng") || text.Contains("biểu đồ") || text.Contains("modal"))
+                    {
+                        t.StoryPoints = 3;
+                        t.EstimatedHours = 8;
+                    }
+                    else
+                    {
+                        t.StoryPoints = fibRotation[i % fibRotation.Length];
+                        t.EstimatedHours = t.StoryPoints * 3;
+                    }
+                    t.RemainingHours = t.EstimatedHours;
+                }
+                proposal.TotalStoryPoints = proposal.Tasks.Sum(t => t.StoryPoints);
+                proposal.TotalEstimatedHours = proposal.Tasks.Sum(t => t.EstimatedHours);
+            }
+
+            // 2. Intelligent Assignee Matching by Skills, Role & Workload Balance
+            var assignedSet = new HashSet<Guid>();
+
+            for (var i = 0; i < proposal.Tasks.Count; i++)
+            {
+                var task = proposal.Tasks[i];
+                var matched = MatchBestMemberForTask(task, members, assignedSet);
+                task.AssigneeUserId = matched.UserId;
+                task.AssigneeName = matched.DisplayName;
+                assignedSet.Add(matched.UserId);
+
+                if (task.RemainingHours <= 0)
+                {
+                    task.RemainingHours = task.EstimatedHours;
+                }
+
+                // If all members were assigned once, reset set to re-balance
+                if (assignedSet.Count >= members.Count)
+                {
+                    assignedSet.Clear();
+                }
+
+                // Subtasks matching
+                if (task.Subtasks != null && task.Subtasks.Count > 0)
+                {
+                    for (var j = 0; j < task.Subtasks.Count; j++)
+                    {
+                        var sub = task.Subtasks[j];
+                        var subRole = string.IsNullOrWhiteSpace(sub.Role) ? (j % 2 == 0 ? "Backend" : "Frontend") : sub.Role;
+                        sub.Role = subRole;
+                        var subMember = MatchMemberByRole(subRole, members, task.AssigneeUserId);
+                        sub.AssigneeUserId = subMember.UserId;
+                        sub.AssigneeName = subMember.DisplayName;
+                        if (sub.EstimatedHours <= 0) sub.EstimatedHours = 6;
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Ignore enrichment parse errors
+        }
+    }
+
+    private static TeamMemberProfile MatchBestMemberForTask(
+        ProposedTaskDto task,
+        List<TeamMemberProfile> memberList,
+        HashSet<Guid> recentlyAssigned)
+    {
+        var text = (task.Title + " " + task.Description + " " + string.Join(" ", task.Tags ?? [])).ToLowerInvariant();
+
+        // 1. Direct name match if AI already suggested a valid member
+        if (!string.IsNullOrWhiteSpace(task.AssigneeName))
+        {
+            var direct = memberList.FirstOrDefault(m =>
+                m.DisplayName.Contains(task.AssigneeName, StringComparison.OrdinalIgnoreCase) ||
+                task.AssigneeName.Contains(m.DisplayName, StringComparison.OrdinalIgnoreCase));
+            if (direct != null) return direct;
+        }
+
+        // 2. Skill & Domain matching
+        bool isFrontend = text.Contains("giao diện") || text.Contains("ui") || text.Contains("ux") ||
+                          text.Contains("angular") || text.Contains("component") || text.Contains("bảng") ||
+                          text.Contains("modal") || text.Contains("drawer") || text.Contains("css") || text.Contains("tailwind");
+
+        bool isBackend = text.Contains("api") || text.Contains("backend") || text.Contains("c#") ||
+                         text.Contains(".net") || text.Contains("mysql") || text.Contains("redis") ||
+                         text.Contains("database") || text.Contains("sse") || text.Contains("signalr") ||
+                         text.Contains("controller") || text.Contains("mcp") || text.Contains("dbcontext");
+
+        bool isQA = text.Contains("kiểm thử") || text.Contains("test") || text.Contains("qa") ||
+                    text.Contains("playwright") || text.Contains("e2e") || text.Contains("nghiệm thu") ||
+                    text.Contains("ac") || text.Contains("regression");
+
+        bool isLead = text.Contains("kiến trúc") || text.Contains("bảo mật") || text.Contains("quy trình") ||
+                      text.Contains("kế hoạch") || text.Contains("sprint");
+
+        List<TeamMemberProfile> candidates = memberList;
+
+        if (isFrontend)
+        {
+            var fe = memberList.Where(m =>
+                m.JobTitle.Contains("Frontend", StringComparison.OrdinalIgnoreCase) ||
+                m.Skills.Any(s => s.Contains("Angular", StringComparison.OrdinalIgnoreCase) || s.Contains("Tailwind", StringComparison.OrdinalIgnoreCase))).ToList();
+            if (fe.Count > 0) candidates = fe;
+        }
+        else if (isBackend)
+        {
+            var be = memberList.Where(m =>
+                m.JobTitle.Contains("Backend", StringComparison.OrdinalIgnoreCase) ||
+                m.Skills.Any(s => s.Contains("C#", StringComparison.OrdinalIgnoreCase) || s.Contains(".NET", StringComparison.OrdinalIgnoreCase) || s.Contains("MySQL", StringComparison.OrdinalIgnoreCase))).ToList();
+            if (be.Count > 0) candidates = be;
+        }
+        else if (isQA)
+        {
+            var qa = memberList.Where(m =>
+                m.JobTitle.Contains("QA", StringComparison.OrdinalIgnoreCase) ||
+                m.JobTitle.Contains("Tester", StringComparison.OrdinalIgnoreCase) ||
+                m.Skills.Any(s => s.Contains("Playwright", StringComparison.OrdinalIgnoreCase) || s.Contains("QA", StringComparison.OrdinalIgnoreCase))).ToList();
+            if (qa.Count > 0) candidates = qa;
+        }
+        else if (isLead)
+        {
+            var ld = memberList.Where(m =>
+                m.JobTitle.Contains("Lead", StringComparison.OrdinalIgnoreCase) ||
+                m.JobTitle.Contains("Admin", StringComparison.OrdinalIgnoreCase) ||
+                m.Roles.Any(r => r.Contains("ProjectManager", StringComparison.OrdinalIgnoreCase) || r.Contains("Director", StringComparison.OrdinalIgnoreCase))).ToList();
+            if (ld.Count > 0) candidates = ld;
+        }
+
+        // Avoid assigning same person repeatedly: check unassigned first
+        var unassigned = candidates.Where(c => !recentlyAssigned.Contains(c.UserId)).ToList();
+        return (unassigned.Count > 0 ? unassigned : candidates)
+            .OrderByDescending(c => c.RemainingHours)
+            .FirstOrDefault() ?? memberList[0];
+    }
+
+    private static TeamMemberProfile MatchMemberByRole(string role, List<TeamMemberProfile> memberList, Guid? avoidUserId = null)
+    {
+        var roleLower = role.ToLowerInvariant();
+        var pool = memberList.Where(m => avoidUserId == null || m.UserId != avoidUserId.Value).ToList();
+        if (pool.Count == 0) pool = memberList;
+
+        if (roleLower.Contains("front") || roleLower.Contains("ui"))
+        {
+            var fe = pool.FirstOrDefault(m => m.JobTitle.Contains("Frontend", StringComparison.OrdinalIgnoreCase) || m.Skills.Any(s => s.Contains("Angular", StringComparison.OrdinalIgnoreCase)));
+            if (fe != null) return fe;
+        }
+        else if (roleLower.Contains("back") || roleLower.Contains("api"))
+        {
+            var be = pool.FirstOrDefault(m => m.JobTitle.Contains("Backend", StringComparison.OrdinalIgnoreCase) || m.Skills.Any(s => s.Contains("C#", StringComparison.OrdinalIgnoreCase) || s.Contains(".NET", StringComparison.OrdinalIgnoreCase)));
+            if (be != null) return be;
+        }
+        else if (roleLower.Contains("qa") || roleLower.Contains("test"))
+        {
+            var qa = pool.FirstOrDefault(m => m.JobTitle.Contains("QA", StringComparison.OrdinalIgnoreCase) || m.JobTitle.Contains("Tester", StringComparison.OrdinalIgnoreCase) || m.Skills.Any(s => s.Contains("Playwright", StringComparison.OrdinalIgnoreCase)));
+            if (qa != null) return qa;
+        }
+
+        return pool[0];
+    }
+
+    private async Task<List<(Guid Id, string Name)>> LoadProjectDocMetasAsync(Guid projectId, CancellationToken ct)
+    {
+        try
+        {
+            var rawDocs = await _planningDb.ProjectDocuments.AsNoTracking()
+                .Where(d => d.ProjectId == projectId && !d.IsDirectory)
+                .OrderByDescending(d => d.UpdatedAt)
+                .Take(12)
+                .Select(d => new { d.Id, Name = string.IsNullOrEmpty(d.Name) ? d.Title : d.Name, d.Extension })
+                .ToListAsync(ct);
+
+            return rawDocs
+                .Where(d => (d.Extension ?? string.Empty).ToLowerInvariant() is not (".png" or ".jpg" or ".jpeg" or ".gif" or ".webp"))
+                .Select(d => (d.Id, d.Name))
+                .ToList();
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private static decimal NormalizeFibonacciSp(decimal rawSp, int maxSp = 13)
+    {
+        if (rawSp <= 0m) return 1m;
+        int[] fib = maxSp <= 5 ? [1, 2, 3, 5] : [1, 2, 3, 5, 8, 13];
+        var capped = Math.Min(rawSp, maxSp);
+        var best = fib[0];
+        var bestDist = Math.Abs(capped - best);
+        for (var i = 1; i < fib.Length; i++)
+        {
+            var dist = Math.Abs(capped - fib[i]);
+            if (dist <= bestDist)
+            {
+                best = fib[i];
+                bestDist = dist;
+            }
+        }
+        return best;
+    }
+
+    private static string SafeText(string? input, string fallback)
+    {
+        var cleaned = InputGuardrail.StripUnsafeHtmlOrScript(input);
+        return string.IsNullOrWhiteSpace(cleaned) ? fallback : cleaned;
+    }
+
+    private static string? CleanOptionalText(string? input)
+    {
+        var cleaned = InputGuardrail.StripUnsafeHtmlOrScript(input);
+        return string.IsNullOrWhiteSpace(cleaned) ? null : cleaned;
+    }
+
+    private static List<string> ParseCitationArray(System.Text.Json.Nodes.JsonNode? citeNode)
+    {
+        if (citeNode is System.Text.Json.Nodes.JsonArray cArr)
+        {
+            return cArr.Select(x => InputGuardrail.StripUnsafeHtmlOrScript(x?.GetValue<string>()))
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .ToList();
+        }
+        if (citeNode != null)
+        {
+            return citeNode.ToString()
+                .Split(['\n', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(InputGuardrail.StripUnsafeHtmlOrScript)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .ToList();
+        }
+        return [];
+    }
+
+    private static (Guid? DocId, List<string> Citations) NormalizeSpecHubCitations(
+        IReadOnlyList<string>? rawCitations,
+        IReadOnlyList<(Guid Id, string Name)>? availableDocs,
+        int fallbackDocIndex)
+    {
+        var clean = rawCitations?
+            .Select(InputGuardrail.StripUnsafeHtmlOrScript)
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? [];
+
+        static bool LooksLikeSpecFileRef(string s) =>
+            s.Contains(".md", StringComparison.OrdinalIgnoreCase) ||
+            s.Contains(".docx", StringComparison.OrdinalIgnoreCase) ||
+            s.Contains(".pdf", StringComparison.OrdinalIgnoreCase) ||
+            s.Contains(".xlsx", StringComparison.OrdinalIgnoreCase) ||
+            s.Contains(".txt", StringComparison.OrdinalIgnoreCase) ||
+            s.Contains("spec hub", StringComparison.OrdinalIgnoreCase) ||
+            s.Contains("tài liệu đặc tả", StringComparison.OrdinalIgnoreCase) ||
+            s.Contains("quy chuẩn ui/ux", StringComparison.OrdinalIgnoreCase);
+
+        if (availableDocs != null)
+        {
+            Guid? matchedDocId = null;
+            var verified = new List<string>();
+            foreach (var cite in clean)
+            {
+                var matched = availableDocs.FirstOrDefault(d =>
+                    !string.IsNullOrWhiteSpace(d.Name) &&
+                    (cite.Contains(d.Name, StringComparison.OrdinalIgnoreCase) ||
+                     cite.Contains(Path.GetFileNameWithoutExtension(d.Name), StringComparison.OrdinalIgnoreCase)));
+                if (matched != default)
+                {
+                    matchedDocId ??= matched.Id;
+                    verified.Add(cite);
+                }
+                else if (!LooksLikeSpecFileRef(cite))
+                {
+                    verified.Add(cite);
+                }
+            }
+
+            if (verified.Count == 0 && availableDocs.Count > 0 && fallbackDocIndex >= 0)
+            {
+                var assignedDoc = availableDocs[fallbackDocIndex % availableDocs.Count];
+                matchedDocId = assignedDoc.Id;
+                verified.Add($"{assignedDoc.Name} - Mục Phần II");
+            }
+
+            return (matchedDocId, verified);
+        }
+
+        return (null, clean.Where(c => !LooksLikeSpecFileRef(c)).ToList());
+    }
+
+    private static ProposedTaskDto ParseSingleTask(
+        string rawJson,
+        ProposedTaskDto existing,
+        ProjectActiveConfig? activeConfig = null,
+        IReadOnlyList<(Guid Id, string Name)>? availableDocs = null,
+        string? teamCapacitiesJson = null,
+        string? safeFeedback = null)
+    {
+        try
+        {
+            var cleaned = rawJson.Trim();
+            if (cleaned.StartsWith("```json", StringComparison.OrdinalIgnoreCase)) cleaned = cleaned[7..];
+            if (cleaned.StartsWith("```")) cleaned = cleaned[3..];
+            if (cleaned.EndsWith("```")) cleaned = cleaned[..^3];
+            var parsed = JsonSerializer.Deserialize<ProposedTaskDto>(cleaned.Trim(), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (parsed != null)
+            {
+                parsed.Id = existing.Id;
+                parsed.SourceBacklogIssueId ??= existing.SourceBacklogIssueId;
+                parsed.SourceBacklogIssueKey ??= existing.SourceBacklogIssueKey;
+                parsed.Title = SafeText(parsed.Title, existing.Title);
+                parsed.Description = SafeText(parsed.Description, existing.Description);
+                parsed.AiRationale = SafeText(parsed.AiRationale, existing.AiRationale ?? "Tinh chỉnh theo cấu hình dự án.");
+                parsed.StoryPoints = NormalizeFibonacciSp(parsed.StoryPoints <= 0 ? existing.StoryPoints : parsed.StoryPoints, maxSp: 13);
+                parsed.EstimatedHours = Math.Clamp(parsed.EstimatedHours <= 0 ? parsed.StoryPoints * 4m : parsed.EstimatedHours, 1m, 120m);
+                parsed.RemainingHours = parsed.EstimatedHours;
+                if (parsed.AcceptanceCriteria != null)
+                {
+                    parsed.AcceptanceCriteria = parsed.AcceptanceCriteria
+                        .Select(InputGuardrail.StripUnsafeHtmlOrScript)
+                        .Where(x => !string.IsNullOrWhiteSpace(x))
+                        .ToList();
+                }
+
+                if (activeConfig != null)
+                {
+                    parsed.Type = activeConfig.ResolveIssueTypeName(parsed.Type);
+                    parsed.Priority = activeConfig.ResolvePriorityName(parsed.Priority);
+                    parsed.Status = activeConfig.ResolveStatusName(parsed.Status);
+                }
+
+                var (docId, cites) = NormalizeSpecHubCitations(parsed.DocumentCitations, availableDocs, fallbackDocIndex: -1);
+                parsed.DocumentId = docId ?? existing.DocumentId;
+                parsed.DocumentCitations = cites.Count > 0 ? cites : existing.DocumentCitations;
+
+                if (!string.IsNullOrWhiteSpace(teamCapacitiesJson))
+                {
+                    try
+                    {
+                        var members = JsonSerializer.Deserialize<List<TeamMemberProfile>>(teamCapacitiesJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
+                        if (members.Count > 0)
+                        {
+                            var matched = MatchBestMemberForTask(parsed, members, new HashSet<Guid>());
+                            parsed.AssigneeUserId = matched.UserId;
+                            parsed.AssigneeName = matched.DisplayName;
+                        }
+                    }
+                    catch { }
+                }
+
+                foreach (var sub in parsed.Subtasks)
+                {
+                    sub.Title = SafeText(sub.Title, "Công việc con");
+                    sub.Description = SafeText(sub.Description, sub.Title);
+                    sub.StoryPoints = (int)NormalizeFibonacciSp(sub.StoryPoints <= 0 ? 1m : sub.StoryPoints, maxSp: 5);
+                    sub.EstimatedHours = Math.Clamp(sub.EstimatedHours <= 0 ? 4m : sub.EstimatedHours, 0.5m, 80m);
+                    if (activeConfig != null)
+                    {
+                        sub.Priority = activeConfig.ResolvePriorityName(sub.Priority);
+                        sub.Status = activeConfig.ResolveStatusName(sub.Status);
+                    }
+                    var (sDocId, sCites) = NormalizeSpecHubCitations(sub.DocumentCitations, availableDocs, fallbackDocIndex: -1);
+                    sub.DocumentId = sDocId ?? parsed.DocumentId;
+                    sub.DocumentCitations = sCites.Count > 0 ? sCites : parsed.DocumentCitations.ToList();
+                }
+
+                return parsed;
+            }
+        }
+        catch { }
+
+        var noteText = string.IsNullOrWhiteSpace(safeFeedback) ? "Cập nhật nội dung công việc" : (safeFeedback.Length > 240 ? safeFeedback[..240] : safeFeedback);
+        existing.Description = $"{existing.Description}\n[Đã ghi nhận yêu cầu: {noteText}]".Trim();
+        return existing;
+    }
+}

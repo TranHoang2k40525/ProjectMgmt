@@ -1,11 +1,22 @@
 using System.ComponentModel.DataAnnotations;
+using System.Globalization;
+using System.Text;
+using System.Text.Json;
+using DeliveryIntelligence.Application.Dto;
 using DeliveryIntelligence.Application.IServices;
+using DeliveryIntelligence.Application.Services;
 using DeliveryIntelligence.Domain.Entities;
+using DeliveryIntelligence.Domain.UseCases;
 using DeliveryIntelligence.Infrastructure;
-using IdentityExperience.Infrastructure;
+using IdentityExperience.Application.Dto;
+using IdentityExperience.Application.IServices;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Planning.Domain.Entities;
 using Planning.Infrastructure;
+using ProjectMgmt.IdentityAccess.Contracts;
+using ProjectMgmt.Solution.Realtime;
 using ProjectMgmt.Solution.Security;
 
 namespace ProjectMgmt.Solution.Controllers;
@@ -25,6 +36,10 @@ public sealed class WorkItemRequest
     public string? SprintId { get; set; }
     public Guid? AssigneeId { get; set; }
     public string? AssigneeName { get; set; }
+    public decimal? EstimatedHours { get; set; }
+    public decimal? RemainingHours { get; set; }
+    public bool? IsBlocked { get; set; }
+    public string? BlockReason { get; set; }
     [Required, MaxLength(30)] public List<string> Labels { get; set; } = [];
 }
 
@@ -39,10 +54,14 @@ public sealed class SprintRequest
 }
 
 [Route("api")]
-[Route("api/v1")]
 public sealed class WorkItemsController(
-    DeliveryIntelligenceDbContext delivery, PlanningDbContext planning,
-    IdentityExperienceDbContext identity, ProjectAccess access) : ApiControllerBase
+    DeliveryIntelligenceDbContext delivery,
+    PlanningDbContext planning,
+    IUserLookupService userLookup,
+    IssueHistoryRecorder historyRecorder,
+    IPermissionEvaluator permissionEvaluator,
+    ProjectAccess access,
+    ISkillCatalogReader? skillCatalog = null) : ApiControllerBase
 {
     private ObjectResult Denied() => StatusCode(403, new { message = "Bạn không có quyền thực hiện thao tác này.", code = "PROJECT_PERMISSION_DENIED" });
     private BadRequestObjectResult Invalid(string message) => BadRequest(new { message });
@@ -105,7 +124,15 @@ public sealed class WorkItemsController(
         if (!id.HasValue && await delivery.Issues.AnyAsync(i => i.Id == issue.Id)) return Conflict(new { message = "Mã công việc đã tồn tại." });
         var type = await planning.IssueTypes.SingleOrDefaultAsync(t => t.ProjectId == projectId && t.Name == request.IssueType);
         if (type is null && request.IssueType == "Sub-task") type = await planning.IssueTypes.FirstOrDefaultAsync(t => t.ProjectId == projectId && t.IsSubtask);
-        var status = await planning.WorkflowStatuses.SingleOrDefaultAsync(s => s.ProjectId == projectId && s.Name == request.StatusName);
+        var status = await planning.WorkflowStatuses.FirstOrDefaultAsync(s => s.ProjectId == projectId && (s.Name == request.StatusName || (request.StatusName == "Code Review" && s.Name == "In Review") || (request.StatusName == "In Review" && s.Name == "Code Review")));
+        if (status is null && !id.HasValue)
+        {
+            status = await planning.WorkflowStatuses
+                .Where(s => s.ProjectId == projectId)
+                .OrderByDescending(s => s.IsInitial)
+                .ThenBy(s => s.OrderIndex)
+                .FirstOrDefaultAsync();
+        }
         if (type is null || status is null) return Invalid("Loại công việc hoặc trạng thái không thuộc dự án.");
         if (type.IsSubtask != request.ParentId.HasValue) return Invalid("Subtask phải có công việc cha; các loại khác không dùng ParentId.");
         if (request.ParentId.HasValue)
@@ -125,11 +152,17 @@ public sealed class WorkItemsController(
         Guid? assignee = request.AssigneeId;
         if (!string.IsNullOrWhiteSpace(request.AssigneeName))
         {
-            if (!assignee.HasValue || !await identity.UserProfiles.AnyAsync(p => p.UserId == assignee && p.DisplayName == request.AssigneeName))
+            var allUsers = await userLookup.GetAllActiveDisplayInfoAsync();
+            var userById = allUsers.ToDictionary(u => u.UserId);
+            if (!assignee.HasValue || !allUsers.Any(p => p.UserId == assignee && p.DisplayName == request.AssigneeName))
             {
-                var matches = await identity.UserProfiles.Where(p => p.DisplayName == request.AssigneeName).Select(p => p.UserId).Take(2).ToListAsync();
-                if (matches.Count != 1) return Invalid("Chọn người xử lý bằng tài khoản thành viên hợp lệ.");
-                assignee = matches[0];
+                var resolved = Services.Ai.AiSprintCommitCoordinator.ResolveAssigneeId(
+                    assignee,
+                    request.AssigneeName,
+                    userById,
+                    allUsers);
+                if (!resolved.HasValue) return Invalid("Chọn người xử lý bằng tài khoản thành viên hợp lệ.");
+                assignee = resolved.Value;
             }
         }
         else assignee = null;
@@ -139,12 +172,32 @@ public sealed class WorkItemsController(
         {
             if (!await access.AllowsAsync(projectId, "issue.transition")) return Denied();
             var transition = await planning.WorkflowTransitions.SingleOrDefaultAsync(t => t.ProjectId == projectId && t.FromStatusId == issue.StatusId && t.ToStatusId == status.Id);
-            if (transition is null) return Invalid("Workflow không cho phép chuyển trạng thái này.");
-            if (!string.IsNullOrWhiteSpace(transition.RequiredPermissionCode) && !await access.AllowsAsync(projectId, transition.RequiredPermissionCode)) return Denied();
+            if (transition is null)
+            {
+                var isProjectAdmin = await access.AllowsAsync(projectId, "project.admin") || await access.AllowsAsync(projectId, "workflow.manage");
+                if (!isProjectAdmin) return Invalid("Workflow không cho phép chuyển trạng thái này.");
+            }
+            else if (!string.IsNullOrWhiteSpace(transition.RequiredPermissionCode) && !await access.AllowsAsync(projectId, transition.RequiredPermissionCode)) return Denied();
         }
         if (issue.AssigneeId != assignee && (id.HasValue || assignee != access.UserId) && !await access.AllowsAsync(projectId, "issue.assign")) return Denied();
         var priorityName = request.Priority == "Urgent" ? "Highest" : request.Priority;
-        var priority = await planning.Priorities.AsNoTracking().FirstOrDefaultAsync(p => p.Name == request.Priority || p.Name == priorityName);
+        var priority = await planning.Priorities.AsNoTracking()
+            .Where(p => p.ProjectId == projectId && (p.Name == request.Priority || p.Name == priorityName || p.Id.ToString() == request.Priority))
+            .FirstOrDefaultAsync();
+
+        priority ??= await planning.Priorities.AsNoTracking()
+            .Where(p => p.ProjectId == null && (p.Name == request.Priority || p.Name == priorityName || p.Id.ToString() == request.Priority))
+            .FirstOrDefaultAsync();
+
+        priority ??= await planning.Priorities.AsNoTracking()
+            .Where(p => p.Name == request.Priority || p.Name == priorityName)
+            .FirstOrDefaultAsync();
+
+        priority ??= await planning.Priorities.AsNoTracking()
+            .Where(p => p.ProjectId == projectId || p.ProjectId == null)
+            .OrderBy(p => p.Level)
+            .FirstOrDefaultAsync();
+
         if (priority is null) return Invalid("Độ ưu tiên không hợp lệ.");
         if (request.Labels.Count > 30 || request.Labels.Any(l => string.IsNullOrWhiteSpace(l) || l.Length > 100)) return Invalid("Nhãn không hợp lệ.");
         var previousStatus = issue.StatusId;
@@ -161,14 +214,20 @@ public sealed class WorkItemsController(
         issue.Title = request.Title.Trim(); issue.Description = request.Description; issue.StoryPoints = request.StoryPoints;
         issue.StatusId = status.Id; issue.IssueTypeId = type.Id; issue.PriorityId = priority.Id;
         issue.ParentId = request.ParentId; issue.EpicId = epicId; issue.SprintId = sprintId; issue.AssigneeId = assignee; issue.UpdatedAt = DateTime.UtcNow;
+        if (request.EstimatedHours.HasValue) issue.EstimatedHours = request.EstimatedHours.Value;
+        if (request.RemainingHours.HasValue) issue.RemainingHours = request.RemainingHours.Value;
+        if (request.IsBlocked.HasValue)
+        {
+            issue.IsBlocked = request.IsBlocked.Value;
+            issue.BlockReason = request.IsBlocked.Value ? request.BlockReason : null;
+            issue.BlockedAt = request.IsBlocked.Value ? (issue.BlockedAt ?? DateTime.UtcNow) : null;
+        }
         var changedAt = DateTime.UtcNow;
-        // Category thật là ToDo/InProgress/Done (CK_WorkflowStatus_Category); luật mốc thời gian dùng chung với module C.
-        DeliveryIntelligence.Domain.UseCases.IssueStatusRules.Apply(issue, status.Category, changedAt);
+        IssueStatusRules.Apply(issue, status.IsDone || string.Equals(status.Category, "Done", StringComparison.OrdinalIgnoreCase), status.IsActiveWork || string.Equals(status.Category, "InProgress", StringComparison.OrdinalIgnoreCase), changedAt);
         delivery.ActivityLogs.Add(new ActivityLog { Id = Guid.NewGuid(), IssueId = issue.Id, UserId = access.UserId, Action = id.HasValue ? "Updated" : "Created", FieldName = changingStatus ? "Status" : null, OldValue = changingStatus ? previousCategory : null, NewValue = changingStatus ? status.Name : null, Source = "User", CreatedAt = DateTime.UtcNow });
-        var history = HttpContext.RequestServices.GetRequiredService<DeliveryIntelligence.Application.Services.IssueHistoryRecorder>();
-        if (!id.HasValue) await history.RecordStatusAsync(issue, null, null, status.Id, status.Category, access.UserId, changedAt);
-        else if (changingStatus) await history.RecordStatusAsync(issue, previousStatus, previousCategory, status.Id, status.Category, access.UserId, changedAt);
-        await history.RecordAssignmentAsync(issue, id.HasValue ? previousAssignee : null, assignee, access.UserId, changedAt);
+        if (!id.HasValue) await historyRecorder.RecordStatusAsync(issue, null, null, status.Id, status.Category, access.UserId, changedAt);
+        else if (changingStatus) await historyRecorder.RecordStatusAsync(issue, previousStatus, previousCategory, status.Id, status.Category, access.UserId, changedAt);
+        await historyRecorder.RecordAssignmentAsync(issue, id.HasValue ? previousAssignee : null, assignee, access.UserId, changedAt);
         await delivery.SaveChangesAsync();
         var links = await delivery.IssueLabels.Where(l => l.IssueId == issue.Id).ToListAsync();
         var requestedLabels = request.Labels.Select(l => l.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -184,7 +243,7 @@ public sealed class WorkItemsController(
         return Ok((await Views([issue])).Single());
     }
 
-    private Task<bool> accessFor(Guid userId, Guid projectId) => HttpContext.RequestServices.GetRequiredService<ProjectMgmt.IdentityAccess.Contracts.IPermissionEvaluator>().IsProjectMemberAsync(userId, projectId);
+    private Task<bool> accessFor(Guid userId, Guid projectId) => permissionEvaluator.IsProjectMemberAsync(userId, projectId);
 
     [HttpDelete("issues/{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, [FromServices] IIssueTrackingService issues)
@@ -204,17 +263,121 @@ public sealed class WorkItemsController(
     }
 
     [HttpPost("issues/{id:guid}/comments")]
-    public async Task<IActionResult> AddComment(Guid id, CommentRequest request, [FromServices] IIssueCollaborationService collaboration)
+    public async Task<IActionResult> AddComment(
+        Guid id,
+        CommentRequest request,
+        [FromServices] IIssueCollaborationService collaboration,
+        [FromServices] INotificationServices notifications,
+        [FromServices] IHubContext<NotificationHub> hub)
     {
         var issue = await delivery.Issues.AsNoTracking().SingleOrDefaultAsync(i => i.Id == id && !i.IsDeleted);
         if (issue is null) return NotFound();
         if (!await access.AllowsAsync(issue.ProjectId, "issue.update")) return Denied();
-        var added = await collaboration.AddCommentAsync(id, new DeliveryIntelligence.Application.Dto.CreateCommentDto
+        var added = await collaboration.AddCommentAsync(id, new CreateCommentDto
         {
             Content = request.Content, ParentCommentId = request.ParentCommentId, MentionedUserIds = request.MentionedUserIds
         }, access.UserId);
         if (added.IsFailure) return Invalid(added.Error.Description);
-        return Ok((await Views([issue])).Single());
+
+        var workItemViews = await Views([issue]);
+        var workItemView = workItemViews.Single();
+
+        // 1. Tên người bình luận
+        var commenter = await userLookup.GetDisplayInfoAsync(access.UserId);
+        var commenterName = commenter?.DisplayName ?? "Một thành viên";
+
+        // 2. Danh sách người nhận thông báo: Người được gán (Assignee), Người tạo (Reporter), Người được nhắc (@mentions)
+        var recipients = new HashSet<Guid>();
+        if (issue.AssigneeId.HasValue && issue.AssigneeId.Value != Guid.Empty && issue.AssigneeId.Value != access.UserId)
+        {
+            recipients.Add(issue.AssigneeId.Value);
+        }
+        if (issue.ReporterId != Guid.Empty && issue.ReporterId != access.UserId)
+        {
+            recipients.Add(issue.ReporterId);
+        }
+        if (request.MentionedUserIds != null)
+        {
+            foreach (var mId in request.MentionedUserIds)
+            {
+                if (mId != Guid.Empty && mId != access.UserId)
+                {
+                    recipients.Add(mId);
+                }
+            }
+        }
+
+        // Tự động quét thêm các @mentions trong nội dung bình luận nếu có
+        if (request.Content.Contains('@'))
+        {
+            try
+            {
+                var allActiveUsers = await userLookup.GetAllActiveDisplayInfoAsync();
+                foreach (var u in allActiveUsers)
+                {
+                    if (!string.IsNullOrWhiteSpace(u.DisplayName) &&
+                        request.Content.Contains($"@{u.DisplayName}", StringComparison.OrdinalIgnoreCase) &&
+                        u.UserId != access.UserId)
+                    {
+                        recipients.Add(u.UserId);
+                    }
+                }
+            }
+            catch
+            {
+                // Bỏ qua nếu lỗi quét người dùng
+            }
+        }
+
+        // 3. Gửi thông báo đến từng người nhận
+        var previewContent = request.Content.Length > 150 ? request.Content[..150] + "..." : request.Content;
+        foreach (var recipientId in recipients)
+        {
+            try
+            {
+                var isAssignee = issue.AssigneeId.HasValue && issue.AssigneeId.Value == recipientId;
+                var isMention = request.MentionedUserIds != null && request.MentionedUserIds.Contains(recipientId);
+                var title = isMention
+                    ? $"{commenterName} đã nhắc đến bạn trong bình luận công việc [{workItemView.IssueKey}]"
+                    : isAssignee
+                        ? $"{commenterName} đã bình luận về công việc bạn được giao [{workItemView.IssueKey}]"
+                        : $"{commenterName} đã bình luận về công việc [{workItemView.IssueKey}]";
+
+                await notifications.PublishAsync(new NotificationDto
+                {
+                    UserId = recipientId,
+                    ActorId = access.UserId,
+                    Type = "issue_comment",
+                    Title = title,
+                    Content = previewContent,
+                    EntityType = "Issue",
+                    EntityId = issue.Id,
+                    ProjectId = issue.ProjectId
+                });
+            }
+            catch
+            {
+                // Thông báo là kênh phụ
+            }
+        }
+
+        // 4. Phát SignalR realtime cho tất cả clients
+        try
+        {
+            await hub.Clients.All.SendAsync("WorkItemCommentAdded", new
+            {
+                issueId = issue.Id,
+                projectId = issue.ProjectId,
+                comment = added.Value,
+                workItem = workItemView
+            });
+        }
+        catch
+        {
+            // Bỏ qua lỗi kết nối realtime nếu hub ngắt
+        }
+
+        return Ok(workItemView);
     }
 
     [HttpPost("projects/{projectId:guid}/sprints")]
@@ -229,7 +392,7 @@ public sealed class WorkItemsController(
     {
         if (!await access.AllowsAsync(projectId, "sprint.create")) return Denied();
         if (string.IsNullOrWhiteSpace(request.Name) || request.EndDate < request.StartDate) return Invalid("Tên hoặc ngày Sprint không hợp lệ.");
-        var sprint = id.HasValue ? await planning.Sprints.SingleAsync(s => s.Id == id) : new Planning.Domain.Entities.Sprint { Id = request.Id ?? Guid.NewGuid(), ProjectId = projectId, CreatedAt = DateTime.UtcNow, OrderIndex = await planning.Sprints.CountAsync(s => s.ProjectId == projectId) };
+        var sprint = id.HasValue ? await planning.Sprints.SingleAsync(s => s.Id == id) : new Sprint { Id = request.Id ?? Guid.NewGuid(), ProjectId = projectId, CreatedAt = DateTime.UtcNow, OrderIndex = await planning.Sprints.CountAsync(s => s.ProjectId == projectId) };
         var status = request.Status switch { "active" => "Active", "completed" => "Completed", _ => "Planned" };
         if (sprint.Status == "Completed" && status != "Completed") return Invalid("Sprint đã hoàn thành không thể mở lại.");
         if (status != sprint.Status && status != "Planned" && !await access.AllowsAsync(projectId, status == "Active" ? "sprint.start" : "sprint.close")) return Denied();
@@ -243,18 +406,19 @@ public sealed class WorkItemsController(
         return Ok(SprintView(sprint, await delivery.Issues.AsNoTracking().Where(i => i.SprintId == sprint.Id && !i.IsDeleted).ToListAsync()));
     }
 
-    private static object SprintView(Planning.Domain.Entities.Sprint s, List<Issue> issues) => new { s.Id, s.ProjectId, s.Name, s.Goal, s.StartDate, s.EndDate, status = s.Status == "Active" ? "active" : s.Status == "Completed" ? "completed" : "future", workItemsCount = issues.Count(i => i.SprintId == s.Id), totalStoryPoints = issues.Where(i => i.SprintId == s.Id).Sum(i => i.StoryPoints ?? 0) };
+    private static object SprintView(Sprint s, List<Issue> issues) => new { s.Id, s.ProjectId, s.Name, s.Goal, s.StartDate, s.EndDate, status = s.Status == "Active" ? "active" : s.Status == "Completed" ? "completed" : "future", workItemsCount = issues.Count(i => i.SprintId == s.Id), totalStoryPoints = issues.Where(i => i.SprintId == s.Id).Sum(i => i.StoryPoints ?? 0) };
 
     [HttpPost("issues/{id:guid}/attachments")]
-    [RequestSizeLimit(11 * 1024 * 1024)]
-    public async Task<IActionResult> Upload(Guid id, IFormFile file, [FromServices] IIssueCollaborationService collaboration)
+    [RequestSizeLimit(100 * 1024 * 1024)]
+    public async Task<IActionResult> Upload(Guid id, IFormFile? file, [FromServices] IIssueCollaborationService collaboration)
     {
+        if (file is null || file.Length == 0) return BadRequest(new { error = "Tệp đính kèm không được để trống." });
         var issue = await delivery.Issues.AsNoTracking().SingleOrDefaultAsync(i => i.Id == id && !i.IsDeleted);
         if (issue is null) return NotFound();
         if (!await access.AllowsAsync(issue.ProjectId, "issue.update")) return Denied();
         await using var content = file.OpenReadStream();
         var uploaded = await collaboration.UploadAttachmentAsync(id, file.FileName, file.Length, content, access.UserId);
-        if (uploaded.IsFailure) return Invalid(uploaded.Error.Description);
+        if (uploaded.IsFailure) return BadRequest(new { error = uploaded.Error.Description });
         var attachment = uploaded.Value;
         return Ok(new { attachment.Id, attachment.FileName, attachment.FileSizeBytes, attachment.CreatedAt });
     }
@@ -287,7 +451,7 @@ public sealed class WorkItemsController(
         var issue = await delivery.Issues.AsNoTracking().SingleOrDefaultAsync(i => i.Id == id && !i.IsDeleted);
         if (issue is null) return NotFound();
         if (!await access.AllowsAsync(issue.ProjectId, "issue.update")) return Denied();
-        var added = await requirements.AddCriterionAsync(id, new DeliveryIntelligence.Application.Dto.SaveCriterionDto { Content = request.Content, IsMet = request.IsMet }, access.UserId);
+        var added = await requirements.AddCriterionAsync(id, new SaveCriterionDto { Content = request.Content, IsMet = request.IsMet }, access.UserId);
         return added.IsSuccess ? Ok() : Invalid(added.Error.Description);
     }
     [HttpPut("criteria/{id:guid}")]
@@ -298,8 +462,38 @@ public sealed class WorkItemsController(
         var issue = await delivery.Issues.AsNoTracking().SingleOrDefaultAsync(i => i.Id == issueId.Value && !i.IsDeleted);
         if (issue is null) return NotFound();
         if (!await access.AllowsAsync(issue.ProjectId, "issue.update")) return Denied();
-        var updated = await requirements.UpdateCriterionAsync(id, new DeliveryIntelligence.Application.Dto.SaveCriterionDto { Content = request.Content, IsMet = request.IsMet }, access.UserId);
+        var updated = await requirements.UpdateCriterionAsync(id, new SaveCriterionDto { Content = request.Content, IsMet = request.IsMet }, access.UserId);
         return updated.IsSuccess ? Ok() : Invalid(updated.Error.Description);
+    }
+
+    public sealed class BlockRequest { [Required, StringLength(500)] public string Reason { get; set; } = ""; }
+
+    [HttpPost("issues/{id:guid}/block")]
+    public async Task<IActionResult> BlockIssue(Guid id, [FromBody] BlockRequest request)
+    {
+        var issue = await delivery.Issues.SingleOrDefaultAsync(i => i.Id == id && !i.IsDeleted);
+        if (issue is null) return NotFound();
+        if (!await access.AllowsAsync(issue.ProjectId, "issue.update")) return Denied();
+        issue.IsBlocked = true;
+        issue.BlockReason = request.Reason.Trim();
+        issue.BlockedAt = DateTime.UtcNow;
+        delivery.ActivityLogs.Add(new ActivityLog { Id = Guid.NewGuid(), IssueId = issue.Id, UserId = access.UserId, Action = "Blocked", FieldName = "BlockReason", NewValue = issue.BlockReason, Source = "User", CreatedAt = DateTime.UtcNow });
+        await delivery.SaveChangesAsync();
+        return Ok((await Views([issue])).Single());
+    }
+
+    [HttpPost("issues/{id:guid}/unblock")]
+    public async Task<IActionResult> UnblockIssue(Guid id)
+    {
+        var issue = await delivery.Issues.SingleOrDefaultAsync(i => i.Id == id && !i.IsDeleted);
+        if (issue is null) return NotFound();
+        if (!await access.AllowsAsync(issue.ProjectId, "issue.update")) return Denied();
+        issue.IsBlocked = false;
+        issue.BlockReason = null;
+        issue.BlockedAt = null;
+        delivery.ActivityLogs.Add(new ActivityLog { Id = Guid.NewGuid(), IssueId = issue.Id, UserId = access.UserId, Action = "Unblocked", Source = "User", CreatedAt = DateTime.UtcNow });
+        await delivery.SaveChangesAsync();
+        return Ok((await Views([issue])).Single());
     }
 
     private async Task<List<WorkItemView>> Views(List<Issue> issues)
@@ -310,28 +504,210 @@ public sealed class WorkItemsController(
         var types = await planning.IssueTypes.AsNoTracking().Where(t => projectIds.Contains(t.ProjectId)).ToDictionaryAsync(t => t.Id);
         var priorities = await planning.Priorities.AsNoTracking().ToDictionaryAsync(p => p.Id);
         var sprints = await planning.Sprints.AsNoTracking().Where(s => projectIds.Contains(s.ProjectId)).ToDictionaryAsync(s => s.Id);
-        var profiles = await identity.UserProfiles.AsNoTracking().ToDictionaryAsync(p => p.UserId);
+        var users = await userLookup.GetAllActiveDisplayInfoAsync();
+        var profiles = users.ToDictionary(p => p.UserId);
         var comments = await delivery.Comments.AsNoTracking().Where(c => ids.Contains(c.IssueId) && !c.IsDeleted).OrderBy(c => c.CreatedAt).ToListAsync();
         var activities = await delivery.ActivityLogs.AsNoTracking().Where(a => ids.Contains(a.IssueId)).OrderByDescending(a => a.CreatedAt).ToListAsync();
         var attachments = await delivery.Attachments.AsNoTracking().Where(a => ids.Contains(a.IssueId)).ToListAsync();
         var criteria = await delivery.AcceptanceCriteria.AsNoTracking().Where(c => ids.Contains(c.IssueId)).OrderBy(c => c.OrderIndex).ToListAsync();
         var labels = await (from link in delivery.IssueLabels join label in delivery.Labels on link.LabelId equals label.Id where ids.Contains(link.IssueId) select new { link.IssueId, label.Name }).ToListAsync();
+        var specLinks = await (
+            from link in planning.SpecStoryLinks.AsNoTracking()
+            join doc in planning.ProjectDocuments.AsNoTracking() on link.DocumentId equals doc.Id
+            where ids.Contains(link.IssueId)
+            select new
+            {
+                link.IssueId,
+                link.DocumentId,
+                DocumentTitle = !string.IsNullOrWhiteSpace(doc.Title) ? doc.Title : doc.Name,
+                FileName = doc.Name,
+                link.Excerpt
+            }).ToListAsync();
+        var issueSkillLinks = await delivery.IssueRequiredSkills.AsNoTracking()
+            .Where(rs => ids.Contains(rs.IssueId))
+            .ToListAsync();
+        var skillNamesById = skillCatalog is not null
+            ? (await skillCatalog.GetSkillsAsync()).ToDictionary(s => s.Id, s => s.Name)
+            : new Dictionary<Guid, string>();
+        var aiMetaByIssue = ParseAiIssueMetadataByIssue(activities);
         var epicIds = issues.Where(i => i.EpicId.HasValue).Select(i => i.EpicId!.Value).Distinct().ToList();
         var epics = await delivery.Issues.AsNoTracking().Where(i => epicIds.Contains(i.Id)).ToDictionaryAsync(i => i.Id);
         string Name(Guid? userId) => userId.HasValue && profiles.TryGetValue(userId.Value, out var p) ? p.DisplayName : "";
-        return issues.Select(i => new WorkItemView {
-            Id = i.Id, ProjectId = i.ProjectId, IssueKey = $"{projects[i.ProjectId].ProjectKey}-{i.IssueNumber}", Title = i.Title, Description = i.Description,
-            StatusId = i.StatusId, StatusName = statuses[i.StatusId].Name, IssueType = types[i.IssueTypeId].IsSubtask ? "Sub-task" : types[i.IssueTypeId].Name,
-            Priority = i.PriorityId.HasValue && priorities.TryGetValue(i.PriorityId.Value, out var p) ? (p.Name == "Highest" ? "Urgent" : p.Name) : "Medium",
-            StoryPoints = i.StoryPoints ?? 0, ParentId = i.ParentId, AssigneeId = i.AssigneeId, AssigneeName = Name(i.AssigneeId), ReporterName = Name(i.ReporterId),
-            SprintId = i.SprintId, SprintName = i.SprintId.HasValue && sprints.TryGetValue(i.SprintId.Value, out var sp) ? sp.Name : "",
-            EpicId = i.EpicId, EpicName = i.EpicId.HasValue && epics.TryGetValue(i.EpicId.Value, out var e) ? e.Title : "", EpicColor = "indigo", CreatedAt = i.CreatedAt, UpdatedAt = i.UpdatedAt,
-            Labels = labels.Where(l => l.IssueId == i.Id).Select(l => l.Name).ToList(),
-            Comments = comments.Where(c => c.IssueId == i.Id).Select(c => new { c.Id, authorName = Name(c.UserId), c.Content, c.CreatedAt }).ToList(),
-            Activities = activities.Where(a => a.IssueId == i.Id).Select(a => new { a.Id, actorName = Name(a.UserId), action = a.Action + (a.NewValue is null ? "" : ": " + a.NewValue), timestamp = a.CreatedAt }).ToList(),
-            Attachments = attachments.Where(a => a.IssueId == i.Id).Select(a => new { a.Id, a.FileName, a.FileSizeBytes, a.CreatedAt }).ToList(),
-            Criteria = criteria.Where(c => c.IssueId == i.Id).Select(c => new { c.Id, c.Content, c.IsMet }).ToList()
+        string? Avatar(Guid? userId) => userId.HasValue && profiles.TryGetValue(userId.Value, out var p) ? p.AvatarUrl : null;
+        return issues.Select(i =>
+        {
+            var aiMeta = aiMetaByIssue.GetValueOrDefault(i.Id);
+            var issueSpecLinks = specLinks.Where(l => l.IssueId == i.Id).ToList();
+            var mergedCitations = new List<string>();
+            var seenCitations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var cite in aiMeta?.DocumentCitations ?? [])
+            {
+                if (seenCitations.Add(cite)) mergedCitations.Add(cite);
+            }
+            foreach (var specLink in issueSpecLinks)
+            {
+                var labelText = !string.IsNullOrWhiteSpace(specLink.Excerpt)
+                    ? specLink.Excerpt!
+                    : specLink.DocumentTitle;
+                if (!string.IsNullOrWhiteSpace(labelText) && seenCitations.Add(labelText))
+                {
+                    mergedCitations.Add(labelText);
+                }
+            }
+
+            var mergedSkills = new List<string>();
+            var seenSkills = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var link in issueSkillLinks.Where(rs => rs.IssueId == i.Id))
+            {
+                if (skillNamesById.TryGetValue(link.SkillId, out var skillName) && seenSkills.Add(skillName))
+                {
+                    mergedSkills.Add(skillName);
+                }
+            }
+            foreach (var suggested in aiMeta?.SuggestedSkills ?? [])
+            {
+                if (seenSkills.Add(suggested)) mergedSkills.Add(suggested);
+            }
+
+            var isSubtask = types.TryGetValue(i.IssueTypeId, out var typeEntity) && typeEntity.IsSubtask;
+            var subtaskRole = aiMeta?.SubtaskRole;
+            if (string.IsNullOrWhiteSpace(subtaskRole) && isSubtask && !string.IsNullOrWhiteSpace(i.Title) && i.Title.StartsWith('['))
+            {
+                var closeIdx = i.Title.IndexOf(']');
+                if (closeIdx > 1 && closeIdx < 32)
+                {
+                    subtaskRole = i.Title[1..closeIdx].Trim();
+                }
+            }
+
+            return new WorkItemView
+            {
+                Id = i.Id, ProjectId = i.ProjectId, IssueKey = $"{projects[i.ProjectId].ProjectKey}-{i.IssueNumber}", Title = i.Title, Description = i.Description,
+                StatusId = i.StatusId, StatusName = statuses.TryGetValue(i.StatusId, out var st) ? st.Name : "",
+                StatusColor = statuses.TryGetValue(i.StatusId, out var sc) ? sc.ColorHex : "#3B82F6",
+                IsDone = statuses.TryGetValue(i.StatusId, out var sd) && (sd.IsDone || string.Equals(sd.Category, "Done", StringComparison.OrdinalIgnoreCase)),
+                IssueTypeId = i.IssueTypeId,
+                IssueType = types.TryGetValue(i.IssueTypeId, out var it) ? (it.IsSubtask ? "Sub-task" : it.Name) : "Task",
+                IssueTypeIcon = types.TryGetValue(i.IssueTypeId, out var iti)
+                    ? (!string.IsNullOrWhiteSpace(iti.IconKey) && iti.IconKey != "task" ? iti.IconKey : DefaultIconForIssueType(iti.Name, iti.IsSubtask))
+                    : "task_alt",
+                IssueTypeColor = types.TryGetValue(i.IssueTypeId, out var itc) ? itc.ColorHex : "#6366F1",
+                Priority = i.PriorityId.HasValue && priorities.TryGetValue(i.PriorityId.Value, out var p) ? (p.Name == "Highest" ? "Urgent" : p.Name) : "Medium",
+                StoryPoints = i.StoryPoints ?? 0,
+                EstimatedHours = i.EstimatedHours, RemainingHours = i.RemainingHours,
+                IsBlocked = i.IsBlocked, BlockReason = i.BlockReason, BlockedAt = i.BlockedAt,
+                ParentId = i.ParentId, AssigneeId = i.AssigneeId, AssigneeName = Name(i.AssigneeId), AssigneeAvatar = Avatar(i.AssigneeId), ReporterName = Name(i.ReporterId),
+                SprintId = i.SprintId, SprintName = i.SprintId.HasValue && sprints.TryGetValue(i.SprintId.Value, out var sp) ? sp.Name : "",
+                EpicId = i.EpicId, EpicName = i.EpicId.HasValue && epics.TryGetValue(i.EpicId.Value, out var e) ? e.Title : "", EpicColor = "indigo", CreatedAt = i.CreatedAt, UpdatedAt = i.UpdatedAt,
+                Labels = labels.Where(l => l.IssueId == i.Id).Select(l => l.Name).ToList(),
+                Comments = comments.Where(c => c.IssueId == i.Id).Select(c => new { c.Id, authorName = Name(c.UserId), authorAvatar = Avatar(c.UserId), c.Content, c.CreatedAt }).ToList(),
+                Activities = activities.Where(a => a.IssueId == i.Id).Select(a => new { a.Id, actorName = Name(a.UserId), actorAvatar = Avatar(a.UserId), action = a.Action + (a.NewValue is null ? "" : ": " + a.NewValue), timestamp = a.CreatedAt }).ToList(),
+                Attachments = attachments.Where(a => a.IssueId == i.Id).Select(a => new { a.Id, a.FileName, a.FileSizeBytes, a.CreatedAt }).ToList(),
+                Criteria = criteria.Where(c => c.IssueId == i.Id).Select(c => new { c.Id, c.Content, c.IsMet }).ToList(),
+                AiRationale = aiMeta?.AiRationale,
+                SubtaskRole = subtaskRole,
+                DocumentCitations = mergedCitations,
+                SpecLinks = issueSpecLinks.Select(l => new { documentId = l.DocumentId, documentTitle = l.DocumentTitle, fileName = l.FileName, excerpt = l.Excerpt }).ToList(),
+                RequiredSkills = mergedSkills
+            };
         }).ToList();
+    }
+
+    private sealed class ParsedAiIssueMetadata
+    {
+        public string? AiRationale { get; set; }
+        public string? SubtaskRole { get; set; }
+        public List<string> DocumentCitations { get; } = [];
+        public List<string> SuggestedSkills { get; } = [];
+    }
+
+    private static Dictionary<Guid, ParsedAiIssueMetadata> ParseAiIssueMetadataByIssue(List<ActivityLog> activities)
+    {
+        var result = new Dictionary<Guid, ParsedAiIssueMetadata>();
+        foreach (var log in activities)
+        {
+            if (!string.Equals(log.Source, "AI", StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(log.Detail) ||
+                !log.Detail.TrimStart().StartsWith('{'))
+            {
+                continue;
+            }
+
+            try
+            {
+                using var doc = JsonDocument.Parse(log.Detail);
+                var root = doc.RootElement;
+                if (!result.TryGetValue(log.IssueId, out var meta))
+                {
+                    meta = new ParsedAiIssueMetadata();
+                    result[log.IssueId] = meta;
+                }
+
+                if (string.IsNullOrWhiteSpace(meta.AiRationale) &&
+                    root.TryGetProperty("aiRationale", out var rationaleEl) &&
+                    rationaleEl.ValueKind == JsonValueKind.String)
+                {
+                    meta.AiRationale = rationaleEl.GetString();
+                }
+
+                if (string.IsNullOrWhiteSpace(meta.SubtaskRole) &&
+                    root.TryGetProperty("subtaskRole", out var roleEl) &&
+                    roleEl.ValueKind == JsonValueKind.String)
+                {
+                    meta.SubtaskRole = roleEl.GetString();
+                }
+
+                if (root.TryGetProperty("documentCitations", out var citeEl) &&
+                    citeEl.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in citeEl.EnumerateArray())
+                    {
+                        if (item.ValueKind == JsonValueKind.String)
+                        {
+                            var val = item.GetString()?.Trim();
+                            if (!string.IsNullOrWhiteSpace(val) && !meta.DocumentCitations.Contains(val, StringComparer.OrdinalIgnoreCase))
+                            {
+                                meta.DocumentCitations.Add(val);
+                            }
+                        }
+                    }
+                }
+
+                if (root.TryGetProperty("suggestedSkills", out var skillEl) &&
+                    skillEl.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in skillEl.EnumerateArray())
+                    {
+                        if (item.ValueKind == JsonValueKind.String)
+                        {
+                            var val = item.GetString()?.Trim();
+                            if (!string.IsNullOrWhiteSpace(val) && !meta.SuggestedSkills.Contains(val, StringComparer.OrdinalIgnoreCase))
+                            {
+                                meta.SuggestedSkills.Add(val);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+                // Skip non-metadata ActivityLog JSON payloads safely
+            }
+        }
+        return result;
+    }
+
+    private static string DefaultIconForIssueType(string? name, bool isSubtask = false)
+    {
+        if (isSubtask) return "subdirectory_arrow_right";
+        return (name ?? "").Trim().ToLowerInvariant() switch
+        {
+            "epic" => "bolt",
+            "story" => "bookmark",
+            "bug" => "bug_report",
+            "subtask" or "sub-task" => "subdirectory_arrow_right",
+            _ => "task_alt"
+        };
     }
 }
 
@@ -339,11 +715,19 @@ public sealed class WorkItemView
 {
     public Guid Id { get; set; } public Guid ProjectId { get; set; } public string IssueKey { get; set; } = "";
     public string Title { get; set; } = ""; public string? Description { get; set; }
-    public Guid StatusId { get; set; } public string StatusName { get; set; } = ""; public string IssueType { get; set; } = "";
+    public Guid StatusId { get; set; } public string StatusName { get; set; } = ""; public string StatusColor { get; set; } = "#3B82F6";
+    public bool IsDone { get; set; }
+    public Guid IssueTypeId { get; set; } public string IssueType { get; set; } = ""; public string? IssueTypeIcon { get; set; } public string? IssueTypeColor { get; set; }
     public string Priority { get; set; } = ""; public decimal StoryPoints { get; set; }
-    public Guid? ParentId { get; set; } public Guid? AssigneeId { get; set; } public string AssigneeName { get; set; } = ""; public string ReporterName { get; set; } = "";
+    public decimal? EstimatedHours { get; set; } public decimal? RemainingHours { get; set; }
+    public bool IsBlocked { get; set; } public string? BlockReason { get; set; } public DateTime? BlockedAt { get; set; }
+    public Guid? ParentId { get; set; } public Guid? AssigneeId { get; set; } public string AssigneeName { get; set; } = ""; public string? AssigneeAvatar { get; set; } public string ReporterName { get; set; } = "";
     public Guid? SprintId { get; set; } public string SprintName { get; set; } = ""; public Guid? EpicId { get; set; } public string EpicName { get; set; } = ""; public string EpicColor { get; set; } = "";
     public DateTime CreatedAt { get; set; } public DateTime? UpdatedAt { get; set; }
     public List<string> Labels { get; set; } = []; public object Comments { get; set; } = Array.Empty<object>(); public object Activities { get; set; } = Array.Empty<object>();
     public object Attachments { get; set; } = Array.Empty<object>(); public object Criteria { get; set; } = Array.Empty<object>();
+    public string? AiRationale { get; set; } public string? SubtaskRole { get; set; }
+    public List<string> DocumentCitations { get; set; } = [];
+    public object SpecLinks { get; set; } = Array.Empty<object>();
+    public List<string> RequiredSkills { get; set; } = [];
 }

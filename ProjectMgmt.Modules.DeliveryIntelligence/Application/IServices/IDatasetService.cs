@@ -9,23 +9,23 @@ namespace DeliveryIntelligence.Application.IServices;
 /// </summary>
 public interface IDatasetService
 {
-    Task<IReadOnlyList<DatasetDto>> ListDatasetsAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<DatasetDto>> ListDatasetsAsync();
 
-    Task<Result<DatasetDto>> CreateDatasetAsync(CreateDatasetDto request, Guid actorUserId, CancellationToken cancellationToken = default);
+    Task<Result<DatasetDto>> CreateDatasetAsync(CreateDatasetDto request, Guid actorUserId);
 
-    Task<Result<IReadOnlyList<DatasetVersionDto>>> ListVersionsAsync(Guid datasetId, CancellationToken cancellationToken = default);
+    Task<Result<IReadOnlyList<DatasetVersionDto>>> ListVersionsAsync(Guid datasetId);
 
-    Task<Result<DatasetVersionDto>> CreateVersionAsync(Guid datasetId, CreateDatasetVersionDto request, CancellationToken cancellationToken = default);
+    Task<Result<DatasetVersionDto>> CreateVersionAsync(Guid datasetId, CreateDatasetVersionDto request);
 
-    Task<Result<DatasetVersionDto>> GetVersionAsync(Guid versionId, CancellationToken cancellationToken = default);
+    Task<Result<DatasetVersionDto>> GetVersionAsync(Guid versionId);
 
-    Task<Result<PagedResultDto<DatasetSampleDto>>> ListSamplesAsync(Guid versionId, SampleQueryDto query, CancellationToken cancellationToken = default);
+    Task<Result<PagedResultDto<DatasetSampleDto>>> ListSamplesAsync(Guid versionId, SampleQueryDto query);
 
-    Task<Result<DatasetSampleDto>> GetSampleAsync(Guid sampleId, CancellationToken cancellationToken = default);
+    Task<Result<DatasetSampleDto>> GetSampleAsync(Guid sampleId);
 
     /// <summary>Thêm sample (Raw, chưa duyệt). Nội dung trùng trong cùng version (ContentHash) bị từ chối 409.</summary>
-    Task<Result<DatasetSampleDto>> AddSampleAsync(Guid versionId, SaveDatasetSampleDto request, CancellationToken cancellationToken = default);
+    Task<Result<DatasetSampleDto>> AddSampleAsync(Guid versionId, SaveDatasetSampleDto request);
 
     /// <summary>Sửa nội dung sample: tính lại hash, đưa về Raw/NotReviewed để chạy lại rule và duyệt lại.</summary>
-    Task<Result<DatasetSampleDto>> UpdateSampleAsync(Guid sampleId, SaveDatasetSampleDto request, CancellationToken cancellationToken = default);
+    Task<Result<DatasetSampleDto>> UpdateSampleAsync(Guid sampleId, SaveDatasetSampleDto request);
 }

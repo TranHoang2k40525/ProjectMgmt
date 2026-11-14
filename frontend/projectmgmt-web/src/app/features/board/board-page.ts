@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { DragDropModule, CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
 import { gsap } from 'gsap';
 import { Flip } from 'gsap/Flip';
+import { apiErrorMessage } from '../../core/http/api-error-message';
 import { ProjectManagementService, WorkItem } from '../../core/services/project-management.service';
 import { IdentityService } from '../../core/services/identity.service';
 import { ToastService } from '../../core/services/toast.service';
@@ -12,11 +13,12 @@ import { ContextMenuComponent, ContextMenuItemAction } from '../../shared/compon
 gsap.registerPlugin(Flip);
 
 import { NoProjectStateComponent } from '../../shared/components/no-project-state/no-project-state.component';
+import { CardTiltDirective } from '../../shared/motion/card-tilt.directive';
 
 @Component({
   selector: 'app-board-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, DragDropModule, ContextMenuComponent, NoProjectStateComponent],
+  imports: [CommonModule, FormsModule, DragDropModule, ContextMenuComponent, NoProjectStateComponent, CardTiltDirective],
   templateUrl: './board-page.html',
   styleUrl: './board-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -51,6 +53,46 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
   readonly items = this.projectService.workItems;
   readonly epics = this.projectService.epics;
 
+  readonly boardTitle = computed(() => {
+    const p = this.projectService.currentProject();
+    if ((p as any)?.boardTabTitle) {
+      const t = (p as any).boardTabTitle;
+      return t.startsWith('Bảng ') ? t : `Bảng ${t}`;
+    }
+    if ((p as any)?.workflowName) {
+      const w = (p as any).workflowName;
+      return w.startsWith('Bảng ') ? w : `Bảng ${w}`;
+    }
+    if ((p as any)?.boardName) {
+      const bn = (p as any).boardName;
+      return bn.startsWith('Bảng ') ? bn : `Bảng ${bn}`;
+    }
+    if (typeof localStorage !== 'undefined' && p?.id) {
+      const saved = localStorage.getItem(`projectmgmt.workflow-name.${p.id}`)
+        || localStorage.getItem(`projectmgmt.workflow-name.${p.id.toLowerCase()}`);
+      if (saved) return saved.startsWith('Bảng ') ? saved : `Bảng ${saved}`;
+    }
+    if (typeof sessionStorage !== 'undefined' && p?.id) {
+      const saved = sessionStorage.getItem(`projectmgmt.workflow-name.${p.id}`)
+        || sessionStorage.getItem(`projectmgmt.workflow-name.${p.id.toLowerCase()}`);
+      if (saved) return saved.startsWith('Bảng ') ? saved : `Bảng ${saved}`;
+    }
+    if ((p as any)?.boardName) return (p as any).boardName;
+    if ((p as any)?.managementType === 'Kanban' || p?.type === 'Kanban') return 'Bảng Kanban';
+    if ((p as any)?.managementType) return `Bảng ${(p as any).managementType}`;
+    return 'Bảng Scrum';
+  });
+
+  readonly isKanbanBoard = computed(() => {
+    const p = this.projectService.currentProject();
+    const title = this.boardTitle().toLowerCase();
+    const wName = ((p as any)?.workflowName || '').toLowerCase();
+    const tId = ((p as any)?.workflowTemplateId || '').toLowerCase();
+    return (p as any)?.managementType === 'Kanban' || p?.type === 'Kanban' || title.includes('kanban') || wName.includes('kanban') || tId.includes('kanban');
+  });
+
+  readonly currentWorkflowName = computed(() => this.boardTitle().replace(/^Bảng\s+/i, '').trim());
+
   readonly filteredItems = computed(() => {
     let list = this.items();
     const query = this.searchQuery().trim().toLowerCase();
@@ -81,15 +123,115 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
     return list;
   });
 
-  readonly toDoItems = computed(() => this.filteredItems().filter(i => i.statusName === 'To Do'));
-  readonly inProgressItems = computed(() => this.filteredItems().filter(i => i.statusName === 'In Progress'));
-  readonly codeReviewItems = computed(() => this.filteredItems().filter(i => i.statusName === 'Code Review'));
-  readonly doneItems = computed(() => this.filteredItems().filter(i => i.statusName === 'Done'));
+  readonly boardColumns = computed(() => {
+    const statuses = this.projectService.projectStatuses();
+    if (statuses.length === 0) {
+      return [
+        { id: 'st-1', name: 'To Do', colorHex: '#64748B' },
+        { id: 'st-2', name: 'In Progress', colorHex: '#3B82F6' },
+        { id: 'st-3', name: 'Code Review', colorHex: '#8B5CF6' },
+        { id: 'st-4', name: 'Done', colorHex: '#10B981' }
+      ];
+    }
+    return statuses;
+  });
+
+  getColumnItems(statusName: string): WorkItem[] {
+    const all = this.filteredItems().filter(i => (i.statusName || '').trim().toLowerCase() === statusName.trim().toLowerCase());
+    return [...all].sort((a, b) => {
+      if (a.isBlocked && !b.isBlocked) return -1;
+      if (!a.isBlocked && b.isBlocked) return 1;
+      return 0;
+    });
+  }
+
+  readonly issueTypes = computed(() => {
+    const custom = this.projectService.customIssueTypes().map(t => t.name);
+    return custom.length > 0 ? custom : ['Story', 'Task', 'Bug', 'Epic', 'Sub-task'];
+  });
+
+  getIssueTypeIcon(type: string): string {
+    const typeName = type || '';
+    const custom = this.projectService.customIssueTypes().find(t =>
+      t.name.toLowerCase() === typeName.toLowerCase() ||
+      ((typeName.toLowerCase() === 'sub-task' || typeName.toLowerCase() === 'subtask') && (t.isSubtask || t.name.toLowerCase() === 'subtask' || t.name.toLowerCase() === 'sub-task'))
+    );
+    if (custom?.icon && custom.icon !== 'task') return custom.icon;
+    const map: Record<string, string> = {
+      'story': 'bookmark',
+      'task': 'task_alt',
+      'bug': 'bug_report',
+      'use-case': 'schema',
+      'epic': 'bolt',
+      'sub-task': 'subdirectory_arrow_right',
+      'subtask': 'subdirectory_arrow_right'
+    };
+    return map[typeName.toLowerCase()] || custom?.icon || 'task_alt';
+  }
+
+  getIssueTypeColor(type: string): string {
+    const typeName = type || '';
+    const custom = this.projectService.customIssueTypes().find(t =>
+      t.name.toLowerCase() === typeName.toLowerCase() ||
+      ((typeName.toLowerCase() === 'sub-task' || typeName.toLowerCase() === 'subtask') && (t.isSubtask || t.name.toLowerCase() === 'subtask' || t.name.toLowerCase() === 'sub-task'))
+    );
+    if (custom?.color) return custom.color;
+    const map: Record<string, string> = {
+      'story': '#65BA43',
+      'task': '#4BADE8',
+      'bug': '#E5493A',
+      'epic': '#904EE2',
+      'sub-task': '#4BADE8',
+      'subtask': '#4BADE8'
+    };
+    return map[typeName.toLowerCase()] || '#4BADE8';
+  }
+
+  // --- Blocker Management ---
+  readonly showBlockModal = signal<boolean>(false);
+  readonly blockingItem = signal<WorkItem | null>(null);
+  blockReasonInput = '';
+
+  openBlockModal(item: WorkItem, event?: Event): void {
+    if (event) event.stopPropagation();
+    this.blockingItem.set(item);
+    this.blockReasonInput = '';
+    this.showBlockModal.set(true);
+  }
+
+  confirmBlock(): void {
+    const item = this.blockingItem();
+    const reason = this.blockReasonInput.trim();
+    if (!item || !reason) return;
+    this.projectService.blockIssue(item.id, reason).subscribe({
+      next: () => {
+        this.showBlockModal.set(false);
+        this.toastService.warning('Báo Chặn (Blocker)', `Đã gắn cờ cản trở cho ${item.issueKey}`);
+      },
+      error: (err) => this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể báo chặn.'))
+    });
+  }
+
+  unblock(item: WorkItem, event?: Event): void {
+    if (event) event.stopPropagation();
+    this.projectService.unblockIssue(item.id).subscribe({
+      next: () => this.toastService.success('Đã Gỡ Chặn', `Đã mở lại tiến độ cho ${item.issueKey}`),
+      error: (err) => this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể gỡ chặn.'))
+    });
+  }
+
+  readonly toDoItems = computed(() => this.getColumnItems('To Do'));
+  readonly inProgressItems = computed(() => this.getColumnItems('In Progress'));
+  readonly codeReviewItems = computed(() => this.getColumnItems('Code Review'));
+  readonly doneItems = computed(() => this.getColumnItems('Done'));
 
   ngOnInit(): void {
     const currentProj = this.projectService.currentProject();
-    if (currentProj?.id && (!currentProj.members || currentProj.members.length === 0)) {
-      this.projectService.loadProjectMembers(currentProj.id).subscribe();
+    if (currentProj?.id) {
+      if (!currentProj.members || currentProj.members.length === 0) {
+        this.projectService.loadProjectMembers(currentProj.id).subscribe();
+      }
+      this.projectService.loadWorkspace(currentProj.id);
     }
   }
 
@@ -127,7 +269,6 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
     const item = event.item.data as WorkItem;
     if (item && item.statusName !== targetStatus) {
       this.animateBoardChange(() => this.projectService.updateWorkItemStatus(item.id, targetStatus));
-      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     }
   }
 
@@ -157,14 +298,12 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
           };
           const targetStatus = statusMap[val] || val;
           this.animateBoardChange(() => this.projectService.updateWorkItemStatus(item.id, targetStatus));
-          this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
         }
         break;
 
       case 'assign': {
         const myName = this.identityService.authState().currentUser?.displayName || 'Tôi';
         this.projectService.updateWorkItemAssignee(item.id, myName);
-        this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
         break;
       }
 
@@ -180,7 +319,7 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
 
       case 'copy':
         navigator.clipboard?.writeText?.(`${item.issueKey}: ${item.title}`);
-        this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
+        this.toastService.success('Đã sao chép', `Đã chép [${item.issueKey}] vào bộ nhớ tạm.`);
         break;
 
       case 'delete':
@@ -205,7 +344,6 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
       const item = this.items().find(i => i.id === taskId);
       if (item) {
         this.projectService.updateWorkItem({ ...item, title: newTitle });
-        this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
       }
     }
     this.inlineEditingTaskId.set(null);
@@ -231,23 +369,20 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
   // Quick Inline Status Shift
   moveStatus(task: WorkItem, direction: 'prev' | 'next', event?: Event): void {
     if (event) event.stopPropagation();
-    const statuses: string[] = ['To Do', 'In Progress', 'Code Review', 'Done'];
+    const statuses = this.boardColumns().map(s => s.name);
     const idx = statuses.indexOf(task.statusName);
     if (direction === 'next' && idx < statuses.length - 1) {
       const nextStatus = statuses[idx + 1];
       this.animateBoardChange(() => this.projectService.updateWorkItemStatus(task.id, nextStatus));
-      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     } else if (direction === 'prev' && idx > 0) {
       const prevStatus = statuses[idx - 1];
       this.animateBoardChange(() => this.projectService.updateWorkItemStatus(task.id, prevStatus));
-      this.toastService.info('Lùi Trạng Thái', `Công việc [${task.issueKey}] về ${prevStatus}`);
     }
   }
 
   updateInlineStatus(taskId: string, statusName: string, event?: Event): void {
     if (event) event.stopPropagation();
     this.animateBoardChange(() => this.projectService.updateWorkItemStatus(taskId, statusName));
-    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
   }
 
   updateInlineAssignee(taskId: string, assigneeName: string, event?: Event): void {
@@ -268,6 +403,17 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
     return { total: subs.length, done };
   }
 
+  getAssigneeAvatar(name?: string, itemAvatar?: string): string | null {
+    return this.projectService.getMemberAvatar(name, itemAvatar);
+  }
+
+  getAssigneeInitials(name?: string): string {
+    if (!name) return 'U';
+    const parts = name.trim().split(' ');
+    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+    return (parts[parts.length - 2][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+
   closeAllPopups(): void {
     this.activeMenuTaskId.set(null);
     this.contextMenuVisible.set(false);
@@ -282,7 +428,6 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
     if (event) event.stopPropagation();
     const myName = this.identityService.authState().currentUser?.displayName || 'Tôi';
     this.projectService.updateWorkItemAssignee(taskId, myName);
-    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     this.activeMenuTaskId.set(null);
   }
 
@@ -290,7 +435,7 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
     if (event) event.stopPropagation();
     const cloned = this.projectService.cloneWorkItem(taskId);
     if (cloned) {
-      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
+      this.toastService.success('Nhân bản', 'Đã tạo bản sao công việc thành công.');
     }
     this.activeMenuTaskId.set(null);
   }

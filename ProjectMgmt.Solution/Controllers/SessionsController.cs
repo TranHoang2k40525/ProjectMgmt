@@ -7,9 +7,7 @@ using ProjectMgmt.IdentityAccess.Contracts;
 namespace ProjectMgmt.Solution.Controllers;
 
 [Route("api/users/me/sessions")]
-[Route("api/v1/users/me/sessions")]
 [Route("api/sessions")]
-[Route("api/v1/sessions")]
 public sealed class SessionsController(IdentityExperienceDbContext identity, ICurrentUserContext currentUser) : ApiControllerBase
 {
     [HttpGet]

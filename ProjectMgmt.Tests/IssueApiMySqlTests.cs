@@ -39,7 +39,7 @@ public class DeliveryApiFixture : IAsyncLifetime
 /// </summary>
 public class IssueApiMySqlTests(DeliveryApiFixture fixture) : IClassFixture<DeliveryApiFixture>
 {
-    private static readonly string DemoIssues = $"/api/v1/projects/{SharedTestData.ProjectId}/issues";
+    private static readonly string DemoIssues = $"/api/projects/{SharedTestData.ProjectId}/issues";
 
     private HttpClient As(Guid? userId) => fixture.Factory!.CreateClientFor(userId);
 
@@ -66,7 +66,7 @@ public class IssueApiMySqlTests(DeliveryApiFixture fixture) : IClassFixture<Deli
     [MySqlFact]
     public async Task PatchUpdatesIssueForEditorsOnly()
     {
-        var url = $"/api/v1/issues/{SharedTestData.BacklogTaskIssueId}";
+        var url = $"/api/issues/{SharedTestData.BacklogTaskIssueId}";
         var request = new UpdateIssueDto { Title = "Tài liệu đăng nhập (đã sửa)", StoryPoints = 2, DueDate = new DateOnly(2026, 11, 15) };
 
         Assert.Equal(HttpStatusCode.Forbidden, (await As(SharedTestData.ViewerUserId).PatchAsJsonAsync(url, request)).StatusCode);
@@ -86,13 +86,13 @@ public class IssueApiMySqlTests(DeliveryApiFixture fixture) : IClassFixture<Deli
     {
         var rank = new RankIssueDto { PreviousIssueId = SharedTestData.EpicIssueId, NextIssueId = SharedTestData.StoryIssueId };
         Assert.Equal(HttpStatusCode.Forbidden,
-            (await As(SharedTestData.DeveloperUserId).PutAsJsonAsync($"/api/v1/issues/{SharedTestData.BugIssueId}/rank", rank)).StatusCode);
+            (await As(SharedTestData.DeveloperUserId).PutAsJsonAsync($"/api/issues/{SharedTestData.BugIssueId}/rank", rank)).StatusCode);
 
-        var ranked = await As(SharedTestData.OwnerUserId).PutAsJsonAsync($"/api/v1/issues/{SharedTestData.BugIssueId}/rank", rank);
+        var ranked = await As(SharedTestData.OwnerUserId).PutAsJsonAsync($"/api/issues/{SharedTestData.BugIssueId}/rank", rank);
         Assert.Equal(1.5m, (await ranked.Content.ReadFromJsonAsync<IssueRankDto>())!.RankOrder);
 
         var badParent = await As(SharedTestData.OwnerUserId).PutAsJsonAsync(
-            $"/api/v1/issues/{SharedTestData.EpicIssueId}/parent", new ChangeIssueParentDto { ParentId = SharedTestData.StoryIssueId });
+            $"/api/issues/{SharedTestData.EpicIssueId}/parent", new ChangeIssueParentDto { ParentId = SharedTestData.StoryIssueId });
         Assert.Equal(HttpStatusCode.BadRequest, badParent.StatusCode);
         Assert.Contains("ISSUE_EPIC_PARENT_NOT_ALLOWED", await badParent.Content.ReadAsStringAsync(), StringComparison.Ordinal);
     }
@@ -101,23 +101,23 @@ public class IssueApiMySqlTests(DeliveryApiFixture fixture) : IClassFixture<Deli
     public async Task CommentsThroughOldAndNewRoutesShareOneStore()
     {
         var epic = SharedTestData.EpicIssueId;
-        var posted = await As(SharedTestData.DeveloperUserId).PostAsJsonAsync($"/api/v1/issues/{epic}/comments",
+        var posted = await As(SharedTestData.DeveloperUserId).PostAsJsonAsync($"/api/issues/{epic}/comments",
             new { content = "Nhờ @owner xem", mentionedUserIds = new[] { SharedTestData.OwnerUserId, SharedTestData.OutsiderUserId } });
         Assert.Equal(HttpStatusCode.OK, posted.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,
-            (await As(SharedTestData.ViewerUserId).PostAsJsonAsync($"/api/v1/issues/{epic}/comments", new { content = "x" })).StatusCode);
+            (await As(SharedTestData.ViewerUserId).PostAsJsonAsync($"/api/issues/{epic}/comments", new { content = "x" })).StatusCode);
 
-        var comments = await As(SharedTestData.ViewerUserId).GetFromJsonAsync<List<CommentDto>>($"/api/v1/issues/{epic}/comments");
+        var comments = await As(SharedTestData.ViewerUserId).GetFromJsonAsync<List<CommentDto>>($"/api/issues/{epic}/comments");
         var root = Assert.Single(comments!);
         Assert.Equal([SharedTestData.OwnerUserId], root.MentionedUserIds);
         Assert.Equal("Demo Developer", root.AuthorName);
 
-        var reply = await As(SharedTestData.OwnerUserId).PostAsJsonAsync($"/api/v1/comments/{root.Id}/replies", new CreateCommentDto { Content = "Đã xem" });
+        var reply = await As(SharedTestData.OwnerUserId).PostAsJsonAsync($"/api/comments/{root.Id}/replies", new CreateCommentDto { Content = "Đã xem" });
         Assert.Equal(root.Id, (await reply.Content.ReadFromJsonAsync<CommentDto>())!.ParentCommentId);
         Assert.Equal(HttpStatusCode.Forbidden,
-            (await As(SharedTestData.OwnerUserId).PutAsJsonAsync($"/api/v1/comments/{root.Id}", new UpdateCommentDto { Content = "sửa" })).StatusCode);
+            (await As(SharedTestData.OwnerUserId).PutAsJsonAsync($"/api/comments/{root.Id}", new UpdateCommentDto { Content = "sửa" })).StatusCode);
 
-        var watchers = await As(SharedTestData.ViewerUserId).GetFromJsonAsync<List<WatcherDto>>($"/api/v1/issues/{epic}/watchers");
+        var watchers = await As(SharedTestData.ViewerUserId).GetFromJsonAsync<List<WatcherDto>>($"/api/issues/{epic}/watchers");
         Assert.Contains(watchers!, w => w.UserId == SharedTestData.DeveloperUserId);
     }
 
@@ -128,53 +128,53 @@ public class IssueApiMySqlTests(DeliveryApiFixture fixture) : IClassFixture<Deli
         using var form = new MultipartFormDataContent();
         var file = new ByteArrayContent("hello"u8.ToArray());
         form.Add(file, "file", "ghi-chu.txt");
-        var upload = await As(SharedTestData.DeveloperUserId).PostAsync($"/api/v1/issues/{epic}/attachments", form);
+        var upload = await As(SharedTestData.DeveloperUserId).PostAsync($"/api/issues/{epic}/attachments", form);
         Assert.Equal(HttpStatusCode.OK, upload.StatusCode);
 
-        var listed = await As(SharedTestData.ViewerUserId).GetFromJsonAsync<List<AttachmentDto>>($"/api/v1/issues/{epic}/attachments");
+        var listed = await As(SharedTestData.ViewerUserId).GetFromJsonAsync<List<AttachmentDto>>($"/api/issues/{epic}/attachments");
         var attachment = Assert.Single(listed!, a => a.FileName == "ghi-chu.txt");
         Assert.Equal("text/plain", attachment.ContentType);
 
-        Assert.Equal("hello", await As(SharedTestData.ViewerUserId).GetStringAsync($"/api/v1/attachments/{attachment.Id}/download"));
-        Assert.Equal("hello", await As(SharedTestData.ViewerUserId).GetStringAsync($"/api/v1/attachments/{attachment.Id}"));
-        Assert.Equal(HttpStatusCode.Forbidden, (await As(SharedTestData.OutsiderUserId).GetAsync($"/api/v1/attachments/{attachment.Id}/download")).StatusCode);
+        Assert.Equal("hello", await As(SharedTestData.ViewerUserId).GetStringAsync($"/api/attachments/{attachment.Id}/download"));
+        Assert.Equal("hello", await As(SharedTestData.ViewerUserId).GetStringAsync($"/api/attachments/{attachment.Id}"));
+        Assert.Equal(HttpStatusCode.Forbidden, (await As(SharedTestData.OutsiderUserId).GetAsync($"/api/attachments/{attachment.Id}/download")).StatusCode);
 
         using var bad = new MultipartFormDataContent { { new ByteArrayContent([1]), "file", "tool.exe" } };
-        Assert.Equal(HttpStatusCode.BadRequest, (await As(SharedTestData.OwnerUserId).PostAsync($"/api/v1/issues/{epic}/attachments", bad)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await As(SharedTestData.OwnerUserId).PostAsync($"/api/issues/{epic}/attachments", bad)).StatusCode);
 
-        var watch = await As(SharedTestData.ViewerUserId).PostAsync($"/api/v1/issues/{epic}/watchers/me", null);
+        var watch = await As(SharedTestData.ViewerUserId).PostAsync($"/api/issues/{epic}/watchers/me", null);
         Assert.True((await watch.Content.ReadFromJsonAsync<WatchStateDto>())!.IsWatching);
-        var unwatch = await As(SharedTestData.ViewerUserId).DeleteAsync($"/api/v1/issues/{epic}/watchers/me");
+        var unwatch = await As(SharedTestData.ViewerUserId).DeleteAsync($"/api/issues/{epic}/watchers/me");
         Assert.False((await unwatch.Content.ReadFromJsonAsync<WatchStateDto>())!.IsWatching);
 
-        Assert.Equal(HttpStatusCode.NoContent, (await As(SharedTestData.OwnerUserId).DeleteAsync($"/api/v1/attachments/{attachment.Id}")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await As(SharedTestData.OwnerUserId).GetAsync($"/api/v1/attachments/{attachment.Id}/download")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await As(SharedTestData.OwnerUserId).DeleteAsync($"/api/attachments/{attachment.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await As(SharedTestData.OwnerUserId).GetAsync($"/api/attachments/{attachment.Id}/download")).StatusCode);
     }
 
     [MySqlFact]
     public async Task LabelsAndLinksPersistWithPermissions()
     {
-        var labelsUrl = $"/api/v1/projects/{SharedTestData.ProjectId}/labels";
+        var labelsUrl = $"/api/projects/{SharedTestData.ProjectId}/labels";
         Assert.Equal(HttpStatusCode.Forbidden, (await As(SharedTestData.ViewerUserId).PostAsJsonAsync(labelsUrl, new SaveLabelDto { Name = "api" })).StatusCode);
         var created = await As(SharedTestData.DeveloperUserId).PostAsJsonAsync(labelsUrl, new SaveLabelDto { Name = "api", ColorHex = "#36B37E" });
         var label = (await created.Content.ReadFromJsonAsync<LabelDto>())!;
         Assert.Equal(HttpStatusCode.Conflict, (await As(SharedTestData.DeveloperUserId).PostAsJsonAsync(labelsUrl, new SaveLabelDto { Name = "API" })).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await As(SharedTestData.DeveloperUserId).DeleteAsync($"/api/v1/labels/{label.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await As(SharedTestData.DeveloperUserId).DeleteAsync($"/api/labels/{label.Id}")).StatusCode);
 
         var epic = SharedTestData.EpicIssueId;
-        var tagged = await As(SharedTestData.DeveloperUserId).PostAsync($"/api/v1/issues/{epic}/labels/{label.Id}", null);
+        var tagged = await As(SharedTestData.DeveloperUserId).PostAsync($"/api/issues/{epic}/labels/{label.Id}", null);
         Assert.Equal("api", Assert.Single((await tagged.Content.ReadFromJsonAsync<List<LabelDto>>())!).Name);
 
-        var link = await As(SharedTestData.DeveloperUserId).PostAsJsonAsync($"/api/v1/issues/{epic}/links",
+        var link = await As(SharedTestData.DeveloperUserId).PostAsJsonAsync($"/api/issues/{epic}/links",
             new CreateIssueLinkDto { TargetIssueId = SharedTestData.BacklogTaskIssueId, LinkType = "Duplicates" });
         Assert.Equal(HttpStatusCode.OK, link.StatusCode);
-        var inverse = await As(SharedTestData.ViewerUserId).GetFromJsonAsync<List<IssueLinkDto>>($"/api/v1/issues/{SharedTestData.BacklogTaskIssueId}/links");
+        var inverse = await As(SharedTestData.ViewerUserId).GetFromJsonAsync<List<IssueLinkDto>>($"/api/issues/{SharedTestData.BacklogTaskIssueId}/links");
         var back = Assert.Single(inverse!, l => l.TargetIssueId == epic);
         Assert.Equal("IsDuplicatedBy", back.LinkType);
 
-        Assert.Equal(HttpStatusCode.NoContent, (await As(SharedTestData.DeveloperUserId).DeleteAsync($"/api/v1/issue-links/{back.Id}")).StatusCode);
-        Assert.Empty((await As(SharedTestData.ViewerUserId).GetFromJsonAsync<List<IssueLinkDto>>($"/api/v1/issues/{epic}/links"))!);
-        Assert.Equal(HttpStatusCode.NoContent, (await As(SharedTestData.OwnerUserId).DeleteAsync($"/api/v1/labels/{label.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await As(SharedTestData.DeveloperUserId).DeleteAsync($"/api/issue-links/{back.Id}")).StatusCode);
+        Assert.Empty((await As(SharedTestData.ViewerUserId).GetFromJsonAsync<List<IssueLinkDto>>($"/api/issues/{epic}/links"))!);
+        Assert.Equal(HttpStatusCode.NoContent, (await As(SharedTestData.OwnerUserId).DeleteAsync($"/api/labels/{label.Id}")).StatusCode);
     }
 
     [MySqlFact]
@@ -192,7 +192,7 @@ public class IssueApiMySqlTests(DeliveryApiFixture fixture) : IClassFixture<Deli
             assigneeName = "Demo Developer",
             labels = Array.Empty<string>()
         };
-        var response = await As(SharedTestData.OwnerUserId).PutAsJsonAsync($"/api/v1/issues/{epic}", body);
+        var response = await As(SharedTestData.OwnerUserId).PutAsJsonAsync($"/api/issues/{epic}", body);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         await using var delivery = fixture.Database.CreateDeliveryContext();
@@ -204,41 +204,41 @@ public class IssueApiMySqlTests(DeliveryApiFixture fixture) : IClassFixture<Deli
         var assignment = await delivery.IssueAssignmentHistories.AsNoTracking().SingleAsync(h => h.IssueId == epic);
         Assert.Equal((SharedTestData.DeveloperUserId, "Manual"), (assignment.ToAssigneeId!.Value, assignment.AssignmentSource));
 
-        var statuses = await As(SharedTestData.ViewerUserId).GetFromJsonAsync<List<StatusChangeDto>>($"/api/v1/issues/{epic}/status-history");
+        var statuses = await As(SharedTestData.ViewerUserId).GetFromJsonAsync<List<StatusChangeDto>>($"/api/issues/{epic}/status-history");
         Assert.Equal("In Progress", Assert.Single(statuses!).ToStatusName);
-        var activity = await As(SharedTestData.ViewerUserId).GetFromJsonAsync<PagedResultDto<ActivityDto>>($"/api/v1/issues/{epic}/history?pageSize=5");
+        var activity = await As(SharedTestData.ViewerUserId).GetFromJsonAsync<PagedResultDto<ActivityDto>>($"/api/issues/{epic}/history?pageSize=5");
         Assert.NotEmpty(activity!.Items);
-        Assert.Equal(HttpStatusCode.Forbidden, (await As(SharedTestData.OutsiderUserId).GetAsync($"/api/v1/issues/{epic}/assignment-history")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await As(SharedTestData.OutsiderUserId).GetAsync($"/api/issues/{epic}/assignment-history")).StatusCode);
     }
 
     [MySqlFact]
     public async Task CriteriaAndRequiredSkillsThroughApi()
     {
         var bug = SharedTestData.BugIssueId;
-        var criterion = await As(SharedTestData.DeveloperUserId).PostAsJsonAsync($"/api/v1/issues/{bug}/acceptance-criteria",
+        var criterion = await As(SharedTestData.DeveloperUserId).PostAsJsonAsync($"/api/issues/{bug}/acceptance-criteria",
             new SaveCriterionDto { Content = "Avatar hiển thị đúng tỉ lệ" });
         var created = (await criterion.Content.ReadFromJsonAsync<AcceptanceCriterionDto>())!;
-        Assert.Equal(HttpStatusCode.Forbidden, (await As(SharedTestData.ViewerUserId).PutAsJsonAsync($"/api/v1/acceptance-criteria/{created.Id}",
+        Assert.Equal(HttpStatusCode.Forbidden, (await As(SharedTestData.ViewerUserId).PutAsJsonAsync($"/api/acceptance-criteria/{created.Id}",
             new SaveCriterionDto { Content = created.Content, IsMet = true })).StatusCode);
 
         // Route cũ của Issue Detail vẫn tick được qua service C.
-        Assert.Equal(HttpStatusCode.OK, (await As(SharedTestData.DeveloperUserId).PutAsJsonAsync($"/api/v1/criteria/{created.Id}",
+        Assert.Equal(HttpStatusCode.OK, (await As(SharedTestData.DeveloperUserId).PutAsJsonAsync($"/api/criteria/{created.Id}",
             new { content = created.Content, isMet = true })).StatusCode);
-        var listed = await As(SharedTestData.ViewerUserId).GetFromJsonAsync<List<AcceptanceCriterionDto>>($"/api/v1/issues/{bug}/acceptance-criteria");
+        var listed = await As(SharedTestData.ViewerUserId).GetFromJsonAsync<List<AcceptanceCriterionDto>>($"/api/issues/{bug}/acceptance-criteria");
         Assert.Equal("Demo Developer", Assert.Single(listed!).MetByName);
 
-        var skill = await As(SharedTestData.DeveloperUserId).PostAsJsonAsync($"/api/v1/issues/{bug}/required-skills",
+        var skill = await As(SharedTestData.DeveloperUserId).PostAsJsonAsync($"/api/issues/{bug}/required-skills",
             new SaveRequiredSkillDto { SkillId = SharedTestData.AngularSkillId, MinLevel = 3, Weight = 1 });
         Assert.Equal(HttpStatusCode.OK, skill.StatusCode);
-        var skills = await As(SharedTestData.ViewerUserId).GetFromJsonAsync<List<RequiredSkillDto>>($"/api/v1/issues/{bug}/required-skills");
+        var skills = await As(SharedTestData.ViewerUserId).GetFromJsonAsync<List<RequiredSkillDto>>($"/api/issues/{bug}/required-skills");
         Assert.Equal("Angular / TypeScript", Assert.Single(skills!).SkillName);
-        Assert.Equal(HttpStatusCode.NoContent, (await As(SharedTestData.DeveloperUserId).DeleteAsync($"/api/v1/issue-required-skills/{skills![0].Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await As(SharedTestData.DeveloperUserId).DeleteAsync($"/api/issue-required-skills/{skills![0].Id}")).StatusCode);
     }
 
     [MySqlFact]
     public async Task PermissionsReflectProjectRoles()
     {
-        var url = $"/api/v1/issues/{SharedTestData.BugIssueId}/permissions";
+        var url = $"/api/issues/{SharedTestData.BugIssueId}/permissions";
         var owner = await As(SharedTestData.OwnerUserId).GetFromJsonAsync<IssuePermissionsDto>(url);
         var developer = await As(SharedTestData.DeveloperUserId).GetFromJsonAsync<IssuePermissionsDto>(url);
         var viewer = await As(SharedTestData.ViewerUserId).GetFromJsonAsync<IssuePermissionsDto>(url);
@@ -253,7 +253,7 @@ public class IssueApiMySqlTests(DeliveryApiFixture fixture) : IClassFixture<Deli
     [MySqlFact]
     public async Task ReleaseLinksReportMissingPlanningContract()
     {
-        var response = await As(SharedTestData.OwnerUserId).GetAsync($"/api/v1/issues/{SharedTestData.BugIssueId}/components");
+        var response = await As(SharedTestData.OwnerUserId).GetAsync($"/api/issues/{SharedTestData.BugIssueId}/components");
         Assert.Equal(HttpStatusCode.NotImplemented, response.StatusCode);
         Assert.Contains("RELEASE_LOOKUP_UNAVAILABLE", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
     }
@@ -261,7 +261,7 @@ public class IssueApiMySqlTests(DeliveryApiFixture fixture) : IClassFixture<Deli
     [MySqlFact]
     public async Task TransitionEndpointReportsMissingWorkflowContract()
     {
-        var response = await As(SharedTestData.OwnerUserId).PostAsJsonAsync($"/api/v1/issues/{SharedTestData.BugIssueId}/transition",
+        var response = await As(SharedTestData.OwnerUserId).PostAsJsonAsync($"/api/issues/{SharedTestData.BugIssueId}/transition",
             new TransitionIssueDto { TargetStatusId = SharedTestData.InProgressStatusId });
         Assert.Equal(HttpStatusCode.NotImplemented, response.StatusCode);
         Assert.Contains("WORKFLOW_VALIDATION_UNAVAILABLE", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
@@ -274,16 +274,16 @@ public class IssueApiMySqlTests(DeliveryApiFixture fixture) : IClassFixture<Deli
         await using (other)
         {
             Assert.Equal(HttpStatusCode.Forbidden,
-                (await As(SharedTestData.DeveloperUserId).DeleteAsync($"/api/v1/issues/{SharedTestData.StoryIssueId}")).StatusCode);
+                (await As(SharedTestData.DeveloperUserId).DeleteAsync($"/api/issues/{SharedTestData.StoryIssueId}")).StatusCode);
             Assert.Equal(HttpStatusCode.NoContent,
-                (await As(SharedTestData.OwnerUserId).DeleteAsync($"/api/v1/issues/{SharedTestData.StoryIssueId}")).StatusCode);
+                (await As(SharedTestData.OwnerUserId).DeleteAsync($"/api/issues/{SharedTestData.StoryIssueId}")).StatusCode);
 
             var rows = await other.Issues.AsNoTracking()
                 .Where(i => i.Id == SharedTestData.StoryIssueId || i.Id == SharedTestData.SubtaskIssueId)
                 .ToListAsync();
             Assert.All(rows, row => Assert.True(row.IsDeleted));
             Assert.Equal(HttpStatusCode.NotFound,
-                (await As(SharedTestData.OwnerUserId).GetAsync($"/api/v1/issues/{SharedTestData.StoryIssueId}/core")).StatusCode);
+                (await As(SharedTestData.OwnerUserId).GetAsync($"/api/issues/{SharedTestData.StoryIssueId}/core")).StatusCode);
         }
     }
 }

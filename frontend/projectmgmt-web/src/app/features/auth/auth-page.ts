@@ -1,8 +1,10 @@
 import { AfterViewInit, Component, ElementRef, OnDestroy, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
+import { safeReturnUrl } from '../../core/guards/auth.guard';
 import { IdentityService } from '../../core/services/identity.service';
+import { WorkspaceContextService } from '../workspace/workspace-context.service';
 
 import { gsap } from 'gsap';
 
@@ -19,7 +21,9 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
   private static readonly strongPasswordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,128}$/;
   private fb = inject(FormBuilder);
   private identityService = inject(IdentityService);
+  private workspaceContext = inject(WorkspaceContextService);
   private router = inject(Router);
+  private route = inject(ActivatedRoute, { optional: true });
 
   @ViewChild('authPage', { static: true }) private authPage!: ElementRef<HTMLElement>;
   private entryTween: gsap.core.Tween | null = null;
@@ -145,7 +149,27 @@ export class AuthPageComponent implements OnInit, AfterViewInit, OnDestroy {
     this.identityService.login(email, password).subscribe({
       next: () => {
         this.loading.set(false);
-        this.router.navigate(['/for-you']);
+        const returnUrl = safeReturnUrl(this.route?.snapshot.queryParamMap.get('returnUrl'));
+        if (returnUrl) {
+          void this.router.navigateByUrl(returnUrl);
+          return;
+        }
+
+        // Vào trực tiếp phân nhánh tổ chức của người dùng
+        this.workspaceContext.refreshOrganizations().subscribe({
+          next: (orgs) => {
+            const lastId = this.workspaceContext.lastOrgId();
+            const matchedOrg = (lastId && orgs.find(o => o.id === lastId)) || orgs[0];
+            if (matchedOrg) {
+              void this.router.navigate(['/orgs', matchedOrg.id, 'overview']);
+            } else {
+              void this.router.navigate(['/for-you']);
+            }
+          },
+          error: () => {
+            void this.router.navigate(['/for-you']);
+          }
+        });
       },
       error: (err) => {
         this.loading.set(false);

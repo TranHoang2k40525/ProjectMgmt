@@ -9,21 +9,19 @@ namespace DeliveryIntelligence.Application.IServices;
 /// </summary>
 public interface IIssueTrackingService
 {
-    Task<Result<IssueDetailDto>> GetAsync(Guid issueId, CancellationToken cancellationToken = default);
+    Task<Result<IssueDetailDto>> GetAsync(Guid issueId);
 
     Task<Result<PagedResultDto<IssueListItemDto>>> ListAsync(
         Guid projectId,
-        IssueListQueryDto query,
-        CancellationToken cancellationToken = default);
+        IssueListQueryDto query);
 
     Task<Result<IssueDetailDto>> UpdateAsync(
         Guid issueId,
         UpdateIssueDto request,
-        Guid actorUserId,
-        CancellationToken cancellationToken = default);
+        Guid actorUserId);
 
     /// <summary>Xóa mềm Issue cùng toàn bộ con cháu; Issue khác đang trỏ EpicId tới nó được gỡ liên kết.</summary>
-    Task<Result> DeleteAsync(Guid issueId, Guid actorUserId, CancellationToken cancellationToken = default);
+    Task<Result> DeleteAsync(Guid issueId, Guid actorUserId);
 
     Result ValidateCreate(CreateIssueDto request);
 
@@ -38,6 +36,5 @@ public interface IIssueCreationService
 {
     Task<Result<IssueDetailDto>> CreateAsync(
         CreateIssueDto request,
-        Guid reporterUserId,
-        CancellationToken cancellationToken = default);
+        Guid reporterUserId);
 }

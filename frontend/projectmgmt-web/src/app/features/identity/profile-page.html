@@ -1,26 +1,43 @@
 <div class="profile-page relative w-full min-h-screen bg-surface px-4 py-6 sm:px-6 lg:px-8 font-body-md text-body-md text-on-surface">
   <div class="max-w-7xl mx-auto flex flex-col gap-6 animate-fade-in">
     
-    <!-- Hero Banner Card from Stitch Screen 3095f5e818b74b43984bdd26650c7398 -->
+    <!-- Project Context Return Banner if inside an active project -->
+    @if (projectService.hasActiveProject()) {
+      <div class="flex items-center justify-between p-3.5 px-4 rounded-xl bg-primary/10 border border-primary/20 text-slate-800 dark:text-slate-100 shadow-2xs">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <span class="material-symbols-outlined text-[20px] text-primary shrink-0" aria-hidden="true">folder</span>
+          <div class="flex items-center gap-2 truncate">
+            <span class="text-xs font-medium text-slate-500 dark:text-slate-400">Dự án đang làm việc:</span>
+            <span class="text-xs font-bold text-primary truncate">{{ projectService.currentProject().name }}</span>
+            @if (projectService.currentProject().projectKey) {
+              <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-primary/15 text-primary border border-primary/25">
+                {{ projectService.currentProject().projectKey }}
+              </span>
+            }
+          </div>
+        </div>
+
+        <button
+          type="button"
+          (click)="goBackToProject()"
+          class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-xs font-bold transition-all cursor-pointer shadow-xs shrink-0"
+        >
+          <span class="material-symbols-outlined text-[16px]" aria-hidden="true">arrow_back</span>
+          <span>Quay lại dự án</span>
+        </button>
+      </div>
+    }
+
+    <!-- Hero Banner Card -->
     @if (user(); as u) {
-      <div class="profile-hero relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary via-primary-container to-secondary p-6 sm:p-8 text-on-primary shadow-lg border border-outline-variant/20">
-        <div class="absolute -right-16 -top-20 w-80 h-80 rounded-full bg-secondary-container/20 blur-3xl pointer-events-none"></div>
-        <div class="absolute -left-12 -bottom-20 w-72 h-72 rounded-full bg-tertiary-container/15 blur-2xl pointer-events-none"></div>
-        
+      <div class="profile-hero relative overflow-hidden rounded-2xl bg-[#0f172a] p-6 sm:p-8 text-white shadow-md border border-slate-800">
         <div class="profile-hero-layout relative flex flex-col md:flex-row md:items-center justify-between gap-6 z-10">
           <div class="flex flex-col gap-1">
-            <div class="flex items-center gap-2">
-              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container-lowest/15 backdrop-blur-md text-on-primary font-label-sm text-label-sm uppercase tracking-wider font-semibold">
-                <span class="material-symbols-outlined text-[14px]">verified_user</span>
-                Tài Khoản Kỹ Sư Agile
-              </span>
-            </div>
-            
             <h1 class="font-headline-lg text-headline-lg text-white tracking-tight font-bold">
-              Hồ sơ cá nhân & Cài đặt bảo mật tài khoản
+              Hồ sơ cá nhân & Bảo mật tài khoản
             </h1>
             <p class="font-body-md text-body-md text-on-primary-container/90 max-w-2xl">
-              Quản lý định danh kỹ sư, thông tin xác thực đa lớp, quyền điều phối Scrum Sprint và thông tin định danh số.
+              Quản lý thông tin tài khoản và bảo mật cá nhân.
             </p>
           </div>
 
@@ -42,23 +59,27 @@
         <div class="profile-overview-layout flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           
           <div class="flex flex-col sm:flex-row items-start sm:items-center gap-5">
-            <div class="relative group">
-              @if (u.avatarUrl) {
-                <img [src]="u.avatarUrl" [alt]="u.displayName" class="w-24 h-24 rounded-full object-cover shadow-md ring-4 ring-surface-container-high" />
+            <div id="profile-avatar-button" class="relative group cursor-pointer" (click)="openAvatarModal()" title="Nhấp để xem, thay đổi hoặc xóa ảnh đại diện">
+              @if (resolvedAvatarUrl()) {
+                <img [src]="resolvedAvatarUrl()" [alt]="u.displayName" class="w-24 h-24 rounded-full object-cover shadow-md ring-4 ring-surface-container-high transition-transform duration-200 group-hover:scale-105" />
               } @else {
-                <div class="w-24 h-24 rounded-full bg-gradient-to-br from-primary-container to-secondary-container text-white text-3xl font-bold flex items-center justify-center shadow-md ring-4 ring-surface-container-high">
+                <div class="w-24 h-24 rounded-full bg-gradient-to-br from-primary-container to-secondary-container text-white text-3xl font-bold flex items-center justify-center shadow-md ring-4 ring-surface-container-high transition-transform duration-200 group-hover:scale-105">
                   {{ u.displayName.charAt(0).toUpperCase() }}
                 </div>
               }
-              <span class="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-emerald-500 ring-2 ring-surface-container-lowest" title="Đang online"></span>
+              <div class="absolute inset-0 rounded-full bg-black/40 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <span class="material-symbols-outlined text-[24px]">photo_camera</span>
+                <span class="text-[10px] font-bold mt-0.5">Tùy chọn</span>
+              </div>
+              <span class="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-emerald-500 ring-2 ring-surface-container-lowest z-10" title="Đang online"></span>
             </div>
 
             <div class="flex flex-col gap-1 min-w-0">
               <div class="flex flex-wrap items-center gap-2">
                 <h2 class="font-headline-md text-headline-md text-on-surface font-bold">{{ u.displayName }}</h2>
                 <span class="px-3 py-1 rounded-full bg-surface-container-high text-primary font-label-sm text-label-sm flex items-center gap-1 font-semibold">
-                  <span class="material-symbols-outlined text-[14px]">hub</span>
-                  {{ u.roleName }}
+                  <span class="material-symbols-outlined text-[14px]">account_circle</span>
+                  {{ contextRole() }}
                 </span>
                 <span class="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-label-sm text-label-sm font-semibold flex items-center gap-1">
                   <span class="material-symbols-outlined text-[13px]">check_circle</span>
@@ -85,8 +106,8 @@
 
           <div class="profile-quick-actions flex items-center gap-2 shrink-0">
             <button type="button" (click)="setTab('SKILLS')" class="px-3.5 py-2 rounded-xl bg-primary-container text-on-primary hover:bg-primary font-label-lg text-label-lg transition-colors flex items-center gap-1.5 shadow-sm font-semibold cursor-pointer">
-              <span class="material-symbols-outlined text-[18px]">auto_awesome</span>
-              <span>Hồ sơ năng lực AI</span>
+              <span class="material-symbols-outlined text-[18px]">verified</span>
+              <span>Kỹ năng chuyên môn</span>
             </button>
           </div>
         </div>
@@ -144,6 +165,19 @@
             <span class="material-symbols-outlined text-[18px]">devices</span>
             <span>Phiên & Refresh Tokens</span>
             <span class="px-1.5 py-0.2 rounded-full bg-surface-container-highest text-primary font-label-sm text-label-sm font-bold">{{ activeSessions().length }}</span>
+          </button>
+
+          <button
+            type="button"
+            class="px-4 py-2.5 rounded-lg font-label-lg text-label-lg transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer"
+            [class.bg-surface-container-lowest]="activeTab() === 'AI_USAGE'"
+            [class.text-primary]="activeTab() === 'AI_USAGE'"
+            [class.font-bold]="activeTab() === 'AI_USAGE'"
+            [class.shadow-sm]="activeTab() === 'AI_USAGE'"
+            [class.text-on-surface-variant]="activeTab() !== 'AI_USAGE'"
+            (click)="setTab('AI_USAGE')">
+            <span class="material-symbols-outlined text-[18px]">psychology</span>
+            <span>Mức tiêu thụ Token AI</span>
           </button>
         </div>
       </div>
@@ -263,18 +297,7 @@
                   <textarea id="profBio" rows="3" maxlength="5000" formControlName="bio" placeholder="Vai trò, kinh nghiệm và định hướng chuyên môn..." class="w-full px-4 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-primary-container"></textarea>
                 </div>
 
-                <div class="flex flex-col gap-1.5 md:col-span-2">
-                  <label for="profAvatar" class="font-label-md text-label-md text-on-surface font-semibold">Ảnh đại diện</label>
-                  <input id="profAvatar" type="file" accept="image/jpeg,image/png,image/webp" (change)="onAvatarSelected($event)" class="w-full px-4 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-md text-body-md file:mr-4 file:rounded-lg file:border-0 file:bg-primary-container file:px-3 file:py-1.5 file:text-white" />
-                  <small class="text-outline">JPEG, PNG hoặc WebP; dung lượng tối đa 5 MB. Backend kiểm tra chữ ký tệp thật.</small>
-                </div>
-
-                <div class="md:col-span-2 pt-4 flex items-center justify-between border-t border-surface-container mt-2">
-                  <span class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1">
-                    <span class="material-symbols-outlined text-[16px] text-primary">history</span>
-                    Đã đồng bộ thông tin hồ sơ với máy chủ
-                  </span>
-
+                <div class="md:col-span-2 pt-4 flex items-center justify-end border-t border-surface-container mt-2">
                   <button type="submit" [disabled]="loading() || profileForm.invalid" class="px-5 py-2.5 rounded-xl bg-primary-container hover:bg-primary text-on-primary font-label-lg text-label-lg transition-colors shadow-md flex items-center gap-2 font-bold cursor-pointer disabled:opacity-50">
                     @if (loading()) {
                       <span class="spinner"></span> Đang lưu...
@@ -516,6 +539,202 @@
             </div>
           }
 
+          <!-- TAB 5: AI TOKEN CONSUMPTION MANAGEMENT -->
+          @if (activeTab() === 'AI_USAGE') {
+            <div class="rounded-2xl bg-surface-container-lowest p-6 shadow-sm border border-outline-variant/30 space-y-6">
+              <!-- Header -->
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-surface-container">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                    <span class="material-symbols-outlined text-[24px]">psychology</span>
+                  </div>
+                  <div>
+                    <h3 class="font-headline-sm text-headline-sm font-bold text-on-surface">Quản lý Hạn mức & Mức tiêu thụ Token AI</h3>
+                    <p class="font-body-sm text-body-sm text-on-surface-variant">Giám sát lượng token vào/ra thời gian thực, tỷ lệ thành công của các Agent và chi phí ước tính.</p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  (click)="loadAiUsage()"
+                  [disabled]="aiUsageLoading()"
+                  class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-surface-container-low hover:bg-surface-container text-primary font-label-md text-label-md font-semibold transition-colors cursor-pointer self-start sm:self-auto shrink-0 shadow-2xs"
+                >
+                  <span class="material-symbols-outlined text-[18px]" [class.animate-spin]="aiUsageLoading()">refresh</span>
+                  <span>Làm mới số liệu</span>
+                </button>
+              </div>
+
+              <!-- 4 Top KPI Cards -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-col gap-1">
+                  <div class="flex items-center justify-between text-slate-500">
+                    <span class="text-xs font-semibold uppercase tracking-wider">Tổng Tokens</span>
+                    <span class="material-symbols-outlined text-[20px] text-primary">memory</span>
+                  </div>
+                  <strong class="text-2xl font-bold text-slate-900 dark:text-white mt-1">
+                    {{ (aiUsage()?.totalTokens || 0) | number }}
+                  </strong>
+                  <span class="text-[11px] text-slate-500">Bao gồm Prompt + Completion</span>
+                </div>
+
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-col gap-1">
+                  <div class="flex items-center justify-between text-slate-500">
+                    <span class="text-xs font-semibold uppercase tracking-wider">Input Tokens</span>
+                    <span class="material-symbols-outlined text-[20px] text-indigo-500">input</span>
+                  </div>
+                  <strong class="text-2xl font-bold text-slate-900 dark:text-white mt-1">
+                    {{ (aiUsage()?.promptTokens || 0) | number }}
+                  </strong>
+                  <span class="text-[11px] text-slate-500">Dữ liệu tài liệu & Ngữ cảnh</span>
+                </div>
+
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-col gap-1">
+                  <div class="flex items-center justify-between text-slate-500">
+                    <span class="text-xs font-semibold uppercase tracking-wider">Output Tokens</span>
+                    <span class="material-symbols-outlined text-[20px] text-emerald-500">output</span>
+                  </div>
+                  <strong class="text-2xl font-bold text-slate-900 dark:text-white mt-1">
+                    {{ (aiUsage()?.completionTokens || 0) | number }}
+                  </strong>
+                  <span class="text-[11px] text-slate-500">Nội dung do mô hình sinh ra</span>
+                </div>
+
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-col gap-1">
+                  <div class="flex items-center justify-between text-slate-500">
+                    <span class="text-xs font-semibold uppercase tracking-wider">Lượt gọi & Tỷ lệ</span>
+                    <span class="material-symbols-outlined text-[20px] text-teal-500">verified</span>
+                  </div>
+                  <strong class="text-2xl font-bold text-slate-900 dark:text-white mt-1">
+                    {{ aiUsage()?.totalCalls || 0 }} <span class="text-sm font-normal text-slate-500">lượt</span>
+                  </strong>
+                  <span class="text-[11px] text-emerald-600 font-semibold">Tỷ lệ hoàn thành: {{ aiUsage()?.successRate || 100 }}%</span>
+                </div>
+              </div>
+
+              <!-- Model Breakdown & Cost Estimate Section -->
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="p-5 rounded-xl bg-surface-container-low border border-outline-variant/30 flex flex-col gap-3">
+                  <div class="flex items-center justify-between">
+                    <strong class="text-sm font-bold text-on-surface">Phân bổ theo Mô hình AI</strong>
+                    <span class="text-xs text-on-surface-variant font-mono">Tokens</span>
+                  </div>
+
+                  @if (aiUsage()?.modelBreakdown; as breakdown) {
+                    <div class="flex flex-col gap-2.5 mt-1">
+                      @for (entry of breakdown | keyvalue; track entry.key) {
+                        <div class="flex flex-col gap-1">
+                          <div class="flex items-center justify-between text-xs font-medium">
+                            <span class="text-on-surface">{{ entry.key }}</span>
+                            <span class="font-mono text-primary font-bold">{{ entry.value | number }}</span>
+                          </div>
+                          <div class="w-full h-2 rounded-full bg-surface-container-highest overflow-hidden">
+                            <div
+                              class="h-full bg-primary rounded-full transition-all"
+                              [style.width.%]="(entry.value / (aiUsage()?.totalTokens || 1)) * 100"
+                            ></div>
+                          </div>
+                        </div>
+                      }
+                    </div>
+                  } @else {
+                    <p class="text-xs text-on-surface-variant italic">Chưa ghi nhận dữ liệu phân bổ mô hình.</p>
+                  }
+                </div>
+
+                <div class="p-5 rounded-xl bg-surface-container-low border border-outline-variant/30 flex flex-col justify-between gap-3">
+                  <div>
+                    <div class="flex items-center justify-between">
+                      <strong class="text-sm font-bold text-on-surface">Chi phí ước tính & Hạn mức</strong>
+                      <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800">Hoạt động tốt</span>
+                    </div>
+                    <p class="text-xs text-on-surface-variant mt-1">
+                      Chi phí được tính dựa trên đơn giá token chính thức của nhà cung cấp Gemini API &amp; Claude.
+                    </p>
+                  </div>
+
+                  <div class="p-3.5 rounded-lg bg-surface-container-lowest border border-outline-variant/20 flex items-center justify-between">
+                    <span class="text-xs text-on-surface-variant">Chi phí tích lũy ước tính:</span>
+                    <strong class="text-base font-mono text-emerald-600 font-bold">
+                      ${{ (aiUsage()?.estimatedCostUsd || 0) | number:'1.4-4' }}
+                    </strong>
+                  </div>
+
+                  <div class="text-[11px] text-on-surface-variant flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-[15px] text-primary">security</span>
+                    <span>Khóa API được bảo vệ bởi Input Guardrail và không lưu trữ trên Git.</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Recent Execution History Table -->
+              <div class="flex flex-col gap-3 mt-2">
+                <div class="flex items-center justify-between">
+                  <strong class="text-sm font-bold text-on-surface">Nhật ký các lượt gọi AI Agent gần đây</strong>
+                  <span class="text-xs text-on-surface-variant">Tối đa 15 lượt gần nhất</span>
+                </div>
+
+                @if (aiUsage()?.recentHistory && aiUsage()!.recentHistory.length > 0) {
+                  <div class="overflow-x-auto rounded-xl border border-outline-variant/30">
+                    <table class="w-full text-left text-xs">
+                      <thead class="bg-surface-container-low text-on-surface-variant border-b border-outline-variant/20">
+                        <tr>
+                          <th class="py-2.5 px-3 font-semibold">Thời gian</th>
+                          <th class="py-2.5 px-3 font-semibold">Tác vụ</th>
+                          <th class="py-2.5 px-3 font-semibold">Mô hình</th>
+                          <th class="py-2.5 px-3 font-semibold">Input / Output</th>
+                          <th class="py-2.5 px-3 font-semibold">Thời lượng</th>
+                          <th class="py-2.5 px-3 font-semibold">Trạng thái</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-outline-variant/20">
+                        @for (row of aiUsage()!.recentHistory; track row.sessionId) {
+                          <tr class="hover:bg-surface-container-low/50 transition-colors">
+                            <td class="py-2.5 px-3 text-on-surface-variant whitespace-nowrap">
+                              {{ row.timestampUtc | date:'HH:mm:ss dd/MM' }}
+                            </td>
+                            <td class="py-2.5 px-3 font-medium text-on-surface">
+                              {{ row.operationName || 'Phân tách Sprint' }}
+                            </td>
+                            <td class="py-2.5 px-3 text-on-surface">
+                              <span class="px-2 py-0.5 rounded text-[11px] bg-slate-100 dark:bg-slate-800 font-mono">
+                                {{ row.model }}
+                              </span>
+                            </td>
+                            <td class="py-2.5 px-3 font-mono text-on-surface-variant">
+                              {{ row.promptTokens }} / {{ row.completionTokens }}
+                            </td>
+                            <td class="py-2.5 px-3 font-mono text-on-surface-variant">
+                              {{ row.durationMs }}ms
+                            </td>
+                            <td class="py-2.5 px-3">
+                              @if (row.success) {
+                                <span class="inline-flex items-center gap-1 text-emerald-600 font-semibold">
+                                  <span class="material-symbols-outlined text-[14px]">check_circle</span>
+                                  <span>Thành công</span>
+                                </span>
+                              } @else {
+                                <span class="inline-flex items-center gap-1 text-rose-600 font-semibold">
+                                  <span class="material-symbols-outlined text-[14px]">cancel</span>
+                                  <span>Lỗi</span>
+                                </span>
+                              }
+                            </td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+                } @else {
+                  <div class="p-6 rounded-xl bg-surface-container-low border border-outline-variant/20 text-center text-on-surface-variant">
+                    <span class="material-symbols-outlined text-[28px] text-outline mb-1">history_toggle_off</span>
+                    <p class="text-xs">Chưa có lượt gọi Agent nào được ghi nhận trong phiên hiện tại.</p>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+
         </div>
 
         <!-- RIGHT COLUMN (4 cols) from Stitch Screen 3095f5e818b74b43984bdd26650c7398 -->
@@ -592,3 +811,10 @@
     }
   </div>
 </div>
+
+<app-avatar-modal 
+  [(isOpen)]="isAvatarModalOpen" 
+  [user]="user()" 
+  [isCurrentUser]="true"
+  (avatarUpdated)="onAvatarModalUpdated($event)"
+></app-avatar-modal>

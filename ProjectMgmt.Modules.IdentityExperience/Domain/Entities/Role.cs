@@ -6,5 +6,8 @@ public class Role
     public string Name { get; set; } = string.Empty;
     public string Scope { get; set; } = string.Empty;
     public bool IsSystem { get; set; }
+    public bool IsPreset { get; set; }
+    public bool IsActive { get; set; } = true;
+    public Guid? OrgId { get; set; }
     public string? Description { get; set; }
 }

@@ -132,6 +132,113 @@ public class EmailService : IEmailService
                 null));
     }
 
+    public Task<bool> SendInvitationAcceptedAsync(
+        string recipientEmail,
+        string recipientName,
+        string memberName,
+        string memberEmail,
+        Guid projectId)
+    {
+        var safeRecipient = WebUtility.HtmlEncode(recipientName);
+        var safeMember = WebUtility.HtmlEncode(memberName);
+        var safeEmail = WebUtility.HtmlEncode(memberEmail);
+        var body = $$"""
+            <!doctype html>
+            <html lang="vi">
+            <body style="font-family:Arial,sans-serif;color:#111;line-height:1.6">
+              <p>Xin chào {{safeRecipient}},</p>
+              <p>Thành viên <strong>{{safeMember}}</strong> ({{safeEmail}}) đã <strong>chấp nhận</strong> lời mời tham gia dự án của bạn.</p>
+              <p>Mã dự án: <strong>{{projectId}}</strong>.</p>
+              <p>Họ đã chính thức tham gia vào nhóm làm việc trên hệ thống.</p>
+            </body>
+            </html>
+            """;
+
+        return SendMessageAsync(
+            recipientEmail,
+            "Lời mời tham gia dự án đã được chấp nhận",
+            body);
+    }
+
+    public Task<bool> SendInvitationDeclinedAsync(
+        string recipientEmail,
+        string recipientName,
+        string memberName,
+        string memberEmail,
+        Guid projectId)
+    {
+        var safeRecipient = WebUtility.HtmlEncode(recipientName);
+        var safeMember = WebUtility.HtmlEncode(memberName);
+        var safeEmail = WebUtility.HtmlEncode(memberEmail);
+        var body = $$"""
+            <!doctype html>
+            <html lang="vi">
+            <body style="font-family:Arial,sans-serif;color:#111;line-height:1.6">
+              <p>Xin chào {{safeRecipient}},</p>
+              <p>Thành viên <strong>{{safeMember}}</strong> ({{safeEmail}}) đã <strong>từ chối</strong> lời mời tham gia dự án.</p>
+              <p>Mã dự án: <strong>{{projectId}}</strong>.</p>
+              <p>Bạn có thể liên hệ trực tiếp với thành viên hoặc gửi lại lời mời nếu cần thiết.</p>
+            </body>
+            </html>
+            """;
+
+        return SendMessageAsync(
+            recipientEmail,
+            "Lời mời tham gia dự án đã bị từ chối",
+            body);
+    }
+
+    public Task<bool> SendOrganizationInvitationAsync(
+        string recipientEmail,
+        string recipientName,
+        string orgName,
+        string inviterName,
+        string roleName,
+        string inviteAcceptUrl)
+    {
+        var safeRecipient = WebUtility.HtmlEncode(recipientName);
+        var safeOrg = WebUtility.HtmlEncode(orgName);
+        var safeInviter = WebUtility.HtmlEncode(inviterName);
+        var safeRole = WebUtility.HtmlEncode(roleName);
+        var safeUrl = WebUtility.HtmlEncode(inviteAcceptUrl);
+        const string notificationsUrl = "http://projectmgmt_develop.dev.com/notifications";
+        const string localNotificationsUrl = "http://localhost:4200/notifications";
+
+        var body = $$"""
+            <!doctype html>
+            <html lang="vi">
+            <body style="font-family:Arial,sans-serif;color:#0f172a;line-height:1.6;background:#f8fafc;padding:24px">
+              <div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px">
+                <h2 style="margin:0 0 12px 0;color:#0f172a;font-size:20px">Lời mời tham gia tổ chức {{safeOrg}}</h2>
+                <p style="margin:0 0 12px 0">Xin chào <strong>{{safeRecipient}}</strong>,</p>
+                <p style="margin:0 0 12px 0">
+                  <strong>{{safeInviter}}</strong> đã mời bạn tham gia tổ chức <strong>{{safeOrg}}</strong> trên Hệ thống Quản lý Dự án Scrum tích hợp AI với vai trò <strong>{{safeRole}}</strong>.
+                </p>
+                <div style="margin:24px 0">
+                  <a href="{{safeUrl}}" style="display:inline-block;background:#0f172a;color:#ffffff;text-decoration:none;font-weight:700;padding:12px 22px;border-radius:8px;margin-right:10px">
+                    Chấp nhận &amp; Tham gia tổ chức
+                  </a>
+                  <a href="{{notificationsUrl}}" style="display:inline-block;background:#f1f5f9;color:#0f172a;text-decoration:none;font-weight:600;padding:12px 18px;border-radius:8px;border:1px solid #cbd5e1">
+                    Mở Trung tâm Thông báo
+                  </a>
+                </div>
+                <p style="margin:12px 0 4px 0;font-size:13px;color:#475569">
+                  Link tham gia trực tiếp: <a href="{{safeUrl}}" style="color:#2563eb">{{safeUrl}}</a>
+                </p>
+                <p style="margin:4px 0 0 0;font-size:13px;color:#64748b">
+                  Hoặc truy cập <a href="{{notificationsUrl}}" style="color:#2563eb">{{notificationsUrl}}</a> (Localhost: <a href="{{localNotificationsUrl}}" style="color:#2563eb">{{localNotificationsUrl}}</a>) để xác nhận trong mục Thông báo hoặc Trang chủ.
+                </p>
+              </div>
+            </body>
+            </html>
+            """;
+
+        return SendMessageAsync(
+            recipientEmail,
+            $"Lời mời tham gia tổ chức {orgName}",
+            body);
+    }
+
     private async Task<bool> SendMessageAsync(
         string recipientEmail,
         string subject,
@@ -250,13 +357,23 @@ public class EmailService : IEmailService
         return $$"""
             <!doctype html>
             <html lang="vi">
-            <body style="font-family:Arial,sans-serif;color:#111;line-height:1.6">
-              <p>Xin chào {{safeName}},</p>
-              <p>{{safeAction}}.</p>
-              <p>Mã dự án: <strong>{{projectId}}</strong>.</p>
-              {{roleParagraph}}
-              <p>Đăng nhập vào Hệ thống Quản lý Dự án Scrum tích hợp AI để xem chi tiết.</p>
-              <p>Nếu bạn cho rằng đây là nhầm lẫn, hãy liên hệ quản trị viên dự án.</p>
+            <body style="font-family:Arial,sans-serif;color:#0f172a;line-height:1.6;background:#f8fafc;padding:24px">
+              <div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px">
+                <h2 style="margin:0 0 12px 0;color:#0f172a;font-size:20px">{{safeAction}}</h2>
+                <p>Xin chào <strong>{{safeName}}</strong>,</p>
+                <p>{{safeAction}} trên Hệ thống Quản lý Dự án Scrum tích hợp AI.</p>
+                <p>Mã dự án: <strong>{{projectId}}</strong>.</p>
+                {{roleParagraph}}
+                <div style="margin:24px 0">
+                  <a href="http://projectmgmt_develop.dev.com/projects/{{projectId}}/summary" style="display:inline-block;background:#0f172a;color:#ffffff;text-decoration:none;font-weight:700;padding:12px 22px;border-radius:8px;margin-right:10px">
+                    Mở Dự án ngay
+                  </a>
+                  <a href="http://projectmgmt_develop.dev.com/notifications" style="display:inline-block;background:#f1f5f9;color:#0f172a;text-decoration:none;font-weight:600;padding:12px 18px;border-radius:8px;border:1px solid #cbd5e1">
+                    Xem Thông báo
+                  </a>
+                </div>
+                <p style="font-size:13px;color:#64748b">Nếu bạn cho rằng đây là nhầm lẫn, hãy liên hệ quản trị viên dự án.</p>
+              </div>
             </body>
             </html>
             """;

@@ -24,11 +24,6 @@ import { ISSUE_SECTION_STYLES } from './issue-section.styles';
   template: `
     <h2>Bình luận <span class="muted">({{ count() }})</span></h2>
     @if (error()) { <p role="alert" class="error">{{ error() }}</p> }
-    @if (canWrite()) {
-      <label class="muted" for="new-comment">Viết bình luận — gõ &#64;Tên để nhắc thành viên</label>
-      <textarea id="new-comment" [(ngModel)]="draft" rows="3" maxlength="20000"></textarea>
-      <div class="row"><button type="button" (click)="post()" [disabled]="busy() || !draft.trim()">{{ busy() ? 'Đang gửi…' : 'Gửi bình luận' }}</button></div>
-    }
     @if (loading()) { <p class="muted" role="status">Đang tải bình luận…</p> }
     @for (thread of threads(); track thread.comment.id) {
       <article>
@@ -71,6 +66,13 @@ import { ISSUE_SECTION_STYLES } from './issue-section.styles';
       </article>
     } @empty {
       @if (!loading()) { <p class="muted">Chưa có bình luận.</p> }
+    }
+    @if (canWrite()) {
+      <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e2e8f0;">
+        <label class="muted" for="new-comment">Viết bình luận — gõ &#64;Tên để nhắc thành viên</label>
+        <textarea id="new-comment" [(ngModel)]="draft" rows="3" maxlength="20000" placeholder="Viết phản hồi hoặc trao đổi..."></textarea>
+        <div class="row"><button type="button" (click)="post()" [disabled]="busy() || !draft.trim()">{{ busy() ? 'Đang gửi…' : 'Gửi bình luận' }}</button></div>
+      </div>
     }
   `
 })

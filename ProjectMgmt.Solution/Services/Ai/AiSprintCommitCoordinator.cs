@@ -1,0 +1,1537 @@
+namespace ProjectMgmt.Solution.Services.Ai;
+
+using System.Globalization;
+using System.Text;
+using System.Text.Json;
+using DeliveryIntelligence.Application.IServices;
+using DeliveryIntelligence.Domain.Entities;
+using DeliveryIntelligence.Infrastructure;
+using IdentityExperience.Application.IServices;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Planning.Domain.Entities;
+using Planning.Infrastructure;
+using ProjectMgmt.Core.Security;
+using ProjectMgmt.Core.Staging;
+using ProjectMgmt.IdentityAccess.Contracts;
+using ProjectMgmt.Solution.Dtos.Ai;
+
+public interface IAiSprintCommitCoordinator
+{
+    Task<AiApplySprintProposalResponse> ApplySprintProposalAsync(
+        AiApplySprintProposalRequest request,
+        IProjectScopeContext scope,
+        CancellationToken ct = default);
+}
+
+public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
+{
+    private readonly PlanningDbContext _planningDb;
+    private readonly DeliveryIntelligenceDbContext _deliveryDb;
+    private readonly IStateStagingService _stagingService;
+    private readonly IUserLookupService _userLookup;
+    private readonly ISkillCatalogReader? _skillCatalog;
+    private readonly IRoleServices? _roleServices;
+    private readonly ILogger<AiSprintCommitCoordinator> _logger;
+
+    [ActivatorUtilitiesConstructor]
+    public AiSprintCommitCoordinator(
+        PlanningDbContext planningDb,
+        DeliveryIntelligenceDbContext deliveryDb,
+        IStateStagingService stagingService,
+        IUserLookupService userLookup,
+        ILogger<AiSprintCommitCoordinator> logger,
+        ISkillCatalogReader? skillCatalog = null,
+        IRoleServices? roleServices = null)
+    {
+        _planningDb = planningDb;
+        _deliveryDb = deliveryDb;
+        _stagingService = stagingService;
+        _userLookup = userLookup;
+        _skillCatalog = skillCatalog;
+        _roleServices = roleServices;
+        _logger = logger;
+    }
+
+    public async Task<AiApplySprintProposalResponse> ApplySprintProposalAsync(
+        AiApplySprintProposalRequest request,
+        IProjectScopeContext scope,
+        CancellationToken ct = default)
+    {
+        ProjectScopeGuard.EnsureValidScope(scope);
+
+        if (!request.PushToBacklog && string.IsNullOrWhiteSpace(request.SprintGoal) && (!request.TargetSprintId.HasValue || request.TargetSprintId.Value == Guid.Empty))
+        {
+            return Failure("INVALID_SPRINT_GOAL", "Sprint Goal không được để trống.");
+        }
+
+        var effectiveGoal = string.IsNullOrWhiteSpace(request.SprintGoal)
+            ? "Bổ sung hạng mục công việc vào kho Product Backlog"
+            : InputGuardrail.StripUnsafeHtmlOrScript(request.SprintGoal);
+
+        if (request.Tasks == null || request.Tasks.Count == 0)
+        {
+            return Failure("EMPTY_TASK_LIST", "Danh sách công việc đề xuất không được để trống.");
+        }
+
+        try
+        {
+            var project = await _planningDb.Projects
+                .FirstOrDefaultAsync(p => p.Id == scope.ProjectId && !p.IsDeleted && !p.IsArchived, ct);
+
+            if (project == null)
+            {
+                return Failure("PROJECT_NOT_FOUND", "Dự án không tồn tại hoặc đã bị lưu trữ/xóa.");
+            }
+
+            ProjectScopeGuard.Validate(scope, project.OrgId, project.Id);
+
+            var activeConfig = await ProjectActiveConfigResolver.ResolveAsync(_planningDb, _deliveryDb, project.Id, ct);
+
+            var issueTypes = await _planningDb.IssueTypes.AsNoTracking()
+                .Where(t => t.ProjectId == project.Id)
+                .OrderBy(t => t.OrderIndex)
+                .ToListAsync(ct);
+
+            var initialStatus = activeConfig.Statuses
+                .FirstOrDefault(s => s.Name.Equals(activeConfig.InitialStatusName, StringComparison.OrdinalIgnoreCase))
+                ?? activeConfig.Statuses.FirstOrDefault();
+            if (initialStatus == null || issueTypes.Count == 0)
+            {
+                return Failure("PROJECT_CONFIG_MISSING", "Dự án chưa được cấu hình loại công việc hoặc trạng thái quy trình.");
+            }
+
+            var defaultPriority = activeConfig.ResolvePriorityEntity(null);
+
+            var epicIssueType = issueTypes.FirstOrDefault(t => !t.IsSubtask && t.Name.Equals("Epic", StringComparison.OrdinalIgnoreCase));
+            var subtaskIssueType = issueTypes.FirstOrDefault(t => t.IsSubtask)
+                ?? issueTypes.FirstOrDefault(t => t.Name.Contains("Sub", StringComparison.OrdinalIgnoreCase));
+            var defaultParentType = issueTypes.FirstOrDefault(t => !t.IsSubtask && !t.Name.Equals("Epic", StringComparison.OrdinalIgnoreCase))
+                ?? issueTypes.First();
+
+            var now = DateTime.UtcNow;
+
+            // 1. Resolve or create target Sprint (unless pushing directly to Product Backlog)
+            Sprint? targetSprint = null;
+            if (!request.PushToBacklog)
+            {
+                if (request.TargetSprintId.HasValue && request.TargetSprintId.Value != Guid.Empty)
+                {
+                    var requestedSprint = await _planningDb.Sprints
+                        .FirstOrDefaultAsync(s => s.Id == request.TargetSprintId.Value && s.ProjectId == project.Id, ct);
+                    if (requestedSprint == null)
+                    {
+                        return Failure("INVALID_TARGET_SPRINT", "Sprint đích không tồn tại trong dự án này.");
+                    }
+
+                    if (!string.Equals(requestedSprint.Status, "Completed", StringComparison.OrdinalIgnoreCase))
+                    {
+                        targetSprint = requestedSprint;
+                    }
+                }
+
+                targetSprint ??= await _planningDb.Sprints
+                    .Where(s => s.ProjectId == project.Id && s.Status == "Planned")
+                    .OrderBy(s => s.OrderIndex)
+                    .ThenBy(s => s.StartDate)
+                    .FirstOrDefaultAsync(ct);
+
+                if (targetSprint == null)
+                {
+                    if (string.IsNullOrWhiteSpace(request.SprintGoal))
+                    {
+                        return Failure("INVALID_SPRINT_GOAL", "Sprint Goal không được để trống.");
+                    }
+
+                    var sprintCount = await _planningDb.Sprints.CountAsync(s => s.ProjectId == project.Id, ct);
+                    targetSprint = new Sprint
+                    {
+                        Id = Guid.NewGuid(),
+                        ProjectId = project.Id,
+                        Name = $"{project.ProjectKey} Sprint {sprintCount + 1}",
+                        Goal = effectiveGoal,
+                        Status = "Planned",
+                        StartDate = DateOnly.FromDateTime(now),
+                        EndDate = DateOnly.FromDateTime(now.AddDays(14)),
+                        OrderIndex = sprintCount,
+                        CreatedAt = now,
+                        UpdatedAt = now
+                    };
+                    _planningDb.Sprints.Add(targetSprint);
+                }
+                else
+                {
+                    if (!string.IsNullOrWhiteSpace(request.SprintGoal))
+                    {
+                        targetSprint.Goal = InputGuardrail.StripUnsafeHtmlOrScript(request.SprintGoal);
+                    }
+                    else if (string.IsNullOrWhiteSpace(targetSprint.Goal))
+                    {
+                        return Failure("INVALID_SPRINT_GOAL", "Sprint Goal không được để trống.");
+                    }
+                    targetSprint.UpdatedAt = now;
+                }
+            }
+
+            Guid? targetSprintIdForIssues = request.PushToBacklog ? null : targetSprint?.Id;
+            string destinationLabel = request.PushToBacklog ? "Product Backlog" : (targetSprint?.Name ?? "Sprint");
+
+            // 2. Load active users, docs, and skill catalog for assignee/spec/skill enrichment
+            var allUsers = await _userLookup.GetAllActiveDisplayInfoAsync();
+            var revalidation = await PreCommitRevalidateAsync(
+                project,
+                request,
+                activeConfig,
+                targetSprintIdForIssues,
+                allUsers,
+                ct);
+
+            var eligibleUsers = revalidation.EligibleUsers;
+            var userById = eligibleUsers.ToDictionary(u => u.UserId);
+            var projectDocs = await _planningDb.ProjectDocuments.AsNoTracking()
+                .Where(d => d.ProjectId == project.Id && !d.IsDirectory)
+                .Select(d => new ProjectDocMeta(d.Id, d.Name, d.Title, d.RelativePath))
+                .ToListAsync(ct);
+            var docById = projectDocs.ToDictionary(d => d.Id);
+            var skillCatalogItems = _skillCatalog != null
+                ? await _skillCatalog.GetSkillsAsync()
+                : [];
+            var skillByNormalizedName = BuildSkillLookup(skillCatalogItems);
+
+            // 3. Load existing Epics in project
+            var existingEpics = epicIssueType != null
+                ? await _deliveryDb.Issues.AsNoTracking()
+                    .Where(i => i.ProjectId == project.Id && !i.IsDeleted && i.IssueTypeId == epicIssueType.Id)
+                    .ToListAsync(ct)
+                : [];
+
+            var epicIdByTitle = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+            foreach (var ep in existingEpics)
+            {
+                if (!string.IsNullOrWhiteSpace(ep.Title) && !epicIdByTitle.ContainsKey(ep.Title.Trim()))
+                {
+                    epicIdByTitle[ep.Title.Trim()] = ep.Id;
+                }
+            }
+
+            var maxIssueNumber = await _deliveryDb.Issues
+                .Where(i => i.ProjectId == project.Id)
+                .MaxAsync(i => (int?)i.IssueNumber, ct) ?? 0;
+            var currentIssueNumber = Math.Max(project.IssueCounter, maxIssueNumber);
+
+            var maxRank = await _deliveryDb.Issues
+                .Where(i => i.ProjectId == project.Id)
+                .MaxAsync(i => (decimal?)i.RankOrder, ct) ?? 0m;
+
+            var epicTypeId = epicIssueType?.Id;
+            var backlogIssues = await _deliveryDb.Issues
+                .Where(i => i.ProjectId == project.Id && i.SprintId == null && !i.IsDeleted && i.ParentId == null && (!epicTypeId.HasValue || i.IssueTypeId != epicTypeId.Value))
+                .ToListAsync(ct);
+            var backlogById = backlogIssues.ToDictionary(i => i.Id);
+            var backlogByNumber = backlogIssues.GroupBy(i => i.IssueNumber).ToDictionary(g => g.Key, g => g.First());
+            var movedBacklogIds = new HashSet<Guid>();
+
+            var backlogParentIds = backlogIssues.Select(i => i.Id).ToList();
+            var existingBacklogSubtasks = backlogParentIds.Count > 0
+                ? await _deliveryDb.Issues
+                    .Where(i => i.ProjectId == project.Id && i.ParentId.HasValue && backlogParentIds.Contains(i.ParentId.Value) && !i.IsDeleted)
+                    .ToListAsync(ct)
+                : [];
+            var existingCriteriaByIssue = backlogParentIds.Count > 0
+                ? (await _deliveryDb.AcceptanceCriteria.AsNoTracking()
+                    .Where(c => backlogParentIds.Contains(c.IssueId))
+                    .ToListAsync(ct))
+                    .GroupBy(c => c.IssueId)
+                    .ToDictionary(g => g.Key, g => g.Select(c => c.Content).ToHashSet(StringComparer.OrdinalIgnoreCase))
+                : new Dictionary<Guid, HashSet<string>>();
+            var existingIssueLabelsByIssue = backlogParentIds.Count > 0
+                ? (await _deliveryDb.IssueLabels.AsNoTracking()
+                    .Where(il => backlogParentIds.Contains(il.IssueId))
+                    .ToListAsync(ct))
+                    .GroupBy(il => il.IssueId)
+                    .ToDictionary(g => g.Key, g => g.Select(il => il.LabelId).ToHashSet())
+                : new Dictionary<Guid, HashSet<Guid>>();
+            var existingSpecLinksByIssue = backlogParentIds.Count > 0
+                ? (await _planningDb.SpecStoryLinks.AsNoTracking()
+                    .Where(sl => backlogParentIds.Contains(sl.IssueId))
+                    .ToListAsync(ct))
+                    .GroupBy(sl => sl.IssueId)
+                    .ToDictionary(g => g.Key, g => g.Select(sl => sl.DocumentId).ToHashSet())
+                : new Dictionary<Guid, HashSet<Guid>>();
+            var existingSkillIdsByIssue = backlogParentIds.Count > 0
+                ? (await _deliveryDb.IssueRequiredSkills.AsNoTracking()
+                    .Where(rs => backlogParentIds.Contains(rs.IssueId))
+                    .ToListAsync(ct))
+                    .GroupBy(rs => rs.IssueId)
+                    .ToDictionary(g => g.Key, g => g.Select(rs => rs.SkillId).ToHashSet())
+                : new Dictionary<Guid, HashSet<Guid>>();
+
+            var existingLabels = await _deliveryDb.Labels
+                .Where(l => l.ProjectId == project.Id)
+                .ToListAsync(ct);
+            var labelByName = existingLabels
+                .GroupBy(l => l.Name.Trim().TrimStart('#'), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+            var newIssues = new List<Issue>();
+            var newLabels = new List<Label>();
+            var newIssueLabels = new List<IssueLabel>();
+            var newCriteria = new List<AcceptanceCriteria>();
+            var newSpecLinks = new List<SpecStoryLink>();
+            var newRequiredSkills = new List<IssueRequiredSkill>();
+            var newLogs = new List<ActivityLog>();
+            var createdSummaries = new List<AiCreatedIssueItemDto>();
+            var createdTaskCount = 0;
+            var createdSubtaskCount = 0;
+            var movedFromBacklogCount = 0;
+            var committedStoryPoints = 0m;
+            var aiLogId = Guid.NewGuid();
+
+            foreach (var taskDto in request.Tasks)
+            {
+                if (revalidation.SkippedTasks.Contains(taskDto))
+                {
+                    continue;
+                }
+
+                var safeTaskTitle = InputGuardrail.StripUnsafeHtmlOrScript(taskDto.Title);
+                if (string.IsNullOrWhiteSpace(safeTaskTitle))
+                {
+                    continue;
+                }
+                committedStoryPoints += Math.Max(0m, taskDto.StoryPoints);
+                var safeTaskDescription = InputGuardrail.StripUnsafeHtmlOrScript(taskDto.Description);
+
+                // Resolve EpicId
+                Guid? resolvedEpicId = null;
+                if (taskDto.EpicId.HasValue && existingEpics.Any(e => e.Id == taskDto.EpicId.Value))
+                {
+                    resolvedEpicId = taskDto.EpicId.Value;
+                }
+                else if (!string.IsNullOrWhiteSpace(taskDto.EpicTitle))
+                {
+                    var cleanEpicTitle = InputGuardrail.StripUnsafeHtmlOrScript(taskDto.EpicTitle);
+                    if (string.IsNullOrWhiteSpace(cleanEpicTitle)) cleanEpicTitle = "Epic AI";
+                    if (epicIdByTitle.TryGetValue(cleanEpicTitle, out var cachedEpicId))
+                    {
+                        resolvedEpicId = cachedEpicId;
+                    }
+                    else if (epicIssueType != null)
+                    {
+                        currentIssueNumber++;
+                        maxRank += 1000m;
+                        var newEpic = new Issue
+                        {
+                            Id = Guid.NewGuid(),
+                            ProjectId = project.Id,
+                            IssueNumber = currentIssueNumber,
+                            SprintId = null,
+                            ReporterId = scope.UserId,
+                            StatusId = initialStatus.Id,
+                            IssueTypeId = epicIssueType.Id,
+                            PriorityId = defaultPriority?.Id,
+                            Title = cleanEpicTitle,
+                            Description = $"Epic được khởi tạo tự động từ Trợ Lý AI cho {destinationLabel}.",
+                            StoryPoints = 0,
+                            RankOrder = maxRank,
+                            IsAiGenerated = true,
+                            AiGenerationLogId = aiLogId,
+                            IsDeleted = false,
+                            CreatedAt = now,
+                            UpdatedAt = now
+                        };
+                        newIssues.Add(newEpic);
+                        epicIdByTitle[cleanEpicTitle] = newEpic.Id;
+                        resolvedEpicId = newEpic.Id;
+                    }
+                }
+
+                // Resolve IssueType from active project IssueTypes
+                var resolvedTypeName = activeConfig.ResolveIssueTypeName(taskDto.Type);
+                var parentIssueType = issueTypes.FirstOrDefault(t =>
+                    !t.IsSubtask && t.Name.Equals(resolvedTypeName, StringComparison.OrdinalIgnoreCase))
+                    ?? defaultParentType;
+
+                // Resolve Priority from active project Priorities (respects custom priority schemes such as Urgent/High/Normal/Low)
+                var matchedPriority = activeConfig.ResolvePriorityEntity(taskDto.Priority) ?? defaultPriority;
+
+                // Resolve Status from active project WorkflowStatuses (respects custom initial/active statuses)
+                var resolvedStatusName = activeConfig.ResolveStatusName(taskDto.Status);
+                var matchedStatus = activeConfig.Statuses.FirstOrDefault(s =>
+                    s.Name.Equals(resolvedStatusName, StringComparison.OrdinalIgnoreCase)) ?? initialStatus;
+
+                // Resolve Assignee (chỉ chấp nhận thành viên còn hợp lệ trong dự án)
+                var resolvedAssigneeId = revalidation.UnassignedTasks.Contains(taskDto)
+                    ? null
+                    : ResolveAssigneeId(taskDto.AssigneeUserId, taskDto.AssigneeName, userById, eligibleUsers);
+
+                // Match existing Product Backlog item so it is MOVED into Sprint instead of duplicated
+                Issue? matchedBacklogIssue = null;
+                if (!revalidation.ForceCreateNewTasks.Contains(taskDto))
+                {
+                    if (taskDto.SourceBacklogIssueId.HasValue &&
+                        backlogById.TryGetValue(taskDto.SourceBacklogIssueId.Value, out var byIdCandidate) &&
+                        !movedBacklogIds.Contains(byIdCandidate.Id))
+                    {
+                        matchedBacklogIssue = byIdCandidate;
+                    }
+                    else if (!string.IsNullOrWhiteSpace(taskDto.SourceBacklogIssueKey))
+                    {
+                        var dashIdx = taskDto.SourceBacklogIssueKey.LastIndexOf('-');
+                        var numStr = dashIdx >= 0 ? taskDto.SourceBacklogIssueKey[(dashIdx + 1)..] : taskDto.SourceBacklogIssueKey;
+                        if (int.TryParse(numStr.Trim(), out var issueNum) &&
+                            backlogByNumber.TryGetValue(issueNum, out var byKeyCandidate) &&
+                            !movedBacklogIds.Contains(byKeyCandidate.Id))
+                        {
+                            matchedBacklogIssue = byKeyCandidate;
+                        }
+                    }
+                    else
+                    {
+                        var normalizedTitle = taskDto.Title.Trim();
+                        matchedBacklogIssue = backlogIssues.FirstOrDefault(b =>
+                            !movedBacklogIds.Contains(b.Id) &&
+                            string.Equals(b.Title?.Trim(), normalizedTitle, StringComparison.OrdinalIgnoreCase));
+                    }
+                }
+
+                Guid parentIssueId;
+                string parentIssueKey;
+                string parentTitle;
+                var estHours = Math.Clamp(Math.Max(0m, taskDto.EstimatedHours), 0m, 160m);
+                var remHours = Math.Clamp(taskDto.RemainingHours > 0m ? taskDto.RemainingHours : estHours, 0m, 160m);
+                var points = Math.Clamp(Math.Max(0m, taskDto.StoryPoints), 0m, 21m);
+
+                if (matchedBacklogIssue != null)
+                {
+                    movedBacklogIds.Add(matchedBacklogIssue.Id);
+                    if (!request.PushToBacklog)
+                    {
+                        movedFromBacklogCount++;
+                    }
+                    parentIssueId = matchedBacklogIssue.Id;
+                    parentIssueKey = $"{project.ProjectKey}-{matchedBacklogIssue.IssueNumber}";
+
+                    matchedBacklogIssue.SprintId = targetSprintIdForIssues;
+                    if (resolvedEpicId.HasValue) matchedBacklogIssue.EpicId = resolvedEpicId.Value;
+                    matchedBacklogIssue.StatusId = matchedStatus.Id;
+                    matchedBacklogIssue.IssueTypeId = parentIssueType.Id;
+                    if (matchedPriority != null) matchedBacklogIssue.PriorityId = matchedPriority.Id;
+                    if (resolvedAssigneeId.HasValue)
+                    {
+                        matchedBacklogIssue.AssigneeId = resolvedAssigneeId.Value;
+                        matchedBacklogIssue.IsAiAssigned = true;
+                    }
+                    else if (revalidation.UnassignedTasks.Contains(taskDto))
+                    {
+                        matchedBacklogIssue.AssigneeId = null;
+                        matchedBacklogIssue.IsAiAssigned = false;
+                    }
+                    matchedBacklogIssue.Title = safeTaskTitle;
+                    if (!string.IsNullOrWhiteSpace(safeTaskDescription))
+                    {
+                        matchedBacklogIssue.Description = safeTaskDescription;
+                    }
+                    matchedBacklogIssue.StoryPoints = points;
+                    matchedBacklogIssue.EstimatedHours = estHours;
+                    matchedBacklogIssue.RemainingHours = remHours;
+                    matchedBacklogIssue.OriginalEstimateMinutes = (int)Math.Round(estHours * 60m, MidpointRounding.AwayFromZero);
+                    matchedBacklogIssue.IsAiGenerated = true;
+                    matchedBacklogIssue.AiGenerationLogId = aiLogId;
+                    matchedBacklogIssue.UpdatedAt = now;
+                    parentTitle = matchedBacklogIssue.Title;
+
+                    // Also move any pre-existing child subtasks belonging to this backlog item into the target destination
+                    foreach (var existingChild in existingBacklogSubtasks.Where(s => s.ParentId == matchedBacklogIssue.Id))
+                    {
+                        existingChild.SprintId = targetSprintIdForIssues;
+                        existingChild.UpdatedAt = now;
+                    }
+
+                    createdTaskCount++;
+                    createdSummaries.Add(new AiCreatedIssueItemDto
+                    {
+                        IssueId = matchedBacklogIssue.Id,
+                        IssueKey = parentIssueKey,
+                        Title = matchedBacklogIssue.Title,
+                        Type = parentIssueType.Name,
+                        StoryPoints = matchedBacklogIssue.StoryPoints
+                    });
+                }
+                else
+                {
+                    currentIssueNumber++;
+                    maxRank += 1000m;
+                    parentIssueId = Guid.NewGuid();
+                    parentIssueKey = $"{project.ProjectKey}-{currentIssueNumber}";
+
+                    var parentIssue = new Issue
+                    {
+                        Id = parentIssueId,
+                        ProjectId = project.Id,
+                        IssueNumber = currentIssueNumber,
+                        SprintId = targetSprintIdForIssues,
+                        EpicId = resolvedEpicId,
+                        AssigneeId = resolvedAssigneeId,
+                        ReporterId = scope.UserId,
+                        StatusId = matchedStatus.Id,
+                        IssueTypeId = parentIssueType.Id,
+                        PriorityId = matchedPriority?.Id,
+                        Title = safeTaskTitle,
+                        Description = string.IsNullOrWhiteSpace(safeTaskDescription) ? null : safeTaskDescription,
+                        StoryPoints = points,
+                        EstimatedHours = estHours,
+                        RemainingHours = remHours,
+                        OriginalEstimateMinutes = (int)Math.Round(estHours * 60m, MidpointRounding.AwayFromZero),
+                        TimeSpentMinutes = 0,
+                        RankOrder = maxRank,
+                        IsAiGenerated = true,
+                        AiGenerationLogId = aiLogId,
+                        IsAiAssigned = resolvedAssigneeId.HasValue,
+                        IsDeleted = false,
+                        CreatedAt = now,
+                        UpdatedAt = now
+                    };
+
+                    parentTitle = parentIssue.Title;
+                    newIssues.Add(parentIssue);
+                    createdTaskCount++;
+                    createdSummaries.Add(new AiCreatedIssueItemDto
+                    {
+                        IssueId = parentIssue.Id,
+                        IssueKey = parentIssueKey,
+                        Title = parentIssue.Title,
+                        Type = parentIssueType.Name,
+                        StoryPoints = parentIssue.StoryPoints
+                    });
+                }
+
+                // Persist project Labels, Spec links, Suggested Skills, Acceptance Criteria & AI Rationale Log
+                AttachLabels(
+                    taskDto.Tags,
+                    project.Id,
+                    parentIssueId,
+                    existingIssueLabelsByIssue,
+                    labelByName,
+                    newLabels,
+                    newIssueLabels);
+
+                AttachSpecLinks(
+                    taskDto.DocumentId,
+                    taskDto.DocumentCitations,
+                    projectDocs,
+                    docById,
+                    parentIssueId,
+                    existingSpecLinksByIssue,
+                    newSpecLinks,
+                    now);
+
+                AttachRequiredSkills(
+                    taskDto.SuggestedSkills,
+                    skillByNormalizedName,
+                    parentIssueId,
+                    existingSkillIdsByIssue,
+                    newRequiredSkills);
+
+                AppendAcceptanceCriteria(
+                    taskDto.AcceptanceCriteria,
+                    parentIssueId,
+                    existingCriteriaByIssue,
+                    newCriteria,
+                    now);
+
+                newLogs.Add(new ActivityLog
+                {
+                    Id = Guid.NewGuid(),
+                    IssueId = parentIssueId,
+                    UserId = scope.UserId,
+                    Action = request.PushToBacklog
+                        ? "AiBacklogTaskPushed"
+                        : (matchedBacklogIssue != null ? "AiSprintBacklogItemMovedToSprint" : "AiSprintTaskCommitted"),
+                    Detail = BuildAiActivityDetail(
+                        request.SessionId,
+                        targetSprintIdForIssues,
+                        destinationLabel,
+                        request.PushToBacklog,
+                        movedFromBacklog: !request.PushToBacklog && matchedBacklogIssue != null,
+                        aiRationale: taskDto.AiRationale,
+                        subtaskRole: null,
+                        documentCitations: taskDto.DocumentCitations,
+                        suggestedSkills: taskDto.SuggestedSkills),
+                    Source = "AI",
+                    CreatedAt = now
+                });
+
+                // Add Subtasks if Subtask IssueType exists
+                if (subtaskIssueType != null && taskDto.Subtasks != null)
+                {
+                    var existingChildTitles = existingBacklogSubtasks
+                        .Where(s => s.ParentId == parentIssueId)
+                        .Select(s => s.Title.Trim())
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var subDto in taskDto.Subtasks)
+                    {
+                        var rawSubTitle = InputGuardrail.StripUnsafeHtmlOrScript(subDto.Title);
+                        if (string.IsNullOrWhiteSpace(rawSubTitle)) continue;
+
+                        var cleanSubRole = InputGuardrail.StripUnsafeHtmlOrScript(subDto.Role);
+                        var safeSubDescription = InputGuardrail.StripUnsafeHtmlOrScript(subDto.Description);
+                        var prefixedSubTitle = !string.IsNullOrWhiteSpace(cleanSubRole) && !rawSubTitle.StartsWith("[", StringComparison.Ordinal)
+                            ? $"[{cleanSubRole}] {rawSubTitle}"
+                            : rawSubTitle;
+
+                        if (existingChildTitles.Contains(rawSubTitle) || existingChildTitles.Contains(prefixedSubTitle))
+                        {
+                            continue;
+                        }
+
+                        currentIssueNumber++;
+                        maxRank += 1000m;
+                        var subId = Guid.NewGuid();
+                        var subHours = Math.Clamp(Math.Max(0m, subDto.EstimatedHours), 0m, 80m);
+
+                        var subAssigneeId = revalidation.UnassignedSubtasks.Contains(subDto)
+                            ? null
+                            : ResolveAssigneeId(subDto.AssigneeUserId, subDto.AssigneeName, userById, eligibleUsers)
+                              ?? (revalidation.UnassignedTasks.Contains(taskDto) ? null : resolvedAssigneeId);
+
+                        var subStatusName = activeConfig.ResolveStatusName(subDto.Status);
+                        var subStatus = activeConfig.Statuses.FirstOrDefault(s =>
+                            s.Name.Equals(subStatusName, StringComparison.OrdinalIgnoreCase)) ?? matchedStatus;
+                        var subPriority = activeConfig.ResolvePriorityEntity(subDto.Priority) ?? matchedPriority;
+
+                        var subIssue = new Issue
+                        {
+                            Id = subId,
+                            ProjectId = project.Id,
+                            IssueNumber = currentIssueNumber,
+                            SprintId = targetSprintIdForIssues,
+                            ParentId = parentIssueId,
+                            EpicId = resolvedEpicId,
+                            AssigneeId = subAssigneeId,
+                            ReporterId = scope.UserId,
+                            StatusId = subStatus.Id,
+                            IssueTypeId = subtaskIssueType.Id,
+                            PriorityId = subPriority?.Id,
+                            Title = prefixedSubTitle,
+                            Description = !string.IsNullOrWhiteSpace(safeSubDescription)
+                                ? safeSubDescription
+                                : $"Công việc con thuộc {parentIssueKey}: {parentTitle}",
+                            StoryPoints = Math.Clamp(subDto.StoryPoints, 0, 13),
+                            EstimatedHours = subHours,
+                            RemainingHours = subHours,
+                            OriginalEstimateMinutes = (int)Math.Round(subHours * 60m, MidpointRounding.AwayFromZero),
+                            TimeSpentMinutes = 0,
+                            RankOrder = maxRank,
+                            IsAiGenerated = true,
+                            AiGenerationLogId = aiLogId,
+                            IsAiAssigned = subAssigneeId.HasValue,
+                            IsDeleted = false,
+                            CreatedAt = now,
+                            UpdatedAt = now
+                        };
+
+                        newIssues.Add(subIssue);
+                        createdSubtaskCount++;
+
+                        var subDocId = subDto.DocumentId ?? taskDto.DocumentId;
+                        var subCitations = subDto.DocumentCitations is { Count: > 0 }
+                            ? subDto.DocumentCitations
+                            : taskDto.DocumentCitations;
+
+                        if (!string.IsNullOrWhiteSpace(subDto.Role))
+                        {
+                            AttachLabels(
+                                [subDto.Role.Trim()],
+                                project.Id,
+                                subId,
+                                existingIssueLabelsByIssue,
+                                labelByName,
+                                newLabels,
+                                newIssueLabels);
+                        }
+
+                        AttachSpecLinks(
+                            subDocId,
+                            subCitations,
+                            projectDocs,
+                            docById,
+                            subId,
+                            existingSpecLinksByIssue,
+                            newSpecLinks,
+                            now);
+
+                        AppendAcceptanceCriteria(
+                            subDto.AcceptanceCriteria,
+                            subId,
+                            existingCriteriaByIssue,
+                            newCriteria,
+                            now);
+
+                        newLogs.Add(new ActivityLog
+                        {
+                            Id = Guid.NewGuid(),
+                            IssueId = subId,
+                            UserId = scope.UserId,
+                            Action = request.PushToBacklog ? "AiBacklogSubtaskPushed" : "AiSprintSubtaskCommitted",
+                            Detail = BuildAiActivityDetail(
+                                request.SessionId,
+                                targetSprintIdForIssues,
+                                destinationLabel,
+                                request.PushToBacklog,
+                                movedFromBacklog: false,
+                                aiRationale: taskDto.AiRationale,
+                                subtaskRole: subDto.Role,
+                                documentCitations: subCitations,
+                                suggestedSkills: null),
+                            Source = "AI",
+                            CreatedAt = now
+                        });
+
+                        createdSummaries.Add(new AiCreatedIssueItemDto
+                        {
+                            IssueId = subIssue.Id,
+                            IssueKey = $"{project.ProjectKey}-{subIssue.IssueNumber}",
+                            Title = subIssue.Title,
+                            Type = subtaskIssueType.Name,
+                            ParentIssueId = parentIssueId,
+                            StoryPoints = subIssue.StoryPoints
+                        });
+                    }
+                }
+            }
+
+            if (createdTaskCount == 0)
+            {
+                return Failure("NO_VALID_TASKS", "Không có công việc hợp lệ nào để lưu trữ.");
+            }
+
+            project.IssueCounter = currentIssueNumber;
+
+            // 4. Kế thừa công việc dở dang từ Sprint trước (Sprint Rollover) & Xử lý Task quá hạn (chỉ khi áp dụng vào Sprint)
+            var rolloverCount = 0;
+            var backlogReturnedCount = 0;
+            Sprint? previousSprint = null;
+            if (!request.PushToBacklog && targetSprint != null)
+            {
+                var today = DateOnly.FromDateTime(DateTime.UtcNow);
+                var doneStatusIds = activeConfig.DoneStatusIds;
+
+                // Tìm Sprint trước đó của dự án (Sprint có OrderIndex ngay trước targetSprint hoặc Sprint gần nhất)
+                previousSprint = await _planningDb.Sprints.AsNoTracking()
+                    .Where(s => s.ProjectId == project.Id && s.Id != targetSprint.Id && s.OrderIndex <= targetSprint.OrderIndex)
+                    .OrderByDescending(s => s.OrderIndex)
+                    .ThenByDescending(s => s.CreatedAt)
+                    .FirstOrDefaultAsync(ct);
+
+                if (previousSprint != null)
+                {
+                    var unfinishedIssues = await _deliveryDb.Issues
+                        .Where(i => i.SprintId == previousSprint.Id && !i.IsDeleted && !doneStatusIds.Contains(i.StatusId))
+                        .ToListAsync(ct);
+
+                    var bugTypeId = issueTypes.FirstOrDefault(t => t.Name.Contains("Bug", StringComparison.OrdinalIgnoreCase))?.Id;
+
+                    foreach (var unfinished in unfinishedIssues)
+                    {
+                        if (revalidation.SkippedIssueIds.Contains(unfinished.Id))
+                        {
+                            continue;
+                        }
+
+                        var isBug = bugTypeId.HasValue && unfinished.IssueTypeId == bugTypeId.Value;
+                        var isInProgress = unfinished.TimeSpentMinutes > 0 ||
+                                           activeConfig.Statuses.Any(s => s.Id == unfinished.StatusId && (s.IsActiveWork || s.Category.Equals("InProgress", StringComparison.OrdinalIgnoreCase)));
+                        var isOverdue = unfinished.DueDate.HasValue && unfinished.DueDate.Value < today;
+
+                        if (isBug || isInProgress || !isOverdue)
+                        {
+                            // Kế thừa sang Sprint mới (Rollover)
+                            unfinished.SprintId = targetSprint.Id;
+                            unfinished.UpdatedAt = now;
+
+                            // Nếu là Bug quá hạn, tăng mức ưu tiên lên cấp độ khẩn cấp nhất theo cấu hình dự án
+                            if (isBug && isOverdue)
+                            {
+                                var highestPrio = activeConfig.GetHighestUrgencyPriority();
+                                if (highestPrio != null)
+                                {
+                                    unfinished.PriorityId = highestPrio.Id;
+                                }
+                            }
+
+                            newLogs.Add(new ActivityLog
+                            {
+                                Id = Guid.NewGuid(),
+                                IssueId = unfinished.Id,
+                                UserId = scope.UserId,
+                                Action = "AiSprintRollover",
+                                Detail = JsonSerializer.Serialize(new
+                                {
+                                    fromSprintId = previousSprint.Id,
+                                    fromSprintName = previousSprint.Name,
+                                    toSprintId = targetSprint.Id,
+                                    toSprintName = targetSprint.Name,
+                                    reason = isBug ? "Bug tồn đọng nghiêm trọng được tự động kế thừa" : "Công việc dở dang được kế thừa tiếp tục hoàn thiện"
+                                }),
+                                Source = "AI",
+                                CreatedAt = now
+                            });
+
+                            rolloverCount++;
+                        }
+                        else
+                        {
+                            // Task thường chưa từng bắt đầu (TimeSpent = 0) nhưng đã quá hạn -> Chuyển về Product Backlog
+                            unfinished.SprintId = null;
+                            unfinished.UpdatedAt = now;
+
+                            newLogs.Add(new ActivityLog
+                            {
+                                Id = Guid.NewGuid(),
+                                IssueId = unfinished.Id,
+                                UserId = scope.UserId,
+                                Action = "AiSprintOverdueReturnedToBacklog",
+                                Detail = JsonSerializer.Serialize(new
+                                {
+                                    fromSprintId = previousSprint.Id,
+                                    fromSprintName = previousSprint.Name,
+                                    reason = "Công việc quá hạn từ Sprint cũ chưa bắt đầu, chuyển về Product Backlog để PO thẩm định lại độ ưu tiên và giá trị"
+                                }),
+                                Source = "AI",
+                                CreatedAt = now
+                            });
+
+                            backlogReturnedCount++;
+                        }
+                    }
+                }
+            }
+
+            if (newIssues.Count > 0)
+            {
+                await _deliveryDb.Issues.AddRangeAsync(newIssues, ct);
+            }
+            if (newLabels.Count > 0)
+            {
+                await _deliveryDb.Labels.AddRangeAsync(newLabels, ct);
+            }
+            if (newIssueLabels.Count > 0)
+            {
+                await _deliveryDb.IssueLabels.AddRangeAsync(newIssueLabels, ct);
+            }
+            if (newCriteria.Count > 0)
+            {
+                await _deliveryDb.AcceptanceCriteria.AddRangeAsync(newCriteria, ct);
+            }
+            if (newSpecLinks.Count > 0)
+            {
+                await _planningDb.SpecStoryLinks.AddRangeAsync(newSpecLinks, ct);
+            }
+            if (newRequiredSkills.Count > 0)
+            {
+                await _deliveryDb.IssueRequiredSkills.AddRangeAsync(newRequiredSkills, ct);
+            }
+            if (newLogs.Count > 0)
+            {
+                await _deliveryDb.ActivityLogs.AddRangeAsync(newLogs, ct);
+            }
+
+            await _planningDb.SaveChangesAsync(ct);
+            await _deliveryDb.SaveChangesAsync(ct);
+
+            if (!string.IsNullOrWhiteSpace(request.SessionId))
+            {
+                await _stagingService.RemoveProposalAsync(request.SessionId, ct);
+            }
+
+            var totalSp = committedStoryPoints;
+            var warningNote = revalidation.Warnings.Count > 0
+                ? $" (Lưu ý {revalidation.Warnings.Count} cảnh báo đối soát dữ liệu trước khi lưu)."
+                : string.Empty;
+
+            if (request.PushToBacklog)
+            {
+                return new AiApplySprintProposalResponse
+                {
+                    Success = true,
+                    Message = $"Đã đẩy thành công {createdTaskCount} công việc và {createdSubtaskCount} công việc con vào kho Product Backlog.{warningNote}",
+                    SprintId = Guid.Empty,
+                    SprintName = "Product Backlog",
+                    SprintGoal = effectiveGoal,
+                    CreatedIssueCount = createdTaskCount + createdSubtaskCount,
+                    CreatedTaskCount = createdTaskCount,
+                    CreatedSubtaskCount = createdSubtaskCount,
+                    MovedFromBacklogCount = 0,
+                    RolloverTaskCount = 0,
+                    BacklogReturnedCount = 0,
+                    TotalStoryPoints = totalSp,
+                    Warnings = revalidation.Warnings,
+                    CreatedIssues = createdSummaries
+                };
+            }
+
+            var movedSummary = movedFromBacklogCount > 0
+                ? $" (trong đó đã chuyển {movedFromBacklogCount} công việc từ Backlog sang)"
+                : string.Empty;
+            var rolloverSummary = rolloverCount > 0
+                ? $" Đã kế thừa {rolloverCount} hạng mục dở dang từ {previousSprint?.Name}."
+                : string.Empty;
+            var backlogSummary = backlogReturnedCount > 0
+                ? $" Đã chuyển {backlogReturnedCount} công việc quá hạn về Product Backlog để thẩm định lại."
+                : string.Empty;
+
+            return new AiApplySprintProposalResponse
+            {
+                Success = true,
+                Message = $"Đã áp dụng thành công {createdTaskCount} công việc{movedSummary} và {createdSubtaskCount} công việc con vào {targetSprint!.Name}.{rolloverSummary}{backlogSummary}{warningNote}",
+                SprintId = targetSprint.Id,
+                SprintName = targetSprint.Name,
+                SprintGoal = targetSprint.Goal ?? effectiveGoal,
+                CreatedIssueCount = createdTaskCount + createdSubtaskCount,
+                CreatedTaskCount = createdTaskCount,
+                CreatedSubtaskCount = createdSubtaskCount,
+                MovedFromBacklogCount = movedFromBacklogCount,
+                RolloverTaskCount = rolloverCount,
+                BacklogReturnedCount = backlogReturnedCount,
+                TotalStoryPoints = totalSp,
+                Warnings = revalidation.Warnings,
+                CreatedIssues = createdSummaries
+            };
+        }
+        catch (ProjectScopeException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[AiSprintCommitCoordinator] Lỗi khi commit đề xuất Sprint cho dự án {ProjectId}", scope.ProjectId);
+            _planningDb.ChangeTracker.Clear();
+            _deliveryDb.ChangeTracker.Clear();
+            return Failure("COMMIT_FAILED", $"Không thể lưu đề xuất vào Sprint: {ex.Message}");
+        }
+    }
+
+    private static AiApplySprintProposalResponse Failure(string code, string message) => new()
+    {
+        Success = false,
+        ErrorCode = code,
+        Message = message
+    };
+
+    private sealed record ProjectDocMeta(Guid Id, string Name, string Title, string RelativePath);
+
+    private static Dictionary<string, SkillCatalogItem> BuildSkillLookup(IReadOnlyList<SkillCatalogItem> skills)
+    {
+        var map = new Dictionary<string, SkillCatalogItem>(StringComparer.Ordinal);
+        foreach (var skill in skills)
+        {
+            if (string.IsNullOrWhiteSpace(skill.Name)) continue;
+            var key = NormalizeLookupToken(skill.Name);
+            if (!string.IsNullOrEmpty(key) && !map.ContainsKey(key))
+            {
+                map[key] = skill;
+            }
+        }
+        return map;
+    }
+
+    internal static Guid? ResolveAssigneeId(
+        Guid? explicitUserId,
+        string? assigneeName,
+        IReadOnlyDictionary<Guid, UserDisplayInfo> userById,
+        IReadOnlyList<UserDisplayInfo> allUsers)
+    {
+        if (explicitUserId.HasValue && userById.ContainsKey(explicitUserId.Value))
+        {
+            return explicitUserId.Value;
+        }
+
+        if (string.IsNullOrWhiteSpace(assigneeName))
+        {
+            return null;
+        }
+
+        var trimmed = assigneeName.Trim();
+
+        // Preserve exact matches first (e.g. "Hoàng Team 04 (Backend Dev)").
+        var exact = allUsers.FirstOrDefault(u =>
+            u.DisplayName.Equals(trimmed, StringComparison.OrdinalIgnoreCase) ||
+            u.Email.Equals(trimmed, StringComparison.OrdinalIgnoreCase));
+        if (exact != null) return exact.UserId;
+
+        var strippedTarget = StripTrailingParenthetical(trimmed);
+        var strippedMatches = allUsers
+            .Where(u => StripTrailingParenthetical(u.DisplayName).Equals(strippedTarget, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (strippedMatches.Count > 0) return strippedMatches[0].UserId;
+
+        var foldedTarget = NormalizeLookupToken(strippedTarget);
+        if (string.IsNullOrEmpty(foldedTarget)) return null;
+
+        var foldedMatches = allUsers
+            .Where(u => NormalizeLookupToken(StripTrailingParenthetical(u.DisplayName)) == foldedTarget)
+            .ToList();
+        if (foldedMatches.Count > 0) return foldedMatches[0].UserId;
+
+        var uniquePartial = allUsers
+            .Where(u =>
+            {
+                var foldedName = NormalizeLookupToken(StripTrailingParenthetical(u.DisplayName));
+                var emailLocal = u.Email.Split('@')[0];
+                return (!string.IsNullOrEmpty(foldedName) &&
+                        (foldedName.Contains(foldedTarget, StringComparison.Ordinal) ||
+                         foldedTarget.Contains(foldedName, StringComparison.Ordinal))) ||
+                       emailLocal.Equals(trimmed, StringComparison.OrdinalIgnoreCase);
+            })
+            .ToList();
+
+        return uniquePartial.Count == 1 ? uniquePartial[0].UserId : null;
+    }
+
+    private static string StripTrailingParenthetical(string value)
+    {
+        var trimmed = value.Trim();
+        var openIdx = trimmed.LastIndexOf('(');
+        if (openIdx > 0 && trimmed.EndsWith(')'))
+        {
+            return trimmed[..openIdx].Trim();
+        }
+        return trimmed;
+    }
+
+    internal static string NormalizeLookupToken(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return string.Empty;
+        var decomposed = input.Trim().Normalize(NormalizationForm.FormD);
+        var sb = new StringBuilder(decomposed.Length);
+        foreach (var ch in decomposed)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(ch) == UnicodeCategory.NonSpacingMark) continue;
+            var mapped = ch switch
+            {
+                'đ' or 'Đ' => 'd',
+                _ => char.ToLowerInvariant(ch)
+            };
+            if (char.IsLetterOrDigit(mapped) || char.IsWhiteSpace(mapped))
+            {
+                sb.Append(mapped);
+            }
+        }
+        return string.Join(' ', sb.ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    private static void AttachLabels(
+        IReadOnlyList<string>? tags,
+        Guid projectId,
+        Guid issueId,
+        Dictionary<Guid, HashSet<Guid>> existingIssueLabelsByIssue,
+        Dictionary<string, Label> labelByName,
+        List<Label> newLabels,
+        List<IssueLabel> newIssueLabels)
+    {
+        if (tags == null || tags.Count == 0) return;
+        if (!existingIssueLabelsByIssue.TryGetValue(issueId, out var alreadyLinkedLabels))
+        {
+            alreadyLinkedLabels = new HashSet<Guid>();
+            existingIssueLabelsByIssue[issueId] = alreadyLinkedLabels;
+        }
+
+        foreach (var rawTag in tags)
+        {
+            var cleanTag = rawTag?.Trim().TrimStart('#').Trim();
+            if (string.IsNullOrWhiteSpace(cleanTag) || cleanTag.Length > 100) continue;
+
+            if (!labelByName.TryGetValue(cleanTag, out var targetLabel))
+            {
+                targetLabel = new Label
+                {
+                    Id = Guid.NewGuid(),
+                    ProjectId = projectId,
+                    Name = cleanTag,
+                    ColorHex = "#DFE1E6"
+                };
+                labelByName[cleanTag] = targetLabel;
+                newLabels.Add(targetLabel);
+            }
+
+            if (alreadyLinkedLabels.Add(targetLabel.Id))
+            {
+                newIssueLabels.Add(new IssueLabel
+                {
+                    IssueId = issueId,
+                    LabelId = targetLabel.Id
+                });
+            }
+        }
+    }
+
+    private static void AttachSpecLinks(
+        Guid? explicitDocId,
+        IReadOnlyList<string>? citations,
+        IReadOnlyList<ProjectDocMeta> projectDocs,
+        IReadOnlyDictionary<Guid, ProjectDocMeta> docById,
+        Guid issueId,
+        Dictionary<Guid, HashSet<Guid>> existingSpecLinksByIssue,
+        List<SpecStoryLink> newSpecLinks,
+        DateTime now)
+    {
+        if (!existingSpecLinksByIssue.TryGetValue(issueId, out var alreadyLinkedDocs))
+        {
+            alreadyLinkedDocs = new HashSet<Guid>();
+            existingSpecLinksByIssue[issueId] = alreadyLinkedDocs;
+        }
+
+        var batchLinksByDoc = new Dictionary<Guid, SpecStoryLink>();
+
+        void UpsertDocLink(Guid docId, string? excerptText)
+        {
+            var cleanExcerpt = string.IsNullOrWhiteSpace(excerptText) ? null : excerptText.Trim();
+            if (cleanExcerpt != null && cleanExcerpt.Length > 500) cleanExcerpt = cleanExcerpt[..500];
+
+            if (batchLinksByDoc.TryGetValue(docId, out var existingNew))
+            {
+                if (!string.IsNullOrWhiteSpace(cleanExcerpt) &&
+                    (existingNew.Excerpt == null || !existingNew.Excerpt.Contains(cleanExcerpt, StringComparison.OrdinalIgnoreCase)))
+                {
+                    var combined = string.IsNullOrWhiteSpace(existingNew.Excerpt)
+                        ? cleanExcerpt
+                        : $"{existingNew.Excerpt} | {cleanExcerpt}";
+                    existingNew.Excerpt = combined.Length > 500 ? combined[..500] : combined;
+                }
+                return;
+            }
+
+            if (!alreadyLinkedDocs.Add(docId)) return;
+
+            var link = new SpecStoryLink
+            {
+                Id = Guid.NewGuid(),
+                DocumentId = docId,
+                IssueId = issueId,
+                Excerpt = cleanExcerpt,
+                CreatedAt = now
+            };
+            batchLinksByDoc[docId] = link;
+            newSpecLinks.Add(link);
+        }
+
+        if (citations != null)
+        {
+            foreach (var rawCite in citations)
+            {
+                var cleanCite = rawCite?.Trim();
+                if (string.IsNullOrWhiteSpace(cleanCite)) continue;
+
+                var matchedDoc = MatchProjectDocument(cleanCite, projectDocs);
+                if (matchedDoc != null)
+                {
+                    UpsertDocLink(matchedDoc.Id, cleanCite);
+                }
+            }
+        }
+
+        if (explicitDocId.HasValue && docById.ContainsKey(explicitDocId.Value) &&
+            !batchLinksByDoc.ContainsKey(explicitDocId.Value))
+        {
+            var fallbackExcerpt = citations is { Count: > 0 }
+                ? string.Join(" | ", citations.Where(c => !string.IsNullOrWhiteSpace(c)).Take(3))
+                : null;
+            UpsertDocLink(explicitDocId.Value, fallbackExcerpt);
+        }
+    }
+
+    private static ProjectDocMeta? MatchProjectDocument(string citation, IReadOnlyList<ProjectDocMeta> projectDocs)
+    {
+        if (projectDocs.Count == 0) return null;
+
+        var docCandidate = citation.Split([" - ", " | ", "#"], 2, StringSplitOptions.TrimEntries)[0];
+        var exact = projectDocs.FirstOrDefault(d =>
+            d.Name.Equals(docCandidate, StringComparison.OrdinalIgnoreCase) ||
+            d.Title.Equals(docCandidate, StringComparison.OrdinalIgnoreCase) ||
+            d.RelativePath.Equals(docCandidate, StringComparison.OrdinalIgnoreCase) ||
+            Path.GetFileNameWithoutExtension(d.Name).Equals(docCandidate, StringComparison.OrdinalIgnoreCase));
+        if (exact != null) return exact;
+
+        var normalizedCite = NormalizeLookupToken(citation);
+        if (string.IsNullOrEmpty(normalizedCite)) return null;
+
+        return projectDocs.FirstOrDefault(d =>
+        {
+            var nameToken = NormalizeLookupToken(Path.GetFileNameWithoutExtension(d.Name));
+            var titleToken = NormalizeLookupToken(d.Title);
+            return (nameToken.Length >= 4 && normalizedCite.Contains(nameToken, StringComparison.Ordinal)) ||
+                   (titleToken.Length >= 4 && normalizedCite.Contains(titleToken, StringComparison.Ordinal));
+        });
+    }
+
+    private static void AttachRequiredSkills(
+        IReadOnlyList<string>? suggestedSkills,
+        IReadOnlyDictionary<string, SkillCatalogItem> skillByNormalizedName,
+        Guid issueId,
+        Dictionary<Guid, HashSet<Guid>> existingSkillIdsByIssue,
+        List<IssueRequiredSkill> newRequiredSkills)
+    {
+        if (suggestedSkills == null || suggestedSkills.Count == 0 || skillByNormalizedName.Count == 0) return;
+        if (!existingSkillIdsByIssue.TryGetValue(issueId, out var alreadyLinkedSkills))
+        {
+            alreadyLinkedSkills = new HashSet<Guid>();
+            existingSkillIdsByIssue[issueId] = alreadyLinkedSkills;
+        }
+
+        foreach (var rawSkill in suggestedSkills)
+        {
+            var normalized = NormalizeLookupToken(rawSkill);
+            if (string.IsNullOrEmpty(normalized)) continue;
+
+            if (!skillByNormalizedName.TryGetValue(normalized, out var matched))
+            {
+                var candidates = skillByNormalizedName
+                    .Where(kv => kv.Key.Contains(normalized, StringComparison.Ordinal) ||
+                                 (kv.Key.Length >= 2 && normalized.Contains(kv.Key, StringComparison.Ordinal)))
+                    .Select(kv => kv.Value)
+                    .ToList();
+                if (candidates.Count == 1)
+                {
+                    matched = candidates[0];
+                }
+            }
+
+            if (matched != null && alreadyLinkedSkills.Add(matched.Id))
+            {
+                newRequiredSkills.Add(new IssueRequiredSkill
+                {
+                    Id = Guid.NewGuid(),
+                    IssueId = issueId,
+                    SkillId = matched.Id,
+                    MinLevel = 3,
+                    Weight = 1.000m,
+                    Source = "AI"
+                });
+            }
+        }
+    }
+
+    private static void AppendAcceptanceCriteria(
+        IReadOnlyList<string>? criteriaList,
+        Guid issueId,
+        Dictionary<Guid, HashSet<string>> existingCriteriaByIssue,
+        List<AcceptanceCriteria> newCriteria,
+        DateTime now)
+    {
+        if (criteriaList == null || criteriaList.Count == 0) return;
+        if (!existingCriteriaByIssue.TryGetValue(issueId, out var existingAcSet))
+        {
+            existingAcSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            existingCriteriaByIssue[issueId] = existingAcSet;
+        }
+
+        for (var idx = 0; idx < criteriaList.Count; idx++)
+        {
+            var criterionText = InputGuardrail.StripUnsafeHtmlOrScript(criteriaList[idx]);
+            if (string.IsNullOrWhiteSpace(criterionText) || !existingAcSet.Add(criterionText)) continue;
+
+            newCriteria.Add(new AcceptanceCriteria
+            {
+                Id = Guid.NewGuid(),
+                IssueId = issueId,
+                Content = criterionText.Length > 2000 ? criterionText[..2000] : criterionText,
+                IsMet = false,
+                OrderIndex = existingAcSet.Count - 1,
+                Source = "AI",
+                CreatedAt = now
+            });
+        }
+    }
+
+    private static string BuildAiActivityDetail(
+        string? sessionId,
+        Guid? sprintId,
+        string sprintName,
+        bool pushedToBacklog,
+        bool movedFromBacklog,
+        string? aiRationale,
+        string? subtaskRole,
+        IReadOnlyList<string>? documentCitations,
+        IReadOnlyList<string>? suggestedSkills)
+    {
+        var cleanCitations = documentCitations?
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? [];
+
+        var cleanSkills = suggestedSkills?
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(s => s.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? [];
+
+        return JsonSerializer.Serialize(new
+        {
+            sessionId,
+            sprintId,
+            sprintName,
+            pushedToBacklog,
+            movedFromBacklog,
+            aiRationale = string.IsNullOrWhiteSpace(aiRationale) ? null : aiRationale.Trim(),
+            subtaskRole = string.IsNullOrWhiteSpace(subtaskRole) ? null : subtaskRole.Trim(),
+            documentCitations = cleanCitations,
+            suggestedSkills = cleanSkills
+        });
+    }
+
+    private sealed class PreCommitRevalidationResult
+    {
+        public List<string> Warnings { get; } = [];
+        public HashSet<ProposedTaskDto> SkippedTasks { get; } = new(ReferenceEqualityComparer.Instance);
+        public HashSet<Guid> SkippedIssueIds { get; } = [];
+        public HashSet<ProposedTaskDto> ForceCreateNewTasks { get; } = new(ReferenceEqualityComparer.Instance);
+        public HashSet<ProposedTaskDto> UnassignedTasks { get; } = new(ReferenceEqualityComparer.Instance);
+        public HashSet<ProposedSubTaskDto> UnassignedSubtasks { get; } = new(ReferenceEqualityComparer.Instance);
+        public IReadOnlyList<UserDisplayInfo> EligibleUsers { get; init; } = [];
+    }
+
+    /// <summary>
+    /// Đối soát lại toàn bộ cấu hình Workflow/Priority/IssueType/Labels, thành viên khả dụng của dự án
+    /// và trạng thái thực tế của các hạng mục nguồn từ Backlog ngay trước khi ghi DB để chống xung đột stale state.
+    /// </summary>
+    private async Task<PreCommitRevalidationResult> PreCommitRevalidateAsync(
+        Project project,
+        AiApplySprintProposalRequest request,
+        ProjectActiveConfig activeConfig,
+        Guid? targetSprintIdForIssues,
+        IReadOnlyList<UserDisplayInfo> allUsers,
+        CancellationToken ct)
+    {
+        var warnings = new List<string>();
+        var skippedTasks = new HashSet<ProposedTaskDto>(ReferenceEqualityComparer.Instance);
+        var skippedIssueIds = new HashSet<Guid>();
+        var forceCreateNew = new HashSet<ProposedTaskDto>(ReferenceEqualityComparer.Instance);
+        var unassignedTasks = new HashSet<ProposedTaskDto>(ReferenceEqualityComparer.Instance);
+        var unassignedSubtasks = new HashSet<ProposedSubTaskDto>(ReferenceEqualityComparer.Instance);
+
+        // 1. Lọc danh sách thành viên thực sự còn thuộc dự án tại thời điểm commit
+        IReadOnlyList<UserDisplayInfo> eligibleUsers = allUsers;
+        HashSet<Guid>? projectMemberIds = null;
+        if (_roleServices != null)
+        {
+            var membersDto = await _roleServices.GetProjectMembersAsync(project.Id);
+            projectMemberIds = membersDto.Items?
+                .Where(m => m.UserId.HasValue && m.UserId.Value != Guid.Empty)
+                .Select(m => m.UserId!.Value)
+                .ToHashSet() ?? [];
+
+            if (project.LeadUserId != Guid.Empty)
+            {
+                projectMemberIds.Add(project.LeadUserId);
+            }
+
+            eligibleUsers = allUsers.Where(u => projectMemberIds.Contains(u.UserId)).ToList();
+        }
+
+        var allUserById = allUsers.ToDictionary(u => u.UserId);
+        var eligibleById = eligibleUsers.ToDictionary(u => u.UserId);
+
+        // 2. Truy vấn thực tế các issue Backlog được tham chiếu (kể cả đã xóa hoặc đã gán Sprint khác)
+        var requestedIds = request.Tasks
+            .Where(t => t.SourceBacklogIssueId.HasValue && t.SourceBacklogIssueId.Value != Guid.Empty)
+            .Select(t => t.SourceBacklogIssueId!.Value)
+            .Distinct()
+            .ToList();
+
+        var requestedNumbers = new List<int>();
+        foreach (var taskDto in request.Tasks)
+        {
+            if (TryParseIssueNumber(taskDto.SourceBacklogIssueKey, out var num))
+            {
+                requestedNumbers.Add(num);
+            }
+        }
+        requestedNumbers = requestedNumbers.Distinct().ToList();
+
+        var referencedIssues = (requestedIds.Count > 0 || requestedNumbers.Count > 0)
+            ? await _deliveryDb.Issues.AsNoTracking()
+                .Where(i => i.ProjectId == project.Id &&
+                            (requestedIds.Contains(i.Id) || requestedNumbers.Contains(i.IssueNumber)))
+                .ToListAsync(ct)
+            : [];
+
+        var issueById = referencedIssues.ToDictionary(i => i.Id);
+        var issueByNum = referencedIssues
+            .GroupBy(i => i.IssueNumber)
+            .ToDictionary(g => g.Key, g => g.OrderBy(i => i.IsDeleted).First());
+
+        var defaultPriorityName = activeConfig.GetDefaultPriorityName();
+
+        foreach (var taskDto in request.Tasks)
+        {
+            var taskLabel = string.IsNullOrWhiteSpace(taskDto.Title) ? "(Không tiêu đề)" : taskDto.Title.Trim();
+
+            // 2a. Kiểm tra trạng thái tồn tại & Sprint hiện tại của hạng mục Backlog nguồn
+            if (taskDto.SourceBacklogIssueId.HasValue || !string.IsNullOrWhiteSpace(taskDto.SourceBacklogIssueKey))
+            {
+                Issue? existingRef = null;
+                if (taskDto.SourceBacklogIssueId.HasValue && issueById.TryGetValue(taskDto.SourceBacklogIssueId.Value, out var foundById))
+                {
+                    existingRef = foundById;
+                }
+                else if (TryParseIssueNumber(taskDto.SourceBacklogIssueKey, out var issueNum) &&
+                         issueByNum.TryGetValue(issueNum, out var foundByNum))
+                {
+                    existingRef = foundByNum;
+                }
+
+                var refKey = !string.IsNullOrWhiteSpace(taskDto.SourceBacklogIssueKey)
+                    ? taskDto.SourceBacklogIssueKey.Trim()
+                    : (existingRef != null ? $"{project.ProjectKey}-{existingRef.IssueNumber}" : taskDto.SourceBacklogIssueId?.ToString() ?? taskLabel);
+
+                if (existingRef == null || existingRef.IsDeleted)
+                {
+                    forceCreateNew.Add(taskDto);
+                    taskDto.SourceBacklogIssueId = null;
+                    taskDto.SourceBacklogIssueKey = null;
+                    warnings.Add($"Hạng mục nguồn Backlog '{refKey}' ({taskLabel}) không còn tồn tại hoặc đã bị xóa; hệ thống đã tự động chuyển sang tạo mới công việc.");
+                }
+                else if (existingRef.SprintId.HasValue &&
+                         (!targetSprintIdForIssues.HasValue || existingRef.SprintId.Value != targetSprintIdForIssues.Value))
+                {
+                    skippedTasks.Add(taskDto);
+                    skippedIssueIds.Add(existingRef.Id);
+                    warnings.Add($"Hạng mục Backlog '{project.ProjectKey}-{existingRef.IssueNumber}' ({taskLabel}) hiện đã nằm trong một Sprint khác; hệ thống bỏ qua thao tác di chuyển để không ghi đè dữ liệu Sprint khác.");
+                    continue;
+                }
+            }
+
+            // 2b. Kiểm tra & ánh xạ lại Workflow Status / Priority nếu cấu hình dự án vừa thay đổi
+            if (!string.IsNullOrWhiteSpace(taskDto.Status))
+            {
+                var trimmedStatus = taskDto.Status.Trim();
+                var hasExactStatus = activeConfig.Statuses.Any(s => s.Name.Equals(trimmedStatus, StringComparison.OrdinalIgnoreCase));
+                if (!hasExactStatus)
+                {
+                    var remappedStatus = activeConfig.ResolveStatusName(trimmedStatus);
+                    if (!remappedStatus.Equals(trimmedStatus, StringComparison.OrdinalIgnoreCase))
+                    {
+                        warnings.Add($"Trạng thái '{trimmedStatus}' của '{taskLabel}' không còn hợp lệ trong quy trình '{activeConfig.WorkflowName}'; đã ánh xạ về '{remappedStatus}'.");
+                        taskDto.Status = remappedStatus;
+                    }
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(taskDto.Priority) && activeConfig.Priorities.Count > 0)
+            {
+                var trimmedPriority = taskDto.Priority.Trim();
+                var hasExactPriority = activeConfig.Priorities.Any(p => p.Name.Equals(trimmedPriority, StringComparison.OrdinalIgnoreCase));
+                if (!hasExactPriority)
+                {
+                    warnings.Add($"Mức ưu tiên '{trimmedPriority}' của '{taskLabel}' không còn tồn tại; đã ánh xạ về mức mặc định '{defaultPriorityName}'.");
+                    taskDto.Priority = defaultPriorityName;
+                }
+            }
+
+            // 2c. Kiểm tra thành viên phụ trách Task còn thuộc dự án không
+            if (IsInvalidProjectAssignee(taskDto.AssigneeUserId, taskDto.AssigneeName, projectMemberIds, allUserById, allUsers, eligibleById, eligibleUsers))
+            {
+                unassignedTasks.Add(taskDto);
+                taskDto.AssigneeUserId = null;
+                taskDto.AssigneeName = null;
+                warnings.Add($"Thành viên được gán cho công việc '{taskLabel}' không còn thuộc dự án hiện tại; đã chuyển sang Chưa gán (Unassigned).");
+            }
+
+            // 2d. Kiểm tra Subtasks tương ứng
+            foreach (var subDto in taskDto.Subtasks ?? [])
+            {
+                var subLabel = string.IsNullOrWhiteSpace(subDto.Title) ? taskLabel : subDto.Title.Trim();
+
+                if (!string.IsNullOrWhiteSpace(subDto.Status))
+                {
+                    var trimmedSubStatus = subDto.Status.Trim();
+                    var hasExactSubStatus = activeConfig.Statuses.Any(s => s.Name.Equals(trimmedSubStatus, StringComparison.OrdinalIgnoreCase));
+                    if (!hasExactSubStatus)
+                    {
+                        var remappedSubStatus = activeConfig.ResolveStatusName(trimmedSubStatus);
+                        warnings.Add($"Trạng thái '{trimmedSubStatus}' của việc con '{subLabel}' không còn hợp lệ; đã ánh xạ về '{remappedSubStatus}'.");
+                        subDto.Status = remappedSubStatus;
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(subDto.Priority) && activeConfig.Priorities.Count > 0)
+                {
+                    var trimmedSubPriority = subDto.Priority.Trim();
+                    var hasExactSubPriority = activeConfig.Priorities.Any(p => p.Name.Equals(trimmedSubPriority, StringComparison.OrdinalIgnoreCase));
+                    if (!hasExactSubPriority)
+                    {
+                        warnings.Add($"Mức ưu tiên '{trimmedSubPriority}' của việc con '{subLabel}' không còn tồn tại; đã ánh xạ về '{defaultPriorityName}'.");
+                        subDto.Priority = defaultPriorityName;
+                    }
+                }
+
+                if (IsInvalidProjectAssignee(subDto.AssigneeUserId, subDto.AssigneeName, projectMemberIds, allUserById, allUsers, eligibleById, eligibleUsers))
+                {
+                    unassignedSubtasks.Add(subDto);
+                    subDto.AssigneeUserId = null;
+                    subDto.AssigneeName = null;
+                    warnings.Add($"Thành viên được gán cho việc con '{subLabel}' không còn thuộc dự án; đã chuyển sang Chưa gán (Unassigned).");
+                }
+            }
+        }
+
+        var result = new PreCommitRevalidationResult
+        {
+            EligibleUsers = eligibleUsers
+        };
+        result.Warnings.AddRange(warnings);
+        foreach (var item in skippedTasks) result.SkippedTasks.Add(item);
+        foreach (var skippedId in skippedIssueIds) result.SkippedIssueIds.Add(skippedId);
+        foreach (var item in forceCreateNew) result.ForceCreateNewTasks.Add(item);
+        foreach (var item in unassignedTasks) result.UnassignedTasks.Add(item);
+        foreach (var item in unassignedSubtasks) result.UnassignedSubtasks.Add(item);
+        return result;
+    }
+
+    private static bool TryParseIssueNumber(string? issueKey, out int issueNumber)
+    {
+        issueNumber = 0;
+        if (string.IsNullOrWhiteSpace(issueKey)) return false;
+        var dashIdx = issueKey.LastIndexOf('-');
+        var numStr = dashIdx >= 0 ? issueKey[(dashIdx + 1)..] : issueKey;
+        return int.TryParse(numStr.Trim(), out issueNumber) && issueNumber > 0;
+    }
+
+    private static bool IsInvalidProjectAssignee(
+        Guid? explicitUserId,
+        string? assigneeName,
+        HashSet<Guid>? projectMemberIds,
+        IReadOnlyDictionary<Guid, UserDisplayInfo> allUserById,
+        IReadOnlyList<UserDisplayInfo> allUsers,
+        IReadOnlyDictionary<Guid, UserDisplayInfo> eligibleById,
+        IReadOnlyList<UserDisplayInfo> eligibleUsers)
+    {
+        if (explicitUserId.HasValue && explicitUserId.Value != Guid.Empty)
+        {
+            if (projectMemberIds != null)
+            {
+                return !projectMemberIds.Contains(explicitUserId.Value) || !eligibleById.ContainsKey(explicitUserId.Value);
+            }
+
+            return !allUserById.ContainsKey(explicitUserId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(assigneeName) && projectMemberIds != null)
+        {
+            var matchedGlobal = ResolveAssigneeId(null, assigneeName, allUserById, allUsers);
+            if (matchedGlobal.HasValue)
+            {
+                return !projectMemberIds.Contains(matchedGlobal.Value);
+            }
+
+            var matchedEligible = ResolveAssigneeId(null, assigneeName, eligibleById, eligibleUsers);
+            return matchedEligible == null && allUsers.Count > 0;
+        }
+
+        return false;
+    }
+}

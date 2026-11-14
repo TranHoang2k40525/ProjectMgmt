@@ -19,6 +19,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Planning.Infrastructure;
+using Planning.Infrastructure.Services;
 using ProjectMgmt.IdentityAccess.Contracts;
 using ProjectMgmt.Modules.IdentityExperience.Application.Services;
 using ProjectMgmt.Modules.Planning.ProjectManagement.Application.IServices;
@@ -35,8 +36,20 @@ using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
 using MySqlConnector;
+using ProjectMgmt.Core.Ai;
+using ProjectMgmt.Core.Staging;
+using ProjectMgmt.Core.VectorSearch;
+using ProjectMgmt.Core.Tracing;
+using ProjectMgmt.Solution.McpServers;
+using ProjectMgmt.Solution.Services.Ai;
+using ProjectMgmt.Solution.Services.Ai.Adapters;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Configuration
+    .AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true)
+    .AddJsonFile("local.settings.json", optional: true, reloadOnChange: true)
+    .AddEnvironmentVariables();
 
 var logFilePath = Path.Combine(
     builder.Environment.ContentRootPath,
@@ -126,11 +139,21 @@ builder.Services
         {
             OnMessageReceived = context =>
             {
-                var accessToken = context.Request.Query["access_token"];
-                if (!string.IsNullOrWhiteSpace(accessToken)
-                    && context.HttpContext.Request.Path.StartsWithSegments("/hubs/notifications"))
+                var accessToken = context.Request.Query["access_token"].ToString();
+                if (string.IsNullOrWhiteSpace(accessToken))
                 {
-                    context.Token = accessToken;
+                    accessToken = context.Request.Query["token"].ToString();
+                }
+
+                if (!string.IsNullOrWhiteSpace(accessToken))
+                {
+                    var path = context.HttpContext.Request.Path.Value ?? "";
+                    if (path.StartsWith("/hubs/notifications", StringComparison.OrdinalIgnoreCase) ||
+                        path.Contains("/documents/", StringComparison.OrdinalIgnoreCase) ||
+                        path.Contains("/attachments/", StringComparison.OrdinalIgnoreCase))
+                    {
+                        context.Token = accessToken;
+                    }
                 }
 
                 return Task.CompletedTask;
@@ -211,9 +234,9 @@ builder.Services.AddSignalR();
 
 builder.Services.AddScoped(_ => new MySqlConnection(connectionString));
 
-builder.Services.AddDbContext<IdentityExperienceDbContext>((services, options) =>
+builder.Services.AddDbContext<IdentityExperienceDbContext>((_, options) =>
     options.UseMySql(
-        services.GetRequiredService<MySqlConnection>(),
+        connectionString,
         serverVersion,
         mysql =>
         {
@@ -221,9 +244,9 @@ builder.Services.AddDbContext<IdentityExperienceDbContext>((services, options) =
             mysql.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null);
         }));
 
-builder.Services.AddDbContext<PlanningDbContext>((services, options) =>
+builder.Services.AddDbContext<PlanningDbContext>((_, options) =>
     options.UseMySql(
-        services.GetRequiredService<MySqlConnection>(),
+        connectionString,
         serverVersion,
         mysql =>
         {
@@ -231,9 +254,9 @@ builder.Services.AddDbContext<PlanningDbContext>((services, options) =>
             mysql.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null);
         }));
 
-builder.Services.AddDbContext<DeliveryIntelligenceDbContext>((services, options) =>
+builder.Services.AddDbContext<DeliveryIntelligenceDbContext>((_, options) =>
     options.UseMySql(
-        services.GetRequiredService<MySqlConnection>(),
+        connectionString,
         serverVersion,
         mysql =>
         {
@@ -260,6 +283,7 @@ builder.Services.AddScoped<IAiIssueSourceReader, AiIssueSourceReader>();
 builder.Services.AddScoped<IAiBreakdownApplyCoordinator, AiBreakdownApplyCoordinator>();
 builder.Services.AddScoped<IUserWorkReader, UserWorkReader>();
 builder.Services.AddScoped<IAvatarStorage, LocalAvatarStorage>();
+builder.Services.AddScoped<ISpecHubStorageService, SpecHubStorageService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserContext, CurrentUserContext>();
 builder.Services.AddScoped<IPermissionEvaluator, PermissionEvaluator>();
@@ -309,12 +333,65 @@ builder.Services.AddScoped<IIssueRequirementService>(services => services.GetReq
 builder.Services.AddScoped<ProjectMgmt.IssueTracking.Contracts.IIssueSkillService>(services => services.GetRequiredService<IssueRequirementService>());
 // IssueTransitionService không đăng ký: cần IWorkflowValidationService thật của Planning (ValidateOnBuild sẽ chặn khởi động).
 // IssuesController tự dựng service khi contract đó có trong DI.
-builder.Services.AddSingleton(builder.Configuration.GetSection(AttachmentOptions.SectionName).Get<AttachmentOptions>() ?? new AttachmentOptions());
-builder.Services.AddSingleton<IAttachmentStorage>(services => new DeliveryIntelligence.Infrastructure.Services.LocalAttachmentStorage(
-    Path.Combine(services.GetRequiredService<IWebHostEnvironment>().ContentRootPath, "App_Data", "attachments")));
+var attachmentOpts = builder.Configuration.GetSection(AttachmentOptions.SectionName).Get<AttachmentOptions>() ?? new AttachmentOptions();
+attachmentOpts.MaxFileSizeBytes = Math.Max(attachmentOpts.MaxFileSizeBytes, 100 * 1024 * 1024);
+// Cho phép tất cả các loại file (tài liệu, ảnh, mã nguồn .cs, .hs, video, v.v.) trừ danh sách mã độc BlockedExtensions
+attachmentOpts.AllowedExtensions = ["*"];
+builder.Services.AddSingleton(attachmentOpts);
+
+var attachmentsHubPath = Path.Combine(builder.Environment.ContentRootPath, "Attachments_Hub");
+Directory.CreateDirectory(attachmentsHubPath);
+builder.Services.AddSingleton<IAttachmentStorage>(_ => new DeliveryIntelligence.Infrastructure.Services.LocalAttachmentStorage(attachmentsHubPath));
 builder.Services.AddScoped<ProjectMgmt.IssueTracking.Contracts.IIssueReadService>(services => services.GetRequiredService<IssueContractService>());
 builder.Services.AddScoped<ProjectMgmt.IssueTracking.Contracts.IIssueSprintService>(services => services.GetRequiredService<IssueContractService>());
 // IIssueCreationService chưa đăng ký: cần IIssueNumberGenerator thật từ Planning.
+
+// --- AI Core Configuration & Resilience Services (Milestone M1 & M2) ---
+builder.Services.Configure<AiOptions>(builder.Configuration.GetSection("Ai"));
+builder.Services.Configure<RedisOptions>(builder.Configuration.GetSection("Redis"));
+builder.Services.Configure<QdrantOptions>(builder.Configuration.GetSection("Qdrant"));
+builder.Services.Configure<LangfuseOptions>(builder.Configuration.GetSection("Langfuse"));
+
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<MemoryStateStagingService>();
+builder.Services.AddScoped<IStateStagingService>(sp =>
+{
+    var memory = sp.GetRequiredService<MemoryStateStagingService>();
+    var redisOptions = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<RedisOptions>>();
+    var primary = sp.GetService<IExternalStagingProvider>();
+    var logger = sp.GetService<ILogger<ResilientStateStagingService>>();
+    return new ResilientStateStagingService(memory, redisOptions, primary, logger);
+});
+builder.Services.AddScoped<IVectorSearchService, ResilientVectorSearchService>();
+builder.Services.AddScoped<IAiTraceService, ResilientTraceService>();
+
+// --- AI Model Client & External Providers (Milestone M2) ---
+builder.Services.AddHttpClient();
+builder.Services.AddHttpClient("AiClient", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(180);
+});
+builder.Services.AddScoped<IAiModelClient, MultiProviderAiModelClient>();
+builder.Services.AddScoped<IExternalStagingProvider, StackExchangeRedisStagingProvider>();
+builder.Services.AddScoped<IExternalVectorSearchProvider, QdrantVectorSearchProvider>();
+builder.Services.AddScoped<IExternalTraceExporter, LangfuseTraceExporter>();
+builder.Services.AddScoped<ISpecKeywordFallbackProvider, SpecHubKeywordFallbackProvider>();
+
+// --- In-Process MCP Tool Classes & Registry (Milestone M2) ---
+builder.Services.AddScoped<SpecHubTools>();
+builder.Services.AddScoped<BacklogTools>();
+builder.Services.AddScoped<SprintTools>();
+builder.Services.AddScoped<TeamTools>();
+builder.Services.AddScoped<PlanningTools>();
+builder.Services.AddScoped<IMcpToolRegistry, McpToolRegistry>();
+
+// --- Document Text Extractor & Sprint Decomposition Pipeline (Milestone M2 & M3) ---
+builder.Services.AddSingleton<IAiTokenUsageTracker, AiTokenUsageTracker>();
+builder.Services.AddSingleton<IPromptTemplateService, PromptTemplateService>();
+builder.Services.AddScoped<IAiDocumentTextExtractor, AiDocumentTextExtractor>();
+builder.Services.AddScoped<IAiConversationSessionStore, AiConversationSessionStore>();
+builder.Services.AddScoped<IAiSprintDecompositionService, AiSprintDecompositionService>();
+builder.Services.AddScoped<IAiSprintCommitCoordinator, AiSprintCommitCoordinator>();
 
 var app = builder.Build();
 
@@ -392,6 +469,8 @@ CREATE TABLE IF NOT EXISTS SprintMessage (
         {
             Log.Warning(ex, "Could not ensure SprintMessage table exists");
         }
+
+        await TestAccountSeeder.SeedAsync(scope.ServiceProvider);
     }
     catch
     {
@@ -423,7 +502,8 @@ app.UseSerilogRequestLogging(options =>
 var frontendIndexPath = Path.Combine(app.Environment.WebRootPath ?? string.Empty, "index.html");
 var hasFrontendArtifact = File.Exists(frontendIndexPath);
 var avatarDirectory = Path.Combine(app.Environment.ContentRootPath, "Assets", "avatars");
-Directory.CreateDirectory(avatarDirectory);
+try { Directory.CreateDirectory(avatarDirectory); } catch { /* Ignore if directory exists or restricted */ }
+try { Directory.CreateDirectory(Path.Combine(app.Environment.ContentRootPath, "Spec_Hub")); } catch { /* Ignore */ }
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(avatarDirectory),
@@ -463,7 +543,7 @@ if (hasFrontendArtifact)
 
         context.Response.ContentType = "text/html; charset=utf-8";
         await context.Response.SendFileAsync(frontendIndexPath);
-    });
+    }).AllowAnonymous();
 }
 
 app.Run();

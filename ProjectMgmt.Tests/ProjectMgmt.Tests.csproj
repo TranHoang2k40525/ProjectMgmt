@@ -6,6 +6,7 @@
     <PackageReference Include="BCrypt.Net-Next" />
     <PackageReference Include="libphonenumber-csharp" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
@@ -23,6 +24,7 @@
     <ProjectReference Include="..\ProjectMgmt.Modules.IdentityExperience\Infrastructure\IdentityExperience.Infrastructure.csproj" />
     <ProjectReference Include="..\ProjectMgmt.Modules.Planning\Application\Planning.Application.csproj" />
     <ProjectReference Include="..\ProjectMgmt.Modules.Planning\Infrastructure\Planning.Infrastructure.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.McpServer\ProjectMgmt.McpServer.csproj" />
     <ProjectReference Include="..\ProjectMgmt.Solution\ProjectMgmt.Solution.csproj" />
   </ItemGroup>
 </Project>

@@ -32,14 +32,13 @@ public class IssueHistoryRecorder
         Guid toStatusId,
         string toCategory,
         Guid? changedBy,
-        DateTime changedAtUtc,
-        CancellationToken cancellationToken = default)
+        DateTime changedAtUtc)
     {
         ArgumentNullException.ThrowIfNull(issue);
         long? duration = null;
         if (fromStatusId.HasValue)
         {
-            var previous = await _issues.GetLastStatusChangeAsync(issue.Id, cancellationToken);
+            var previous = await _issues.GetLastStatusChangeAsync(issue.Id);
             var since = previous?.ChangedAt ?? issue.CreatedAt;
             duration = Math.Max(0, (long)(changedAtUtc - since).TotalSeconds);
         }
@@ -55,7 +54,7 @@ public class IssueHistoryRecorder
             ChangedBy = changedBy,
             DurationSeconds = duration,
             ChangedAt = changedAtUtc
-        }, cancellationToken);
+        });
     }
 
     /// <summary>
@@ -70,8 +69,7 @@ public class IssueHistoryRecorder
         DateTime assignedAtUtc,
         string? source = null,
         Guid? aiCandidateId = null,
-        string? reason = null,
-        CancellationToken cancellationToken = default)
+        string? reason = null)
     {
         ArgumentNullException.ThrowIfNull(issue);
         if (fromAssigneeId == toAssigneeId)
@@ -102,6 +100,6 @@ public class IssueHistoryRecorder
             StoryPointsAtTime = issue.StoryPoints,
             Reason = reason is { Length: > 500 } ? reason[..500] : reason,
             AssignedAt = assignedAtUtc
-        }, cancellationToken);
+        });
     }
 }

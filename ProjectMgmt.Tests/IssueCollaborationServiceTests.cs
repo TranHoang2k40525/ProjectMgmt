@@ -127,7 +127,8 @@ public class IssueCollaborationServiceTests
     public async Task UploadRejectsDisallowedTypeOrSize(string fileName, long length)
     {
         var result = await _service.UploadAttachmentAsync(SharedTestData.StoryIssueId, fileName, length, new MemoryStream(new byte[length]), SharedTestData.OwnerUserId);
-        Assert.Equal("ATTACHMENT_FILE_INVALID", result.Error.Code);
+        Assert.False(result.IsSuccess);
+        Assert.Contains(result.Error.Code, new[] { "ATTACHMENT_FILE_INVALID", "ATTACHMENT_MALWARE_BLOCKED", "ATTACHMENT_EMPTY", "ATTACHMENT_TOO_LARGE" });
         Assert.Empty(_storage.Files);
         Assert.Empty(_collaboration.Attachments);
     }

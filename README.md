@@ -167,7 +167,7 @@ npm start
 
 ### 5.4 Hướng dẫn xác thực trên Swagger UI
 1. Mở trang Swagger tại `http://localhost:5083/swagger/index.html`.
-2. Gọi API `POST /api/v1/auth/login` để lấy chuỗi `accessToken`.
+2. Gọi API `POST /api/auth/login` để lấy chuỗi `accessToken`.
 3. Nhấp vào nút **Authorize 🔓** ở góc trên bên phải màn hình Swagger.
 4. Dán token vừa lấy vào ô **Value** rồi nhấn **Authorize** ➔ **Close**.
 5. Biểu tượng khóa sẽ chuyển sang trạng thái khóa **🔒**. Toàn bộ các API được gọi sau đó sẽ tự động được gửi kèm token mà không cần nhập lại.

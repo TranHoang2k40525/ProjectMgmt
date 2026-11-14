@@ -1,4 +1,4 @@
-import { Component, DestroyRef, ElementRef, HostListener, OnDestroy, ViewChild, afterNextRender, inject, signal, computed } from '@angular/core';
+import { Component, DestroyRef, ElementRef, HostListener, ViewChild, afterNextRender, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive, RouterOutlet, Router, NavigationEnd } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -16,9 +16,17 @@ import { ExcelImportModalComponent } from '../../shared/components/excel-import-
 import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/confirm-dialog';
 import { RouteTransitionLayerComponent } from '../../shared/motion/route-transition-layer/route-transition-layer';
 import { MotionOrchestratorService } from '../../core/motion/motion-orchestrator.service';
-import { MotionDirective } from '../../shared/motion/motion.directive';
 import { FocusRecommendationService } from '../../core/attention/focus-recommendation.service';
 import { RecentWorkService } from '../../core/attention/recent-work.service';
+import { AvatarModalComponent } from '../../shared/components/avatar-modal/avatar-modal.component';
+import { resolveAvatarUrl } from '../../core/utils/avatar.utils';
+import { CreateOrgModalComponent } from '../../features/workspace/create-org/create-org-modal';
+import { RecentListComponent } from '../../features/workspace/components/recent-list';
+import { WorkspaceDataSource } from '../../features/workspace/data/workspace-data-source';
+import { ORG_ROLE_LABELS, OrganizationSummary, RecentItem } from '../../features/workspace/data/workspace.models';
+import { WorkspaceContextService } from '../../features/workspace/workspace-context.service';
+import { WorkspaceNavigation } from '../../features/workspace/workspace-navigation';
+import { QuickProfileModalComponent } from '../../shared/components/quick-profile-modal/quick-profile-modal.component';
 
 @Component({
   selector: 'app-shell',
@@ -35,12 +43,15 @@ import { RecentWorkService } from '../../core/attention/recent-work.service';
     ExcelImportModalComponent,
     ConfirmDialogComponent,
     RouteTransitionLayerComponent,
-    MotionDirective
+    AvatarModalComponent,
+    CreateOrgModalComponent,
+    RecentListComponent,
+    QuickProfileModalComponent
   ],
   templateUrl: './app-shell.html',
   styleUrl: './app-shell.scss'
 })
-export class AppShellComponent implements OnDestroy {
+export class AppShellComponent {
   @HostListener('window:beforeunload', ['$event'])
   protectPendingChanges(event: BeforeUnloadEvent): void {
     if (this.projectService.pendingSaves() > 0) event.preventDefault();
@@ -55,6 +66,9 @@ export class AppShellComponent implements OnDestroy {
   private readonly destroyRef = inject(DestroyRef);
   private readonly motion = inject(MotionOrchestratorService);
   private readonly recentWork = inject(RecentWorkService);
+  private readonly workspace = inject(WorkspaceContextService);
+  private readonly workspaceData = inject(WorkspaceDataSource);
+  private readonly workspaceNav = inject(WorkspaceNavigation);
 
   @ViewChild('pageBody', { read: ElementRef })
   private pageBody?: ElementRef<HTMLElement>;
@@ -65,8 +79,48 @@ export class AppShellComponent implements OnDestroy {
   // Check if current route is inside a Project Context (Show Sub-Header)
   readonly isProjectRoute = computed(() => {
     const url = this.currentUrl();
-    return url.includes('/project/') || url.includes('/board') || url.includes('/backlog') || url.includes('/task-list') || url.includes('/roadmap') || url.includes('/reports') || (url.includes('/projects/') && url.includes('/settings'));
+    if (!url || url === '/' || url.startsWith('/for-you') || url.startsWith('/orgs') || url.startsWith('/profile') || url.startsWith('/notifications') || url.startsWith('/admin') || url.startsWith('/auth') || url.startsWith('/login') || url.startsWith('/invite')) {
+      return false;
+    }
+    return (
+      url.startsWith('/project') ||
+      url.startsWith('/projects') ||
+      url.startsWith('/board') ||
+      url.startsWith('/backlog') ||
+      url.startsWith('/roadmap') ||
+      url.startsWith('/task-list') ||
+      url.startsWith('/list') ||
+      url.startsWith('/documents') ||
+      url.startsWith('/reports') ||
+      url.startsWith('/issues')
+    );
   });
+
+  isTabActive(tab: string): boolean {
+    const url = this.currentUrl();
+    switch (tab) {
+      case 'summary':
+        return url.startsWith('/project/summary') || url.includes('/summary');
+      case 'roadmap':
+        return url.startsWith('/roadmap');
+      case 'board':
+        return url.startsWith('/board');
+      case 'backlog':
+        return url.startsWith('/backlog');
+      case 'task-list':
+        return url.startsWith('/task-list') || url.startsWith('/list');
+      case 'documents':
+        return url.startsWith('/documents') || url.includes('/documents');
+      case 'reports':
+        return url.startsWith('/reports');
+      case 'members':
+        return url.includes('/members') || url.includes('tab=members');
+      case 'settings':
+        return (url.includes('/settings') && !url.includes('tab=members')) || url.includes('/workflow') || url.includes('/boards') || url.includes('/board-settings');
+      default:
+        return false;
+    }
+  }
 
   // Header Live Search Signal
   readonly headerSearchQuery = signal<string>('');
@@ -85,24 +139,162 @@ export class AppShellComponent implements OnDestroy {
   // Computed Expanded State
   readonly isSidebarExpanded = computed(() => !this.isSidebarCollapsed());
 
-  readonly isSpacesSectionExpanded = signal<boolean>(true);
   readonly isCreateTaskModalOpen = signal<boolean>(false);
   readonly isCreateProjectModalOpen = signal<boolean>(false);
   readonly isExcelImportModalOpen = signal<boolean>(false);
+  readonly isCreateOrgOpen = signal<boolean>(false);
 
   // Flyout Popups State
   readonly isRecentFlyoutOpen = signal<boolean>(false);
+  readonly isQuickProfileOpen = signal<boolean>(false);
 
-  // Projects & Recent Work Items
+  openQuickProfile(): void {
+    this.isQuickProfileOpen.set(true);
+  }
+
+  /** Điều hướng an toàn về Trang chủ ban đầu ngoài tổ chức (Agile Workspace / Dành cho bạn) */
+  goToHome(event?: Event): void {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    this.workspace.currentOrg.set(null);
+    this.projectService.clearActiveProject();
+    this.closeFlyouts();
+    if (typeof window !== 'undefined' && window.innerWidth < 1280) {
+      this.isSidebarCollapsed.set(true);
+    }
+    void this.router.navigate(['/for-you']);
+  }
+
+  // Sidebar 2 cấp: trang chủ (Tổ chức) và tổ chức đang xem (Dự án, Cài đặt)
   readonly projectsList = this.projectService.allProjectsList;
   readonly activeProject = this.projectService.currentProject;
   readonly workItems = this.projectService.workItems;
-  readonly recentWorkItems = computed(() => {
-    const ids = this.recentWork.recentTaskIds();
-    const all = this.workItems();
-    const matched = ids.map(id => all.find(i => i.id === id)).filter((x): x is WorkItem => !!x);
-    return matched.length > 0 ? matched : all.slice(0, 6);
+  readonly organizations = this.workspace.organizations;
+  readonly orgRoleLabels = ORG_ROLE_LABELS;
+  readonly recentItems = signal<RecentItem[]>([]);
+  /** Tổ chức đang xem: theo URL /orgs/:id, hoặc tổ chức của dự án đang mở khi ở trong màn dự án / công việc. */
+  readonly currentOrgId = computed(() => {
+    const url = this.currentUrl();
+    // Khi người dùng ở trang chủ ban đầu ngoài tổ chức hoặc các trang toàn cục, không gán Org context
+    if (!url || url === '/' || url.startsWith('/for-you') || url.startsWith('/profile') || url.startsWith('/notifications') || url.startsWith('/admin') || url.startsWith('/auth') || url.startsWith('/login') || url.startsWith('/invite')) {
+      return null;
+    }
+    const match = /^\/orgs\/([^/?#]+)/.exec(url);
+    if (match) return decodeURIComponent(match[1]);
+    if (this.isProjectRoute() || url.startsWith('/issues/')) {
+      return this.activeProject().orgId || null;
+    }
+    // Giữ nguyên tổ chức nếu đang có dự án được chọn trong ngữ cảnh dự án
+    if (this.projectService.hasActiveProject() && this.activeProject()?.orgId) {
+      return this.activeProject().orgId;
+    }
+    return null;
   });
+  readonly sidebarOrg = computed(() => this.organizations().find(org => org.id === this.currentOrgId()) ?? null);
+
+  readonly currentBoardTabTitle = computed(() => {
+    const p = this.activeProject();
+    // 1. Ưu tiên tên Tab / Tên Workflow mà người dùng đã chọn áp dụng
+    if ((p as any)?.boardTabTitle) return (p as any).boardTabTitle;
+    if ((p as any)?.workflowName) {
+      const w = (p as any).workflowName.replace(/^Bảng\s+/i, '').trim();
+      if (w) return w;
+    }
+    // 2. Tiếp theo từ tên Board thực tế trong cơ sở dữ liệu
+    if ((p as any)?.boardName) {
+      const trimmed = (p as any).boardName.replace(/^Bảng\s+/i, '').trim();
+      if (trimmed) return trimmed;
+    }
+    // 3. Kiểm tra lưu vết trong localStorage hoặc sessionStorage theo dự án
+    if (typeof localStorage !== 'undefined' && p?.id) {
+      const saved = localStorage.getItem(`projectmgmt.workflow-name.${p.id}`)
+        || localStorage.getItem(`projectmgmt.workflow-name.${p.id.toLowerCase()}`);
+      if (saved) return saved.replace(/^Bảng\s+/i, '').trim();
+    }
+    if (typeof sessionStorage !== 'undefined' && p?.id) {
+      const saved = sessionStorage.getItem(`projectmgmt.workflow-name.${p.id}`)
+        || sessionStorage.getItem(`projectmgmt.workflow-name.${p.id.toLowerCase()}`);
+      if (saved) return saved.replace(/^Bảng\s+/i, '').trim();
+    }
+    // 4. Fallback theo loại quy trình quản lý
+    if ((p as any)?.managementType === 'Kanban' || p?.type === 'Kanban') return 'Kanban';
+    if ((p as any)?.managementType) return (p as any).managementType;
+    return 'Scrum';
+  });
+
+  /** Vai trò theo ngữ cảnh hiện tại (Dự án -> Tổ chức -> Tài khoản cá nhân, tuyệt đối không gán Admin toàn cục) */
+  readonly currentContextRole = computed(() => {
+    if (this.isProjectRoute() && this.activeProject().id) {
+      const proj = this.activeProject();
+      const myId = this.identity.authState().currentUser?.id;
+      if (proj.leadUserId && myId && proj.leadUserId.toLowerCase() === myId.toLowerCase()) return 'Giám đốc dự án';
+      const myMember = (proj.members || []).find(m => m.userId && myId && m.userId.toLowerCase() === myId.toLowerCase());
+      if (myMember) {
+        switch (myMember.role) {
+          case 'Project Lead': return 'Quản lý dự án';
+          case 'Scrum Master': return 'Scrum Master';
+          case 'Developer': return 'Kỹ sư phát triển';
+          case 'QA Engineer': return 'QA Engineer';
+          case 'Viewer': return 'Người quan sát';
+        }
+      }
+      return 'Thành viên dự án';
+    }
+    const org = this.sidebarOrg();
+    if (org) {
+      return this.orgRoleLabels[org.myRole] || 'Thành viên tổ chức';
+    }
+    return 'Tài khoản cá nhân';
+  });
+
+  readonly canManageActiveProject = computed(() => {
+    if (this.identity.isSystemAdmin()) return true;
+    const currentUser = this.identity.authState().currentUser;
+    const myId = currentUser?.id;
+    const myName = currentUser?.displayName;
+    const myEmail = currentUser?.email;
+    if (!myId) return false;
+
+    const org = this.sidebarOrg();
+    if (org && (org.myRole === 'Owner' || (org.ownerId && org.ownerId.toLowerCase() === myId.toLowerCase()))) {
+      return true;
+    }
+
+    const proj = this.activeProject();
+    if (!proj || !proj.id) return false;
+
+    // Giám đốc dự án / Người phụ trách cao nhất (LeadUserId)
+    if (proj.leadUserId && proj.leadUserId.toLowerCase() === myId.toLowerCase()) {
+      return true;
+    }
+
+    // Kiểm tra vai trò trong dự án: chỉ Quản lý dự án / Scrum Master mới có quyền Cài đặt
+    const members = proj.members || [];
+    const myMember = members.find(m =>
+      (m.userId && m.userId.toLowerCase() === myId.toLowerCase()) ||
+      (m.email && myEmail && m.email.toLowerCase() === myEmail.toLowerCase()) ||
+      (m.displayName && myName && m.displayName.toLowerCase() === myName.toLowerCase())
+    );
+
+    if (myMember) {
+      const role = (myMember.role || '').toLowerCase();
+      return role.includes('lead') || role.includes('manager') || role.includes('scrum') || role.includes('director') || role.includes('owner');
+    }
+
+    return false;
+  });
+
+  readonly canEditProjectTasks = computed(() => {
+    if (this.canManageActiveProject()) return true;
+    const myId = this.identity.authState().currentUser?.id;
+    if (!myId) return false;
+    const proj = this.activeProject();
+    const myMember = (proj.members || []).find(m => m.userId && m.userId.toLowerCase() === myId.toLowerCase());
+    return myMember ? myMember.role !== 'Viewer' : true;
+  });
+
   @HostListener('document:keydown', ['$event'])
   onGlobalKeydown(event: KeyboardEvent): void {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
@@ -113,6 +305,7 @@ export class AppShellComponent implements OnDestroy {
   }
 
   constructor() {
+    this.workspace.refreshOrganizations().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ error: () => undefined });
     this.projectService.getProjects().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       error: () => this.toastService.error('Dự án', 'Không thể tải dự án. Mở danh sách dự án để thử lại.')
     });
@@ -134,20 +327,35 @@ export class AppShellComponent implements OnDestroy {
   }
 
   onRouteActivated(): void {
+    const url = this.currentUrl();
+    if (url.includes('/settings') || url.includes('/workflow') || url.includes('/boards') || url.includes('/members')) {
+      return;
+    }
     window.requestAnimationFrame(() => {
       if (this.pageBody) {
-        this.motion.animatePage(this.pageBody.nativeElement, this.currentUrl());
+        this.motion.animatePage(this.pageBody.nativeElement, url);
       }
     });
   }
 
-  ngOnDestroy(): void {
-    this.motion.destroy();
+  readonly isAvatarModalOpen = signal(false);
+  readonly avatarLoadErrorUrl = signal<string | null>(null);
+
+  readonly currentResolvedAvatarUrl = computed(() => {
+    const url = resolveAvatarUrl(this.identity.authState().currentUser?.avatarUrl);
+    if (url && this.avatarLoadErrorUrl() === url) return null;
+    return url;
+  });
+
+  openCurrentUserAvatarModal(): void {
+    this.isAvatarModalOpen.set(true);
   }
 
-  useAvatarFallback(event: Event): void {
-    const image = event.target as HTMLImageElement;
-    image.style.display = 'none';
+  useAvatarFallback(_event: Event): void {
+    const url = resolveAvatarUrl(this.identity.authState().currentUser?.avatarUrl);
+    if (url) {
+      this.avatarLoadErrorUrl.set(url);
+    }
   }
 
   toggleSidebar(): void {
@@ -162,12 +370,44 @@ export class AppShellComponent implements OnDestroy {
     this.isMobileSearchOpen.update(value => !value);
   }
 
-  toggleSpacesSection(): void {
-    this.isSpacesSectionExpanded.update(val => !val);
+  /** Cài đặt tổ chức chỉ hiện với người tạo tổ chức hoặc Quản trị viên hệ thống. */
+  isOrgOwner(org: OrganizationSummary | null | undefined): boolean {
+    if (!org) return false;
+    if (this.identity.isSystemAdmin()) return true;
+    const myId = this.identity.authState().currentUser?.id;
+    if (!myId) return false;
+    if (org.myRole === 'Owner') return true;
+    if (org.ownerId && org.ownerId.toLowerCase() === myId.toLowerCase()) return true;
+    return false;
+  }
+
+  projectsOf(orgId: string): Project[] {
+    return this.projectsList().filter(project => project.orgId === orgId && !project.isDeleted);
+  }
+
+  openProject(project: Project): void {
+    this.closeFlyouts();
+    this.workspaceNav.openProject(project);
+  }
+
+  onOrgCreated(org: OrganizationSummary): void {
+    this.isCreateOrgOpen.set(false);
+    this.workspace.upsert(org);
+    this.toastService.success('Đã tạo tổ chức', org.name);
+    this.workspaceNav.openOrganization(org.id);
   }
 
   toggleRecentFlyout(): void {
-    this.isRecentFlyoutOpen.update(val => !val);
+    const opening = !this.isRecentFlyoutOpen();
+    this.isRecentFlyoutOpen.set(opening);
+    if (opening) {
+      this.workspaceData.listRecent(this.sidebarOrg()?.id).subscribe({ next: items => this.recentItems.set(items), error: () => this.recentItems.set([]) });
+    }
+  }
+
+  openRecent(item: RecentItem): void {
+    this.closeFlyouts();
+    this.workspaceNav.openRecent(item);
   }
 
   closeFlyouts(): void {
@@ -193,20 +433,7 @@ export class AppShellComponent implements OnDestroy {
     });
   }
 
-  selectProjectSpace(proj: Project): void {
-    this.projectService.selectProject(proj);
-    this.closeFlyouts();
-    this.toastService.info('Chuyển Không Gian Dự Án', `Đã mở không gian làm việc ${proj.name} (${proj.projectKey})`);
-    this.router.navigate(['/project/summary']);
-  }
-
   openSearchResult(item: WorkItem): void {
-    this.closeFlyouts();
-    this.recentWork.rememberTask(item.id);
-    this.projectService.activeDrawerTask.set(item);
-  }
-
-  openRecentItem(item: WorkItem): void {
     this.closeFlyouts();
     this.recentWork.rememberTask(item.id);
     this.projectService.activeDrawerTask.set(item);
@@ -247,8 +474,24 @@ export class AppShellComponent implements OnDestroy {
   }
 
   exportExcel(): void {
-    this.excelService.exportToExcel(this.projectService.workItems(), 'Project_WorkItems_Export.csv');
-    this.toastService.success('Xuất Dữ Liệu Excel', 'Đã tải xuống file CSV/Excel danh sách công việc thành công.');
+    const proj = this.projectService.currentProject();
+    const projectKey = proj.projectKey || 'ProjectMgmt';
+    const projectName = proj.name || projectKey;
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const filename = `${projectKey}_Bao_Cao_Du_An_${dateStr}.xlsx`;
+    this.excelService.exportToExcel(
+      this.projectService.workItems(),
+      filename,
+      this.projectService.sprints(),
+      projectName,
+      {
+        scope: 'project_all',
+        projectKey,
+        projectName,
+        projectStatuses: this.projectService.projectStatuses(),
+      }
+    );
+    this.toastService.success('Xuất Dữ Liệu Excel', `Đã tải xuống bảng Excel: ${filename}`);
   }
 
   closeActiveDrawer(): void {
@@ -258,7 +501,7 @@ export class AppShellComponent implements OnDestroy {
   logout(): void {
     this.confirmService.confirm({
       title: 'Xác Nhận Đăng Xuất',
-      message: 'Bạn có chắc chắn muốn đăng xuất khỏi Hệ thống Quản lý Dự án Scrum tích hợp AI?',
+      message: 'Bạn có chắc chắn muốn đăng xuất khỏi Hệ thống Quản lý Dự án Enterprise?',
       type: 'danger',
       confirmText: 'Đăng xuất ngay',
       cancelText: 'Hủy bỏ',

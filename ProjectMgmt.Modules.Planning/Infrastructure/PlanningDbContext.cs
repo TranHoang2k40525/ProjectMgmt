@@ -25,6 +25,12 @@ public class PlanningDbContext : DbContext
     public DbSet<SprintMessage> SprintMessages => Set<SprintMessage>();
     public DbSet<SprintSnapshot> SprintSnapshots => Set<SprintSnapshot>();
     public DbSet<SprintMemberCapacity> SprintMemberCapacities => Set<SprintMemberCapacity>();
+    public DbSet<ProjectDocument> ProjectDocuments => Set<ProjectDocument>();
+    public DbSet<ProjectDocumentComment> ProjectDocumentComments => Set<ProjectDocumentComment>();
+    public DbSet<SpecStoryLink> SpecStoryLinks => Set<SpecStoryLink>();
+    public DbSet<PlanningPokerSession> PlanningPokerSessions => Set<PlanningPokerSession>();
+    public DbSet<PlanningPokerVote> PlanningPokerVotes => Set<PlanningPokerVote>();
+    public DbSet<SprintRetrospectiveCard> SprintRetrospectiveCards => Set<SprintRetrospectiveCard>();
     public DbSet<UserWorkloadSnapshot> UserWorkloadSnapshots => Set<UserWorkloadSnapshot>();
     public DbSet<UserPerformanceMetric> UserPerformanceMetrics => Set<UserPerformanceMetric>();
     public DbSet<AiAssignmentRun> AiAssignmentRuns => Set<AiAssignmentRun>();

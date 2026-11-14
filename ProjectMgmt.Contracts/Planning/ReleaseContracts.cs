@@ -10,7 +10,7 @@ public record ProjectVersionDto(Guid Id, Guid ProjectId, string Name, DateOnly? 
 /// </summary>
 public interface IProjectReleaseLookupService
 {
-    Task<IReadOnlyList<ProjectComponentDto>> GetComponentsAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<ProjectComponentDto>> GetComponentsAsync(Guid projectId);
 
-    Task<IReadOnlyList<ProjectVersionDto>> GetVersionsAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<ProjectVersionDto>> GetVersionsAsync(Guid projectId);
 }

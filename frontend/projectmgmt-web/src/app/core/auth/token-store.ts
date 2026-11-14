@@ -8,6 +8,7 @@ export interface AuthSession {
   userId: string;
   email: string;
   fullName: string;
+  avatarUrl?: string | null;
   roles: string[];
 }
 

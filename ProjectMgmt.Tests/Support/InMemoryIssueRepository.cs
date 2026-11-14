@@ -14,27 +14,27 @@ public class InMemoryIssueRepository : IIssueRepository
     public List<Issue> Issues { get; }
     public int SaveCount { get; private set; }
 
-    public Task<Issue?> GetByIdAsync(Guid issueId, bool includeDeleted = false, CancellationToken cancellationToken = default) =>
+    public Task<Issue?> GetByIdAsync(Guid issueId, bool includeDeleted = false) =>
         Task.FromResult(Issues.SingleOrDefault(issue => issue.Id == issueId && (includeDeleted || !issue.IsDeleted)));
 
-    public Task<Issue?> GetByNumberAsync(Guid projectId, int issueNumber, CancellationToken cancellationToken = default) =>
+    public Task<Issue?> GetByNumberAsync(Guid projectId, int issueNumber) =>
         Task.FromResult(Issues.SingleOrDefault(issue =>
             issue.ProjectId == projectId && issue.IssueNumber == issueNumber && !issue.IsDeleted));
 
-    public Task<IReadOnlyList<Issue>> GetByIdsAsync(IEnumerable<Guid> issueIds, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<Issue>> GetByIdsAsync(IEnumerable<Guid> issueIds)
     {
         var ids = issueIds.ToHashSet();
         IReadOnlyList<Issue> result = Issues.Where(issue => ids.Contains(issue.Id) && !issue.IsDeleted).ToList();
         return Task.FromResult(result);
     }
 
-    public Task<IReadOnlyList<Issue>> GetChildrenAsync(Guid parentId, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<Issue>> GetChildrenAsync(Guid parentId)
     {
         IReadOnlyList<Issue> result = Ordered(Issues.Where(issue => issue.ParentId == parentId && !issue.IsDeleted)).ToList();
         return Task.FromResult(result);
     }
 
-    public Task<IReadOnlyList<Issue>> GetByEpicAsync(Guid epicId, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<Issue>> GetByEpicAsync(Guid epicId)
     {
         IReadOnlyList<Issue> result = Issues.Where(issue => issue.EpicId == epicId).ToList();
         return Task.FromResult(result);
@@ -43,13 +43,13 @@ public class InMemoryIssueRepository : IIssueRepository
     public List<IssueStatusHistory> StatusHistory { get; } = [];
     public List<IssueAssignmentHistory> AssignmentHistory { get; } = [];
 
-    public Task<IReadOnlyList<Issue>> GetBySprintAsync(Guid sprintId, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<Issue>> GetBySprintAsync(Guid sprintId)
     {
         IReadOnlyList<Issue> result = Ordered(Issues.Where(issue => issue.SprintId == sprintId && !issue.IsDeleted)).ToList();
         return Task.FromResult(result);
     }
 
-    public Task<IReadOnlyList<Issue>> GetOpenByAssigneeAsync(Guid userId, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<Issue>> GetOpenByAssigneeAsync(Guid userId)
     {
         IReadOnlyList<Issue> result = Issues
             .Where(issue => issue.AssigneeId == userId && !issue.IsDeleted && issue.ResolvedAt is null)
@@ -60,19 +60,19 @@ public class InMemoryIssueRepository : IIssueRepository
         return Task.FromResult(result);
     }
 
-    public Task<IReadOnlyList<IssueStatusHistory>> GetStatusHistoryAsync(Guid issueId, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<IssueStatusHistory>> GetStatusHistoryAsync(Guid issueId)
     {
         IReadOnlyList<IssueStatusHistory> result = StatusHistory.Where(h => h.IssueId == issueId).OrderBy(h => h.ChangedAt).ToList();
         return Task.FromResult(result);
     }
 
-    public Task<IReadOnlyList<IssueAssignmentHistory>> GetAssignmentHistoryAsync(Guid issueId, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<IssueAssignmentHistory>> GetAssignmentHistoryAsync(Guid issueId)
     {
         IReadOnlyList<IssueAssignmentHistory> result = AssignmentHistory.Where(h => h.IssueId == issueId).OrderBy(h => h.AssignedAt).ToList();
         return Task.FromResult(result);
     }
 
-    public Task<IssuePage> ListAsync(IssueListFilter filter, CancellationToken cancellationToken = default)
+    public Task<IssuePage> ListAsync(IssueListFilter filter)
     {
         var page = Math.Max(filter.Page, 1);
         var pageSize = Math.Clamp(filter.PageSize, 1, IssueListFilter.MaxPageSize);
@@ -104,18 +104,18 @@ public class InMemoryIssueRepository : IIssueRepository
         return Task.FromResult(new IssuePage(items, matched.Count));
     }
 
-    public Task<IReadOnlyList<Issue>> GetRankedAsync(Guid projectId, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<Issue>> GetRankedAsync(Guid projectId)
     {
         IReadOnlyList<Issue> result = Ordered(Issues.Where(issue => issue.ProjectId == projectId && !issue.IsDeleted)).ToList();
         return Task.FromResult(result);
     }
 
-    public Task<decimal?> GetMaxRankAsync(Guid projectId, CancellationToken cancellationToken = default) =>
+    public Task<decimal?> GetMaxRankAsync(Guid projectId) =>
         Task.FromResult(Issues.Where(issue => issue.ProjectId == projectId && !issue.IsDeleted)
             .Select(issue => (decimal?)issue.RankOrder)
             .Max());
 
-    public Task AddAsync(Issue issue, CancellationToken cancellationToken = default)
+    public Task AddAsync(Issue issue)
     {
         Issues.Add(issue);
         return Task.CompletedTask;
@@ -123,13 +123,13 @@ public class InMemoryIssueRepository : IIssueRepository
 
     public List<ActivityLog> Activities { get; } = [];
 
-    public Task AddActivityAsync(ActivityLog activity, CancellationToken cancellationToken = default)
+    public Task AddActivityAsync(ActivityLog activity)
     {
         Activities.Add(activity);
         return Task.CompletedTask;
     }
 
-    public Task SaveChangesAsync(CancellationToken cancellationToken = default)
+    public Task SaveChangesAsync()
     {
         SaveCount++;
         return Task.CompletedTask;
@@ -138,24 +138,23 @@ public class InMemoryIssueRepository : IIssueRepository
     public Task<(IReadOnlyList<ActivityLog> Items, int TotalCount)> GetActivitiesAsync(
         Guid issueId,
         int page,
-        int pageSize,
-        CancellationToken cancellationToken = default)
+        int pageSize)
     {
         var matched = Activities.Where(a => a.IssueId == issueId).OrderByDescending(a => a.CreatedAt).ThenBy(a => a.Id).ToList();
         IReadOnlyList<ActivityLog> items = matched.Skip((page - 1) * pageSize).Take(pageSize).ToList();
         return Task.FromResult((items, matched.Count));
     }
 
-    public Task<IssueStatusHistory?> GetLastStatusChangeAsync(Guid issueId, CancellationToken cancellationToken = default) =>
+    public Task<IssueStatusHistory?> GetLastStatusChangeAsync(Guid issueId) =>
         Task.FromResult(StatusHistory.Where(h => h.IssueId == issueId).MaxBy(h => h.ChangedAt));
 
-    public Task AddStatusHistoryAsync(IssueStatusHistory history, CancellationToken cancellationToken = default)
+    public Task AddStatusHistoryAsync(IssueStatusHistory history)
     {
         StatusHistory.Add(history);
         return Task.CompletedTask;
     }
 
-    public Task AddAssignmentHistoryAsync(IssueAssignmentHistory history, CancellationToken cancellationToken = default)
+    public Task AddAssignmentHistoryAsync(IssueAssignmentHistory history)
     {
         AssignmentHistory.Add(history);
         return Task.CompletedTask;
@@ -163,13 +162,13 @@ public class InMemoryIssueRepository : IIssueRepository
 
     public int TransactionCount { get; private set; }
 
-    public Task<Issue?> LockForUpdateAsync(Guid issueId, CancellationToken cancellationToken = default) =>
-        GetByIdAsync(issueId, cancellationToken: cancellationToken);
+    public Task<Issue?> LockForUpdateAsync(Guid issueId) =>
+        GetByIdAsync(issueId);
 
-    public async Task<T> ExecuteInTransactionAsync<T>(Func<CancellationToken, Task<T>> work, CancellationToken cancellationToken = default)
+    public async Task<T> ExecuteInTransactionAsync<T>(Func<Task<T>> work)
     {
         TransactionCount++;
-        return await work(cancellationToken);
+        return await work();
     }
 
     private static IOrderedEnumerable<Issue> Ordered(IEnumerable<Issue> issues) =>

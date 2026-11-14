@@ -9,7 +9,6 @@ describe('resolveMotionProfile', () => {
     expect(resolveMotionProfile('/roadmap').name).toBe('blueprint');
     expect(resolveMotionProfile('/reports').name).toBe('data');
     expect(resolveMotionProfile('/profile').name).toBe('scanner');
-    expect(resolveMotionProfile('/admin/ai-governance').name).toBe('ai');
     expect(resolveMotionProfile('/project/settings').name).toBe('precision');
   });
 

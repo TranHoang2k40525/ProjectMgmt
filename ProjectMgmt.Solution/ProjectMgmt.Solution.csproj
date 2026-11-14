@@ -19,6 +19,7 @@
     <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" />
     <PackageReference Include="Serilog.AspNetCore" />
     <PackageReference Include="Serilog.Sinks.File" />
+    <PackageReference Include="StackExchange.Redis" />
     <PackageReference Include="Swashbuckle.AspNetCore" />
   </ItemGroup>
 
@@ -38,6 +39,10 @@
     <ProjectReference Include="..\ProjectMgmt.Modules.IdentityExperience\Infrastructure\IdentityExperience.Infrastructure.csproj" />
     <ProjectReference Include="..\ProjectMgmt.Modules.Planning\Application\Planning.Application.csproj" />
     <ProjectReference Include="..\ProjectMgmt.Modules.Planning\Infrastructure\Planning.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ProjectMgmt.Tests" />
   </ItemGroup>
 
 </Project>

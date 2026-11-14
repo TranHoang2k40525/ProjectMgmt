@@ -25,23 +25,22 @@ public class IssueHistoryService : IIssueHistoryService
     public async Task<Result<PagedResultDto<ActivityDto>>> GetActivityAsync(
         Guid issueId,
         int page,
-        int pageSize,
-        CancellationToken cancellationToken = default)
+        int pageSize)
     {
         if (page < 1 || pageSize is < 1 or > MaxPageSize)
         {
             return Result<PagedResultDto<ActivityDto>>.Failure(Error.Validation("HISTORY_PAGE_INVALID", $"Trang từ 1, mỗi trang 1–{MaxPageSize} dòng."));
         }
 
-        if (await _issues.GetByIdAsync(issueId, cancellationToken: cancellationToken) is null)
+        if (await _issues.GetByIdAsync(issueId) is null)
         {
             return Result<PagedResultDto<ActivityDto>>.Failure(IssueErrors.NotFound);
         }
 
-        var (items, total) = await _issues.GetActivitiesAsync(issueId, page, pageSize, cancellationToken);
+        var (items, total) = await _issues.GetActivitiesAsync(issueId, page, pageSize);
         var userIds = items.Where(a => a.UserId.HasValue).Select(a => a.UserId!.Value)
             .Concat(items.Where(a => a.FieldName == nameof(Issue.AssigneeId)).SelectMany(a => ParseIds(a.OldValue, a.NewValue)));
-        var names = await NamesAsync(userIds, cancellationToken);
+        var names = await NamesAsync(userIds);
 
         return Result.Success(new PagedResultDto<ActivityDto>
         {
@@ -64,17 +63,17 @@ public class IssueHistoryService : IIssueHistoryService
         });
     }
 
-    public async Task<Result<IReadOnlyList<StatusChangeDto>>> GetStatusHistoryAsync(Guid issueId, CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyList<StatusChangeDto>>> GetStatusHistoryAsync(Guid issueId)
     {
-        var issue = await _issues.GetByIdAsync(issueId, cancellationToken: cancellationToken);
+        var issue = await _issues.GetByIdAsync(issueId);
         if (issue is null)
         {
             return Result<IReadOnlyList<StatusChangeDto>>.Failure(IssueErrors.NotFound);
         }
 
-        var history = await _issues.GetStatusHistoryAsync(issueId, cancellationToken);
-        var statuses = (await _projects.GetStatusesAsync(issue.ProjectId, cancellationToken)).ToDictionary(s => s.Id, s => s.Name);
-        var names = await NamesAsync(history.Where(h => h.ChangedBy.HasValue).Select(h => h.ChangedBy!.Value), cancellationToken);
+        var history = await _issues.GetStatusHistoryAsync(issueId);
+        var statuses = (await _projects.GetStatusesAsync(issue.ProjectId)).ToDictionary(s => s.Id, s => s.Name);
+        var names = await NamesAsync(history.Where(h => h.ChangedBy.HasValue).Select(h => h.ChangedBy!.Value));
         IReadOnlyList<StatusChangeDto> result = history.Select(h => new StatusChangeDto
         {
             Id = h.Id,
@@ -92,16 +91,16 @@ public class IssueHistoryService : IIssueHistoryService
         return Result.Success(result);
     }
 
-    public async Task<Result<IReadOnlyList<AssignmentChangeDto>>> GetAssignmentHistoryAsync(Guid issueId, CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyList<AssignmentChangeDto>>> GetAssignmentHistoryAsync(Guid issueId)
     {
-        if (await _issues.GetByIdAsync(issueId, cancellationToken: cancellationToken) is null)
+        if (await _issues.GetByIdAsync(issueId) is null)
         {
             return Result<IReadOnlyList<AssignmentChangeDto>>.Failure(IssueErrors.NotFound);
         }
 
-        var history = await _issues.GetAssignmentHistoryAsync(issueId, cancellationToken);
+        var history = await _issues.GetAssignmentHistoryAsync(issueId);
         var names = await NamesAsync(history.SelectMany(h => new[] { h.FromAssigneeId, h.ToAssigneeId, h.AssignedBy })
-            .Where(id => id.HasValue).Select(id => id!.Value), cancellationToken);
+            .Where(id => id.HasValue).Select(id => id!.Value));
         IReadOnlyList<AssignmentChangeDto> result = history.Select(h => new AssignmentChangeDto
         {
             Id = h.Id,
@@ -119,7 +118,7 @@ public class IssueHistoryService : IIssueHistoryService
         return Result.Success(result);
     }
 
-    private async Task<Dictionary<Guid, string>> NamesAsync(IEnumerable<Guid> userIds, CancellationToken cancellationToken)
+    private async Task<Dictionary<Guid, string>> NamesAsync(IEnumerable<Guid> userIds)
     {
         var ids = userIds.Distinct().ToList();
         if (ids.Count == 0)
@@ -127,7 +126,7 @@ public class IssueHistoryService : IIssueHistoryService
             return [];
         }
 
-        return (await _users.GetDisplayInfoAsync(ids, cancellationToken)).ToDictionary(user => user.UserId, user => user.DisplayName);
+        return (await _users.GetDisplayInfoAsync(ids)).ToDictionary(user => user.UserId, user => user.DisplayName);
     }
 
     private static IEnumerable<Guid> ParseIds(params string?[] values) =>
