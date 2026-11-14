@@ -1857,8 +1857,20 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
             lower.Contains("code ") || lower.Contains("sửa bug") ||
             lower.Contains("fix lỗi");
 
+        bool isPureInquiryQuestion = lower.Contains("tại sao") || lower.Contains("vì sao") ||
+                                     lower.Contains("có nên") || lower.Contains("lý do") ||
+                                     lower.Contains("là gì") || lower.Contains("nghĩa là") ||
+                                     lower.Contains("bao nhiêu") || lower.Contains("những gì") ||
+                                     lower.Contains("gồm gì") || lower.Contains("gồm những") ||
+                                     lower.Contains("như thế nào") || lower.Contains("thế nào") ||
+                                     lower.Contains("ra sao") || lower.Contains("khi nào") ||
+                                     lower.Contains("ở đâu") || lower.Contains("ai sẽ") ||
+                                     lower.Contains("ai đang") || lower.Contains("ai làm") ||
+                                     lower.Contains("ai phụ trách") || lower.Contains("nội dung của") ||
+                                     lower.Contains("chi tiết của");
+
         // 1. Kiểm tra yêu cầu Xuất file Excel (export_excel) - nhận diện đa dạng phạm vi (Sprint, Backlog, 1 Task, Chi tiết Task, Bảng đề xuất)
-        //    và tuyệt đối không nhầm với yêu cầu tạo task/tính năng hoặc câu hỏi "làm sao/cách xuất" hoặc khi file SRS đính kèm dài chỉ nhắc tới từ "excel".
+        //    và tuyệt đối không nhầm với từ ghép "đề xuất" / "truy xuất", câu hỏi "nội dung ... là gì" hoặc yêu cầu tạo task/tính năng.
         var exportCandidate = (!string.IsNullOrWhiteSpace(promptText) &&
                                !promptText.Equals("Tạo Sprint Goal, Tasks và Subtasks chuẩn Scrum.", StringComparison.OrdinalIgnoreCase) &&
                                !promptText.Equals("Phân tích tài liệu dự án và lập kế hoạch Sprint tiếp theo.", StringComparison.OrdinalIgnoreCase))
@@ -1873,9 +1885,7 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                                        exportCandidate.Contains("xuất file") || exportCandidate.Contains("tải file") ||
                                        exportCandidate.Contains("lấy file") || exportCandidate.Contains("cho tôi file") ||
                                        exportCandidate.Contains("export");
-            bool mentionsExportVerb = System.Text.RegularExpressions.Regex.IsMatch(
-                                          exportCandidate,
-                                          @"(?i)\b(xuất|export|download|tải\s*về|tải\s*xuống|tải\s*file|lấy\s*file)\b");
+            bool mentionsExportVerb = ContainsTrueExportVerb(exportCandidate);
             bool mentionsProjectExportTarget =
                 exportCandidate.Contains("sprint") || exportCandidate.Contains("backlog") || exportCandidate.Contains("hàng chờ") ||
                 exportCandidate.Contains("task") || exportCandidate.Contains("công việc") || exportCandidate.Contains("việc") ||
@@ -1889,7 +1899,8 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                 exportCandidate.Contains("làm sao") || exportCandidate.Contains("cách nào") ||
                 exportCandidate.Contains("hướng dẫn") || exportCandidate.Contains("làm thế nào") ||
                 exportCandidate.Contains("có hỗ trợ") || exportCandidate.Contains("tại sao") ||
-                exportCandidate.Contains("vì sao") || exportCandidate.Contains("hỗ trợ những");
+                exportCandidate.Contains("vì sao") || exportCandidate.Contains("hỗ trợ những") ||
+                (isPureInquiryQuestion && !mentionsExcelFormat && !mentionsGenericFile);
             bool asksToEditOrCritique =
                 exportCandidate.Contains("đổi sang") || exportCandidate.Contains("chuyển sang") ||
                 exportCandidate.Contains("nhận xét") || exportCandidate.Contains("đánh giá");
@@ -1915,13 +1926,6 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
 
         // 2. Kiểm tra lệnh hành động trực tiếp trên đề xuất hiện có (push_backlog / apply_sprint)
         bool hasExistingTasks = existingProposal?.Tasks != null && existingProposal.Tasks.Count > 0;
-        bool isPureInquiryQuestion = lower.Contains("tại sao") || lower.Contains("vì sao") ||
-                                     lower.Contains("có nên") || lower.Contains("lý do") ||
-                                     lower.Contains("là gì") || lower.Contains("nghĩa là") ||
-                                     lower.Contains("bao nhiêu") || lower.Contains("những gì") ||
-                                     lower.Contains("như thế nào") || lower.Contains("khi nào") ||
-                                     lower.Contains("ở đâu") || lower.Contains("ai sẽ") ||
-                                     lower.Contains("ai đang");
         if (hasExistingTasks && lower.Length < 180)
         {
             bool asksToCreateOrModify = lower.Contains("thêm ") || lower.Contains("tạo ") || lower.Contains("sinh ") ||
@@ -2115,6 +2119,22 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         }
 
         return "sprint_plan";
+    }
+
+    private static bool ContainsTrueExportVerb(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        if (System.Text.RegularExpressions.Regex.IsMatch(
+                text,
+                @"(?i)\b(export|download|tải\s*về|tải\s*xuống|tải\s*file|lấy\s*file|xuất\s*file|xuất\s*excel|xuất\s*ra|xuất\s*bảng|xuất\s*báo\s*cáo|xuất\s*danh\s*sách|xuất\s*dữ\s*liệu)\b"))
+        {
+            return true;
+        }
+
+        // Loại trừ triệt để từ "xuất" nằm trong các từ ghép tiếng Việt ("đề xuất", "truy xuất", "sản xuất", "đột xuất", "xác xuất", "năng xuất", "hiệu xuất", "xuất hiện", "xuất phát", "xuất sắc"...)
+        return System.Text.RegularExpressions.Regex.IsMatch(
+            text,
+            @"(?i)(?<!\b(?:đề|truy|sản|đột|xác|năng|hiệu|tần|lãi|công|diễn|tái|kiểm|nhập)\s+)\bxuất\b(?!\s+\b(?:hiện|phát|sắc|xứ|bản|khẩu|viện|huyết|toán|cảnh|gia)\b)");
     }
 
     private static bool IsBacklogTargetRequested(string? text)
@@ -2324,6 +2344,35 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         {
             return $"Danh sách tài liệu đặc tả thực tế trong Spec Hub của dự án:\n" +
                    string.Join("\n", projectDocs.Select(d => $"- {d.Name}"));
+        }
+
+        if (existingProposal?.Tasks != null && existingProposal.Tasks.Count > 0 &&
+            (AiIndexedMemoryEngine.AsksAboutCurrentProposalOrSession(question.ToLowerInvariant(), existingProposal) ||
+             contextPlan.UseMemoryOnly))
+        {
+            var sbTasks = new System.Text.StringBuilder();
+            sbTasks.AppendLine($"Dưới đây là chi tiết **{existingProposal.Tasks.Count} công việc đề xuất** ({existingProposal.TotalStoryPoints} SP · {existingProposal.TotalEstimatedHours} giờ) cho mục tiêu **{existingProposal.SprintGoal}**:");
+            for (int idx = 0; idx < existingProposal.Tasks.Count; idx++)
+            {
+                var t = existingProposal.Tasks[idx];
+                var backlogNote = !string.IsNullOrWhiteSpace(t.SourceBacklogIssueKey) ? $" · Từ Backlog: `{t.SourceBacklogIssueKey}`" : string.Empty;
+                sbTasks.AppendLine();
+                sbTasks.AppendLine($"### {idx + 1}. {t.Title}");
+                sbTasks.AppendLine($"- **Phân loại & Khối lượng**: `{t.Type}` · Mức ưu tiên: `{t.Priority}` · `{t.StoryPoints} SP` ({t.EstimatedHours}h) · Trạng thái: `{t.Status}` · Phụ trách: **{t.AssigneeName ?? "Chưa gán"}**{backlogNote}");
+                if (!string.IsNullOrWhiteSpace(t.Description))
+                {
+                    sbTasks.AppendLine($"- **Nội dung mô tả**: {t.Description}");
+                }
+                if (t.AcceptanceCriteria != null && t.AcceptanceCriteria.Count > 0)
+                {
+                    sbTasks.AppendLine($"- **Tiêu chí nghiệm thu**: {string.Join("; ", t.AcceptanceCriteria)}");
+                }
+                if (t.Subtasks != null && t.Subtasks.Count > 0)
+                {
+                    sbTasks.AppendLine($"- **Việc con ({t.Subtasks.Count})**: {string.Join("; ", t.Subtasks.Select(s => $"{s.Title} ({s.Role}, {s.EstimatedHours}h, {s.AssigneeName ?? "Chưa gán"})"))}");
+                }
+            }
+            return sbTasks.ToString().Trim();
         }
 
         if (contextPlan.UseMemoryOnly && contextPlan.RecalledMemories.Count > 0)

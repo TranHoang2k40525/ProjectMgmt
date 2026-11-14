@@ -1058,4 +1058,111 @@ public class AiConversationalAssistantTests
         Assert.Contains("Bản đặc tả về quản lý dự án.txt", lastAssistantTurn.DocumentCitations!);
         Assert.Contains("spec_hub_search", lastAssistantTurn.ThinkingSummary ?? string.Empty);
     }
+
+    [Fact]
+    public async Task ExecutePipelineAsync_QuestionAboutProposedTasks_ShouldNotMisclassifyAsExportExcelOrInvokeMcpTools()
+    {
+        var (planningDb, deliveryDb, identityDb, orgId, projectId, actorId) = await SeedProjectAsync();
+        await using var _p = planningDb;
+        await using var _d = deliveryDb;
+        await using var _i = identityDb;
+
+        var existingProposal = new AiSprintProposalDto
+        {
+            SessionId = "sprint_ai_proposed_qa",
+            ProjectId = projectId,
+            SprintGoal = "Tối ưu hóa giao diện Backlog và cấu hình năng lực thành viên",
+            TotalStoryPoints = 13,
+            TotalEstimatedHours = 36,
+            Tasks =
+            [
+                new ProposedTaskDto
+                {
+                    Id = "task_01",
+                    Title = "Tối ưu hóa giao diện Drawer chi tiết công việc và Modal AI Phân tách",
+                    Description = "Chuẩn hóa bố cục Drawer chi tiết và bảng công việc đề xuất trong Modal AI",
+                    Type = "Story",
+                    Priority = "Medium",
+                    Status = "In Progress",
+                    StoryPoints = 5,
+                    EstimatedHours = 16,
+                    AssigneeName = "Vũ Hoàng Nam",
+                    SourceBacklogIssueKey = "QLDA-19",
+                    AcceptanceCriteria = ["Drawer co dãn đa màn hình", "Hiển thị đầy đủ tiêu chí nghiệm thu"]
+                },
+                new ProposedTaskDto
+                {
+                    Id = "task_02",
+                    Title = "Xây dựng giao diện cấu hình năng lực thành viên (Capacity Planning)",
+                    Description = "Cho phép Scrum Master thiết lập giờ làm việc khả dụng theo từng Sprint",
+                    Type = "Story",
+                    Priority = "Medium",
+                    Status = "To Do",
+                    StoryPoints = 5,
+                    EstimatedHours = 12,
+                    AssigneeName = "Lê Thu Hà",
+                    SourceBacklogIssueKey = "QLDA-87",
+                    AcceptanceCriteria = ["Lưu giờ khả dụng theo thành viên"]
+                }
+            ],
+            IndexedMemories =
+            [
+                new AiMemoryAnchorDto
+                {
+                    AnchorKey = "#mem-1",
+                    TurnIndex = 1,
+                    Category = "proposal_snapshot",
+                    Title = "Kế hoạch 2 việc (10 SP)",
+                    Keywords = "Drawer, Capacity Planning, QLDA-19, QLDA-87",
+                    Summary = "2 việc đề xuất cho Sprint",
+                    DetailContent = "task_01: Tối ưu hóa giao diện Drawer; task_02: Capacity Planning"
+                }
+            ],
+            ConversationHistory =
+            [
+                new AiConversationTurnDto { Id = "u1", Role = "user", Content = "Lập kế hoạch Sprint tiếp theo", Intent = "sprint_plan" },
+                new AiConversationTurnDto { Id = "a1", Role = "assistant", Content = "Đã lập 2 công việc.", Intent = "sprint_plan" }
+            ]
+        };
+
+        var classified = AiSprintDecompositionService.ClassifyConversationalIntent(
+            "nội dung của các task bạn đề xuất là gì",
+            "# GHI CHÚ / YÊU CẦU BỔ SUNG:\nnội dung của các task bạn đề xuất là gì",
+            existingProposal);
+        Assert.Equal("project_qa", classified);
+
+        var aiClient = new CapturingAiClient(_ =>
+            "Dưới đây là nội dung chi tiết của 2 công việc đang được đề xuất trong phiên:\n1. **Tối ưu hóa giao diện Drawer chi tiết công việc và Modal AI Phân tách** (`5 SP`, giao Vũ Hoàng Nam)\n2. **Xây dựng giao diện cấu hình năng lực thành viên (Capacity Planning)** (`5 SP`, giao Lê Thu Hà)");
+        var service = CreateService(aiClient, planningDb, deliveryDb, identityDb);
+        var scope = new ProjectScopeContext(orgId, projectId, actorId);
+
+        var calledTools = new List<string>();
+        AiSprintProposalDto? result = null;
+        await service.ExecutePipelineAsync(
+            sessionId: "sprint_ai_proposed_qa",
+            scope: scope,
+            targetSprintId: null,
+            extractedDocumentContent: "# GHI CHÚ / YÊU CẦU BỔ SUNG:\nnội dung của các task bạn đề xuất là gì",
+            userPrompt: "nội dung của các task bạn đề xuất là gì",
+            onStepProgress: (_, _, _, _, _) => Task.CompletedTask,
+            onToolCall: (toolName, _, _, _) => { calledTools.Add(toolName); return Task.CompletedTask; },
+            onThoughtDelta: _ => Task.CompletedTask,
+            onProposalReady: p => { result = p; return Task.CompletedTask; },
+            existingProposal: existingProposal);
+
+        Assert.NotNull(result);
+        Assert.Equal("project_qa", result!.Intent);
+        Assert.Equal("none", result.TriggerAction);
+        Assert.Null(result.ExportSpec);
+        Assert.DoesNotContain("project_export_metadata", calledTools);
+        Assert.DoesNotContain("spec_hub_search", calledTools);
+        Assert.DoesNotContain("backlog_get_stories", calledTools);
+        Assert.DoesNotContain("sprint_get_history_and_velocity", calledTools);
+        Assert.DoesNotContain("team_get_dev_capacities", calledTools);
+        Assert.DoesNotContain("project_get_active_config", calledTools);
+
+        var sentPromptText = string.Join("\n", aiClient.CapturedPrompts.Single().Messages.Select(m => m.Content));
+        Assert.Contains("Tối ưu hóa giao diện Drawer chi tiết công việc", sentPromptText);
+        Assert.Contains("Chuẩn hóa bố cục Drawer chi tiết", sentPromptText);
+    }
 }

@@ -104,7 +104,9 @@ public static partial class AiIndexedMemoryEngine
         }
 
         // 3. Hỏi đáp dựa trên mạch hội thoại / đề xuất / trí nhớ đã đánh chỉ mục (#mem-X) mà không đòi hỏi truy vấn DB mới
+        bool asksAboutCurrentProposal = AsksAboutCurrentProposalOrSession(lower, existingProposal);
         bool explicitMemoryRef = MemoryAnchorRegex().IsMatch(lower) ||
+                                 asksAboutCurrentProposal ||
                                  lower.Contains("lúc nãy") || lower.Contains("vừa nãy") ||
                                  lower.Contains("hồi nãy") || lower.Contains("vừa rồi") ||
                                  lower.Contains("đề xuất hiện tại") || lower.Contains("đoạn chat") ||
@@ -123,17 +125,27 @@ public static partial class AiIndexedMemoryEngine
 
         bool explicitAnchorTag = MemoryAnchorRegex().IsMatch(lower);
         bool mentionsSpecDocs = MentionsSpecHub(combinedLower);
+        if (asksAboutCurrentProposal && allMemories.Count > 0 && !recalled.Any(m => m.Category == "proposal_snapshot"))
+        {
+            var latestSnap = allMemories.LastOrDefault(m => m.Category == "proposal_snapshot");
+            if (latestSnap != null)
+            {
+                recalled = [latestSnap, .. recalled.Take(3)];
+            }
+        }
+
         if (intent == "project_qa" &&
             !asksDeeperDbFetch &&
-            (!mentionsSpecDocs || explicitAnchorTag) &&
+            (!mentionsSpecDocs || explicitAnchorTag || asksAboutCurrentProposal) &&
             (historyWindow?.Count > 1 || allMemories.Count > 0 || existingProposal?.Tasks?.Count > 0) &&
             (explicitMemoryRef ||
+             asksAboutCurrentProposal ||
              (isFollowUp && !asksLiveDbData && (recalled.Count > 0 || (historyWindow?.Count ?? 0) > 1)) ||
              (recalled.Count > 0 && !asksLiveDbData)))
         {
             bool hasProposalMatch = existingProposal?.Tasks?.Count > 0 &&
-                                    (MentionsProposalOrWorkItem(lower) || isFollowUp);
-            if (explicitMemoryRef || hasProposalMatch || isFollowUp || (recalled.Count > 0 && !asksLiveDbData))
+                                    (asksAboutCurrentProposal || MentionsProposalOrWorkItem(lower) || isFollowUp);
+            if (explicitMemoryRef || asksAboutCurrentProposal || hasProposalMatch || isFollowUp || (recalled.Count > 0 && !asksLiveDbData))
             {
                 return new AiContextExecutionPlan(
                     Intent: intent,
@@ -567,30 +579,35 @@ public static partial class AiIndexedMemoryEngine
         if (includeProposalTaskDetails && existingProposal?.Tasks != null && existingProposal.Tasks.Count > 0)
         {
             sb.AppendLine();
-            sb.AppendLine($"### DANH SÁCH CÔNG VIỆC ĐANG LƯU TRONG PHIÊN HIỆN TẠI (Mục tiêu: {existingProposal.SprintGoal} | Đích đề xuất: {existingProposal.RecommendedTarget}):");
+            sb.AppendLine($"### DANH SÁCH CÔNG VIỆC ĐANG ĐỀ XUẤT TRONG PHIÊN HIỆN TẠI (Mục tiêu: {existingProposal.SprintGoal} | Đích đề xuất: {existingProposal.RecommendedTarget} | Tổng: {existingProposal.Tasks.Count} việc · {existingProposal.TotalStoryPoints} SP · {existingProposal.TotalEstimatedHours}h):");
             var tasks = existingProposal.Tasks;
             for (int tIdx = 0; tIdx < tasks.Count; tIdx++)
             {
                 var t = tasks[tIdx];
-                bool includeRich = tIdx < 16;
+                bool includeRich = tIdx < 20;
+                var aiCode = $"AI{tIdx + 1}";
                 var backlogRef = !string.IsNullOrWhiteSpace(t.SourceBacklogIssueKey)
-                    ? $" | Nguồn Backlog: {t.SourceBacklogIssueKey} ({t.SourceBacklogIssueId})"
+                    ? $" | Nguồn Backlog: {t.SourceBacklogIssueKey}"
                     : string.Empty;
-                sb.AppendLine($"- [{t.Id}] ({t.Type} | {t.Priority} | {t.StoryPoints} SP | {t.EstimatedHours}h | {t.Status} | Epic: {t.EpicTitle ?? "Chung"} | Người xử lý: {t.AssigneeName ?? "Chưa gán"}{backlogRef}): {t.Title}");
+                sb.AppendLine($"- [{aiCode} / {t.Id}] ({t.Type} | Ưu tiên: {t.Priority} | {t.StoryPoints} SP | {t.EstimatedHours}h | Trạng thái: {t.Status} | Epic: {t.EpicTitle ?? "Chung"} | Phụ trách: {t.AssigneeName ?? "Chưa gán"}{backlogRef}): {t.Title}");
 
                 if (includeRich)
                 {
                     if (!string.IsNullOrWhiteSpace(t.Description) && !t.Description.Equals(t.Title, StringComparison.OrdinalIgnoreCase))
                     {
-                        sb.AppendLine($"  Mô tả: {TruncateSingleLine(t.Description, 200)}");
+                        sb.AppendLine($"  Mô tả chi tiết: {TruncateSingleLine(t.Description, 600)}");
+                    }
+                    if (!string.IsNullOrWhiteSpace(t.AiRationale))
+                    {
+                        sb.AppendLine($"  Lý do đề xuất: {TruncateSingleLine(t.AiRationale, 260)}");
                     }
                     if (t.AcceptanceCriteria != null && t.AcceptanceCriteria.Count > 0)
                     {
-                        sb.AppendLine($"  Nghiệm thu: {string.Join("; ", t.AcceptanceCriteria.Take(3))}");
+                        sb.AppendLine($"  Tiêu chí nghiệm thu (AC): {string.Join("; ", t.AcceptanceCriteria.Take(6))}");
                     }
                     if (t.DocumentCitations != null && t.DocumentCitations.Count > 0)
                     {
-                        sb.AppendLine($"  Trích dẫn: {string.Join(", ", t.DocumentCitations.Take(3))}");
+                        sb.AppendLine($"  Trích dẫn đặc tả: {string.Join(", ", t.DocumentCitations.Take(4))}");
                     }
                 }
 
@@ -598,7 +615,10 @@ public static partial class AiIndexedMemoryEngine
                 {
                     foreach (var s in t.Subtasks)
                     {
-                        sb.AppendLine($"  + [{s.Id}] ({s.Role} | {s.EstimatedHours}h | {s.Priority} | {s.Status} | {s.AssigneeName ?? "Chưa gán"}): {s.Title}");
+                        var subDesc = !string.IsNullOrWhiteSpace(s.Description) && !s.Description.Equals(s.Title, StringComparison.OrdinalIgnoreCase)
+                            ? $" — Mô tả: {TruncateSingleLine(s.Description, 220)}"
+                            : string.Empty;
+                        sb.AppendLine($"  + Việc con [{s.Id}] ({s.Role} | {s.StoryPoints} SP | {s.EstimatedHours}h | {s.Priority} | {s.Status} | {s.AssigneeName ?? "Chưa gán"}): {s.Title}{subDesc}");
                     }
                 }
             }
@@ -768,14 +788,46 @@ public static partial class AiIndexedMemoryEngine
         return directives.Distinct(StringComparer.OrdinalIgnoreCase).TakeLast(5).ToList();
     }
 
+    public static bool AsksAboutCurrentProposalOrSession(string lower, AiSprintProposalDto? existingProposal)
+    {
+        if (string.IsNullOrWhiteSpace(lower) || existingProposal?.Tasks == null || existingProposal.Tasks.Count == 0)
+        {
+            return false;
+        }
+
+        if (lower.Contains("bạn đề xuất") || lower.Contains("ai đề xuất") ||
+            lower.Contains("vừa đề xuất") || lower.Contains("đã đề xuất") ||
+            lower.Contains("đang đề xuất") || lower.Contains("đề xuất này") ||
+            lower.Contains("đề xuất trên") || lower.Contains("đề xuất đó") ||
+            lower.Contains("đề xuất hiện tại") || lower.Contains("bảng đề xuất") ||
+            lower.Contains("danh sách đề xuất") || lower.Contains("task đề xuất") ||
+            lower.Contains("công việc đề xuất") || lower.Contains("việc đề xuất") ||
+            lower.Contains("bạn vừa") || lower.Contains("vừa sinh") ||
+            lower.Contains("vừa tạo") || lower.Contains("vừa lập") ||
+            lower.Contains("vừa gợi ý") || lower.Contains("đã sinh") ||
+            lower.Contains("đã tạo") || lower.Contains("các task trên") ||
+            lower.Contains("các công việc trên") || lower.Contains("danh sách trên") ||
+            lower.Contains("bảng trên") || lower.Contains("trong đề xuất"))
+        {
+            return true;
+        }
+
+        // Nếu người dùng hỏi trực tiếp về một mã công việc nằm trong bảng đề xuất hiện tại (ví dụ: task_01, AI1, AI2, QLDA-AI2)
+        if (Regex.IsMatch(lower, @"\b(?:ai\d+|task_0?\d+)\b", RegexOptions.IgnoreCase))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
     public static bool MentionsSpecHub(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) return false;
         if (text.Contains("spec") || text.Contains("đặc tả") || text.Contains("tài liệu") ||
             text.Contains("trích dẫn") || text.Contains("văn bản") || text.Contains("readme") ||
             text.Contains("srs") || text.Contains("brd") || text.Contains("prd") ||
-            text.Contains("kiến trúc") || text.Contains("nghiệp vụ") || text.Contains("chức năng") ||
-            text.Contains("yêu cầu") || text.Contains(".md") || text.Contains(".txt") ||
+            text.Contains(".md") || text.Contains(".txt") ||
             text.Contains(".docx") || text.Contains(".pdf"))
         {
             return true;
