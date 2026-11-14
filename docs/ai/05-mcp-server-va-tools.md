@@ -7,11 +7,18 @@
 ### 1.1. Model Context Protocol (MCP) là gì?
 **Model Context Protocol (MCP)** là chuẩn giao thức công nghiệp mở (Open Protocol) sử dụng cơ chế truyền tin **JSON-RPC 2.0**. Giao thức này đóng vai trò như một "cổng cắm USB-C" phổ quát, cho phép các mô hình trí tuệ nhân tạo (LLM / AI Agents) kết nối an toàn và truy xuất dữ liệu từ các hệ thống phần mềm nghiệp vụ (Database, File System, Git, API) mà không cần viết mã kết nối riêng cho từng mô hình.
 
-### 1.2. Tại sao Dự án áp dụng Chuẩn MCP?
-1. **Chuẩn hóa công cụ (Tool Standardisation)**: Mọi công cụ AI trong dự án đều có lược đồ tham số (`inputSchema`) định dạng JSON Schema rõ ràng, giúp AI tự hiểu cách gọi hàm với xác suất chính xác 100%.
+### 1.2. Tại sao Dự án áp dụng Chuẩn MCP & Cơ chế Gọi MCP Có Chọn Lọc (Selective Invocation)?
+1. **Chuẩn hóa công cụ (Tool Standardisation)**: Mọi công cụ AI trong dự án đều có lược đồ tham số (`inputSchema`) định dạng JSON Schema rõ ràng, giúp AI tự hiểu cách gọi hàm với xác suất chính xác cao.
 2. **Kiến trúc Lưỡng hình (Dual-Form Deployment)**:
    - **Hình thái In-Process**: Chạy trực tiếp trong tiến trình ASP.NET Core để phục vụ người dùng trên Web với độ trễ cực thấp (mili-giây).
    - **Hình thái Standalone Stdio**: Chạy dưới dạng tiến trình Console độc lập, cho phép các Agent bên ngoài (Claude Desktop, Cursor IDE, Roo Code, Gemini CLI) kết nối và thao tác với dự án qua luồng Stdio.
+3. **Gọi MCP Có Chọn Lọc Theo Ý Định & Ngữ Cảnh (Selective MCP Invocation)**:
+   - Trợ Lý AI **không gọi đồng loạt toàn bộ MCP Tools ở mọi tin nhắn** nhằm tránh độ trễ thừa, tránh tốn token và giữ câu trả lời tập trung đúng vào câu hỏi của người dùng.
+   - Cơ chế lập kế hoạch ngữ cảnh phân tách thành 4 chế độ rõ ràng:
+     - **Chào hỏi / Hỏi khả năng trợ lý**: `0` lời gọi MCP bên ngoài — trả lời trực tiếp tức thì.
+     - **Câu hỏi nối tiếp / Nhắc lại `#mem-X`**: Chỉ thực thi thao tác nội bộ **`memory_recall`** để đọc đúng các mảnh trí nhớ đánh chỉ mục liên quan (`0` lời gọi MCP dữ liệu dự án).
+     - **Hỏi đáp dự án phạm vi hẹp** (ví dụ: *"Workflow hiện tại có trạng thái nào?"* hay *"Còn việc gì trong Backlog?"*): Chỉ gọi đúng 1–2 MCP Tool mục tiêu (`project_get_active_config`, `backlog_get_stories`, v.v.).
+     - **Lập kế hoạch / Tinh chỉnh Sprint hoặc Backlog**: Gọi đầy đủ chuỗi MCP cần thiết để đảm bảo kiểm chứng toàn diện quy chuẩn và năng lực.
 
 ```mermaid
 flowchart TD
@@ -264,6 +271,7 @@ Dán dòng JSON sau vào terminal và nhấn Enter:
 
 | Thành phần | Vai trò kỹ thuật | Liên kết mã nguồn |
 | :--- | :--- | :--- |
+| **AiIndexedMemoryEngine** | Bộ lập kế hoạch gọi MCP có chọn lọc (`PlanContextExecution` & `memory_recall`), tránh gọi dư thừa ở các lượt chào hỏi/hỏi đáp ngắn | [`AiIndexedMemoryEngine.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiIndexedMemoryEngine.cs) |
 | **ProjectMgmt.McpServer** | Ứng dụng Console phục vụ kết nối JSON-RPC 2.0 Stdio ngoài | [`Program.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.McpServer/Program.cs) |
 | **McpToolRegistry** | Bộ đăng ký và thực thi 8 công cụ MCP In-Process | [`McpToolRegistry.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/McpToolRegistry.cs) |
 | **ProjectActiveConfigResolver** | Bộ phân giải cấu hình thực tế đang áp dụng của dự án (Workflow, Priorities, IssueTypes, Labels) | [`ProjectActiveConfigResolver.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/ProjectActiveConfigResolver.cs) |

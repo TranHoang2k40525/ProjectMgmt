@@ -37,39 +37,63 @@
             <div class="session-history-popover animate-scale-up" (click)="$event.stopPropagation()">
               <div class="popover-header">
                 <div class="flex items-center gap-1.5">
-                  <span class="material-symbols-outlined text-[16px] text-primary">history</span>
-                  <strong>Lịch sử Phiên AI Sprint</strong>
+                  <span class="material-symbols-outlined text-[16px] text-primary" aria-hidden="true">history</span>
+                  <strong>Lịch sử Phiên làm việc</strong>
                 </div>
                 <button type="button" class="btn-close-popover" (click)="isSessionHistoryOpen.set(false)" title="Đóng">
-                  <span class="material-symbols-outlined text-[16px]">close</span>
+                  <span class="material-symbols-outlined text-[16px]" aria-hidden="true">close</span>
                 </button>
               </div>
 
               @if (sessionsLoading()) {
                 <div class="p-4 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
-                  <span class="material-symbols-outlined text-[16px] spinning-icon">sync</span>
+                  <span class="material-symbols-outlined text-[16px] spinning-icon" aria-hidden="true">sync</span>
                   <span>Đang tải lịch sử phiên...</span>
                 </div>
               } @else if (projectSessions().length > 0) {
                 <div class="sessions-list">
                   @for (sess of projectSessions(); track sess.sessionId) {
-                    <button type="button" class="session-item-row" (click)="restoreSessionFromHistory(sess)">
+                    <div
+                      class="session-item-row"
+                      role="button"
+                      tabindex="0"
+                      [class.is-active-session]="sess.sessionId === activeSessionId()"
+                      (click)="restoreSessionFromHistory(sess)"
+                      (keydown.enter)="restoreSessionFromHistory(sess)"
+                    >
                       <div class="session-item-top">
                         <span class="sess-model-pill">{{ sess.model }}</span>
-                        <span class="sess-time">{{ sess.createdAtUtc | date:'HH:mm dd/MM' }}</span>
+                        <div class="sess-top-right">
+                          <span class="sess-time">{{ (sess.updatedAtUtc || sess.createdAtUtc) | date:'HH:mm dd/MM' }}</span>
+                          <button
+                            type="button"
+                            class="btn-delete-session"
+                            data-testid="btn-delete-ai-session"
+                            title="Xóa phiên làm việc này"
+                            aria-label="Xóa phiên làm việc cũ"
+                            (click)="deleteSessionFromHistory(sess, $event)"
+                          >
+                            <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+                          </button>
+                        </div>
                       </div>
-                      <div class="sess-goal-title" [title]="sess.sprintGoal">{{ sess.sprintGoal }}</div>
+                      <div class="sess-goal-title" [title]="sess.title || sess.sprintGoal">{{ sess.title || sess.sprintGoal }}</div>
                       <div class="session-item-bottom">
-                        <span>{{ sess.taskCount }} việc ({{ sess.totalStoryPoints }} SP)</span>
-                        <span class="sess-creator">Bởi {{ sess.createdByName }}</span>
+                        <span>
+                          {{ sess.turnCount || 0 }} lượt · {{ sess.memoryCount || 0 }} ghi nhớ
+                          @if ((sess.taskCount || 0) > 0) {
+                            · {{ sess.taskCount }} việc
+                          }
+                        </span>
+                        <span class="sess-creator">{{ sess.createdByName }}</span>
                       </div>
-                    </button>
+                    </div>
                   }
                 </div>
               } @else {
                 <div class="p-5 text-center text-xs text-slate-500">
-                  <span class="material-symbols-outlined text-[24px] text-slate-400 mb-1">history_toggle_off</span>
-                  <p>Chưa có phiên làm việc AI nào được lưu trữ trong dự án này.</p>
+                  <span class="material-symbols-outlined text-[24px] text-slate-400 mb-1" aria-hidden="true">history_toggle_off</span>
+                  <p>Chưa có phiên hội thoại AI nào được lưu trong dự án này.</p>
                 </div>
               }
             </div>
@@ -81,10 +105,10 @@
           class="btn-new-session"
           data-testid="btn-ai-new-session"
           (click)="startNewSession()"
-          title="Xóa cache và bắt đầu phiên làm việc AI mới"
+          title="Tạo cuộc hội thoại mới (không xóa các phiên đã lưu)"
         >
-          <span class="material-symbols-outlined" aria-hidden="true">refresh</span>
-          <span>Làm mới & Phiên mới</span>
+          <span class="material-symbols-outlined" aria-hidden="true">add_comment</span>
+          <span>Tạo mới</span>
         </button>
         <button type="button" class="icon-close-btn" data-testid="btn-ai-close-modal" aria-label="Đóng cửa sổ" (click)="closeModal()">
           <span class="material-symbols-outlined" aria-hidden="true">close</span>
@@ -177,35 +201,69 @@
                       }
                     </div>
 
-                    @if (turn.toolCalls; as calls) {
-                      @if (calls.length > 0) {
+                    @if ((turn.traceItems?.length ?? 0) > 0 || (turn.toolCalls?.length ?? 0) > 0 || !!turn.thinkingSummary || !!turn.thoughts || (turn.durationMs ?? 0) > 0) {
+                      @let traceRows = (turn.traceItems && turn.traceItems.length > 0) ? turn.traceItems : buildTraceItemsFromLog(turn.toolCalls);
+                      <div class="thinking-box" [class.is-open]="!!expandedTurnTraces()[turn.id]">
                         <button
                           type="button"
-                          class="msg-trace-toggle"
+                          class="thinking-bar"
                           data-testid="btn-toggle-thinking"
                           [attr.aria-expanded]="!!expandedTurnTraces()[turn.id]"
                           (click)="toggleTurnTrace(turn.id)"
                         >
-                          <span class="material-symbols-outlined" aria-hidden="true">manage_search</span>
-                          <span>Đã tra cứu {{ calls.length }} nguồn dữ liệu của dự án</span>
-                          <span class="material-symbols-outlined" aria-hidden="true">
+                          <span class="material-symbols-outlined thinking-check-icon" aria-hidden="true">check_circle</span>
+                          <span class="thinking-label">{{ turn.thinkingSummary || buildFallbackThinkingSummary(turn) }}</span>
+                          <span class="material-symbols-outlined thinking-chevron" aria-hidden="true">
                             {{ expandedTurnTraces()[turn.id] ? 'expand_less' : 'expand_more' }}
                           </span>
                         </button>
+
                         @if (expandedTurnTraces()[turn.id]) {
-                          <ul class="msg-trace-list animate-fade-in">
-                            @for (tool of calls; track $index; let tIdx = $index) {
-                              <li [attr.data-testid]="'ai-tool-item-' + tIdx">
-                                <span class="material-symbols-outlined" aria-hidden="true">check</span>
-                                <span class="trace-name">{{ tool.summaryVi || tool.toolName }}</span>
-                                @if (tool.durationMs !== undefined && tool.durationMs !== null) {
-                                  <span class="trace-ms">{{ tool.durationMs }}ms</span>
+                          <div class="thinking-body animate-fade-in">
+                            @for (row of traceRows; track $index; let rIdx = $index) {
+                              @let rowKey = turn.id + '_' + rIdx;
+                              <div class="trace-row-wrap" [attr.data-testid]="'ai-tool-item-' + rIdx">
+                                <button
+                                  type="button"
+                                  class="trace-row"
+                                  (click)="toggleTraceRow(rowKey, $event)"
+                                >
+                                  <span class="trace-verb">{{ row.actionVerb }}</span>
+                                  <span class="material-symbols-outlined trace-row-icon" aria-hidden="true">{{ getActionRowIcon(row.actionVerb) }}</span>
+                                  <span class="trace-target">{{ row.target }}</span>
+                                  @if (row.summary) {
+                                    <span class="trace-brief">{{ row.summary }}</span>
+                                  }
+                                  <span class="trace-spacer"></span>
+                                  @if ((row.durationMs ?? 0) > 0) {
+                                    <span class="trace-ms">{{ row.durationMs }}ms</span>
+                                  }
+                                  <span class="material-symbols-outlined trace-row-chevron" aria-hidden="true">
+                                    {{ expandedTraceRows()[rowKey] ? 'expand_less' : 'chevron_right' }}
+                                  </span>
+                                </button>
+                                @if (expandedTraceRows()[rowKey]) {
+                                  <div class="trace-row-detail">{{ row.detail || row.summary }}</div>
                                 }
-                              </li>
+                              </div>
                             }
-                          </ul>
+
+                            @if (turn.referencedMemoryAnchors && turn.referencedMemoryAnchors.length > 0) {
+                              <div class="memory-anchor-bar">
+                                <span class="material-symbols-outlined" aria-hidden="true">bookmarks</span>
+                                <span>Đã trỏ trí nhớ:</span>
+                                @for (anchor of turn.referencedMemoryAnchors; track anchor) {
+                                  <span class="memory-anchor-chip">{{ anchor }}</span>
+                                }
+                              </div>
+                            }
+
+                            @if (turn.thoughts) {
+                              <div class="thinking-note">{{ turn.thoughts }}</div>
+                            }
+                          </div>
                         }
-                      }
+                      </div>
                     }
 
                     <div class="msg-assistant-text">{{ turn.text }}</div>
@@ -252,26 +310,60 @@
                 </div>
                 <div class="msg-assistant-stack">
                   <div class="msg-meta"><strong>Trợ Lý AI</strong></div>
-                  <div class="msg-live-status">
-                    <span class="material-symbols-outlined spinning-icon" aria-hidden="true">progress_activity</span>
-                    <span>{{ currentStepLabel() || 'Đang đọc dữ liệu dự án...' }}</span>
-                  </div>
-                  @if (currentStepDetail()) {
-                    <p class="msg-live-detail">{{ currentStepDetail() }}</p>
-                  }
-                  @if (toolCallsLog().length > 0) {
-                    <ul class="msg-trace-list">
-                      @for (tool of toolCallsLog(); track $index; let tIdx = $index) {
-                        <li [attr.data-testid]="'ai-tool-item-' + tIdx">
-                          <span class="material-symbols-outlined" aria-hidden="true">check</span>
-                          <span class="trace-name">{{ tool.summaryVi || tool.toolName }}</span>
-                          @if (tool.durationMs !== undefined && tool.durationMs !== null) {
-                            <span class="trace-ms">{{ tool.durationMs }}ms</span>
+                  <div class="thinking-box is-running" [class.is-open]="isThinkingExpanded()">
+                    <button
+                      type="button"
+                      class="thinking-bar"
+                      data-testid="btn-toggle-live-thinking"
+                      [attr.aria-expanded]="isThinkingExpanded()"
+                      (click)="isThinkingExpanded.set(!isThinkingExpanded())"
+                    >
+                      <span class="material-symbols-outlined spinning-icon thinking-live-icon" aria-hidden="true">progress_activity</span>
+                      <span class="thinking-label">
+                        Đang suy nghĩ · {{ thinkingElapsedSeconds().toFixed(1) }}s — {{ currentStepLabel() || 'Đang phân tích ngữ cảnh...' }}
+                      </span>
+                      <span class="material-symbols-outlined thinking-chevron" aria-hidden="true">
+                        {{ isThinkingExpanded() ? 'expand_less' : 'expand_more' }}
+                      </span>
+                    </button>
+
+                    @if (isThinkingExpanded()) {
+                      <div class="thinking-body animate-fade-in">
+                        @let liveRows = buildTraceItemsFromLog(toolCallsLog());
+                        @if (liveRows.length > 0) {
+                          @for (row of liveRows; track $index; let rIdx = $index) {
+                            @let liveKey = 'live_' + rIdx;
+                            <div class="trace-row-wrap" [attr.data-testid]="'ai-tool-item-' + rIdx">
+                              <button type="button" class="trace-row" (click)="toggleTraceRow(liveKey, $event)">
+                                <span class="trace-verb">{{ row.actionVerb }}</span>
+                                <span class="material-symbols-outlined trace-row-icon" aria-hidden="true">{{ getActionRowIcon(row.actionVerb) }}</span>
+                                <span class="trace-target">{{ row.target }}</span>
+                                @if (row.summary) {
+                                  <span class="trace-brief">{{ row.summary }}</span>
+                                }
+                                <span class="trace-spacer"></span>
+                                @if ((row.durationMs ?? 0) > 0) {
+                                  <span class="trace-ms">{{ row.durationMs }}ms</span>
+                                }
+                                <span class="material-symbols-outlined trace-row-chevron" aria-hidden="true">
+                                  {{ expandedTraceRows()[liveKey] ? 'expand_less' : 'chevron_right' }}
+                                </span>
+                              </button>
+                              @if (expandedTraceRows()[liveKey]) {
+                                <div class="trace-row-detail">{{ row.detail || row.summary }}</div>
+                              }
+                            </div>
                           }
-                        </li>
-                      }
-                    </ul>
-                  }
+                        } @else if (currentStepDetail()) {
+                          <div class="thinking-note">{{ currentStepDetail() }}</div>
+                        }
+
+                        @if (cleanStreamedThoughts()) {
+                          <div class="thinking-note">{{ cleanStreamedThoughts() }}</div>
+                        }
+                      </div>
+                    }
+                  </div>
                 </div>
               </div>
             }

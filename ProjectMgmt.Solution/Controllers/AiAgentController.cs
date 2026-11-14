@@ -40,6 +40,7 @@ public class AiAgentController : ControllerBase
     private readonly ILogger<AiAgentController> _logger;
     private readonly IAiSprintCommitCoordinator? _commitCoordinator;
     private readonly IAiTokenUsageTracker? _tokenTracker;
+    private readonly IAiConversationSessionStore? _sessionStore;
 
     public AiAgentController(
         IAiSprintDecompositionService decompositionService,
@@ -51,7 +52,8 @@ public class AiAgentController : ControllerBase
         IUserLookupService userLookup,
         ILogger<AiAgentController> logger,
         IAiSprintCommitCoordinator? commitCoordinator = null,
-        IAiTokenUsageTracker? tokenTracker = null)
+        IAiTokenUsageTracker? tokenTracker = null,
+        IAiConversationSessionStore? sessionStore = null)
     {
         _decompositionService = decompositionService;
         _textExtractor = textExtractor;
@@ -63,6 +65,7 @@ public class AiAgentController : ControllerBase
         _logger = logger;
         _commitCoordinator = commitCoordinator;
         _tokenTracker = tokenTracker;
+        _sessionStore = sessionStore;
     }
 
     /// <summary>
@@ -152,14 +155,39 @@ public class AiAgentController : ControllerBase
             var scope = new ProjectScopeContext(project.OrgId, request.ProjectId, userId.Value);
             ProjectScopeGuard.Validate(scope, project.OrgId, request.ProjectId);
 
-            if (!string.IsNullOrWhiteSpace(requestedSessionId))
+            if (!string.IsNullOrWhiteSpace(requestedSessionId) && requestedSessionId.StartsWith("sprint_ai_", StringComparison.Ordinal))
             {
                 existingProposal = await _stagingService.GetProposalAsync<AiSprintProposalDto>(sessionId, ct);
-                // Chống đọc chéo phiên của dự án khác (Project Scope Isolation)
-                if (existingProposal != null && existingProposal.ProjectId != Guid.Empty && existingProposal.ProjectId != request.ProjectId)
+                // Khóa cứng phiên theo (OrganizationId, ProjectId, UserId) để không đọc nhầm ngữ cảnh
+                var redisScopeMismatch = existingProposal != null &&
+                    ((existingProposal.ProjectId != Guid.Empty && existingProposal.ProjectId != request.ProjectId) ||
+                     (existingProposal.OrganizationId.HasValue && existingProposal.OrganizationId.Value != Guid.Empty && existingProposal.OrganizationId.Value != project.OrgId) ||
+                     (existingProposal.UserId.HasValue && existingProposal.UserId.Value != Guid.Empty && existingProposal.UserId.Value != userId.Value));
+
+                if (redisScopeMismatch)
                 {
                     existingProposal = null;
                     sessionId = $"sprint_ai_{Guid.NewGuid():N}";
+                }
+                else if (existingProposal == null && _sessionStore != null)
+                {
+                    // Redis miss / hết TTL -> khôi phục từ MySQL nếu đúng chủ sở hữu
+                    var (dbProposal, isForbidden) = await _sessionStore.GetProposalWithOwnershipCheckAsync(
+                        sessionId,
+                        userId.Value,
+                        project.OrgId,
+                        ct);
+
+                    if (isForbidden || (dbProposal != null && dbProposal.ProjectId != request.ProjectId))
+                    {
+                        existingProposal = null;
+                        sessionId = $"sprint_ai_{Guid.NewGuid():N}";
+                    }
+                    else if (dbProposal != null)
+                    {
+                        existingProposal = dbProposal;
+                        await _stagingService.SaveProposalAsync(sessionId, existingProposal, TimeSpan.FromHours(2), ct);
+                    }
                 }
             }
 
@@ -206,8 +234,9 @@ public class AiAgentController : ControllerBase
                 },
                 onToolCall: async (toolName, toolArgs, summaryVi, durMs) =>
                 {
+                    var (actionVerb, targetLabel, detailPreview) = BuildToolTraceMetadata(toolName, toolArgs, summaryVi);
                     await EmitEventAsync(AiSseEventTypes.ToolCall, new AiToolCallPayload(
-                        toolName, toolArgs, summaryVi, durMs));
+                        toolName, toolArgs, summaryVi, durMs, actionVerb, targetLabel, detailPreview));
                 },
                 onThoughtDelta: async delta =>
                 {
@@ -216,6 +245,9 @@ public class AiAgentController : ControllerBase
                 },
                 onProposalReady: async proposal =>
                 {
+                    proposal.OrganizationId = scope.OrganizationId;
+                    proposal.ProjectId = scope.ProjectId;
+                    proposal.UserId = scope.UserId;
                     await _stagingService.SaveProposalAsync(sessionId, proposal, TimeSpan.FromHours(2), ct);
                     await EmitEventAsync(AiSseEventTypes.ProposalReady, proposal);
                 },
@@ -227,6 +259,12 @@ public class AiAgentController : ControllerBase
             var stagedProposal = await _stagingService.GetProposalAsync<AiSprintProposalDto>(sessionId, ct);
             var taskCount = stagedProposal?.Tasks.Count ?? 0;
             var storyPoints = stagedProposal?.TotalStoryPoints ?? 0;
+            var effectiveModel = request.Model ?? "Gemini 3.6 Flash";
+
+            if (_sessionStore != null && stagedProposal != null)
+            {
+                await _sessionStore.SaveSessionStateAsync(scope, actorName, effectiveModel, stagedProposal, ct);
+            }
 
             if (_tokenTracker != null)
             {
@@ -237,7 +275,7 @@ public class AiAgentController : ControllerBase
                     SessionId: sessionId,
                     UserId: userId.Value,
                     ProjectId: request.ProjectId,
-                    Model: request.Model ?? "Gemini 2.5 Flash",
+                    Model: effectiveModel,
                     PromptTokens: estPromptTokens,
                     CompletionTokens: estCompletionTokens,
                     DurationMs: stopwatch.ElapsedMilliseconds,
@@ -255,8 +293,13 @@ public class AiAgentController : ControllerBase
                         SprintGoal: stagedProposal.SprintGoal,
                         TaskCount: taskCount,
                         TotalStoryPoints: storyPoints,
-                        Model: request.Model ?? "Gemini 2.5 Flash",
-                        CreatedAtUtc: DateTime.UtcNow));
+                        Model: effectiveModel,
+                        CreatedAtUtc: DateTime.UtcNow,
+                        Title: AiIndexedMemoryEngine.BuildSessionTitle(stagedProposal),
+                        TurnCount: stagedProposal.ConversationHistory?.Count ?? 0,
+                        MemoryCount: stagedProposal.IndexedMemories?.Count ?? 0,
+                        UpdatedAtUtc: DateTime.UtcNow,
+                        LastIntent: stagedProposal.Intent));
                 }
             }
 
@@ -288,7 +331,14 @@ public class AiAgentController : ControllerBase
             return BadRequest(new { code = "INVALID_SESSION_ID", message = "Mã phiên không được để trống." });
         }
 
-        var proposal = await _stagingService.GetProposalAsync<AiSprintProposalDto>(sessionId, HttpContext.RequestAborted);
+        var ct = HttpContext.RequestAborted;
+        var userId = _currentUser.UserId;
+        var (proposal, isForbidden) = await LoadScopedProposalAsync(sessionId, userId, ct);
+        if (isForbidden)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Phiên hội thoại AI này thuộc về người dùng hoặc tổ chức khác." });
+        }
+
         if (proposal == null)
         {
             return NotFound(new { code = "PROPOSAL_EXPIRED", message = "Phiên đề xuất không tồn tại hoặc đã hết hạn." });
@@ -297,6 +347,16 @@ public class AiAgentController : ControllerBase
         if (!await _projectAccess.AllowsAsync(proposal.ProjectId, "project.read"))
         {
             return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Không có quyền truy cập." });
+        }
+
+        if (proposal.OrganizationId.HasValue && proposal.OrganizationId.Value != Guid.Empty)
+        {
+            var project = await _planningDb.Projects.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Id == proposal.ProjectId && !p.IsDeleted, ct);
+            if (project == null || project.OrgId != proposal.OrganizationId.Value)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN_ORG_SCOPE", message = "Phiên hội thoại không thuộc tổ chức của dự án này." });
+            }
         }
 
         return Ok(proposal);
@@ -318,7 +378,12 @@ public class AiAgentController : ControllerBase
             return Unauthorized(new { code = "UNAUTHORIZED", message = "Yêu cầu đăng nhập." });
         }
 
-        var proposal = await _stagingService.GetProposalAsync<AiSprintProposalDto>(request.SessionId, ct);
+        var (proposal, isForbidden) = await LoadScopedProposalAsync(request.SessionId, userId, ct);
+        if (isForbidden)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Phiên hội thoại AI này thuộc về thành viên hoặc tổ chức khác." });
+        }
+
         if (proposal == null)
         {
             return NotFound(new { code = "PROPOSAL_EXPIRED", message = "Phiên đề xuất đã hết hạn. Vui lòng thực hiện phân tách lại." });
@@ -329,6 +394,11 @@ public class AiAgentController : ControllerBase
         if (project == null)
         {
             return NotFound(new { code = "PROJECT_NOT_FOUND", message = "Dự án liên quan không tồn tại hoặc đã bị xóa." });
+        }
+
+        if (IsScopeMismatch(proposal, userId.Value, project.OrgId))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Phiên hội thoại không khớp phạm vi người dùng hoặc tổ chức." });
         }
 
         if (!await _projectAccess.AllowsAsync(proposal.ProjectId, "project.read"))
@@ -355,6 +425,7 @@ public class AiAgentController : ControllerBase
                 ct);
 
             await _stagingService.SaveProposalAsync(request.SessionId, proposal, TimeSpan.FromHours(2), ct);
+            await PersistUpdatedSessionAsync(scope, proposal, ct);
 
             return Ok(new { updatedTask });
         }
@@ -385,7 +456,12 @@ public class AiAgentController : ControllerBase
             return Unauthorized(new { code = "UNAUTHORIZED", message = "Yêu cầu đăng nhập." });
         }
 
-        var proposal = await _stagingService.GetProposalAsync<AiSprintProposalDto>(request.SessionId, ct);
+        var (proposal, isForbidden) = await LoadScopedProposalAsync(request.SessionId, userId, ct);
+        if (isForbidden)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Phiên hội thoại AI này thuộc về thành viên hoặc tổ chức khác." });
+        }
+
         if (proposal == null)
         {
             return NotFound(new { code = "PROPOSAL_EXPIRED", message = "Phiên đề xuất đã hết hạn. Vui lòng thực hiện phân tách lại." });
@@ -403,6 +479,11 @@ public class AiAgentController : ControllerBase
             return NotFound(new { code = "PROJECT_NOT_FOUND", message = "Dự án liên quan không tồn tại hoặc đã bị xóa." });
         }
 
+        if (IsScopeMismatch(proposal, userId.Value, project.OrgId))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Phiên hội thoại không khớp phạm vi người dùng hoặc tổ chức." });
+        }
+
         var scope = new ProjectScopeContext(project.OrgId, proposal.ProjectId, userId.Value);
         ProjectScopeGuard.Validate(scope, project.OrgId, proposal.ProjectId);
 
@@ -412,7 +493,11 @@ public class AiAgentController : ControllerBase
             scope,
             ct);
 
+        updatedProposal.OrganizationId ??= project.OrgId;
+        updatedProposal.UserId ??= userId.Value;
+
         await _stagingService.SaveProposalAsync(request.SessionId, updatedProposal, TimeSpan.FromHours(2), ct);
+        await PersistUpdatedSessionAsync(scope, updatedProposal, ct);
 
         return Ok(updatedProposal);
     }
@@ -435,7 +520,12 @@ public class AiAgentController : ControllerBase
             return Unauthorized(new { code = "UNAUTHORIZED", message = "Yêu cầu đăng nhập." });
         }
 
-        var proposal = await _stagingService.GetProposalAsync<AiSprintProposalDto>(sessionId, ct);
+        var (proposal, isForbidden) = await LoadScopedProposalAsync(sessionId, userId, ct);
+        if (isForbidden)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Phiên hội thoại AI này thuộc về thành viên hoặc tổ chức khác." });
+        }
+
         if (proposal == null)
         {
             return NotFound(new { code = "PROPOSAL_EXPIRED", message = "Phiên đề xuất không tồn tại hoặc đã hết hạn." });
@@ -444,6 +534,13 @@ public class AiAgentController : ControllerBase
         if (!await _projectAccess.AllowsAsync(proposal.ProjectId, "project.read"))
         {
             return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Không có quyền thao tác." });
+        }
+
+        var project = await _planningDb.Projects.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == proposal.ProjectId && !p.IsDeleted, ct);
+        if (project != null && IsScopeMismatch(proposal, userId.Value, project.OrgId))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Phiên hội thoại không khớp phạm vi tổ chức hoặc người dùng." });
         }
 
         proposal.SprintGoal = request.SprintGoal?.Trim() ?? proposal.SprintGoal;
@@ -457,6 +554,11 @@ public class AiAgentController : ControllerBase
         }
 
         await _stagingService.SaveProposalAsync(sessionId, proposal, TimeSpan.FromHours(2), ct);
+        if (project != null)
+        {
+            var scope = new ProjectScopeContext(project.OrgId, proposal.ProjectId, userId.Value);
+            await PersistUpdatedSessionAsync(scope, proposal, ct);
+        }
         return Ok(proposal);
     }
 
@@ -475,9 +577,16 @@ public class AiAgentController : ControllerBase
             return Unauthorized(new { code = "UNAUTHORIZED", message = "Yêu cầu đăng nhập." });
         }
 
-        var stagedProposal = !string.IsNullOrWhiteSpace(request.SessionId)
-            ? await _stagingService.GetProposalAsync<AiSprintProposalDto>(request.SessionId, ct)
-            : null;
+        AiSprintProposalDto? stagedProposal = null;
+        if (!string.IsNullOrWhiteSpace(request.SessionId))
+        {
+            var (loadedProposal, isForbidden) = await LoadScopedProposalAsync(request.SessionId, userId, ct);
+            if (isForbidden)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Phiên hội thoại AI này thuộc về thành viên hoặc tổ chức khác." });
+            }
+            stagedProposal = loadedProposal;
+        }
 
         var projectId = request.ProjectId ?? stagedProposal?.ProjectId ?? Guid.Empty;
         if (projectId == Guid.Empty)
@@ -490,6 +599,11 @@ public class AiAgentController : ControllerBase
         if (project == null)
         {
             return NotFound(new { code = "PROJECT_NOT_FOUND", message = "Dự án không tồn tại hoặc đã bị xóa." });
+        }
+
+        if (stagedProposal != null && IsScopeMismatch(stagedProposal, userId.Value, project.OrgId))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Phiên hội thoại không khớp phạm vi người dùng hoặc tổ chức." });
         }
 
         var canCommitSprint = await _projectAccess.AllowsAsync(projectId, "sprint.create")
@@ -557,6 +671,7 @@ public class AiAgentController : ControllerBase
                 TimestampUtc = DateTime.UtcNow
             });
             await _stagingService.SaveProposalAsync(request.SessionId, stagedProposal, TimeSpan.FromHours(2), ct);
+            await PersistUpdatedSessionAsync(scope, stagedProposal, ct);
         }
 
         return Ok(result);
@@ -601,7 +716,7 @@ public class AiAgentController : ControllerBase
     }
 
     /// <summary>
-    /// Retrieves recent AI sprint decomposition session summaries for a project.
+    /// Retrieves persisted AI conversation sessions strictly scoped to (OrganizationId, ProjectId, UserId).
     /// </summary>
     [HttpGet("sessions")]
     public async Task<IActionResult> GetProjectSessions([FromQuery] Guid projectId)
@@ -611,12 +726,187 @@ public class AiAgentController : ControllerBase
             return BadRequest(new { code = "INVALID_PROJECT_ID", message = "Mã dự án không hợp lệ." });
         }
 
+        var ct = HttpContext.RequestAborted;
+        var userId = _currentUser.UserId;
+        if (!userId.HasValue || userId.Value == Guid.Empty)
+        {
+            return Unauthorized(new { code = "UNAUTHORIZED", message = "Yêu cầu đăng nhập." });
+        }
+
+        var project = await _planningDb.Projects.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == projectId && !p.IsDeleted, ct);
+        if (project == null)
+        {
+            return NotFound(new { code = "PROJECT_NOT_FOUND", message = "Dự án không tồn tại hoặc đã bị xóa." });
+        }
+
         if (!await _projectAccess.AllowsAsync(projectId, "project.read"))
         {
             return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Không có quyền truy cập." });
         }
 
-        var sessions = _tokenTracker?.GetProjectSessions(projectId, 15) ?? new List<AiSessionSummary>();
-        return Ok(sessions);
+        var scope = new ProjectScopeContext(project.OrgId, projectId, userId.Value);
+        ProjectScopeGuard.Validate(scope, project.OrgId, projectId);
+
+        if (_sessionStore != null)
+        {
+            var dbSessions = await _sessionStore.ListUserProjectSessionsAsync(scope, 25, ct);
+            return Ok(dbSessions);
+        }
+
+        var fallbackSessions = (_tokenTracker?.GetProjectSessions(projectId, 25) ?? new List<AiSessionSummary>())
+            .Where(s => s.CreatedByUserId == userId.Value)
+            .ToList();
+        return Ok(fallbackSessions);
+    }
+
+    /// <summary>
+    /// Permanently deletes an older AI conversation session owned by the current user inside the project & organization.
+    /// </summary>
+    [HttpDelete("sessions/{sessionId}")]
+    public async Task<IActionResult> DeleteSession(string sessionId, [FromQuery] Guid projectId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return BadRequest(new { code = "INVALID_SESSION_ID", message = "Mã phiên không được để trống." });
+        }
+
+        if (projectId == Guid.Empty)
+        {
+            return BadRequest(new { code = "INVALID_PROJECT_ID", message = "Mã dự án không hợp lệ." });
+        }
+
+        var ct = HttpContext.RequestAborted;
+        var userId = _currentUser.UserId;
+        if (!userId.HasValue || userId.Value == Guid.Empty)
+        {
+            return Unauthorized(new { code = "UNAUTHORIZED", message = "Yêu cầu đăng nhập." });
+        }
+
+        var project = await _planningDb.Projects.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == projectId && !p.IsDeleted, ct);
+        if (project == null)
+        {
+            return NotFound(new { code = "PROJECT_NOT_FOUND", message = "Dự án không tồn tại hoặc đã bị xóa." });
+        }
+
+        if (!await _projectAccess.AllowsAsync(projectId, "project.read"))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Không có quyền thao tác trên dự án này." });
+        }
+
+        var scope = new ProjectScopeContext(project.OrgId, projectId, userId.Value);
+        ProjectScopeGuard.Validate(scope, project.OrgId, projectId);
+
+        var redisProposal = await _stagingService.GetProposalAsync<AiSprintProposalDto>(sessionId, ct);
+        if (redisProposal != null && IsScopeMismatch(redisProposal, userId.Value, project.OrgId))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN_SESSION_OWNER", message = "Không có quyền xóa phiên làm việc của thành viên hoặc tổ chức khác." });
+        }
+
+        var foundInDb = false;
+        if (_sessionStore != null)
+        {
+            var (found, forbidden) = await _sessionStore.DeleteSessionAsync(sessionId, scope, ct);
+            if (forbidden)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN_SESSION_OWNER", message = "Không có quyền xóa phiên làm việc của thành viên hoặc tổ chức khác." });
+            }
+            foundInDb = found;
+        }
+
+        if (!foundInDb && redisProposal == null)
+        {
+            return NotFound(new { code = "SESSION_NOT_FOUND", message = "Không tìm thấy phiên hội thoại trong dự án này." });
+        }
+
+        await _stagingService.RemoveProposalAsync(sessionId, ct);
+        return Ok(new { success = true, message = "Đã xóa phiên hội thoại và bộ nhớ chỉ mục liên quan." });
+    }
+
+    private async Task<(AiSprintProposalDto? Proposal, bool Forbidden)> LoadScopedProposalAsync(
+        string sessionId,
+        Guid? userId,
+        CancellationToken ct)
+    {
+        var proposal = await _stagingService.GetProposalAsync<AiSprintProposalDto>(sessionId, ct);
+        if (proposal != null)
+        {
+            if (proposal.UserId.HasValue && proposal.UserId.Value != Guid.Empty &&
+                userId.HasValue && proposal.UserId.Value != userId.Value)
+            {
+                return (null, true);
+            }
+            return (proposal, false);
+        }
+
+        if (_sessionStore != null && userId.HasValue && userId.Value != Guid.Empty)
+        {
+            var (dbProposal, forbidden) = await _sessionStore.GetProposalWithOwnershipCheckAsync(
+                sessionId, userId.Value, Guid.Empty, ct);
+            if (dbProposal != null)
+            {
+                await _stagingService.SaveProposalAsync(sessionId, dbProposal, TimeSpan.FromHours(2), ct);
+            }
+            return (dbProposal, forbidden);
+        }
+
+        return (null, false);
+    }
+
+    private static bool IsScopeMismatch(AiSprintProposalDto proposal, Guid currentUserId, Guid projectOrgId)
+    {
+        if (proposal.UserId.HasValue && proposal.UserId.Value != Guid.Empty && proposal.UserId.Value != currentUserId)
+        {
+            return true;
+        }
+        if (proposal.OrganizationId.HasValue && proposal.OrganizationId.Value != Guid.Empty && proposal.OrganizationId.Value != projectOrgId)
+        {
+            return true;
+        }
+        return false;
+    }
+
+    private async Task PersistUpdatedSessionAsync(IProjectScopeContext scope, AiSprintProposalDto proposal, CancellationToken ct)
+    {
+        if (_sessionStore == null) return;
+        await _sessionStore.SaveSessionStateAsync(scope, string.Empty, string.Empty, proposal, ct);
+    }
+
+    private static (string ActionVerb, string TargetLabel, string? DetailPreview) BuildToolTraceMetadata(
+        string toolName,
+        object? toolArgs,
+        string summaryVi)
+    {
+        var key = (toolName ?? string.Empty).Trim().ToLowerInvariant();
+        var (verb, target) = key switch
+        {
+            "intent_router" => ("Phân tích", "Ngữ cảnh hội thoại & Ý định"),
+            "memory_recall" => ("Trỏ trí nhớ", "Chỉ mục ghi nhớ phiên (#mem-X)"),
+            "project_get_active_config" => ("Truy vấn MCP", "Cấu hình Active (Workflow, Priority, Type, Label)"),
+            "backlog_get_pending_issues" => ("Truy vấn MCP", "Kho Backlog tồn đọng"),
+            "spechub_get_latest_docs" => ("Truy vấn MCP", "Tài liệu Đặc tả (Spec Hub)"),
+            "sprint_get_active_velocity" => ("Truy vấn MCP", "Sprint & Năng lực thực thi"),
+            "team_get_member_workloads" => ("Truy vấn MCP", "Thành viên & Tải công việc"),
+            "gemini_reasoner" => ("Suy luận AI", "Mô hình Trợ lý AI"),
+            "domain_guardrail_audit" => ("Kiểm chuẩn", "Bộ kiểm chuẩn & Ngữ cảnh dự án"),
+            _ => ("Thực thi", string.IsNullOrWhiteSpace(toolName) ? "Công cụ hệ thống" : toolName)
+        };
+
+        string? detailPreview = null;
+        if (toolArgs != null)
+        {
+            try
+            {
+                var rawArgs = JsonSerializer.Serialize(toolArgs, SseJsonOptions);
+                detailPreview = rawArgs.Length > 260 ? $"{rawArgs[..260]}..." : rawArgs;
+            }
+            catch
+            {
+                detailPreview = null;
+            }
+        }
+
+        return (verb, target, string.IsNullOrWhiteSpace(detailPreview) ? summaryVi : $"{summaryVi} · Tham số: {detailPreview}");
     }
 }

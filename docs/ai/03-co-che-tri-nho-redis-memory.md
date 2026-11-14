@@ -2,82 +2,71 @@
 
 ---
 
-## 1. Bản chất & Phân loại Trí nhớ AI trong Hệ thống
-Trong kỹ thuật phần mềm tích hợp AI, một Agent thông minh không thể chỉ tồn tại dưới dạng "Stateless" (không lưu trạng thái). Nếu không có cơ chế trí nhớ, Agent sẽ quên sạch ngữ cảnh ngay sau khi hoàn thành một lượt suy luận, không thể duy trì phiên hội thoại để người dùng chỉnh sửa, và có nguy cơ ghi dữ liệu rác trực tiếp vào cơ sở dữ liệu sản xuất.
+## 1. Bản chất & Kiến trúc Trí nhớ Đa tầng Kết hợp Redis + MySQL
+Trong kỹ thuật phần mềm tích hợp AI, một Trợ lý thông minh thực thụ không thể chỉ lưu ngữ cảnh tạm bợ trong RAM hay để mất cuộc hội thoại khi hết TTL. Nếu chỉ dùng Redis thuần không có tầng lưu bền vững, người dùng sẽ mất phiên làm việc cũ khi cache hết hạn; mặt khác, nếu nạp nguyên văn hàng chục lượt chat cũ vào prompt thì mô hình sẽ tốn token và suy luận loãng.
 
-Dự án thiết kế một **Kiến trúc Trí nhớ 4 Tầng Đa Cấp (Four-Tier AI Memory Architecture)**:
+Dự án triển khai **Kiến trúc Trí nhớ 4 Tầng Kết hợp Chỉ mục Hóa Ngữ cảnh & Lưu trữ Kép (Hybrid Redis + MySQL + Indexed Memory `#mem-X`)**:
 
 ```mermaid
 flowchart TD
     subgraph T1["TẦNG 1: TRÍ NHỚ LÀM VIỆC TỨC THỜI (WORKING MEMORY)"]
-        WM1["Cửa sổ Ngữ cảnh của Mô hình Trí tuệ Nhân tạo"]
-        WM2["Vùng nhớ Tạm thời lưu Kết quả Tra cứu Công cụ"]
-        WM3["Thời gian tồn tại: Trong suốt tiến trình phân rã (vài giây đến vài chục giây)"]
+        WM1["Cửa sổ Ngữ cảnh Tập trung của Mô hình AI"]
+        WM2["Kết quả Truy xuất Công cụ Chọn lọc + Các mảnh Trí nhớ (#mem-X) Liên quan"]
+        WM3["Hiển thị Nhật ký Suy nghĩ (mặc định đóng) trong suốt lượt xử lý"]
     end
 
-    subgraph T2["TẦNG 2: TRÍ NHỚ HỘI THOẠI & STAGING CÓ TRẠNG THÁI (STATEFUL CONVERSATION & STAGING MEMORY)"]
-        SM1["Lưu trữ trên Hệ thống Bộ nhớ đệm Phân tán Đàn hồi"]
-        SM2["Chứa bản đề xuất (Mục tiêu, Epics, Tasks, Subtasks) KÈM lịch sử hội thoại đa lượt"]
-        SM3["Hỗ trợ định tuyến đích đến (Sprint hoặc Kho Backlog), cờ hành động & ngữ cảnh nối tiếp"]
-        SM4["Cho phép Người dùng Trao đổi tiếp, Hiệu chỉnh, Xuất Excel hoặc Phê duyệt vào Backlog/Sprint"]
+    subgraph T2["TẦNG 2: BỘ NHỚ ĐỆM NÓNG & STAGING PHÂN TÁN (REDIS HOT CACHE)"]
+        SM1["Lưu nóng trên Bộ nhớ đệm Phân tán Đàn hồi theo mã phiên"]
+        SM2["Chứa bản đề xuất đang duyệt kèm lịch sử hội thoại, log suy nghĩ & từ khóa chỉ mục"]
+        SM3["Đáp ứng truy cập tức thì ở cấp độ mili-giây giữa các lượt trao đổi liên tiếp"]
     end
 
-    subgraph T3["TẦNG 3: BỘ NHỚ LỊCH SỬ PHIÊN DỰ ÁN (PROJECT SESSION MEMORY)"]
-        PM1["Quản lý bởi Bộ Giám sát Tài nguyên & Lịch sử Phiên"]
-        PM2["Lưu vết các phiên phân rã Sprint của từng dự án theo thời gian"]
-        PM3["Lưu vết chỉ số tài nguyên, độ trễ và tỷ lệ hoàn tất thành công"]
-        PM4["Hỗ trợ khôi phục phiên làm việc trước đó trực tiếp từ giao diện"]
+    subgraph T3["TẦNG 3: KHO PHIÊN HỘI THOẠI BỀN VỮNG & CHỈ MỤC TRÍ NHỚ TRONG CSDL"]
+        PM1["Lưu trữ Đích thực Cuộc Hội thoại Đa lượt (không phải từng câu hỏi rời rạc)"]
+        PM2["Khóa chặt theo Bộ ba Phạm vi: Tổ chức - Dự án - Người dùng"]
+        PM3["Đánh Chỉ mục Ngữ cảnh Từng Mảnh (#mem-1, #mem-2...) để Agent trỏ thẳng khi cần"]
+        PM4["Tự động khôi phục lên Bộ nhớ đệm Nóng khi mở lại phiên cũ & hỗ trợ Xóa phiên"]
     end
 
     subgraph T4["TẦNG 4: TRÍ NHỚ DÀI HẠN CỐ ĐỊNH (LONG-TERM GROUNDING MEMORY)"]
         LM1["Kho tài liệu đặc tả kỹ thuật và biên bản họp dự án"]
         LM2["Lịch sử chu kỳ, vận tốc thực tế và danh mục công việc tồn đọng"]
-        LM3["Bộ quy chuẩn dự án: Trạng thái quy trình, loại công việc, mức ưu tiên"]
+        LM3["Bộ quy chuẩn dự án đang áp dụng: Quy trình, loại việc, mức ưu tiên, nhãn"]
         LM4["Hồ sơ năng lực, cơ cấu chuyên môn và định mức giờ của đội ngũ"]
-        LM5["Không gian lưu trữ Vector phục vụ tìm kiếm ngữ nghĩa chuyên sâu"]
     end
 
-    T1 -->|Khi suy luận hoàn tất, lưu bộ nhớ tạm| T2
-    T2 -->|Ghi nhận tóm tắt phiên & chỉ số tài nguyên| T3
-    T2 -->|Khi người điều phối phê duyệt áp dụng| T4
-    T3 -.->|Khôi phục lại dữ liệu phiên trước đó| T2
-    T4 -.->|Cung cấp ngữ cảnh thực tế & quy chuẩn vào| T1
+    T1 -->|Ghi nóng tức thì| T2
+    T1 -->|Lưu bền vững đồng bộ & đánh chỉ mục| T3
+    T3 -.->|Tự động nạp bù khi bộ nhớ đệm nóng hết hạn| T2
+    T2 -->|Khi người điều phối phê duyệt Áp dụng / Đẩy Backlog| T4
+    T4 -.->|Chỉ truy xuất công cụ thực sự cần thiết vào| T1
 ```
 
 ---
 
-## 2. Sơ đồ Hoạt động của Chức năng Trí nhớ Redis (Memory Context Flowchart)
+## 2. Sơ đồ Hoạt động của Cơ chế Trí nhớ Kép, Chỉ mục `#mem-X` & Khóa Phạm vi
 
-Sơ đồ dưới đây minh họa chi tiết cách dữ liệu đề xuất AI được ghi, đọc, cập nhật cục bộ và giải phóng trên Redis thông qua cơ chế bọc đàn hồi (Resilient Wrapper):
+Sơ đồ dưới đây minh họa vòng đời đọc/ghi phiên hội thoại, cơ chế khôi phục khi Redis lạnh (Cold-Redis Fallback), đánh chỉ mục trí nhớ `#mem-X` và thao tác **"Tạo mới"** không phá hủy:
 
 ```mermaid
 flowchart TD
-    StartInput["Hoàn tất lượt hội thoại hoặc Người dùng gửi yêu cầu nối tiếp"] --> LoadPrior["Đọc trí nhớ hội thoại và bản đề xuất cũ theo mã phiên\n(nếu tiếp tục cuộc hội thoại trước đó)"]
-    LoadPrior --> CheckConfig{"Kiểm tra Cấu hình Bộ nhớ đệm Phân tán"}
+    StartInput["Người dùng gửi yêu cầu (hoặc mở lại phiên cũ từ Lịch sử)"] --> ScopeLock["Xác thực Khóa Phạm vi Chặt chẽ:\nBộ ba (Tổ chức, Dự án, Người dùng)"]
+    ScopeLock --> CheckHot{"Đọc phiên từ Bộ nhớ đệm Nóng theo mã phiên"}
 
-    CheckConfig -- "Chưa bật" --> MemoryFallback["Chuyển hướng lưu vào Bộ nhớ đệm Nội bộ an toàn"]
-    CheckConfig -- "Đã bật" --> CheckCircuit{"Kiểm tra Trạng thái Ngắt mạch Tự động"}
+    CheckHot -- "Có sẵn" --> RecallIndex["Truy xuất Chỉ mục Trí nhớ (#mem-1..#mem-n)\nchỉ lấy mảnh ngữ cảnh khớp câu hỏi"]
+    CheckHot -- "Hết hạn / Khởi động lại" --> QueryDB["Truy vấn Kho Phiên & Bảng Chỉ mục Trí nhớ\ntrong CSDL đúng bộ ba phạm vi sở hữu"]
+    QueryDB -- "Không đúng chủ sở hữu / Dự án" --> DenyScope["Chặn truy cập (Cô lập hoàn toàn dự án & người dùng)"]
+    QueryDB -- "Khớp phạm vi" --> Rehydrate["Tái nạp phiên lên Bộ nhớ đệm Nóng\n(Cold-Cache Re-hydration)"]
+    Rehydrate --> RecallIndex
 
-    CheckCircuit -- "Mạch Đang Mở (Hệ thống gặp sự cố)" --> MemoryFallback
-    CheckCircuit -- "Mạch Đang Đóng (Hoạt động bình thường)" --> TryDistributed["Ghi cả lịch sử hội thoại & bản đề xuất vào Bộ nhớ đệm Phân tán\nkèm thời hạn tồn tại an toàn"]
+    RecallIndex --> AgentRun["Agent thực thi chọn lọc (0 công cụ / Chỉ đọc #mem-X / Công cụ mục tiêu)\nvà sinh câu trả lời tập trung"]
+    AgentRun --> IndexNew["Đóng gói kiến thức lượt mới thành mảnh chỉ mục (#mem-k)\nkèm từ khóa, tóm tắt và nội dung chi tiết"]
+    IndexNew --> DualSave["Lưu song song: Cập nhật Bộ nhớ đệm Nóng + Ghi bền vững vào CSDL"]
+    DualSave --> UserNext{"Thao tác tiếp theo của Người điều phối"}
 
-    TryDistributed --> CheckResult{"Giao tiếp thành công?"}
-    CheckResult -- "Thành công" --> ResetFailures["Khởi tạo lại bộ đếm lỗi ngắt mạch\nTrả về mã định danh phiên cho Client"]
-    CheckResult -- "Gián đoạn / Timeout" --> RecordFailure["Ghi nhận lỗi vào bộ ngắt mạch\n(Đạt ngưỡng quy định -> Mở mạch tự động)"]
-    RecordFailure --> MemoryFallback
-
-    MemoryFallback --> ReturnClient["Trả về mã định danh phiên cho Client\n(Đảm bảo trải nghiệm hội thoại liền mạch không ngắt quãng)"]
-
-    ReturnClient --> UserAction{"Tương tác tiếp theo của Người điều phối"}
-
-    UserAction -- "Hiệu chỉnh trực tiếp thông tin" --> PatchMemory["Gửi dữ liệu cập nhật trực tiếp vào bộ nhớ phiên"]
-    PatchMemory --> ReturnClient
-
-    UserAction -- "Nhắn tin tiếp / Yêu cầu sửa / Hỏi đáp / Xuất Excel" --> StartInput
-
-    UserAction -- "Đẩy Kho Backlog hoặc Áp dụng vào Sprint" --> CommitPhase["1. Đọc toàn bộ kế hoạch từ bộ nhớ phiên\n2. Mở giao dịch cơ sở dữ liệu: Ghi nhận vào Kho Backlog (Sprint rỗng) hoặc Sprint mới\n3. Xóa danh sách việc đã ghi và bổ sung tin nhắn xác nhận vào lịch sử hội thoại phiên\n4. Cho phép tiếp tục hội thoại trong cùng phiên"]
-
-    CommitPhase --> Done(["Hoàn tất: Công việc đã ghi nhận & Phiên hội thoại vẫn liền mạch"])
+    UserNext -- "Bấm nút Tạo mới" --> BlankUI["Mở khung hội thoại trống trên giao diện\n(KHÔNG xóa phiên cũ trong DB/Cache)"]
+    UserNext -- "Bấm Xóa phiên trong Lịch sử" --> DeleteDB["Kiểm tra quyền sở hữu & Xóa phiên khỏi DB + Cache"]
+    UserNext -- "Áp dụng Sprint hoặc Đẩy Kho Backlog" --> CommitWork["Ghi công việc vào CSDL chính & bảo toàn mạch hội thoại"]
 ```
 
 ---
@@ -228,11 +217,16 @@ Toàn bộ đề xuất phân rã kèm trạng thái đoạn hội thoại đa l
 }
 ```
 
-### 3.3. Thời gian Sống (TTL) & Chính sách Cập nhật / Giải phóng (Eviction & Lifecycle Policy)
-- **TTL Mặc định**: `24 giờ` (`TimeSpan.FromHours(24)`).
-- **Lý do thiết kế**: Đủ dài để Scrum Master đóng laptop, trao đổi nội bộ với nhóm và quay lại tiếp tục đoạn hội thoại vào ngày hôm sau mà không bị mất ngữ cảnh; đồng thời tự động biến mất sau 24h để giải phóng dung lượng RAM của Redis.
-- **Bảo toàn Hội thoại Sau Khi Commit (`ApplyProposal` / `PushToBacklog`)**: Khi người dùng bấm **"Áp dụng vào Sprint"** hoặc **"Đẩy vào Kho Backlog"**, `AiAgentController.ApplyProposal` ghi nhận công việc vào MySQL, xóa danh sách `Tasks` đã commit trong bản Staging (tránh áp dụng trùng lặp nhiều lần), đồng thời **bổ sung tin nhắn xác nhận của Trợ Lý AI vào `ConversationHistory` và lưu lại vào Redis** để đoạn hội thoại được giữ nguyên mạch tiếp tục.
-- **Xóa sạch Chủ động (Explicit Full Reset)**: Khi người dùng bấm nút **"Làm mới & Phiên mới"** (`POST /api/ai/agent/clear-cache`), hệ thống gọi `RemoveAsync(key)` để thu hồi toàn bộ bộ nhớ phiên cũ trên Redis và tạo `sessionId` mới.
+### 3.3. Thời gian Sống (TTL), Lưu trữ Bền vững MySQL & Chính sách Vòng đời Phiên
+- **Lưu trữ Kép (Redis Hot Cache + MySQL Durable Persistence)**:
+  - **Redis Hot Cache**: Giữ nóng bản đề xuất và hội thoại hiện hành để phục vụ phản hồi, tinh chỉnh và chỉnh sửa từng ô tức thì (cùng cơ chế Circuit Breaker fallback sang RAM).
+  - **MySQL Persistent Tables (`AiConversationSessions` & `AiConversationMemoryEntries`)**: Mọi phiên hội thoại hoàn chỉnh (gồm `ProposalJson`, `ConversationHistoryJson` chứa cả `TraceItems`, `ThinkingSummary`, `DurationMs`, `Thoughts`, `ReferencedMemoryAnchors`, cùng danh sách các mảnh trí nhớ `#mem-1..#mem-n`) đều được lưu bền vững vào MySQL bởi [`AiConversationSessionStore.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiConversationSessionStore.cs).
+- **Khóa chặt Phạm vi Đa chiều (`OrganizationId`, `ProjectId`, `UserId`)**: Toàn bộ API liệt kê lịch sử, khôi phục phiên, tiếp tục chat, chỉnh sửa staging, commit Backlog/Sprint và xóa phiên đều đối chiếu nghiêm ngặt bộ ba `(OrganizationId, ProjectId, UserId)`. Người dùng dự án/tổ chức khác hoặc thành viên khác tuyệt đối không thể đọc hoặc ghi đè phiên của nhau.
+- **Khôi phục khi Redis lạnh (Cold-Redis Fallback & Re-hydration)**: Nếu phiên cũ đã trôi khỏi Redis (hết TTL hoặc máy chủ khởi động lại), khi người dùng mở lại hoặc nhắn tiếp trong phiên đó, hệ thống tự động nạp phiên từ MySQL (kèm kiểm tra khóa 3 chiều) và tái nạp ngay lên Redis.
+- **Bảo toàn Hội thoại Sau Khi Commit (`ApplyProposal` / `PushToBacklog`)**: Khi người dùng bấm **"Áp dụng vào Sprint"** hoặc **"Đẩy vào Kho Backlog"**, hệ thống ghi nhận công việc vào MySQL, xóa danh sách `Tasks` đã commit (tránh áp dụng trùng lặp nhiều lần), đồng thời **bổ sung tin nhắn xác nhận của Trợ Lý AI vào `ConversationHistory` và cập nhật đồng bộ cả Redis lẫn MySQL** để đoạn hội thoại được giữ nguyên mạch tiếp tục.
+- **Nút "Tạo mới" Không Phá Hủy vs Xóa Phiên Cũ Chủ Động**:
+  - Nút **"Tạo mới"** trên UI chỉ mở cuộc hội thoại trống mới (reset trạng thái local) và **tuyệt đối không gọi `clear-cache` hay xóa các phiên cũ trong cơ sở dữ liệu**.
+  - Việc xóa phiên cũ được thực hiện chủ động từ danh sách **Lịch sử phiên** thông qua `DELETE /api/ai/agent/sessions/{sessionId}?projectId=...`.
 
 ---
 
@@ -328,11 +322,15 @@ PONG
 Bên cạnh bộ nhớ đề xuất tức thời (Staging Session), hệ thống được trang bị hệ thống quản trị phiên làm việc và đo lường tài nguyên AI độc lập thông qua giao diện [`IAiTokenUsageTracker`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/IAiTokenUsageTracker.cs) và lớp triển khai [`AiTokenUsageTracker`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiTokenUsageTracker.cs):
 
 ### 6.1. Quản lý Lịch sử Phiên Phân rã Dự án (Project Session Memory)
-- **Cơ chế hoạt động**: Mỗi khi một lượt phân rã Sprint hoàn tất, hệ thống tự động ghi nhận bản tóm tắt phiên [`AiSessionSummary`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/IAiTokenUsageTracker.cs) gồm: `SessionId`, `ProjectId`, `SprintGoal`, `TaskCount`, `TotalStoryPoints`, `Model`, `CreatedByName`, `CreatedAtUtc`.
-- **Khôi phục phiên làm việc cũ (Session History Restore)**:
+- **Cơ chế hoạt động**: Mỗi phiên hội thoại hoàn chỉnh được lưu đồng bộ vào bảng `AiConversationSessions` (gắn chặt `OrganizationId`, `ProjectId`, `UserId`, `Title`, `TurnCount`, `MemoryCount`, `LastIntent`, `UpdatedAtUtc`) và các mảnh trí nhớ đánh chỉ mục `AiConversationMemoryEntries` (`#mem-1`, `#mem-2`, ...). Bản tóm tắt phiên [`AiSessionSummary`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/IAiTokenUsageTracker.cs) trả về đầy đủ số lượt trao đổi và số mảnh trí nhớ đã lập chỉ mục.
+- **Hệ thống Đánh Chỉ Mục Trí Nhớ (`AiIndexedMemoryEngine.cs` & `#mem-X`)**:
+  - Mỗi lượt hội thoại hoặc câu trả lời phân tích quan trọng được tách thành nút trí nhớ có mã định danh (`AnchorKey = "#mem-1"`, `Category`, `Title`, `Keywords`, `Summary`, `DetailContent`).
+  - Ở các lượt hỏi nối tiếp, thay vì nhồi toàn bộ lịch sử trò chuyện thô vào Prompt gây loãng suy luận, [`AiIndexedMemoryEngine.SelectRelevantMemories`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiIndexedMemoryEngine.cs) đối chiếu từ khóa câu hỏi (hoặc tham chiếu trực tiếp `#mem-1`) để **trỏ thẳng vào đúng 1–3 mảnh trí nhớ liên quan nhất**.
+- **Khôi phục & Xóa Phiên Cũ (Session History Restore & Delete)**:
   - Trên thanh tiêu đề của Modal AI có biểu tượng **Lịch sử phiên (đồng hồ)**.
-  - Khi nhấp vào, dropdown hiển thị danh sách các phiên phân tách gần nhất trong dự án từ API `GET /api/ai/agent/sessions?projectId=...`.
-  - Nhấp vào phiên bất kỳ để khôi phục toàn bộ bản kế hoạch đề xuất từ Staging Cache (`GET /api/ai/agent/proposal/{sessionId}`) mà không cần chạy lại mô hình LLM từ đầu.
+  - Khi nhấp vào, popover hiển thị danh sách các cuộc hội thoại thực sự thuộc đúng **người dùng + dự án + tổ chức hiện tại** từ API `GET /api/ai/agent/sessions?projectId=...` (kèm số lượt trao đổi `TurnCount` và số mảnh trí nhớ `MemoryCount`).
+  - Nhấp vào phiên bất kỳ để khôi phục toàn bộ lịch sử đoạn chat, bảng đề xuất và các dòng Thinking (mặc định ở trạng thái đóng) qua `GET /api/ai/agent/proposal/{sessionId}` — tự động đọc từ MySQL và nạp bù lên Redis nếu cache đã hết hạn.
+  - Bấm biểu tượng thùng rác cạnh từng phiên để gọi `DELETE /api/ai/agent/sessions/{sessionId}?projectId=...` (kiểm tra chặt quyền sở hữu 3 chiều trước khi xóa cả bảng MySQL lẫn khóa Redis tương ứng).
 
 ### 6.2. Đo lường & Giám sát Tiêu thụ Token (Token Consumption Management)
 - **Bộ ghi nhận mức tiêu thụ**: Ghi nhận `AiUsageRecord` theo từng phiên làm việc (Prompt Tokens, Completion Tokens, Latency mili-giây, Model, trạng thái Success/Failed).
@@ -341,9 +339,9 @@ Bên cạnh bộ nhớ đề xuất tức thời (Staging Session), hệ thống
   - **Phân bổ theo Mô hình**: Tỷ lệ phần trăm và số lượng token giữa `Gemini Flash`, `Gemini Pro`, `Gemini Flash-Lite`.
   - **Bảng Nhật ký Thực thi**: Hiển thị chi tiết 15 lượt gọi gần nhất với thời gian thực thi, số token vào/ra và trạng thái.
 
-### 6.3. Cơ chế Giải phóng Bộ nhớ đệm Cache & Làm mới Tri thức (Staging Cache Invalidation & Session Reset)
-- **Xóa sạch bộ đệm phân tán Redis**: Endpoint `POST /api/ai/agent/clear-cache` giải phóng tức thì các đối tượng đề xuất lưu tạm trong Redis (`ProjectMgmt:Ai:staging:...`), ngăn chặn tình trạng lưu vết kế hoạch cũ khi người dùng chuyển hướng hoặc thay đổi hoàn toàn yêu cầu.
-- **Khởi tạo phiên làm việc tươi mới 100%**: Trên thanh tiêu đề của Modal **Trợ Lý AI**, nút **"Làm mới & Phiên mới"** cho phép người dùng chủ động xóa bỏ cache cục bộ (`localStorage`), hủy bỏ đề xuất/đoạn chat cũ và giải phóng bộ nhớ đệm server chỉ với một thao tác duy nhất.
+### 6.3. Nút "Tạo mới" Không Phá Hủy & Giải Phóng Cache Chọn Lọc
+- **Nút "Tạo mới" (`startNewSession`)**: Trên thanh tiêu đề của Modal **Trợ Lý AI**, nút **"Tạo mới"** chỉ dọn khung soạn thảo và khởi tạo một đoạn hội thoại mới sạch sẽ trên UI mà **không phá hủy hoặc xóa các phiên cũ đã lưu trong DB**.
+- **Xóa phiên cụ thể hoặc Clear-Cache Quản trị**: Endpoint `DELETE /api/ai/agent/sessions/{sessionId}?projectId=...` xóa an toàn từng phiên cũ do chính người dùng sở hữu; trong khi `POST /api/ai/agent/clear-cache` chỉ dùng cho thao tác xóa nóng khóa staging trên Redis khi cần quản trị kỹ thuật.
 
 ---
 
@@ -351,6 +349,9 @@ Bên cạnh bộ nhớ đề xuất tức thời (Staging Session), hệ thống
 
 | Thành phần | Vai trò kỹ thuật | Liên kết mã nguồn |
 | :--- | :--- | :--- |
+| **AiConversationSessionStore** | Kho lưu trữ phiên bền vững trên MySQL, khóa phạm vi `(OrganizationId, ProjectId, UserId)` & re-hydrate Redis | [`AiConversationSessionStore.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiConversationSessionStore.cs) |
+| **AiIndexedMemoryEngine** | Động cơ đánh chỉ mục trí nhớ `#mem-1..#mem-n` và lập kế hoạch Selective MCP | [`AiIndexedMemoryEngine.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiIndexedMemoryEngine.cs) |
+| **AiConversationSession & MemoryEntry** | Thực thể DB & Migration lưu phiên hội thoại và mảnh trí nhớ đánh chỉ mục | [`AiConversationSession.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Modules.DeliveryIntelligence/Domain/Entities/AiConversationSession.cs) |
 | **StackExchangeRedisStagingProvider** | Adapter kết nối Redis, quản lý connection pool & key operations | [`StackExchangeRedisStagingProvider.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/Adapters/StackExchangeRedisStagingProvider.cs#L8-L115) |
 | **ResilientStateStagingService** | Wrapper chống sập, điều phối Redis và In-Memory fallback | [`ResilientStateStagingService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Core/Staging/ResilientStateStagingService.cs#L15-L110) |
 | **MemoryStateStagingService** | Bộ nhớ đệm Fallback lưu trên ConcurrentDictionary của RAM | [`MemoryStateStagingService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Core/Staging/MemoryStateStagingService.cs#L10-L60) |

@@ -115,11 +115,128 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
             ? sanitizedPrompt.Trim()
             : sanitizedDoc.Trim();
 
+        var turnSw = Stopwatch.StartNew();
+
         var history = existingProposal?.ConversationHistory != null
             ? new List<AiConversationTurnDto>(existingProposal.ConversationHistory)
             : new List<AiConversationTurnDto>();
 
+        var indexedMemories = existingProposal?.IndexedMemories != null
+            ? existingProposal.IndexedMemories.Select(CloneMemoryAnchor).ToList()
+            : new List<AiMemoryAnchorDto>();
+
+        var traceItems = new List<AiTurnTraceItemDto>();
+        var thoughtBuffer = new System.Text.StringBuilder();
+
+        async Task EmitThoughtAsync(string delta)
+        {
+            if (string.IsNullOrEmpty(delta)) return;
+            thoughtBuffer.Append(delta);
+            await onThoughtDelta(delta);
+        }
+
+        async Task RecordTraceAsync(
+            string kind,
+            string actionVerb,
+            string target,
+            string toolName,
+            object? args,
+            string summaryVi,
+            long? durationMs,
+            string? detail = null,
+            bool emitToolCall = true)
+        {
+            traceItems.Add(new AiTurnTraceItemDto
+            {
+                Kind = kind,
+                ActionVerb = actionVerb,
+                Target = target,
+                Summary = summaryVi,
+                Detail = detail,
+                DurationMs = durationMs,
+                Status = "done"
+            });
+
+            if (emitToolCall)
+            {
+                await onToolCall(toolName, args, summaryVi, durationMs);
+            }
+        }
+
+        string BuildThinkingSummary(long elapsedMs, List<AiTurnTraceItemDto> items, int mcpCount, int recalledCount)
+        {
+            var secs = Math.Max(0.1, elapsedMs / 1000.0).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+            var parts = new List<string> { $"Đã suy nghĩ xong trong {secs}s", $"{items.Count} thao tác" };
+            if (recalledCount > 0) parts.Add($"{recalledCount} chỉ mục nhớ");
+            if (mcpCount > 0) parts.Add($"{mcpCount} MCP");
+            return string.Join(" · ", parts);
+        }
+
+        void FinalizeAssistantTurn(
+            AiSprintProposalDto targetProposal,
+            string reply,
+            string turnIntent,
+            string actionType,
+            List<string>? recalledKeys)
+        {
+            targetProposal.OrganizationId ??= scope.OrganizationId;
+            targetProposal.UserId ??= scope.UserId;
+            targetProposal.AssistantReply = reply;
+            targetProposal.IndexedMemories = indexedMemories;
+
+            AiIndexedMemoryEngine.UpdateIndexedMemories(
+                targetProposal,
+                sanitizedPrompt,
+                sanitizedDoc,
+                reply,
+                turnIntent);
+            indexedMemories = targetProposal.IndexedMemories;
+
+            turnSw.Stop();
+            var mcpCount = traceItems.Count(t => t.Kind == "mcp");
+            var thinkingSummary = BuildThinkingSummary(turnSw.ElapsedMilliseconds, traceItems, mcpCount, recalledKeys?.Count ?? 0);
+            var cleanThoughts = thoughtBuffer.ToString().Trim();
+
+            history.Add(new AiConversationTurnDto
+            {
+                Id = $"assistant_{DateTime.UtcNow.Ticks}",
+                Role = "assistant",
+                Content = reply,
+                Intent = turnIntent,
+                ActionType = actionType,
+                TaskCount = targetProposal.Tasks.Count,
+                TotalStoryPoints = targetProposal.TotalStoryPoints,
+                ThinkingSummary = thinkingSummary,
+                DurationMs = turnSw.ElapsedMilliseconds,
+                Thoughts = string.IsNullOrWhiteSpace(cleanThoughts) ? null : cleanThoughts,
+                ReferencedMemoryAnchors = recalledKeys != null && recalledKeys.Count > 0 ? recalledKeys : null,
+                TraceItems = traceItems.ToList(),
+                TimestampUtc = DateTime.UtcNow
+            });
+            targetProposal.ConversationHistory = history;
+        }
+
         var intent = ClassifyConversationalIntent(sanitizedPrompt, sanitizedDoc, existingProposal);
+        var hasAttachedDoc = !string.IsNullOrWhiteSpace(sanitizedDoc) && sanitizedDoc != sanitizedPrompt;
+        var contextPlan = AiIndexedMemoryEngine.PlanContextExecution(
+            intent,
+            effectiveUserText,
+            sanitizedDoc,
+            hasAttachedDoc,
+            existingProposal,
+            indexedMemories);
+
+        var recalledKeys = contextPlan.RecalledMemories.Select(m => m.AnchorKey).ToList();
+
+        traceItems.Add(new AiTurnTraceItemDto
+        {
+            Kind = "step",
+            ActionVerb = "Phân tích",
+            Target = "Định tuyến Ý định",
+            Summary = $"Xác định ý định '{intent}' ({(contextPlan.UseMemoryOnly || contextPlan.IsGreetingOrHelp ? "không cần gọi thừa MCP ngoài" : "nạp ngữ cảnh chọn lọc")})",
+            DurationMs = 1,
+            Status = "done"
+        });
 
         var userTurn = new AiConversationTurnDto
         {
@@ -140,7 +257,8 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
         if (intent == "out_of_scope_refusal")
         {
             await onStepProgress(2, "DOMAIN_GUARDRAIL", "Kiểm tra phạm vi nghiệp vụ Quản lý Dự án", 60, "Yêu cầu không thuộc phạm vi quản lý dự án...");
-            await onThoughtDelta("Phát hiện yêu cầu nằm ngoài phạm vi công cụ Quản lý Dự án. Thực hiện từ chối lịch sự theo quy tắc Domain Guardrail.\n");
+            await EmitThoughtAsync("Phát hiện yêu cầu nằm ngoài phạm vi công cụ Quản lý Dự án. Thực hiện từ chối lịch sự theo quy tắc Domain Guardrail (0 MCP call).\n");
+            await RecordTraceAsync("guardrail", "Kiểm tra", "Domain Guardrail", "domain_guardrail", new { intent }, "Từ chối yêu cầu nằm ngoài phạm vi Quản lý Dự án (không gọi MCP)", 1, emitToolCall: false);
             await onStepProgress(5, "FINALIZE_PROPOSAL", "Hoàn tất phản hồi Trợ Lý AI", 100, "Đã từ chối yêu cầu ngoài luồng.");
 
             var refusalReply = "Tôi là Trợ Lý AI chuyên biệt cho hệ thống Quản lý Dự án. Tôi chỉ hỗ trợ các nghiệp vụ thuộc phạm vi quản lý dự án như: phân tích tài liệu đặc tả (Spec Hub), lập kế hoạch Sprint, khởi tạo và đẩy công việc vào kho Product Backlog, phân bổ nhân sự theo năng lực, tra cứu tiến độ Scrum và xuất báo cáo Excel cho dự án. Yêu cầu vừa rồi nằm ngoài phạm vi công cụ quản lý dự án nên tôi xin phép từ chối thực hiện.";
@@ -148,19 +266,7 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
             var refusalProposal = BuildPreservedProposalShell(sessionId, scope.ProjectId, targetSprintId, existingProposal);
             refusalProposal.Intent = "out_of_scope_refusal";
             refusalProposal.TriggerAction = "none";
-            refusalProposal.AssistantReply = refusalReply;
-            history.Add(new AiConversationTurnDto
-            {
-                Id = $"assistant_{DateTime.UtcNow.Ticks}",
-                Role = "assistant",
-                Content = refusalReply,
-                Intent = "out_of_scope_refusal",
-                ActionType = "none",
-                TaskCount = refusalProposal.Tasks.Count,
-                TotalStoryPoints = refusalProposal.TotalStoryPoints,
-                TimestampUtc = DateTime.UtcNow
-            });
-            refusalProposal.ConversationHistory = history;
+            FinalizeAssistantTurn(refusalProposal, refusalReply, "out_of_scope_refusal", "none", recalledKeys);
 
             await onProposalReady(refusalProposal);
             return;
@@ -171,40 +277,46 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
         // =========================================================================
         if (intent == "export_excel")
         {
-            await onStepProgress(2, "QUERY_CONTEXT", "Truy xuất dữ liệu Sprint & Backlog để xuất Excel", 55, "Đang tổng hợp danh sách công việc và cấu hình dự án...");
-            var swExcel = Stopwatch.StartNew();
-            var excelConfig = await _backlogTools.ResolveActiveConfigAsync(scope.ProjectId, cancellationToken);
-            swExcel.Stop();
-            await onToolCall(
-                "project_get_active_config",
-                new { projectId = scope.ProjectId },
-                $"Tổng hợp cấu hình dự án ({excelConfig.WorkflowName}) để định dạng tệp Excel (.xlsx)",
-                swExcel.ElapsedMilliseconds);
+            await onStepProgress(2, "QUERY_CONTEXT", "Chuẩn bị dữ liệu xuất tệp Excel (.xlsx)", 60, "Đang kiểm tra phạm vi dữ liệu xuất báo cáo...");
+            var excelProposal = BuildPreservedProposalShell(sessionId, scope.ProjectId, targetSprintId, existingProposal);
+            if (string.IsNullOrWhiteSpace(excelProposal.WorkflowName))
+            {
+                var swExcel = Stopwatch.StartNew();
+                var excelConfig = await _backlogTools.ResolveActiveConfigAsync(scope.ProjectId, cancellationToken);
+                swExcel.Stop();
+                ApplyConfigMetadata(excelProposal, excelConfig);
+                await RecordTraceAsync(
+                    "mcp",
+                    "Truy vấn MCP",
+                    "project_get_active_config",
+                    "project_get_active_config",
+                    new { projectId = scope.ProjectId },
+                    $"Đồng bộ quy chuẩn dự án ({excelConfig.WorkflowName}) để định dạng tệp Excel",
+                    swExcel.ElapsedMilliseconds);
+            }
+            else
+            {
+                await RecordTraceAsync(
+                    "memory",
+                    "Tận dụng ngữ cảnh",
+                    "Phiên hiện hành",
+                    "context_reuse",
+                    new { workflow = excelProposal.WorkflowName },
+                    $"Dùng cấu hình quy chuẩn đã nạp ({excelProposal.WorkflowName}), bỏ qua truy vấn lặp",
+                    1,
+                    emitToolCall: false);
+            }
 
+            await EmitThoughtAsync("Xác nhận lệnh xuất tệp Excel (.xlsx) từ dữ liệu dự án đang lưu trong hệ thống.\n");
             await onStepProgress(5, "FINALIZE_PROPOSAL", "Hoàn tất chuẩn bị tệp Excel (.xlsx)", 100, "Đang kích hoạt tải xuống tệp Excel...");
 
-            var excelProposal = BuildPreservedProposalShell(sessionId, scope.ProjectId, targetSprintId, existingProposal);
-            ApplyConfigMetadata(excelProposal, excelConfig);
             excelProposal.Intent = "export_excel";
             excelProposal.TriggerAction = "export_excel";
             var excelReply = excelProposal.Tasks.Count > 0
                 ? $"Tôi đã kích hoạt xuất tệp Excel (.xlsx) tổng hợp toàn bộ các Sprint và kho Product Backlog đang lưu trong dự án. Lưu ý: {excelProposal.Tasks.Count} công việc đề xuất ({excelProposal.TotalStoryPoints} SP) trong phiên hội thoại này chưa được lưu vào dự án nên chưa có trong tệp. Nếu muốn đưa chúng vào báo cáo, hãy đẩy vào kho Backlog hoặc áp dụng vào Sprint rồi xuất lại. Nếu trình duyệt chặn tải tự động, bạn có thể bấm nút tải lại ngay bên dưới."
                 : "Tôi đã kích hoạt xuất tệp Excel (.xlsx) tổng hợp toàn bộ các Sprint và kho Product Backlog đang lưu trong dự án. Nếu trình duyệt chặn tải tự động, bạn có thể bấm nút tải lại ngay bên dưới.";
 
-            excelProposal.AssistantReply = excelReply;
-            history.Add(new AiConversationTurnDto
-            {
-                Id = $"assistant_{DateTime.UtcNow.Ticks}",
-                Role = "assistant",
-                Content = excelReply,
-                Intent = "export_excel",
-                ActionType = "export_excel",
-                TaskCount = excelProposal.Tasks.Count,
-                TotalStoryPoints = excelProposal.TotalStoryPoints,
-                TimestampUtc = DateTime.UtcNow
-            });
-            excelProposal.ConversationHistory = history;
-
+            FinalizeAssistantTurn(excelProposal, excelReply, "export_excel", "export_excel", recalledKeys);
             await onProposalReady(excelProposal);
             return;
         }
@@ -224,138 +336,285 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
                 ? $"Tôi đã chuyển mục tiêu lưu trữ sang kho Product Backlog và kích hoạt đẩy {actionProposal.Tasks.Count} công việc ({actionProposal.TotalStoryPoints} SP) vào kho Backlog của dự án."
                 : $"Tôi đã kích hoạt áp dụng {actionProposal.Tasks.Count} công việc ({actionProposal.TotalStoryPoints} SP) vào Sprint tiếp theo của dự án.";
 
-            actionProposal.AssistantReply = actionReply;
-            history.Add(new AiConversationTurnDto
-            {
-                Id = $"assistant_{DateTime.UtcNow.Ticks}",
-                Role = "assistant",
-                Content = actionReply,
-                Intent = intent,
-                ActionType = actionProposal.TriggerAction,
-                TaskCount = actionProposal.Tasks.Count,
-                TotalStoryPoints = actionProposal.TotalStoryPoints,
-                TimestampUtc = DateTime.UtcNow
-            });
-            actionProposal.ConversationHistory = history;
+            await RecordTraceAsync(
+                "step",
+                "Điều phối",
+                isBacklog ? "Kho Product Backlog" : "Sprint mục tiêu",
+                isBacklog ? "push_backlog_trigger" : "apply_sprint_trigger",
+                new { taskCount = actionProposal.Tasks.Count, storyPoints = actionProposal.TotalStoryPoints },
+                actionReply,
+                1,
+                emitToolCall: false);
+
+            FinalizeAssistantTurn(actionProposal, actionReply, intent, actionProposal.TriggerAction, recalledKeys);
             await onStepProgress(5, "FINALIZE_PROPOSAL", "Hoàn tất điều phối", 100, actionReply);
             await onProposalReady(actionProposal);
             return;
         }
 
         // =========================================================================
-        // STEP 2: Truy vấn Ngữ cảnh & Lịch sử Sprint (35%)
+        // RECALL CHỈ MỤC TRÍ NHỚ PHIÊN (#mem-X) NẾU PHÙ HỢP
         // =========================================================================
-        await onStepProgress(2, "QUERY_CONTEXT", "Truy vấn Ngữ cảnh & Lịch sử Sprint", 35, "Đang đối chiếu tài liệu đặc tả và lịch sử Sprint gần nhất...");
-
-        var sw = Stopwatch.StartNew();
-        var relevantDocs = await _specHubTools.SearchRelevantSpecsAsync(scope, "Sprint SRS BRD Requirements", 5, cancellationToken);
-        sw.Stop();
-        await onToolCall("spec_hub_search", new { query = "Sprint SRS BRD Requirements" }, "Tìm kiếm tài liệu đặc tả liên quan trong Spec Hub", sw.ElapsedMilliseconds);
-
-        // Also read top Spec Hub documents in project for surgical context
-        var specHubExcerpts = new System.Text.StringBuilder();
-        var projectDocsList = new List<(Guid Id, string Name)>();
-        try
+        if (contextPlan.RecalledMemories.Count > 0)
         {
-            var projectDocs = await _planningDb.ProjectDocuments.AsNoTracking()
-                .Where(d => d.ProjectId == scope.ProjectId && !d.IsDirectory)
-                .OrderByDescending(d => d.UpdatedAt)
-                .Take(4)
-                .Select(d => new { d.Id, Name = string.IsNullOrEmpty(d.Name) ? d.Title : d.Name, d.Extension })
-                .ToListAsync(cancellationToken);
-
-            projectDocsList = projectDocs.Select(d => (d.Id, d.Name)).ToList();
-
-            foreach (var doc in projectDocs)
-            {
-                var ext = (doc.Extension ?? string.Empty).ToLowerInvariant();
-                if (ext is ".png" or ".jpg" or ".jpeg" or ".gif" or ".webp") continue;
-
-                sw.Restart();
-                var docJson = await _specHubTools.ReadDocumentAsync(doc.Id, scope, cancellationToken);
-                sw.Stop();
-                await onToolCall("spec_hub_read_document", new { documentId = doc.Id, fileName = doc.Name }, $"Đọc phân đoạn tài liệu đặc tả: {doc.Name}", sw.ElapsedMilliseconds);
-
-                if (!string.IsNullOrWhiteSpace(docJson))
-                {
-                    var snippet = docJson.Length > 2500 ? docJson[..2500] + "..." : docJson;
-                    specHubExcerpts.AppendLine($"--- Tài liệu Spec Hub: {doc.Name} ---");
-                    specHubExcerpts.AppendLine(InputGuardrail.Sanitize(snippet).SanitizedText);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "[AiSprintDecomposition] Không thể đọc thêm tài liệu Spec Hub mở rộng");
+            var anchorListText = string.Join(", ", contextPlan.RecalledMemories.Select(m => m.AnchorKey));
+            var detailPreview = string.Join("\n", contextPlan.RecalledMemories.Select(m => $"{m.AnchorKey} ({m.Title}): {m.Summary}"));
+            await RecordTraceAsync(
+                "memory",
+                "Trỏ trí nhớ",
+                anchorListText,
+                "memory_recall",
+                new { anchors = contextPlan.RecalledMemories.Select(m => m.AnchorKey).ToArray() },
+                $"Trỏ trực tiếp chỉ mục trí nhớ phiên ({anchorListText}) thay vì nạp toàn bộ hội thoại cũ",
+                1,
+                detail: detailPreview);
+            await EmitThoughtAsync($"Đã trỏ chỉ mục trí nhớ phiên: {anchorListText} để kế thừa ngữ cảnh trọng tâm.\n");
         }
 
-        sw.Restart();
-        var backlogStories = await _backlogTools.GetActiveStoriesAsync(scope, cancellationToken);
-        sw.Stop();
-        await onToolCall("backlog_get_stories", new { projectId = scope.ProjectId }, "Lấy danh sách các User Story đang có trong Backlog", sw.ElapsedMilliseconds);
-
-        sw.Restart();
-        var sprintHistory = await _sprintTools.GetSprintHistoryAndVelocityAsync(scope, cancellationToken);
-        sw.Stop();
-        await onToolCall("sprint_get_history_and_velocity", new { projectId = scope.ProjectId }, "Truy xuất vận tốc Scrum và các hạng mục dở dang", sw.ElapsedMilliseconds);
-
         // =========================================================================
-        // STEP 3: Đánh giá Năng lực Đội ngũ & Kỹ năng (55%)
+        // FAST PATH: CHÀO HỎI / TRẢ LỜI TỪ TRÍ NHỚ MÀ KHÔNG GỌI THỪA MCP SERVER
         // =========================================================================
-        await onStepProgress(3, "EVALUATE_CAPACITY", "Đánh giá Năng lực Đội ngũ & Kỹ năng", 55, "Đang thống kê số lượng thành viên, kỹ năng và giờ làm khả dụng...");
-
-        sw.Restart();
-        var teamCapacities = await _teamTools.GetDevCapacitiesAsync(scope, cancellationToken);
-        sw.Stop();
-        await onToolCall("team_get_dev_capacities", new { projectId = scope.ProjectId }, "Phân tích kỹ năng và số giờ khả dụng của thành viên đội Scrum", sw.ElapsedMilliseconds);
-
-        // Truy xuất cấu hình đang được ÁP DỤNG THỰC TẾ của dự án (Workflow, Priorities, IssueTypes, Labels)
-        sw.Restart();
-        var activeConfig = await _backlogTools.ResolveActiveConfigAsync(scope.ProjectId, cancellationToken);
-        await _backlogTools.GetActiveConfigAsync(scope.ProjectId, scope, cancellationToken);
-        sw.Stop();
-        await onToolCall(
-            "project_get_active_config",
-            new { projectId = scope.ProjectId },
-            $"Truy xuất cấu hình áp dụng thực tế ({activeConfig.WorkflowName}: {activeConfig.Statuses.Count} trạng thái, {activeConfig.Priorities.Count} mức ưu tiên, {activeConfig.Labels.Count} nhãn)",
-            sw.ElapsedMilliseconds);
-
-        // =========================================================================
-        // INTENT: Tra cứu / Hỏi đáp thông tin dự án (project_qa) mà không ghi đè bảng Task
-        // =========================================================================
-        if (intent == "project_qa")
+        if (intent == "project_qa" && (contextPlan.IsGreetingOrHelp || contextPlan.UseMemoryOnly))
         {
-            await onStepProgress(4, "PROJECT_CONSULTATION", "Tổng hợp câu trả lời từ dữ liệu dự án", 80, "Đang đối chiếu dữ liệu cấu hình, Backlog, Sprint và đội ngũ...");
-            var qaReply = await BuildProjectQaAnswerAsync(
+            await onStepProgress(
+                4,
+                "PROJECT_CONSULTATION",
+                contextPlan.IsGreetingOrHelp ? "Soạn câu trả lời hướng dẫn sử dụng" : "Tổng hợp câu trả lời từ chỉ mục trí nhớ phiên",
+                85,
+                contextPlan.IsGreetingOrHelp
+                    ? "Trợ Lý AI đang trả lời trực tiếp (0 truy vấn MCP)..."
+                    : "Đang trỏ dữ liệu đã ghi nhớ trong phiên để trả lời đúng trọng tâm...");
+
+            var fastQaReply = await BuildFocusedProjectQaAnswerAsync(
                 effectiveUserText,
-                activeConfig,
-                backlogStories,
-                sprintHistory,
-                teamCapacities,
-                projectDocsList,
+                contextPlan,
+                activeConfig: null,
+                backlogStoriesJson: null,
+                sprintHistoryJson: null,
+                teamCapacitiesJson: null,
+                specHubExcerptsText: null,
+                projectDocs: [],
                 history,
+                indexedMemories,
                 existingProposal,
                 scope,
                 model,
                 cancellationToken);
 
+            await RecordTraceAsync(
+                "reasoning",
+                "Tổng hợp",
+                contextPlan.IsGreetingOrHelp ? "Trả lời trực tiếp" : "Ngữ cảnh trí nhớ",
+                "focused_answer",
+                new { mcpCalls = 0 },
+                "Trả lời đúng trọng tâm câu hỏi mà không cần truy vấn dư thừa MCP Server",
+                turnSw.ElapsedMilliseconds,
+                emitToolCall: false);
+
+            var fastQaProposal = BuildPreservedProposalShell(sessionId, scope.ProjectId, targetSprintId, existingProposal);
+            fastQaProposal.Intent = "project_qa";
+            fastQaProposal.TriggerAction = "none";
+            FinalizeAssistantTurn(fastQaProposal, fastQaReply, "project_qa", "none", recalledKeys);
+
+            await onStepProgress(5, "FINALIZE_PROPOSAL", "Hoàn tất phản hồi Trợ Lý AI", 100, "Đã hoàn tất câu trả lời.");
+            await onProposalReady(fastQaProposal);
+            return;
+        }
+
+        // =========================================================================
+        // STEP 2: Truy vấn Ngữ cảnh Có Chọn Lọc (Chỉ gọi MCP Tools thực sự cần thiết)
+        // =========================================================================
+        var sw = Stopwatch.StartNew();
+        var relevantDocs = string.Empty;
+        var specHubExcerpts = new System.Text.StringBuilder();
+        var projectDocsList = new List<(Guid Id, string Name)>();
+        string? backlogStories = null;
+        string? sprintHistory = null;
+        string? teamCapacities = null;
+
+        if (contextPlan.NeedsSpecHub || contextPlan.NeedsBacklog || contextPlan.NeedsSprintHistory)
+        {
+            await onStepProgress(2, "QUERY_CONTEXT", "Truy vấn Ngữ cảnh Dự án có chọn lọc", 35, "Chỉ gọi các công cụ MCP cần thiết cho câu hỏi và mục tiêu hiện tại...");
+        }
+
+        if (contextPlan.NeedsSpecHub)
+        {
+            sw.Restart();
+            relevantDocs = await _specHubTools.SearchRelevantSpecsAsync(scope, contextPlan.SpecSearchKeyword, 5, cancellationToken);
+            sw.Stop();
+            await RecordTraceAsync(
+                "mcp",
+                "Truy vấn MCP",
+                "spec_hub_search",
+                "spec_hub_search",
+                new { query = contextPlan.SpecSearchKeyword },
+                $"Tìm kiếm đặc tả Spec Hub theo từ khóa \"{contextPlan.SpecSearchKeyword}\"",
+                sw.ElapsedMilliseconds);
+
+            try
+            {
+                var rawDocs = await _planningDb.ProjectDocuments.AsNoTracking()
+                    .Where(d => d.ProjectId == scope.ProjectId && !d.IsDirectory)
+                    .OrderByDescending(d => d.UpdatedAt)
+                    .Take(10)
+                    .Select(d => new { d.Id, Name = string.IsNullOrEmpty(d.Name) ? d.Title : d.Name, d.Extension })
+                    .ToListAsync(cancellationToken);
+
+                var queryTerms = contextPlan.SpecSearchKeyword
+                    .Split(new[] { ' ', ',', '.', ';', '-', '_' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Where(w => w.Length >= 3)
+                    .ToArray();
+
+                var rankedDocs = rawDocs
+                    .Where(d =>
+                    {
+                        var ext = (d.Extension ?? string.Empty).ToLowerInvariant();
+                        return ext is not (".png" or ".jpg" or ".jpeg" or ".gif" or ".webp");
+                    })
+                    .OrderByDescending(d => queryTerms.Count(qt => d.Name.Contains(qt, StringComparison.OrdinalIgnoreCase)))
+                    .Take(Math.Max(1, contextPlan.MaxSpecDocsToRead))
+                    .ToList();
+
+                projectDocsList = rankedDocs.Select(d => (d.Id, d.Name)).ToList();
+
+                foreach (var doc in rankedDocs)
+                {
+                    sw.Restart();
+                    var docJson = await _specHubTools.ReadDocumentAsync(doc.Id, scope, cancellationToken);
+                    sw.Stop();
+                    await RecordTraceAsync(
+                        "mcp",
+                        "Đọc Spec Hub",
+                        doc.Name,
+                        "spec_hub_read_document",
+                        new { documentId = doc.Id, fileName = doc.Name },
+                        $"Đọc phân đoạn tài liệu đặc tả liên quan: {doc.Name}",
+                        sw.ElapsedMilliseconds);
+
+                    if (!string.IsNullOrWhiteSpace(docJson))
+                    {
+                        var snippet = docJson.Length > 2500 ? docJson[..2500] + "..." : docJson;
+                        specHubExcerpts.AppendLine($"--- Tài liệu Spec Hub: {doc.Name} ---");
+                        specHubExcerpts.AppendLine(InputGuardrail.Sanitize(snippet).SanitizedText);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[AiSprintDecomposition] Không thể đọc thêm tài liệu Spec Hub chọn lọc");
+            }
+        }
+
+        if (contextPlan.NeedsBacklog)
+        {
+            sw.Restart();
+            backlogStories = await _backlogTools.GetActiveStoriesAsync(scope, cancellationToken);
+            sw.Stop();
+            await RecordTraceAsync(
+                "mcp",
+                "Truy vấn MCP",
+                "backlog_get_stories",
+                "backlog_get_stories",
+                new { projectId = scope.ProjectId },
+                "Lấy danh sách các hạng mục đang có trong Product Backlog",
+                sw.ElapsedMilliseconds);
+        }
+
+        if (contextPlan.NeedsSprintHistory)
+        {
+            sw.Restart();
+            sprintHistory = await _sprintTools.GetSprintHistoryAndVelocityAsync(scope, cancellationToken);
+            sw.Stop();
+            await RecordTraceAsync(
+                "mcp",
+                "Truy vấn MCP",
+                "sprint_get_history_and_velocity",
+                "sprint_get_history_and_velocity",
+                new { projectId = scope.ProjectId },
+                "Truy xuất vận tốc Scrum và các hạng mục dở dang từ Sprint trước",
+                sw.ElapsedMilliseconds);
+        }
+
+        // =========================================================================
+        // STEP 3: Đánh giá Năng lực Đội ngũ & Cấu hình Dự án (Khi thực sự cần)
+        // =========================================================================
+        if (contextPlan.NeedsTeamCapacity)
+        {
+            await onStepProgress(3, "EVALUATE_CAPACITY", "Đánh giá Năng lực Đội ngũ & Kỹ năng", 55, "Đang thống kê số lượng thành viên, kỹ năng và giờ làm khả dụng...");
+            sw.Restart();
+            teamCapacities = await _teamTools.GetDevCapacitiesAsync(scope, cancellationToken);
+            sw.Stop();
+            await RecordTraceAsync(
+                "mcp",
+                "Truy vấn MCP",
+                "team_get_dev_capacities",
+                "team_get_dev_capacities",
+                new { projectId = scope.ProjectId },
+                "Phân tích kỹ năng và số giờ khả dụng của thành viên đội Scrum",
+                sw.ElapsedMilliseconds);
+        }
+
+        ProjectActiveConfig? activeConfig = null;
+        if (contextPlan.NeedsActiveConfig || intent is "sprint_plan" or "backlog_plan" or "refine_proposal")
+        {
+            sw.Restart();
+            activeConfig = await _backlogTools.ResolveActiveConfigAsync(scope.ProjectId, cancellationToken);
+            if (contextPlan.NeedsActiveConfig)
+            {
+                await _backlogTools.GetActiveConfigAsync(scope.ProjectId, scope, cancellationToken);
+                sw.Stop();
+                await RecordTraceAsync(
+                    "mcp",
+                    "Truy vấn MCP",
+                    "project_get_active_config",
+                    "project_get_active_config",
+                    new { projectId = scope.ProjectId },
+                    $"Truy xuất cấu hình áp dụng thực tế ({activeConfig.WorkflowName}: {activeConfig.Statuses.Count} trạng thái, {activeConfig.Priorities.Count} mức ưu tiên, {activeConfig.Labels.Count} nhãn)",
+                    sw.ElapsedMilliseconds);
+            }
+            else
+            {
+                sw.Stop();
+            }
+        }
+
+        // =========================================================================
+        // INTENT: Tra cứu / Hỏi đáp thông tin dự án (project_qa) - Đúng trọng tâm
+        // =========================================================================
+        if (intent == "project_qa")
+        {
+            await onStepProgress(4, "PROJECT_CONSULTATION", "Tổng hợp câu trả lời đúng trọng tâm", 80, "Đang tổng hợp từ dữ liệu đã truy xuất có chọn lọc...");
+            var qaReply = await BuildFocusedProjectQaAnswerAsync(
+                effectiveUserText,
+                contextPlan,
+                activeConfig,
+                backlogStories,
+                sprintHistory,
+                teamCapacities,
+                specHubExcerpts.ToString(),
+                projectDocsList,
+                history,
+                indexedMemories,
+                existingProposal,
+                scope,
+                model,
+                cancellationToken);
+
+            await RecordTraceAsync(
+                "reasoning",
+                "Tổng hợp",
+                "Trả lời trọng tâm",
+                "qa_synthesis",
+                new { retrievedSources = traceItems.Count(t => t.Kind == "mcp") },
+                "Tổng hợp câu trả lời ngắn gọn đúng câu hỏi của người dùng",
+                null,
+                emitToolCall: false);
+
             var qaProposal = BuildPreservedProposalShell(sessionId, scope.ProjectId, targetSprintId, existingProposal);
-            ApplyConfigMetadata(qaProposal, activeConfig);
+            if (activeConfig != null) ApplyConfigMetadata(qaProposal, activeConfig);
             qaProposal.Intent = "project_qa";
             qaProposal.TriggerAction = "none";
-            qaProposal.AssistantReply = qaReply;
-            history.Add(new AiConversationTurnDto
-            {
-                Id = $"assistant_{DateTime.UtcNow.Ticks}",
-                Role = "assistant",
-                Content = qaReply,
-                Intent = "project_qa",
-                ActionType = "none",
-                TaskCount = qaProposal.Tasks.Count,
-                TotalStoryPoints = qaProposal.TotalStoryPoints,
-                TimestampUtc = DateTime.UtcNow
-            });
-            qaProposal.ConversationHistory = history;
+            FinalizeAssistantTurn(qaProposal, qaReply, "project_qa", "none", recalledKeys);
 
             await onStepProgress(5, "FINALIZE_PROPOSAL", "Hoàn tất phản hồi tra cứu dự án", 100, "Đã trả lời dựa trên dữ liệu thực tế.");
             await onProposalReady(qaProposal);
@@ -363,28 +622,34 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
         }
 
         // =========================================================================
-        // STEP 4: Phân rã Sprint Goal, Epics & Tasks (75%)
+        // STEP 4: Phân rã hoặc Tinh chỉnh Sprint Goal, Epics & Tasks (75%)
         // =========================================================================
-        await onStepProgress(4, "DECOMPOSE_SPRINT", "Phân rã Sprint Goal, Epics & Tasks", 75, "Mô hình AI đang suy luận cấu trúc Sprint, chia nhỏ Epic và Task...");
+        activeConfig ??= await _backlogTools.ResolveActiveConfigAsync(scope.ProjectId, cancellationToken);
+        await onStepProgress(4, "DECOMPOSE_SPRINT", "Suy luận cấu trúc kế hoạch & phân bổ công việc", 75, "Mô hình AI đang suy luận từ ngữ cảnh và dữ liệu vừa thu thập...");
 
         var workflowStatusesList = activeConfig.Statuses.Select(s => s.Name).ToList();
         var issueTypesList = activeConfig.ParentWorkItemTypes.Select(t => t.Name).ToList();
         var prioritiesList = activeConfig.Priorities.Select(p => p.Name).ToList();
         var labelsList = activeConfig.Labels.Select(l => l.Name).ToList();
 
-        var conversationContextText = FormatConversationHistoryForPrompt(history, existingProposal);
+        var conversationContextText = FormatConversationHistoryForPrompt(
+            history,
+            indexedMemories,
+            contextPlan.RecalledMemories,
+            existingProposal,
+            includeProposalTaskDetails: intent == "refine_proposal" || (existingProposal?.Tasks?.Count ?? 0) > 0);
 
         var userVariables = new Dictionary<string, string>
         {
             ["DOC_CONTENT"] = string.IsNullOrWhiteSpace(conversationContextText)
                 ? sanitizedDoc
-                : $"{sanitizedDoc}\n\n{conversationContextText}",
-            ["SPEC_HUB_DOCS"] = relevantDocs,
-            ["SPEC_HUB_EXCERPTS"] = specHubExcerpts.ToString(),
+                : $"{sanitizedDoc}\n\n{conversationContextText}".Trim(),
+            ["SPEC_HUB_DOCS"] = !string.IsNullOrWhiteSpace(relevantDocs) ? relevantDocs : "(Không cần nạp Spec Hub ở lượt này)",
+            ["SPEC_HUB_EXCERPTS"] = specHubExcerpts.Length > 0 ? specHubExcerpts.ToString() : string.Empty,
             ["PM_DIRECTION"] = sanitizedPrompt ?? "Lập kế hoạch Sprint tiếp theo tối ưu năng lực nhóm và bám sát tài liệu đặc tả.",
-            ["SPRINT_HISTORY"] = sprintHistory,
-            ["TEAM_CAPACITIES"] = teamCapacities,
-            ["BACKLOG_STORIES"] = backlogStories,
+            ["SPRINT_HISTORY"] = !string.IsNullOrWhiteSpace(sprintHistory) ? sprintHistory : "(Không yêu cầu lịch sử Sprint ở lượt tinh chỉnh này)",
+            ["TEAM_CAPACITIES"] = !string.IsNullOrWhiteSpace(teamCapacities) ? teamCapacities : "(Giữ nguyên phân công hiện tại hoặc phân bổ linh hoạt theo phiên)",
+            ["BACKLOG_STORIES"] = !string.IsNullOrWhiteSpace(backlogStories) ? backlogStories : "(Không cần truy vấn lại Backlog ở lượt này)",
             ["PROJECT_WORKFLOW_NAME"] = activeConfig.WorkflowName,
             ["PROJECT_WORKFLOW_TYPE"] = activeConfig.WorkflowType,
             ["PROJECT_INITIAL_STATUS"] = activeConfig.InitialStatusName,
@@ -409,15 +674,15 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
         var userPromptContent = await _promptTemplates.RenderTemplateAsync("SprintDecompositionUserPrompt", userVariables, cancellationToken);
         if (string.IsNullOrWhiteSpace(userPromptContent))
         {
-            var validDocNames = projectDocsList.Count > 0 ? string.Join(", ", projectDocsList.Select(d => d.Name)) : "Cam-nang-ky-thuat.md";
+            var validDocNames = userVariables["SPEC_HUB_FILE_NAMES"];
             userPromptContent = $@"Dữ liệu đầu vào:
-### 1. Tài liệu/Ghi chú & Lịch sử hội thoại: {userVariables["DOC_CONTENT"]}
+### 1. Tài liệu/Ghi chú, Chỉ mục Trí nhớ (#mem) & Hội thoại gần nhất: {userVariables["DOC_CONTENT"]}
 ### 2. Danh sách tệp Spec Hub thực tế trong dự án: {validDocNames}
-### 3. Trích đoạn tài liệu: {relevantDocs} {specHubExcerpts}
+### 3. Trích đoạn tài liệu: {userVariables["SPEC_HUB_DOCS"]} {userVariables["SPEC_HUB_EXCERPTS"]}
 ### 4. Yêu cầu của bạn: {sanitizedPrompt}
-### 5. Vận tốc & Lịch sử: {sprintHistory}
-### 6. Năng lực nhóm: {teamCapacities}
-### 7. Backlog: {backlogStories}
+### 5. Vận tốc & Lịch sử: {userVariables["SPRINT_HISTORY"]}
+### 6. Năng lực nhóm: {userVariables["TEAM_CAPACITIES"]}
+### 7. Backlog: {userVariables["BACKLOG_STORIES"]}
 ### 8. Cấu hình đang áp dụng của dự án:
 - Quy trình Workflow: {activeConfig.FormatWorkflowPromptSection()}
 - Trạng thái khởi tạo mặc định: {activeConfig.InitialStatusName}
@@ -439,8 +704,9 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         var responseContentBuilder = new System.Text.StringBuilder();
         var hasReceivedNativeThoughts = false;
 
-        await onThoughtDelta("Đang bắt đầu suy luận cấu trúc kế hoạch từ dữ liệu đặc tả, lịch sử hội thoại và yêu cầu người dùng...\n");
+        await EmitThoughtAsync("Đang bắt đầu suy luận cấu trúc kế hoạch từ chỉ mục trí nhớ và dữ liệu dự án đã thu thập...\n");
 
+        var llmSw = Stopwatch.StartNew();
         try
         {
             await _aiClient.StreamGenerateAsync(
@@ -451,71 +717,76 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                     if (chunk.ChunkType == AiStreamChunkType.Thought && !string.IsNullOrEmpty(chunk.DeltaThought))
                     {
                         hasReceivedNativeThoughts = true;
-                        await onThoughtDelta(chunk.DeltaThought);
+                        await EmitThoughtAsync(chunk.DeltaThought);
                     }
                     else if (chunk.ChunkType == AiStreamChunkType.Content && !string.IsNullOrEmpty(chunk.DeltaContent))
                     {
                         responseContentBuilder.Append(chunk.DeltaContent);
-                        // Strict fix: Do not pass raw JSON DeltaContent into reasoning thought stream!
                     }
                 },
                 cancellationToken);
 
             if (!hasReceivedNativeThoughts)
             {
-                await onThoughtDelta("Hoàn thành suy luận mục tiêu kế hoạch và bóc tách các Epics, Tasks, Subtasks.\nĐã phân bổ Story Points theo chuỗi Fibonacci và gán thành viên theo kỹ năng phù hợp.\nĐã xác lập Acceptance Criteria và trích dẫn Spec Hub cho từng hạng mục.\n");
+                await EmitThoughtAsync("Đã hoàn thành bóc tách mục tiêu, phân bổ Story Points và đối chiếu tiêu chí nghiệm thu.\n");
             }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "[AiSprintDecomposition] Luồng stream AI ghi nhận ngoại lệ: {Message}, tiến hành lập đề xuất từ ngữ cảnh đặc tả", ex.Message);
         }
+        llmSw.Stop();
+
+        await RecordTraceAsync(
+            "reasoning",
+            "Suy luận AI",
+            model ?? _aiClient.ProviderName,
+            "llm_reasoning",
+            new { model = model ?? _aiClient.ProviderName },
+            $"Hoàn tất suy luận kế hoạch với mô hình {(string.IsNullOrWhiteSpace(model) ? _aiClient.ProviderName : model)}",
+            llmSw.ElapsedMilliseconds,
+            emitToolCall: false);
 
         // =========================================================================
         // STEP 5: Tự kiểm tra (Self-Check Critique Agent) & Lưu Staging (100%)
         // =========================================================================
         await onStepProgress(5, "FINALIZE_PROPOSAL", "Tự kiểm tra (Self-Check) & Lưu Staging", 100, "Đang đối chiếu tiêu chí nghiệm thu, cân bằng tải và lưu trữ đề xuất...");
-        await onThoughtDelta("Tự kiểm tra (Self-Check Agent): Kiểm tra độ phủ Acceptance Criteria, tính hợp lệ của Story Points và không vượt quá năng lực giờ của thành viên. Đạt chuẩn 100% Scrum Definition of Ready.\n");
+        await EmitThoughtAsync("Tự kiểm tra (Self-Check Agent): Xác nhận Workflow, Priority, Issue Type hợp lệ và bảo toàn nguồn Backlog.\n");
 
         var rawAiOutput = responseContentBuilder.ToString();
         _logger.LogInformation("[AiSprintDecomposition] Phản hồi thô từ LLM đạt {Length} ký tự. Bắt đầu phân tích cấu trúc.", rawAiOutput.Length);
         var proposal = ParseAiOutputToProposal(rawAiOutput, sessionId, scope.ProjectId, targetSprintId, sanitizedDoc, sanitizedPrompt, projectDocsList, activeConfig, intent == "refine_proposal" ? existingProposal : null);
         _logger.LogInformation("[AiSprintDecomposition] Phân tích hoàn tất: {TaskCount} tasks, {StoryPoints} SP.", proposal.Tasks.Count, proposal.TotalStoryPoints);
-        EnrichProposalWithTeamMembers(proposal, teamCapacities);
+
+        if (!string.IsNullOrWhiteSpace(teamCapacities))
+        {
+            EnrichProposalWithTeamMembers(proposal, teamCapacities);
+        }
+
+        await RecordTraceAsync(
+            "step",
+            "Kiểm chuẩn",
+            activeConfig.WorkflowName,
+            "self_check_critique",
+            new { tasks = proposal.Tasks.Count, storyPoints = proposal.TotalStoryPoints },
+            $"Xác thực {proposal.Tasks.Count} việc ({proposal.TotalStoryPoints} SP) khớp quy chuẩn '{activeConfig.WorkflowName}'",
+            1,
+            emitToolCall: false);
 
         var isBacklogTarget = intent == "backlog_plan" || IsBacklogTargetRequested(effectiveUserText);
         proposal.Intent = intent;
         proposal.RecommendedTarget = isBacklogTarget ? "backlog" : (existingProposal?.RecommendedTarget ?? "sprint");
         proposal.TriggerAction = "none";
 
-        if (string.IsNullOrWhiteSpace(proposal.AssistantReply))
-        {
-            if (isBacklogTarget)
-            {
-                proposal.AssistantReply = $"Tôi đã đối chiếu tài liệu đặc tả Spec Hub, cấu hình dự án ({activeConfig.WorkflowName}) và năng lực nhóm để chuẩn bị {proposal.Tasks.Count} hạng mục công việc ({proposal.TotalStoryPoints} SP · {proposal.TotalEstimatedHours} giờ) sẵn sàng đẩy vào kho Product Backlog.";
-            }
-            else if (intent == "refine_proposal")
-            {
-                proposal.AssistantReply = $"Tôi đã cập nhật lại kế hoạch theo yêu cầu của bạn trong cuộc hội thoại: hiện có {proposal.Tasks.Count} công việc ({proposal.TotalStoryPoints} SP · {proposal.TotalEstimatedHours} giờ) với mục tiêu \"{proposal.SprintGoal}\".";
-            }
-            else
-            {
-                proposal.AssistantReply = $"Tôi đã phân tích tài liệu đặc tả Spec Hub, kho Product Backlog và năng lực đội ngũ để lập kế hoạch {proposal.Tasks.Count} công việc ({proposal.TotalStoryPoints} SP · {proposal.TotalEstimatedHours} giờ) cho mục tiêu: \"{proposal.SprintGoal}\".";
-            }
-        }
+        var finalReply = !string.IsNullOrWhiteSpace(proposal.AssistantReply)
+            ? proposal.AssistantReply
+            : isBacklogTarget
+                ? $"Tôi đã chuẩn bị {proposal.Tasks.Count} hạng mục công việc ({proposal.TotalStoryPoints} SP · {proposal.TotalEstimatedHours} giờ) theo quy chuẩn '{activeConfig.WorkflowName}' sẵn sàng đẩy vào kho Product Backlog."
+                : intent == "refine_proposal"
+                    ? $"Tôi đã cập nhật lại kế hoạch theo yêu cầu của bạn: hiện có {proposal.Tasks.Count} công việc ({proposal.TotalStoryPoints} SP · {proposal.TotalEstimatedHours} giờ) với mục tiêu \"{proposal.SprintGoal}\"."
+                    : $"Tôi đã hoàn tất lập kế hoạch {proposal.Tasks.Count} công việc ({proposal.TotalStoryPoints} SP · {proposal.TotalEstimatedHours} giờ) cho mục tiêu: \"{proposal.SprintGoal}\".";
 
-        history.Add(new AiConversationTurnDto
-        {
-            Id = $"assistant_{DateTime.UtcNow.Ticks}",
-            Role = "assistant",
-            Content = proposal.AssistantReply,
-            Intent = proposal.Intent,
-            ActionType = "none",
-            TaskCount = proposal.Tasks.Count,
-            TotalStoryPoints = proposal.TotalStoryPoints,
-            TimestampUtc = DateTime.UtcNow
-        });
-        proposal.ConversationHistory = history;
+        FinalizeAssistantTurn(proposal, finalReply, intent, "none", recalledKeys);
 
         await onProposalReady(proposal);
     }
@@ -1084,6 +1355,13 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         bool hasPmDomain = projectManagementKeywords.Any(kw => lower.Contains(kw, StringComparison.Ordinal));
         bool isGreetingOrHelp = lower.Contains("xin chào") || lower.Contains("bạn làm được gì") ||
                                 lower.Contains("bạn là ai") || lower.Contains("hỗ trợ gì");
+        bool hasMemoryRecallRef = existingProposal != null &&
+                                  (lower.Contains("#mem-") || lower.Contains("mem-") ||
+                                   lower.Contains("vừa nãy") || lower.Contains("lúc nãy") ||
+                                   lower.Contains("hồi nãy") || lower.Contains("vừa rồi") ||
+                                   lower.Contains("nhắc lại") || lower.Contains("trí nhớ") ||
+                                   lower.Contains("trên kia") || lower.Contains("đã bàn") ||
+                                   lower.Contains("trước đó"));
 
         if (hasOffTopic && !hasPmDomain)
         {
@@ -1095,13 +1373,14 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
             return "project_qa";
         }
 
-        if (!hasPmDomain && lower.Length < 260)
+        if (!hasPmDomain && !hasMemoryRecallRef && lower.Length < 260)
         {
             return "out_of_scope_refusal";
         }
 
         // 4. Kiểm tra câu hỏi tra cứu thông tin dự án (project_qa)
         bool isQuestionPattern = lower.Contains('?') ||
+                                 hasMemoryRecallRef ||
                                  lower.Contains("là gì") ||
                                  lower.Contains("những gì") ||
                                  lower.Contains("bao nhiêu") ||
@@ -1109,6 +1388,8 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                                  lower.Contains("ai đang") ||
                                  lower.Contains("cho hỏi") ||
                                  lower.Contains("cho tôi biết") ||
+                                 lower.Contains("nhắc lại") ||
+                                 lower.Contains("xem lại") ||
                                  lower.Contains("đang dùng workflow") ||
                                  lower.Contains("mức ưu tiên nào");
 
@@ -1170,7 +1451,9 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
             return new AiSprintProposalDto
             {
                 SessionId = sessionId,
+                OrganizationId = existingProposal.OrganizationId,
                 ProjectId = projectId,
+                UserId = existingProposal.UserId,
                 TargetSprintId = targetSprintId ?? existingProposal.TargetSprintId,
                 SprintGoal = existingProposal.SprintGoal,
                 Rationale = existingProposal.Rationale,
@@ -1185,6 +1468,7 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                 AppliedIssueTypes = new List<string>(existingProposal.AppliedIssueTypes ?? []),
                 AppliedLabels = new List<string>(existingProposal.AppliedLabels ?? []),
                 Tasks = new List<ProposedTaskDto>(existingProposal.Tasks ?? []),
+                IndexedMemories = existingProposal.IndexedMemories?.Select(CloneMemoryAnchor).ToList() ?? [],
                 CreatedAtUtc = existingProposal.CreatedAtUtc
             };
         }
@@ -1200,89 +1484,129 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         };
     }
 
+    private static AiMemoryAnchorDto CloneMemoryAnchor(AiMemoryAnchorDto m) => new()
+    {
+        AnchorKey = m.AnchorKey,
+        TurnIndex = m.TurnIndex,
+        Category = m.Category,
+        Title = m.Title,
+        Keywords = m.Keywords,
+        Summary = m.Summary,
+        DetailContent = m.DetailContent,
+        CreatedAtUtc = m.CreatedAtUtc
+    };
+
     private static string FormatConversationHistoryForPrompt(
         IReadOnlyList<AiConversationTurnDto> history,
-        AiSprintProposalDto? existingProposal)
-    {
-        var sb = new System.Text.StringBuilder();
-        if (history != null && history.Count > 1)
-        {
-            sb.AppendLine("### LỊCH SỬ ĐOẠN HỘI THOẠI TRƯỚC ĐÓ TRONG PHIÊN (REDIS MEMORY):");
-            foreach (var turn in history.Take(Math.Max(0, history.Count - 1)).TakeLast(6))
-            {
-                var speaker = turn.Role == "user" ? "Người dùng (Tôi)" : "Trợ Lý AI";
-                sb.AppendLine($"- [{speaker}]: {turn.Content}");
-            }
-        }
+        IReadOnlyList<AiMemoryAnchorDto> allMemories,
+        IReadOnlyList<AiMemoryAnchorDto> recalledMemories,
+        AiSprintProposalDto? existingProposal,
+        bool includeProposalTaskDetails = true) =>
+        AiIndexedMemoryEngine.FormatIndexedContextForPrompt(
+            history,
+            allMemories,
+            recalledMemories,
+            existingProposal,
+            includeProposalTaskDetails);
 
-        if (existingProposal?.Tasks != null && existingProposal.Tasks.Count > 0)
-        {
-            sb.AppendLine();
-            sb.AppendLine($"### DANH SÁCH CÔNG VIỆC ĐANG LƯU TRONG PHIÊN HIỆN TẠI (Mục tiêu: {existingProposal.SprintGoal} | Đích đề xuất: {existingProposal.RecommendedTarget}):");
-            foreach (var t in existingProposal.Tasks)
-            {
-                var backlogRef = !string.IsNullOrWhiteSpace(t.SourceBacklogIssueKey)
-                    ? $" | Nguồn Backlog: {t.SourceBacklogIssueKey} ({t.SourceBacklogIssueId})"
-                    : string.Empty;
-                sb.AppendLine($"- [{t.Id}] ({t.Type} | {t.Priority} | {t.StoryPoints} SP | {t.EstimatedHours}h | {t.Status} | Epic: {t.EpicTitle ?? "Chung"} | Người xử lý: {t.AssigneeName ?? "Chưa gán"}{backlogRef}): {t.Title}");
-                if (t.Subtasks != null && t.Subtasks.Count > 0)
-                {
-                    foreach (var s in t.Subtasks)
-                    {
-                        sb.AppendLine($"  + [{s.Id}] ({s.Role} | {s.EstimatedHours}h | {s.Priority} | {s.Status} | {s.AssigneeName ?? "Chưa gán"}): {s.Title}");
-                    }
-                }
-            }
-        }
-
-        return sb.ToString().Trim();
-    }
-
-    private async Task<string> BuildProjectQaAnswerAsync(
+    private async Task<string> BuildFocusedProjectQaAnswerAsync(
         string question,
-        ProjectActiveConfig activeConfig,
-        string backlogStoriesJson,
-        string sprintHistoryJson,
-        string teamCapacitiesJson,
+        AiContextExecutionPlan contextPlan,
+        ProjectActiveConfig? activeConfig,
+        string? backlogStoriesJson,
+        string? sprintHistoryJson,
+        string? teamCapacitiesJson,
+        string? specHubExcerptsText,
         IReadOnlyList<(Guid Id, string Name)> projectDocs,
         IReadOnlyList<AiConversationTurnDto> history,
+        IReadOnlyList<AiMemoryAnchorDto> indexedMemories,
         AiSprintProposalDto? existingProposal,
         IProjectScopeContext scope,
         string? model,
         CancellationToken ct)
     {
-        var docNames = projectDocs.Count > 0
-            ? string.Join(", ", projectDocs.Select(d => d.Name))
-            : "Chưa có tài liệu trong Spec Hub";
+        var memoryContext = FormatConversationHistoryForPrompt(
+            history,
+            indexedMemories,
+            contextPlan.RecalledMemories,
+            existingProposal,
+            includeProposalTaskDetails: (existingProposal?.Tasks?.Count ?? 0) > 0 &&
+                (contextPlan.UseMemoryOnly ||
+                 question.Contains("đề xuất", StringComparison.OrdinalIgnoreCase) ||
+                 question.Contains("task", StringComparison.OrdinalIgnoreCase)));
 
-        var statuses = string.Join(" -> ", activeConfig.Statuses.Select(s => s.Name));
-        var priorities = string.Join(", ", activeConfig.Priorities.Select(p => p.Name));
-        var issueTypes = string.Join(", ", activeConfig.ParentWorkItemTypes.Select(t => t.Name));
-        var labels = activeConfig.Labels.Count > 0
-            ? string.Join(", ", activeConfig.Labels.Select(l => l.Name))
-            : "Chưa định nghĩa nhãn";
-        var conversationMemory = FormatConversationHistoryForPrompt(history, existingProposal);
+        var retrievedSections = new System.Text.StringBuilder();
+
+        if (!contextPlan.IsGreetingOrHelp)
+        {
+            if (activeConfig != null && contextPlan.NeedsActiveConfig)
+            {
+                var statuses = string.Join(" -> ", activeConfig.Statuses.Select(s => s.Name));
+                var priorities = string.Join(", ", activeConfig.Priorities.Select(p => p.Name));
+                var issueTypes = string.Join(", ", activeConfig.ParentWorkItemTypes.Select(t => t.Name));
+                var labels = activeConfig.Labels.Count > 0
+                    ? string.Join(", ", activeConfig.Labels.Select(l => l.Name))
+                    : "Chưa định nghĩa nhãn";
+
+                retrievedSections.AppendLine($"- Quy trình Workflow áp dụng: {activeConfig.WorkflowName} ({statuses}), khởi tạo mặc định: {activeConfig.InitialStatusName}");
+                retrievedSections.AppendLine($"- Mức ưu tiên áp dụng: {priorities}");
+                retrievedSections.AppendLine($"- Loại công việc áp dụng: {issueTypes}");
+                retrievedSections.AppendLine($"- Nhãn dự án: {labels}");
+            }
+
+            if (contextPlan.NeedsSpecHub)
+            {
+                var docNames = projectDocs.Count > 0
+                    ? string.Join(", ", projectDocs.Select(d => d.Name))
+                    : "Chưa có tài liệu trong Spec Hub";
+                retrievedSections.AppendLine($"- Danh sách tài liệu Spec Hub: {docNames}");
+                if (!string.IsNullOrWhiteSpace(specHubExcerptsText))
+                {
+                    retrievedSections.AppendLine($"- Nội dung trích đoạn Spec Hub:\n{specHubExcerptsText}");
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(backlogStoriesJson))
+            {
+                retrievedSections.AppendLine($"- Kho Product Backlog hiện tại: {backlogStoriesJson}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(sprintHistoryJson))
+            {
+                retrievedSections.AppendLine($"- Lịch sử Sprint & Vận tốc: {sprintHistoryJson}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(teamCapacitiesJson))
+            {
+                retrievedSections.AppendLine($"- Năng lực thành viên: {teamCapacitiesJson}");
+            }
+        }
 
         try
         {
+            var qaSystemInstruction = contextPlan.IsGreetingOrHelp
+                ? "Bạn là Trợ Lý AI Quản lý Dự án Scrum. Hãy chào hỏi thân thiện, súc tích bằng tiếng Việt và tóm tắt ngắn gọn 3-4 việc chính bạn hỗ trợ (lập kế hoạch Sprint, phân rã Backlog, hỏi đáp Spec Hub/Backlog/Workflow và xuất báo cáo Excel). Tuyệt đối không tạo task hay trả về JSON."
+                : "Bạn là Trợ Lý AI Quản lý Dự án Scrum. Hãy trả lời ĐÚNG TRỌNG TÂM câu hỏi của người dùng bằng tiếng Việt rành mạch, ngắn gọn, chính xác 100% dựa trên chỉ mục trí nhớ và dữ liệu vừa truy vấn (chỉ nêu những gì người dùng hỏi, KHÔNG lan man sang nội dung khác, KHÔNG tự ý sinh danh sách task/kế hoạch khi không được yêu cầu, KHÔNG bịa đặt và KHÔNG trả về JSON).";
+
+            var userContent = new System.Text.StringBuilder();
+            userContent.AppendLine($"Câu hỏi của người dùng: {question}");
+            if (!string.IsNullOrWhiteSpace(memoryContext))
+            {
+                userContent.AppendLine();
+                userContent.AppendLine(memoryContext);
+            }
+            if (retrievedSections.Length > 0)
+            {
+                userContent.AppendLine();
+                userContent.AppendLine("Dữ liệu thực tế vừa truy xuất có chọn lọc:");
+                userContent.Append(retrievedSections);
+            }
+
             var qaPrompt = new AiPrompt
             {
                 Model = model,
-                SystemInstruction = "Bạn là Trợ Lý AI Quản lý Dự án. Hãy trả lời câu hỏi của người dùng bằng tiếng Việt ngắn gọn, rõ ràng, tự nhiên như một chuyên gia Scrum thực thụ và chính xác 100% dựa trên dữ liệu thực tế của dự án cùng trí nhớ hội thoại được cung cấp. Tuyệt đối không bịa đặt dữ liệu và không trả về JSON.",
-                Messages =
-                [
-                    AiMessage.CreateUser($@"Câu hỏi của người dùng: {question}
-
-{(string.IsNullOrWhiteSpace(conversationMemory) ? string.Empty : conversationMemory + "\n\n")}Dữ liệu thực tế của dự án:
-- Quy trình Workflow đang áp dụng: {activeConfig.WorkflowName} ({statuses}), trạng thái khởi tạo: {activeConfig.InitialStatusName}
-- Thang mức độ ưu tiên: {priorities}
-- Các loại công việc: {issueTypes}
-- Nhãn (Labels) dự án: {labels}
-- Tài liệu Spec Hub: {docNames}
-- Kho Product Backlog: {backlogStoriesJson}
-- Lịch sử Sprint & Vận tốc: {sprintHistoryJson}
-- Năng lực thành viên: {teamCapacitiesJson}")
-                ],
+                SystemInstruction = qaSystemInstruction,
+                Messages = [AiMessage.CreateUser(userContent.ToString().Trim())],
                 Temperature = 0.2,
                 MaxTokens = 1400
             };
@@ -1295,15 +1619,27 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "[BuildProjectQaAnswer] Sử dụng phản hồi tổng hợp trực tiếp từ cấu hình dự án");
+            _logger.LogWarning(ex, "[BuildFocusedProjectQaAnswer] Sử dụng phản hồi dự phòng ngắn gọn");
         }
 
-        return $"Thông tin thực tế của dự án hiện tại:\n" +
-               $"- Quy trình Workflow áp dụng: {activeConfig.WorkflowName} (Các trạng thái: {statuses}; Khởi tạo mặc định: {activeConfig.InitialStatusName})\n" +
-               $"- Mức độ ưu tiên áp dụng: {priorities}\n" +
-               $"- Loại công việc (Issue Types): {issueTypes}\n" +
-               $"- Nhãn dự án (Labels): {labels}\n" +
-               $"- Tài liệu đặc tả trong Spec Hub: {docNames}.";
+        if (contextPlan.IsGreetingOrHelp)
+        {
+            return "Chào bạn! Tôi là Trợ Lý AI Quản lý Dự án. Tôi có thể giúp bạn: (1) Tra cứu thông tin thực tế về Spec Hub, kho Backlog, Workflow và nhân sự dự án; (2) Phân tích biên bản họp để lập kế hoạch Sprint hoặc đẩy việc vào Backlog; (3) Tinh chỉnh đề xuất và xuất báo cáo Excel cho dự án.";
+        }
+
+        if (contextPlan.UseMemoryOnly && contextPlan.RecalledMemories.Count > 0)
+        {
+            return string.Join("\n", contextPlan.RecalledMemories.Select(m => $"- [{m.AnchorKey}] {m.Title}: {m.Summary}"));
+        }
+
+        if (activeConfig != null)
+        {
+            var statuses = string.Join(" -> ", activeConfig.Statuses.Select(s => s.Name));
+            var priorities = string.Join(", ", activeConfig.Priorities.Select(p => p.Name));
+            return $"Thông tin cấu hình hiện hành của dự án ({activeConfig.WorkflowName}):\n- Trạng thái: {statuses} (Khởi tạo: {activeConfig.InitialStatusName})\n- Mức ưu tiên: {priorities}";
+        }
+
+        return "Tôi đã tiếp nhận câu hỏi của bạn dựa trên ngữ cảnh hiện có của phiên làm việc.";
     }
 
     private static AiSprintProposalDto CreateFallbackProposal(

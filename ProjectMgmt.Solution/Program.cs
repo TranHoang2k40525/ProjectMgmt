@@ -389,6 +389,7 @@ builder.Services.AddScoped<IMcpToolRegistry, McpToolRegistry>();
 builder.Services.AddSingleton<IAiTokenUsageTracker, AiTokenUsageTracker>();
 builder.Services.AddSingleton<IPromptTemplateService, PromptTemplateService>();
 builder.Services.AddScoped<IAiDocumentTextExtractor, AiDocumentTextExtractor>();
+builder.Services.AddScoped<IAiConversationSessionStore, AiConversationSessionStore>();
 builder.Services.AddScoped<IAiSprintDecompositionService, AiSprintDecompositionService>();
 builder.Services.AddScoped<IAiSprintCommitCoordinator, AiSprintCommitCoordinator>();
 

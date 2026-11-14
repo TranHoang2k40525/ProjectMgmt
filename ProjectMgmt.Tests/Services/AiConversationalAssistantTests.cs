@@ -417,4 +417,109 @@ public class AiConversationalAssistantTests
         Assert.Equal(2, createdIssues.Count);
         Assert.All(createdIssues, issue => Assert.Null(issue.SprintId));
     }
+
+    [Fact]
+    public async Task ExecutePipelineAsync_GreetingOrCapabilityQuestion_ShouldInvokeZeroMcpToolsAndEmitTrace()
+    {
+        var (planningDb, deliveryDb, identityDb, orgId, projectId, actorId) = await SeedProjectAsync();
+        await using var _p = planningDb;
+        await using var _d = deliveryDb;
+        await using var _i = identityDb;
+
+        var aiClient = new CapturingAiClient(_ => "Xin chào! Tôi là Trợ Lý AI của dự án.");
+        var service = CreateService(aiClient, planningDb, deliveryDb, identityDb);
+        var scope = new ProjectScopeContext(orgId, projectId, actorId);
+
+        var calledTools = new List<string>();
+        AiSprintProposalDto? result = null;
+        await service.ExecutePipelineAsync(
+            sessionId: "sprint_ai_greeting",
+            scope: scope,
+            targetSprintId: null,
+            extractedDocumentContent: string.Empty,
+            userPrompt: "Xin chào bạn làm được gì?",
+            onStepProgress: (_, _, _, _, _) => Task.CompletedTask,
+            onToolCall: (toolName, _, _, _) => { calledTools.Add(toolName); return Task.CompletedTask; },
+            onThoughtDelta: _ => Task.CompletedTask,
+            onProposalReady: p => { result = p; return Task.CompletedTask; });
+
+        Assert.NotNull(result);
+        Assert.Equal("project_qa", result!.Intent);
+        Assert.DoesNotContain("project_get_active_config", calledTools);
+        Assert.DoesNotContain("backlog_get_pending_issues", calledTools);
+        Assert.DoesNotContain("spechub_get_latest_docs", calledTools);
+        Assert.DoesNotContain("sprint_get_active_velocity", calledTools);
+        Assert.DoesNotContain("team_get_member_workloads", calledTools);
+
+        var assistantTurn = result.ConversationHistory!.Last(t => t.Role == "assistant");
+        Assert.NotEmpty(assistantTurn.TraceItems);
+        Assert.DoesNotContain(assistantTurn.TraceItems!, t => t.Kind == "mcp");
+        Assert.False(string.IsNullOrWhiteSpace(assistantTurn.ThinkingSummary));
+        Assert.Contains("Xin chào", result.AssistantReply);
+    }
+
+    [Fact]
+    public async Task ExecutePipelineAsync_NarrowWorkflowQuestion_And_MemoryAnchorFollowUp_ShouldInvokeMcpSelectively()
+    {
+        var (planningDb, deliveryDb, identityDb, orgId, projectId, actorId) = await SeedProjectAsync();
+        await using var _p = planningDb;
+        await using var _d = deliveryDb;
+        await using var _i = identityDb;
+
+        var aiClient = new CapturingAiClient(prompt =>
+            prompt.Messages.Any(m => m.Content.Contains("#mem-1", StringComparison.OrdinalIgnoreCase))
+                ? "Theo trí nhớ #mem-1 vừa nãy, workflow hiện có các trạng thái của dự án."
+                : "Workflow của dự án gồm các trạng thái đang áp dụng.");
+        var service = CreateService(aiClient, planningDb, deliveryDb, identityDb);
+        var scope = new ProjectScopeContext(orgId, projectId, actorId);
+        const string sessionId = "sprint_ai_selective_mcp";
+
+        // Lượt 1: Hỏi hẹp về workflow -> CHỈ gọi project_get_active_config
+        var turn1Tools = new List<string>();
+        AiSprintProposalDto? turn1 = null;
+        await service.ExecutePipelineAsync(
+            sessionId: sessionId,
+            scope: scope,
+            targetSprintId: null,
+            extractedDocumentContent: string.Empty,
+            userPrompt: "Workflow của dự án có những trạng thái nào?",
+            onStepProgress: (_, _, _, _, _) => Task.CompletedTask,
+            onToolCall: (toolName, _, _, _) => { turn1Tools.Add(toolName); return Task.CompletedTask; },
+            onThoughtDelta: _ => Task.CompletedTask,
+            onProposalReady: p => { turn1 = p; return Task.CompletedTask; });
+
+        Assert.NotNull(turn1);
+        Assert.Contains("project_get_active_config", turn1Tools);
+        Assert.DoesNotContain("backlog_get_pending_issues", turn1Tools);
+        Assert.DoesNotContain("spechub_get_latest_docs", turn1Tools);
+        Assert.DoesNotContain("sprint_get_active_velocity", turn1Tools);
+        Assert.DoesNotContain("team_get_member_workloads", turn1Tools);
+        Assert.Contains(turn1!.IndexedMemories, m => m.AnchorKey == "#mem-1");
+
+        // Lượt 2: Hỏi lại về "#mem-1 vừa nãy" -> dùng memory_recall và 0 external MCP calls
+        var turn2Tools = new List<string>();
+        AiSprintProposalDto? turn2 = null;
+        await service.ExecutePipelineAsync(
+            sessionId: sessionId,
+            scope: scope,
+            targetSprintId: null,
+            extractedDocumentContent: string.Empty,
+            userPrompt: "Nhắc lại nội dung #mem-1 vừa nãy giúp tôi",
+            onStepProgress: (_, _, _, _, _) => Task.CompletedTask,
+            onToolCall: (toolName, _, _, _) => { turn2Tools.Add(toolName); return Task.CompletedTask; },
+            onThoughtDelta: _ => Task.CompletedTask,
+            onProposalReady: p => { turn2 = p; return Task.CompletedTask; },
+            existingProposal: turn1);
+
+        Assert.NotNull(turn2);
+        Assert.Contains("memory_recall", turn2Tools);
+        Assert.DoesNotContain("project_get_active_config", turn2Tools);
+        Assert.DoesNotContain("backlog_get_pending_issues", turn2Tools);
+        Assert.DoesNotContain("spechub_get_latest_docs", turn2Tools);
+        Assert.DoesNotContain("sprint_get_active_velocity", turn2Tools);
+        Assert.DoesNotContain("team_get_member_workloads", turn2Tools);
+
+        var lastAssistantTurn = turn2!.ConversationHistory!.Last(t => t.Role == "assistant");
+        Assert.Contains("#mem-1", lastAssistantTurn.ReferencedMemoryAnchors);
+    }
 }

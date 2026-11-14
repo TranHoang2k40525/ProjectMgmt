@@ -1,6 +1,6 @@
 Dữ liệu đầu vào thực tế của dự án:
 
-### 1. Tài liệu / Biên bản cuộc họp & Lịch sử hội thoại trong phiên:
+### 1. Tài liệu / Biên bản cuộc họp, Chỉ mục Trí nhớ (#mem) & Hội thoại gần nhất:
 {{DOC_CONTENT}}
 
 ### 2. Danh sách tệp tài liệu thực tế trong Spec Hub của dự án (BẮT BUỘC chỉ trích dẫn từ danh sách này):

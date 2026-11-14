@@ -29,7 +29,10 @@ public sealed record AiToolCallPayload(
     string ToolName,
     object? ToolArguments,
     string SummaryVi,
-    long? DurationMs = null);
+    long? DurationMs = null,
+    string? ActionVerb = null,
+    string? TargetLabel = null,
+    string? DetailPreview = null);
 
 public sealed record AiThoughtDeltaPayload(
     string Delta,

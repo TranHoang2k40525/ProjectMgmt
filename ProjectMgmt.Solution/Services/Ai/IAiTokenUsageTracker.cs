@@ -21,7 +21,12 @@ public record AiSessionSummary(
     int TaskCount,
     decimal TotalStoryPoints,
     string Model,
-    DateTime CreatedAtUtc);
+    DateTime CreatedAtUtc,
+    string? Title = null,
+    int TurnCount = 0,
+    int MemoryCount = 0,
+    DateTime? UpdatedAtUtc = null,
+    string? LastIntent = null);
 
 public record AiTokenUsageSummary(
     int TotalTokens,

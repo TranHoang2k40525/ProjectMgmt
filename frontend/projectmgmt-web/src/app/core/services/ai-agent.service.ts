@@ -47,6 +47,27 @@ export interface ProposedTaskDto {
   subtasks: ProposedSubTaskDto[];
 }
 
+export interface AiMemoryAnchorDto {
+  anchorKey: string;
+  turnIndex: number;
+  category: string;
+  title: string;
+  keywords: string;
+  summary: string;
+  detailContent: string;
+  createdAtUtc?: string;
+}
+
+export interface AiTurnTraceItemDto {
+  kind: string;
+  actionVerb: string;
+  target: string;
+  summary: string;
+  detail?: string | null;
+  durationMs?: number | null;
+  status: string;
+}
+
 export interface AiConversationTurnDto {
   id: string;
   role: 'user' | 'assistant' | string;
@@ -57,6 +78,11 @@ export interface AiConversationTurnDto {
   actionType?: string | null;
   taskCount?: number;
   totalStoryPoints?: number;
+  thinkingSummary?: string | null;
+  durationMs?: number;
+  thoughts?: string | null;
+  referencedMemoryAnchors?: string[];
+  traceItems?: AiTurnTraceItemDto[];
   timestampUtc?: string;
 }
 
@@ -72,7 +98,9 @@ export type AiConversationIntent =
 
 export interface AiSprintProposalDto {
   sessionId: string;
+  organizationId?: string | null;
   projectId: string;
+  userId?: string | null;
   targetSprintId?: string | null;
   sprintGoal: string;
   rationale: string;
@@ -92,6 +120,7 @@ export interface AiSprintProposalDto {
   recommendedTarget?: 'sprint' | 'backlog' | string | null;
   triggerAction?: 'none' | 'export_excel' | 'push_backlog' | 'apply_sprint' | string | null;
   conversationHistory?: AiConversationTurnDto[];
+  indexedMemories?: AiMemoryAnchorDto[];
 }
 
 export interface AiStepProgressEvent {
@@ -108,6 +137,9 @@ export interface AiToolCallEvent {
   toolArguments?: unknown;
   summaryVi: string;
   durationMs?: number;
+  actionVerb?: string | null;
+  targetLabel?: string | null;
+  detailPreview?: string | null;
 }
 
 export interface AiApplySprintProposalResponse {
@@ -155,6 +187,11 @@ export interface AiSessionSummary {
   totalStoryPoints: number;
   model: string;
   createdAtUtc: string;
+  title?: string | null;
+  turnCount?: number;
+  memoryCount?: number;
+  updatedAtUtc?: string | null;
+  lastIntent?: string | null;
 }
 
 export interface AiStreamCallbacks {
@@ -410,6 +447,14 @@ export class AiAgentService {
   getProjectSessions(projectId: string): Observable<AiSessionSummary[]> {
     const params = new HttpParams().set('projectId', projectId);
     return this.http.get<AiSessionSummary[]>(`${this.baseUrl}/sessions`, { params });
+  }
+
+  deleteSession(sessionId: string, projectId: string): Observable<{ success: boolean; message: string }> {
+    const params = new HttpParams().set('projectId', projectId);
+    return this.http.delete<{ success: boolean; message: string }>(
+      `${this.baseUrl}/sessions/${encodeURIComponent(sessionId)}`,
+      { params }
+    );
   }
 
   clearCache(sessionId?: string, projectId?: string): Observable<{ success: boolean; message: string }> {

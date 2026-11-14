@@ -36,6 +36,8 @@ public class DeliveryIntelligenceDbContext : DbContext
     public DbSet<SprintVelocity> SprintVelocities => Set<SprintVelocity>();
     public DbSet<AiBreakdownQuality> AiBreakdownQualities => Set<AiBreakdownQuality>();
     public DbSet<AiAssignmentAccuracy> AiAssignmentAccuracies => Set<AiAssignmentAccuracy>();
+    public DbSet<AiConversationSession> AiConversationSessions => Set<AiConversationSession>();
+    public DbSet<AiConversationMemoryEntry> AiConversationMemoryEntries => Set<AiConversationMemoryEntry>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

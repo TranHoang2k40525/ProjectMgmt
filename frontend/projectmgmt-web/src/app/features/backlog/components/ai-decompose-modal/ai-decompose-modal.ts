@@ -21,6 +21,7 @@ import {
   AiSprintProposalDto,
   AiStepProgressEvent,
   AiToolCallEvent,
+  AiTurnTraceItemDto,
   ProposedTaskDto,
   ProposedSubTaskDto,
 } from '../../../../core/services/ai-agent.service';
@@ -66,6 +67,16 @@ export interface ChatTurn {
   actionType?: string | null;
   /** Danh sách công cụ dữ liệu thật đã gọi trong lượt trả lời này */
   toolCalls?: AiToolCallEvent[];
+  /** Chuỗi hành động chuẩn hóa theo phong cách Thinking Log */
+  traceItems?: AiTurnTraceItemDto[];
+  /** Tóm tắt một dòng trên thanh Thinking khi thu gọn */
+  thinkingSummary?: string | null;
+  /** Tổng thời gian suy luận / xử lý lượt này (ms) */
+  durationMs?: number | null;
+  /** Tóm tắt suy luận sạch nếu có */
+  thoughts?: string | null;
+  /** Các thẻ trí nhớ (#mem-X) mà Agent đã trỏ tới */
+  referencedMemoryAnchors?: string[];
   /** Lượt trả lời này sinh ra / cập nhật bảng đề xuất công việc */
   hasProposalTable?: boolean;
 }
@@ -151,8 +162,10 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
   readonly errorMessage = signal<string | null>(null);
   readonly selectedModel = signal<string>('Gemini 3.6 Flash');
 
-  // Modern Thinking Accordion State (Image 7)
-  readonly isThinkingExpanded = signal<boolean>(true);
+  // Modern Thinking Accordion State (ALWAYS collapsed by default)
+  readonly isThinkingExpanded = signal<boolean>(false);
+  readonly thinkingElapsedSeconds = signal<number>(0);
+  readonly expandedTraceRows = signal<Record<string, boolean>>({});
   readonly isThinkingVisible = computed(
     () => this.isStreaming() || this.toolCallsLog().length > 0 || !!this.cleanStreamedThoughts() || !!this.proposal()
   );
@@ -229,6 +242,8 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
   readonly showRegenerateAllBar = signal<boolean>(false);
 
   private abortController: AbortController | null = null;
+  private thinkingStartTimeMs = 0;
+  private thinkingTimerId: ReturnType<typeof setInterval> | null = null;
 
   readonly pipelineStepDefinitions = [
     { index: 1, code: 'INGEST_DOCUMENTS', label: 'Tiếp nhận & Guardrail tài liệu', icon: 'shield_lock' },
@@ -852,14 +867,16 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
     }
   }
 
-  startNewSession(): void {
-    const oldSessionId = this.activeSessionId();
+  private resetDraftUiState(): void {
     this.cancelStream();
     this.chatHistory.set([]);
     this.proposal.set(null);
     this.toolCallsLog.set([]);
     this.streamedThoughts.set('');
     this.activeSessionId.set('');
+    this.expandedTurnTraces.set({});
+    this.expandedTraceRows.set({});
+    this.thinkingElapsedSeconds.set(0);
     this.errorMessage.set(null);
     this.promptInput.set('');
     this.pastedDocumentText.set('');
@@ -870,16 +887,35 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
     if (typeof localStorage !== 'undefined' && this.projectId) {
       localStorage.removeItem(this.getStorageKey());
     }
+  }
 
-    // Gửi yêu cầu giải phóng bộ nhớ đệm cache Staging trên Redis
-    if (oldSessionId || this.projectId) {
-      this.aiService.clearCache(oldSessionId || undefined, this.projectId || undefined).subscribe({
-        next: () => {},
-        error: () => {}
-      });
+  /**
+   * Tạo mới một cuộc hội thoại trống trên giao diện mà KHÔNG xóa các phiên làm việc đã lưu trong lịch sử.
+   */
+  startNewSession(): void {
+    this.resetDraftUiState();
+    this.toastService?.success('Đã tạo cuộc hội thoại mới.');
+  }
+
+  private startThinkingTimer(): void {
+    this.stopThinkingTimer();
+    this.thinkingStartTimeMs = Date.now();
+    this.thinkingElapsedSeconds.set(0);
+    this.thinkingTimerId = setInterval(() => {
+      if (this.thinkingStartTimeMs > 0) {
+        this.thinkingElapsedSeconds.set((Date.now() - this.thinkingStartTimeMs) / 1000);
+      }
+    }, 100);
+  }
+
+  private stopThinkingTimer(): void {
+    if (this.thinkingTimerId !== null) {
+      clearInterval(this.thinkingTimerId);
+      this.thinkingTimerId = null;
     }
-
-    this.toastService?.success('Đã xóa bộ nhớ đệm cache và làm mới tri thức phiên làm việc.');
+    if (this.thinkingStartTimeMs > 0) {
+      this.thinkingElapsedSeconds.set((Date.now() - this.thinkingStartTimeMs) / 1000);
+    }
   }
 
   ngOnDestroy(): void {
@@ -893,6 +929,7 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
   }
 
   cancelStream(): void {
+    this.stopThinkingTimer();
     if (this.abortController) {
       this.abortController.abort();
       this.abortController = null;
@@ -1028,7 +1065,9 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
     this.stepsLog.set([]);
     this.toolCallsLog.set([]);
     this.streamedThoughts.set('');
-    this.isThinkingExpanded.set(true);
+    // Mặc định Thinking luôn đóng gọn để không che nội dung trao đổi
+    this.isThinkingExpanded.set(false);
+    this.startThinkingTimer();
 
     this.abortController = new AbortController();
     this.scrollChatToBottom();
@@ -1089,12 +1128,36 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
           onProposalReady: (prop) => {
             this.handleAssistantTurn(prop);
           },
-          onCompleted: () => {
+          onCompleted: (done) => {
+            this.stopThinkingTimer();
             this.isStreaming.set(false);
-            this.isThinkingExpanded.set(true); // Always keep workflow trace open so user can inspect anytime
+            this.isThinkingExpanded.set(false);
+            if (done?.totalDurationMs && done.totalDurationMs > 0) {
+              this.chatHistory.update((list) => {
+                if (list.length === 0) return list;
+                const copy = [...list];
+                for (let i = copy.length - 1; i >= 0; i--) {
+                  if (copy[i].role === 'agent') {
+                    const updated = { ...copy[i] };
+                    if (!updated.durationMs || updated.durationMs <= 0) {
+                      updated.durationMs = done.totalDurationMs;
+                    }
+                    if (!updated.thinkingSummary) {
+                      updated.thinkingSummary = this.buildFallbackThinkingSummary(updated);
+                    }
+                    copy[i] = updated;
+                    break;
+                  }
+                }
+                return copy;
+              });
+            }
             this.saveSession();
+            this.loadProjectSessions();
           },
           onError: (err) => {
+            this.stopThinkingTimer();
+            this.isThinkingExpanded.set(false);
             this.errorMessage.set(err.message || 'Đã xảy ra lỗi khi phân tách công việc.');
             this.isStreaming.set(false);
           },
@@ -1102,6 +1165,8 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
         this.abortController.signal
       );
     } catch (err: any) {
+      this.stopThinkingTimer();
+      this.isThinkingExpanded.set(false);
       if (err?.name !== 'AbortError') {
         this.errorMessage.set('Kết nối luồng SSE bị gián đoạn. Vui lòng thử lại.');
       }
@@ -1139,21 +1204,45 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
       ? `Tôi đã lập ${prop.tasks.length} hạng mục công việc chính và ${subCount} việc con (${prop.totalStoryPoints} SP) dựa trên dữ liệu thực của dự án. Bạn có thể chỉnh sửa trực tiếp trong bảng bên dưới, yêu cầu tôi điều chỉnh tiếp, đẩy vào kho Backlog hoặc áp dụng vào Sprint tiếp theo.`
       : 'Tôi đã xử lý xong yêu cầu của bạn.';
 
+    const historyArr = prop.conversationHistory ?? [];
+    const lastBackendAssistantTurn = [...historyArr]
+      .reverse()
+      .find((h) => h.role === 'assistant');
+
+    const traceItems =
+      lastBackendAssistantTurn?.traceItems && lastBackendAssistantTurn.traceItems.length > 0
+        ? lastBackendAssistantTurn.traceItems
+        : this.buildTraceItemsFromLog(this.toolCallsLog());
+    const durationMs =
+      lastBackendAssistantTurn?.durationMs ??
+      Math.max(100, Math.round(this.thinkingElapsedSeconds() * 1000));
+    const thoughts =
+      (lastBackendAssistantTurn?.thoughts || '').trim() ||
+      this.cleanStreamedThoughts() ||
+      null;
+    const referencedMemoryAnchors = lastBackendAssistantTurn?.referencedMemoryAnchors ?? [];
+
     const doneTime = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-    const turnId = `agent_${Date.now()}`;
-    this.chatHistory.update((list) => [
-      ...list,
-      {
-        id: turnId,
-        role: 'agent',
-        text: (prop.assistantReply || '').trim() || fallbackReply,
-        timestamp: doneTime,
-        intent,
-        actionType: action,
-        toolCalls: [...this.toolCallsLog()],
-        hasProposalTable: producesTable,
-      },
-    ]);
+    const turnId = lastBackendAssistantTurn?.id || `agent_${Date.now()}`;
+    const newTurn: ChatTurn = {
+      id: turnId,
+      role: 'agent',
+      text: (prop.assistantReply || '').trim() || fallbackReply,
+      timestamp: doneTime,
+      intent,
+      actionType: action,
+      toolCalls: [...this.toolCallsLog()],
+      traceItems,
+      durationMs,
+      thoughts,
+      referencedMemoryAnchors,
+      hasProposalTable: producesTable,
+    };
+    newTurn.thinkingSummary =
+      (lastBackendAssistantTurn?.thinkingSummary || '').trim() ||
+      this.buildFallbackThinkingSummary(newTurn);
+
+    this.chatHistory.update((list) => [...list, newTurn]);
     this.saveSession();
     this.scrollChatToBottom();
 
@@ -1169,6 +1258,77 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
 
   toggleTurnTrace(turnId: string): void {
     this.expandedTurnTraces.update((prev) => ({ ...prev, [turnId]: !prev[turnId] }));
+  }
+
+  toggleTraceRow(rowKey: string, event?: Event): void {
+    event?.stopPropagation();
+    this.expandedTraceRows.update((prev) => ({ ...prev, [rowKey]: !prev[rowKey] }));
+  }
+
+  buildTraceItemsFromLog(tools?: AiToolCallEvent[]): AiTurnTraceItemDto[] {
+    if (!tools || tools.length === 0) return [];
+    return tools.map((t) => ({
+      kind: 'mcp',
+      actionVerb: t.actionVerb || this.inferActionVerb(t.toolName),
+      target: t.targetLabel || this.inferTargetLabel(t.toolName),
+      summary: t.summaryVi || t.toolName,
+      detail: t.detailPreview ?? null,
+      durationMs: t.durationMs ?? null,
+      status: 'done',
+    }));
+  }
+
+  buildFallbackThinkingSummary(turn: ChatTurn): string {
+    const items =
+      turn.traceItems && turn.traceItems.length > 0
+        ? turn.traceItems
+        : this.buildTraceItemsFromLog(turn.toolCalls);
+    const secNum = Math.max(0.1, (turn.durationMs ?? 0) / 1000);
+    const secLabel = turn.durationMs && turn.durationMs > 0 ? `${secNum.toFixed(1)}s` : '';
+    const opCount = items.length;
+    if (secLabel && opCount > 0) {
+      return `Đã suy nghĩ xong trong ${secLabel} · ${opCount} thao tác`;
+    }
+    if (opCount > 0) {
+      return `Đã suy nghĩ xong · ${opCount} thao tác`;
+    }
+    return secLabel ? `Đã suy nghĩ xong trong ${secLabel}` : 'Đã suy nghĩ xong';
+  }
+
+  getActionRowIcon(verb?: string | null): string {
+    const v = (verb || '').toLowerCase();
+    if (v.includes('phân tích') || v.includes('đọc')) return 'manage_search';
+    if (v.includes('trí nhớ') || v.includes('trỏ')) return 'bookmarks';
+    if (v.includes('mcp') || v.includes('truy vấn')) return 'database';
+    if (v.includes('suy luận')) return 'psychology';
+    if (v.includes('kiểm')) return 'verified_user';
+    return 'bolt';
+  }
+
+  private inferActionVerb(toolName?: string): string {
+    const k = (toolName || '').toLowerCase();
+    if (k.includes('intent')) return 'Phân tích';
+    if (k.includes('memory')) return 'Trỏ trí nhớ';
+    if (k.includes('gemini') || k.includes('reason')) return 'Suy luận AI';
+    if (k.includes('guardrail') || k.includes('audit')) return 'Kiểm chuẩn';
+    if (k.includes('project') || k.includes('backlog') || k.includes('spec') || k.includes('sprint') || k.includes('team')) {
+      return 'Truy vấn MCP';
+    }
+    return 'Thực thi';
+  }
+
+  private inferTargetLabel(toolName?: string): string {
+    const k = (toolName || '').toLowerCase();
+    if (k.includes('intent')) return 'Ngữ cảnh hội thoại & Ý định';
+    if (k.includes('memory')) return 'Chỉ mục ghi nhớ phiên (#mem-X)';
+    if (k.includes('active_config')) return 'Cấu hình Active (Workflow, Priority, Type, Label)';
+    if (k.includes('backlog')) return 'Kho Backlog tồn đọng';
+    if (k.includes('spechub')) return 'Tài liệu Đặc tả (Spec Hub)';
+    if (k.includes('sprint')) return 'Sprint & Năng lực thực thi';
+    if (k.includes('team')) return 'Thành viên & Tải công việc';
+    if (k.includes('gemini')) return 'Mô hình Trợ lý AI';
+    if (k.includes('guardrail')) return 'Bộ kiểm chuẩn & Ngữ cảnh dự án';
+    return toolName || 'Công cụ hệ thống';
   }
 
   getIntentLabel(intent?: string | null): string {
@@ -1425,26 +1585,45 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
 
   restoreSessionFromHistory(session: any): void {
     this.isSessionHistoryOpen.set(false);
-    this.toastService.info('Phiên làm việc', `Đang khôi phục phiên "${session.sprintGoal}"...`);
+    const titleLabel = session.title || session.sprintGoal || 'Phiên làm việc';
+    this.toastService.info('Phiên làm việc', `Đang khôi phục phiên "${titleLabel}"...`);
     this.aiService.getStagedProposal(session.sessionId).subscribe({
       next: (prop: AiSprintProposalDto) => {
         this.normalizeProposal(prop);
         this.proposal.set(prop);
         this.activeSessionId.set(prop.sessionId);
-        // Khôi phục nguyên vẹn đoạn hội thoại từ trí nhớ phiên trên Redis
+        // Mặc định Thinking luôn đóng gọn kể cả khi mở lại phiên cũ
+        this.isThinkingExpanded.set(false);
+        this.expandedTurnTraces.set({});
+        this.expandedTraceRows.set({});
+        this.toolCallsLog.set([]);
+        this.streamedThoughts.set('');
+
+        // Khôi phục nguyên vẹn đoạn hội thoại cùng Thinking Log & #mem-X từ DB/Redis
         if (prop.conversationHistory && prop.conversationHistory.length > 0) {
-          const restored: ChatTurn[] = prop.conversationHistory.map((h, idx) => ({
-            id: h.id || `restored_${idx}_${Date.now()}`,
-            role: h.role === 'user' ? 'user' : 'agent',
-            text: h.content || '',
-            fullContent: h.role === 'user' && h.fullContent && h.fullContent !== h.content ? h.fullContent : undefined,
-            fileName: h.fileName || undefined,
-            timestamp: h.timestampUtc
-              ? new Date(h.timestampUtc).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
-              : '',
-            intent: h.intent,
-            actionType: h.actionType,
-          }));
+          const restored: ChatTurn[] = prop.conversationHistory.map((h, idx) => {
+            const turn: ChatTurn = {
+              id: h.id || `restored_${idx}_${Date.now()}`,
+              role: h.role === 'user' ? 'user' : 'agent',
+              text: h.content || '',
+              fullContent: h.role === 'user' && h.fullContent && h.fullContent !== h.content ? h.fullContent : undefined,
+              fileName: h.fileName || undefined,
+              timestamp: h.timestampUtc
+                ? new Date(h.timestampUtc).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+                : '',
+              intent: h.intent,
+              actionType: h.actionType,
+              traceItems: h.traceItems ?? [],
+              thinkingSummary: h.thinkingSummary ?? null,
+              durationMs: h.durationMs ?? null,
+              thoughts: h.thoughts ?? null,
+              referencedMemoryAnchors: h.referencedMemoryAnchors ?? [],
+            };
+            if (turn.role === 'agent' && !turn.thinkingSummary && ((turn.traceItems?.length ?? 0) > 0 || (turn.durationMs ?? 0) > 0)) {
+              turn.thinkingSummary = this.buildFallbackThinkingSummary(turn);
+            }
+            return turn;
+          });
           // Bảng đề xuất gắn vào lượt trả lời cuối cùng có sinh/cập nhật kế hoạch
           for (let i = restored.length - 1; i >= 0; i--) {
             if (restored[i].role === 'agent' && ['sprint_plan', 'backlog_plan', 'refine_proposal'].includes(restored[i].intent || '')) {
@@ -1453,6 +1632,8 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
             }
           }
           this.chatHistory.set(restored);
+        } else {
+          this.chatHistory.set([]);
         }
         this.scrollChatToBottom();
         const autoExpand: Record<string, boolean> = {};
@@ -1461,10 +1642,27 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
         }
         this.expandedSubtasks.set(autoExpand);
         this.saveSession();
-        this.toastService.success('Khôi phục phiên', 'Đã nạp lại kế hoạch đề xuất thành công.');
+        this.toastService.success('Khôi phục phiên', 'Đã nạp lại toàn bộ hội thoại và ngữ cảnh làm việc.');
       },
       error: () => {
-        this.toastService.error('Khôi phục', 'Phiên đề xuất này đã hết hạn lưu trữ trên máy chủ.');
+        this.toastService.error('Khôi phục', 'Không thể mở phiên này (không tồn tại hoặc không thuộc quyền sở hữu của bạn).');
+      },
+    });
+  }
+
+  deleteSessionFromHistory(session: any, event: Event): void {
+    event.stopPropagation();
+    if (!this.projectId || !session?.sessionId) return;
+    this.aiService.deleteSession(session.sessionId, this.projectId).subscribe({
+      next: () => {
+        this.projectSessions.update((list) => list.filter((s) => s.sessionId !== session.sessionId));
+        if (this.activeSessionId() === session.sessionId) {
+          this.resetDraftUiState();
+        }
+        this.toastService.success('Xóa phiên', 'Đã xóa phiên hội thoại cũ khỏi dự án.');
+      },
+      error: () => {
+        this.toastService.error('Xóa phiên', 'Không thể xóa phiên làm việc này.');
       },
     });
   }

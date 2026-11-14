@@ -1,7 +1,36 @@
 namespace ProjectMgmt.Solution.Dtos.Ai;
 
 /// <summary>
-/// Represents a single turn in the stateful multi-turn AI Assistant conversation stored in Redis.
+/// Mục chỉ mục trí nhớ có gắn mã trỏ (#mem-X) giúp Agent trỏ đúng ngữ cảnh cần thiết thay vì nạp toàn bộ hội thoại cũ.
+/// </summary>
+public sealed class AiMemoryAnchorDto
+{
+    public string AnchorKey { get; set; } = string.Empty;
+    public int TurnIndex { get; set; }
+    public string Category { get; set; } = "qa_fact";
+    public string Title { get; set; } = string.Empty;
+    public string Keywords { get; set; } = string.Empty;
+    public string Summary { get; set; } = string.Empty;
+    public string DetailContent { get; set; } = string.Empty;
+    public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// Một bước thực thi có cấu trúc của Agent trong Thinking Log (phân tích, trỏ trí nhớ, gọi MCP có chọn lọc, suy luận).
+/// </summary>
+public sealed class AiTurnTraceItemDto
+{
+    public string Kind { get; set; } = "mcp"; // "step" | "mcp" | "memory" | "reasoning" | "guardrail"
+    public string ActionVerb { get; set; } = string.Empty;
+    public string Target { get; set; } = string.Empty;
+    public string Summary { get; set; } = string.Empty;
+    public string? Detail { get; set; }
+    public long? DurationMs { get; set; }
+    public string Status { get; set; } = "done"; // "running" | "done" | "error"
+}
+
+/// <summary>
+/// Represents a single turn in the stateful multi-turn AI Assistant conversation stored in Redis and MySQL.
 /// </summary>
 public sealed class AiConversationTurnDto
 {
@@ -10,20 +39,27 @@ public sealed class AiConversationTurnDto
     public string Content { get; set; } = string.Empty;
     public string? FullContent { get; set; }
     public string? FileName { get; set; }
-    public string Intent { get; set; } = "sprint_plan"; // "sprint_plan" | "backlog_plan" | "refine_proposal" | "export_excel" | "push_backlog" | "apply_sprint" | "project_qa" | "out_of_scope_refusal"
+    public string Intent { get; set; } = "sprint_plan"; // "sprint_plan" | "backlog_plan" | "refine_proposal" | "project_qa" | "export_excel" | "push_backlog" | "apply_sprint" | "out_of_scope_refusal"
     public string? ActionType { get; set; } // "none" | "export_excel" | "push_backlog" | "apply_sprint"
     public int? TaskCount { get; set; }
     public decimal? TotalStoryPoints { get; set; }
+    public string? ThinkingSummary { get; set; }
+    public long? DurationMs { get; set; }
+    public string? Thoughts { get; set; }
+    public List<string>? ReferencedMemoryAnchors { get; set; }
+    public List<AiTurnTraceItemDto>? TraceItems { get; set; }
     public DateTime TimestampUtc { get; set; } = DateTime.UtcNow;
 }
 
 /// <summary>
-/// Full structured sprint/backlog proposal & stateful conversation session staged in IStateStagingService (Redis).
+/// Full structured sprint/backlog proposal & stateful conversation session staged in Redis & persisted in MySQL.
 /// </summary>
 public sealed class AiSprintProposalDto
 {
     public string SessionId { get; set; } = string.Empty;
+    public Guid? OrganizationId { get; set; }
     public Guid ProjectId { get; set; }
+    public Guid? UserId { get; set; }
     public Guid? TargetSprintId { get; set; }
     public string SprintGoal { get; set; } = string.Empty;
     public string Rationale { get; set; } = string.Empty;
@@ -32,6 +68,7 @@ public sealed class AiSprintProposalDto
     public string RecommendedTarget { get; set; } = "sprint"; // "sprint" | "backlog"
     public string? TriggerAction { get; set; } // "none" | "export_excel" | "push_backlog" | "apply_sprint"
     public List<AiConversationTurnDto> ConversationHistory { get; set; } = [];
+    public List<AiMemoryAnchorDto> IndexedMemories { get; set; } = [];
     public List<string> Tags { get; set; } = [];
     public decimal TotalEstimatedHours { get; set; }
     public decimal TotalStoryPoints { get; set; }

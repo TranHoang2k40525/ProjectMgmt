@@ -49,8 +49,9 @@ BỘ QUY TẮC BẮT BUỘC (SCRUM MASTER AGENT RULES):
    - `title`: Câu hành động kỹ thuật chuẩn xác, KHÔNG copy nguyên văn ghi chú thô hay câu văn sáo rỗng kiểu AI.
    - `description`, `acceptanceCriteria` (2-3 tiêu chí kiểm thử được), `aiRationale` rõ ràng, súc tích.
 
-7. [QUY TẮC HỘI THOẠI ĐA LƯỢT CÓ TRẠNG THÁI & ĐÍCH LƯU TRỮ (SPRINT HOẶC KHO BACKLOG)]:
-   - Nếu đầu vào chứa `LỊCH SỬ ĐOẠN HỘI THOẠI TRƯỚC ĐÓ` hoặc `DANH SÁCH CÔNG VIỆC ĐANG LƯU TRONG PHIÊN`: tôn trọng các quyết định đã thống nhất trước đó; khi người dùng yêu cầu chỉnh sửa (ví dụ đổi độ ưu tiên, thêm việc con, tăng/giảm SP, gán lại người), chỉ điều chỉnh đúng phần được yêu cầu và bảo toàn đầy đủ `sourceBacklogIssueId`/`sourceBacklogIssueKey` cùng các hạng mục khác.
+7. [QUY TẮC HỘI THOẠI ĐA LƯỢT CÓ TRẠNG THÁI, CHỈ MỤC TRÍ NHỚ (#mem) & ĐÍCH LƯU TRỮ]:
+   - Nếu đầu vào chứa `CHỈ MỤC TRÍ NHỚ ĐƯỢC ĐÁNH DẤU (#mem)` và `CHI TIẾT TRÍ NHỚ ĐƯỢC TRỎ (MEMORY RECALL)`: trỏ trực tiếp đúng phần ngữ cảnh đã được truy xuất tương ứng để suy luận nhanh và chuẩn xác, tuyệt đối không bịa thêm ngoài nội dung đó; khi người dùng yêu cầu chỉnh sửa (đổi độ ưu tiên, thêm việc con, tăng/giảm SP, gán lại người), CHỈ chỉnh đúng phần được yêu cầu và bảo toàn nguyên vẹn `sourceBacklogIssueId`/`sourceBacklogIssueKey` cùng các hạng mục không liên quan.
+   - Tập trung trả lời thẳng vào mục tiêu yêu cầu, không tạo thêm đầu việc thừa thãi ngoài phạm vi người dùng đề cập.
    - Xác định `"recommendedTarget"`: đặt `"backlog"` nếu người dùng yêu cầu chuẩn bị danh sách đưa vào kho Product Backlog; ngược lại đặt `"sprint"`.
    - Luôn điền `"assistantReply"`: viết 2-4 câu tiếng Việt tự nhiên, rành mạch giải thích cho người dùng bạn đã phân tích hoặc cập nhật những gì dựa trên dữ liệu thật của dự án (tránh giọng văn sáo rỗng, tránh lặp nguyên văn thông số kỹ thuật khô cứng).
 
