@@ -8,6 +8,7 @@ import { apiErrorMessage } from '../../core/http/api-error-message';
 import { ProjectManagementService, WorkItem } from '../../core/services/project-management.service';
 import { IdentityService } from '../../core/services/identity.service';
 import { ToastService } from '../../core/services/toast.service';
+import { AiQuickActionService } from '../../core/services/ai-quick-action.service';
 import { ContextMenuComponent, ContextMenuItemAction } from '../../shared/components/context-menu.component';
 
 gsap.registerPlugin(Flip);
@@ -30,6 +31,7 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
   private readonly identityService = inject(IdentityService);
   readonly projectService = inject(ProjectManagementService);
   readonly toastService = inject(ToastService);
+  readonly aiQuickAction = inject(AiQuickActionService);
 
   readonly projectMembers = computed(() => this.projectService.currentProject()?.members ?? []);
   readonly activeSprint = computed(() => this.projectService.sprints().find(s => s.status === 'active') ?? null);
@@ -308,13 +310,11 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
       }
 
       case 'ai-breakdown':
-        this.projectService.activeDrawerTask.set(item);
-        this.toastService.info('AI Breakdown', `Đang mở gợi ý phân rã Sub-task cho [${item.issueKey}]`);
+        this.aiQuickAction.triggerBreakdown(item);
         break;
 
       case 'ai-assign':
-        this.projectService.activeDrawerTask.set(item);
-        this.toastService.info('AI Assign', `Đang tính toán điểm ứng viên cho [${item.issueKey}]`);
+        this.aiQuickAction.triggerAssignSuggestion(item);
         break;
 
       case 'copy':

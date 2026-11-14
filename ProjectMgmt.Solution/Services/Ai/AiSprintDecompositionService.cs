@@ -2519,7 +2519,7 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         return proposal;
     }
 
-    private static string ExtractJsonObject(string raw)
+    internal static string ExtractJsonObject(string raw)
     {
         var cleaned = raw.Trim();
         if (cleaned.StartsWith("```json", StringComparison.OrdinalIgnoreCase)) cleaned = cleaned[7..];

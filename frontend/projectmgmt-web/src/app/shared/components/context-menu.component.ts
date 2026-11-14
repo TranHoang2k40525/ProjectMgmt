@@ -48,12 +48,12 @@ export interface ContextMenuItemAction {
           <!-- AI Actions -->
           <button (click)="select('ai-breakdown')" class="w-full text-left px-3 py-1.5 text-xs rounded-lg bg-gradient-to-r from-purple-900/40 to-indigo-900/40 text-purple-200 hover:from-purple-800/60 hover:to-indigo-800/60 flex items-center gap-2 font-medium transition-colors my-0.5">
             <span class="material-symbols-outlined text-sm text-purple-400">auto_awesome</span>
-            <span>Phân rã Sub-task bằng AI 1</span>
+            <span>Phân rã Sub-task bằng AI</span>
           </button>
           
           <button (click)="select('ai-assign')" class="w-full text-left px-3 py-1.5 text-xs rounded-lg bg-gradient-to-r from-blue-900/40 to-cyan-900/40 text-cyan-200 hover:from-blue-800/60 hover:to-cyan-800/60 flex items-center gap-2 font-medium transition-colors my-0.5">
             <span class="material-symbols-outlined text-sm text-cyan-400">psychology</span>
-            <span>Đề xuất phân công bằng AI 2</span>
+            <span>Đề xuất phân công bằng AI</span>
           </button>
 
           <div class="my-1 border-t border-slate-800"></div>

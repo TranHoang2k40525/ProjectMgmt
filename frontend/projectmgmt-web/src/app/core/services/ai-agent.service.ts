@@ -142,6 +142,92 @@ export interface AiConfirmTaskRemovalResponse {
   affectedIssueKeys: string[];
 }
 
+export interface AiQuickSubtaskCandidateDto {
+  tempId: string;
+  title: string;
+  description: string;
+  role: string;
+  estimatedHours: number;
+  storyPoints: number;
+  priority: string;
+  suggestedAssigneeUserId?: string | null;
+  suggestedAssigneeName?: string | null;
+  acceptanceCriteria: string[];
+  suggestedSkills: string[];
+  documentCitations: string[];
+  documentId?: string | null;
+  selected: boolean;
+}
+
+export interface AiQuickAssigneeCandidateDto {
+  rank: number;
+  userId: string;
+  displayName: string;
+  jobTitle?: string | null;
+  seniorityLevel?: string | null;
+  roles: string[];
+  totalScore: number;
+  loadBalanceScore: number;
+  skillMatchScore: number;
+  historyScore: number;
+  capacityScore: number;
+  activeSprintTasksCount: number;
+  remainingAvailableHours: number;
+  skills: string[];
+  reason: string;
+  isRecommended: boolean;
+}
+
+export interface AiQuickActionPlanDto {
+  actionId: string;
+  projectId: string;
+  organizationId: string;
+  userId: string;
+  issueId: string;
+  issueKey: string;
+  issueTitle: string;
+  issueType: string;
+  sprintId?: string | null;
+  sprintName: string;
+  actionType: 'subtask_breakdown' | 'assignee_suggestion' | string;
+  status: 'pending' | 'executed' | 'cancelled' | string;
+  executedMode?: string | null;
+  summary: string;
+  rationale: string;
+  stagedInRedis: boolean;
+  usedLlm: boolean;
+  modelUsed?: string | null;
+  warnings: string[];
+  documentCitations: string[];
+  traceItems: AiTurnTraceItemDto[];
+  proposedSubtasks: AiQuickSubtaskCandidateDto[];
+  assigneeCandidates: AiQuickAssigneeCandidateDto[];
+  recommendedUserId?: string | null;
+  createdAtUtc: string;
+  executedAtUtc?: string | null;
+  completedMessage?: string | null;
+}
+
+export interface AiQuickActionConfirmResponse {
+  success: boolean;
+  errorCode?: string | null;
+  message: string;
+  actionId: string;
+  actionType: string;
+  createdSubtaskCount: number;
+  updatedIssueId?: string | null;
+  assignedUserId?: string | null;
+  assignedUserName?: string | null;
+}
+
+export interface AiQuickActionStreamCallbacks {
+  onStepProgress?: (step: AiStepProgressEvent) => void;
+  onToolCall?: (tool: AiToolCallEvent) => void;
+  onPlanReady?: (plan: AiQuickActionPlanDto) => void;
+  onCompleted?: (data: { sessionId: string; totalDurationMs: number; taskCount: number; totalStoryPoints: number }) => void;
+  onError?: (err: { code: string; message: string }) => void;
+}
+
 export interface AiConversationTurnDto {
   id: string;
   role: 'user' | 'assistant' | string;
@@ -382,28 +468,105 @@ export class AiAgentService {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    let response = await fetch(`${this.baseUrl}/decompose/stream`, {
+    await this.executeSseRequest(
+      `${this.baseUrl}/decompose/stream`,
+      formData,
+      headers,
+      (eventType, parsed) => this.dispatchEvent(eventType, parsed, callbacks),
+      (err) => callbacks.onError?.(err),
+      abortSignal
+    );
+  }
+
+  async streamQuickTaskAction(
+    params: {
+      projectId: string;
+      issueId: string;
+      actionType: 'subtask_breakdown' | 'assignee_suggestion';
+      model?: string;
+      customInstruction?: string;
+    },
+    callbacks: AiQuickActionStreamCallbacks,
+    abortSignal?: AbortSignal
+  ): Promise<void> {
+    const headers: Record<string, string> = {
+      Accept: 'text/event-stream',
+      'Content-Type': 'application/json',
+    };
+    const token = await this.getValidAccessToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    await this.executeSseRequest(
+      `${this.baseUrl}/quick-action/stream`,
+      JSON.stringify(params),
+      headers,
+      (eventType, parsed) => {
+        switch (eventType) {
+          case 'step_progress':
+            callbacks.onStepProgress?.(parsed);
+            break;
+          case 'tool_call':
+            callbacks.onToolCall?.(parsed);
+            break;
+          case 'proposal_ready':
+            callbacks.onPlanReady?.(parsed);
+            break;
+          case 'completed':
+            callbacks.onCompleted?.(parsed);
+            break;
+          case 'error':
+            callbacks.onError?.(parsed);
+            break;
+        }
+      },
+      (err) => callbacks.onError?.(err),
+      abortSignal
+    );
+  }
+
+  confirmQuickTaskAction(payload: {
+    actionId: string;
+    projectId: string;
+    mode: 'apply' | 'cancel';
+    selectedSubtasks?: Array<{ tempId: string; title?: string; assigneeUserId?: string | null }>;
+    selectedAssigneeUserId?: string | null;
+    overrideReason?: string;
+  }): Observable<AiQuickActionConfirmResponse> {
+    return this.http.post<AiQuickActionConfirmResponse>(`${this.baseUrl}/quick-action/confirm`, payload);
+  }
+
+  private async executeSseRequest(
+    url: string,
+    body: BodyInit,
+    headers: Record<string, string>,
+    onEvent: (eventType: string, parsed: any) => void,
+    onError: (err: { code: string; message: string }) => void,
+    abortSignal?: AbortSignal
+  ): Promise<void> {
+    let response = await fetch(url, {
       method: 'POST',
       headers,
-      body: formData,
+      body,
       signal: abortSignal,
     });
 
     if (response.status === 401) {
       const refreshedToken = await this.getValidAccessToken(true);
-      if (refreshedToken && refreshedToken !== token) {
+      if (refreshedToken && `Bearer ${refreshedToken}` !== headers['Authorization']) {
         headers['Authorization'] = `Bearer ${refreshedToken}`;
-        response = await fetch(`${this.baseUrl}/decompose/stream`, {
+        response = await fetch(url, {
           method: 'POST',
           headers,
-          body: formData,
+          body,
           signal: abortSignal,
         });
       }
     }
 
     if (!response.ok) {
-      callbacks.onError?.({
+      onError({
         code: `HTTP_${response.status}`,
         message: response.status === 401
           ? 'Phiên làm việc đã hết hạn hoặc không có quyền truy cập (HTTP 401). Vui lòng đăng nhập lại.'
@@ -413,7 +576,7 @@ export class AiAgentService {
     }
 
     if (!response.body) {
-      callbacks.onError?.({
+      onError({
         code: 'EMPTY_STREAM',
         message: 'Trình duyệt không hỗ trợ đọc luồng dữ liệu SSE.',
       });
@@ -452,7 +615,7 @@ export class AiAgentService {
 
         try {
           const parsed = JSON.parse(rawData);
-          this.dispatchEvent(eventType, parsed, callbacks);
+          onEvent(eventType, parsed);
         } catch {
           // Ignore malformed chunk
         }

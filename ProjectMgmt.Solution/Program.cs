@@ -392,6 +392,7 @@ builder.Services.AddScoped<IAiDocumentTextExtractor, AiDocumentTextExtractor>();
 builder.Services.AddScoped<IAiConversationSessionStore, AiConversationSessionStore>();
 builder.Services.AddScoped<IAiSprintDecompositionService, AiSprintDecompositionService>();
 builder.Services.AddScoped<IAiSprintCommitCoordinator, AiSprintCommitCoordinator>();
+builder.Services.AddScoped<IAiTaskQuickActionService, AiTaskQuickActionService>();
 
 var app = builder.Build();
 

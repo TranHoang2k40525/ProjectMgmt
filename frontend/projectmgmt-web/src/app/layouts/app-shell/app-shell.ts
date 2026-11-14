@@ -27,6 +27,7 @@ import { ORG_ROLE_LABELS, OrganizationSummary, RecentItem } from '../../features
 import { WorkspaceContextService } from '../../features/workspace/workspace-context.service';
 import { WorkspaceNavigation } from '../../features/workspace/workspace-navigation';
 import { QuickProfileModalComponent } from '../../shared/components/quick-profile-modal/quick-profile-modal.component';
+import { AiQuickActionTrayComponent } from '../../shared/components/ai-quick-action-tray/ai-quick-action-tray.component';
 
 @Component({
   selector: 'app-shell',
@@ -46,7 +47,8 @@ import { QuickProfileModalComponent } from '../../shared/components/quick-profil
     AvatarModalComponent,
     CreateOrgModalComponent,
     RecentListComponent,
-    QuickProfileModalComponent
+    QuickProfileModalComponent,
+    AiQuickActionTrayComponent
   ],
   templateUrl: './app-shell.html',
   styleUrl: './app-shell.scss'

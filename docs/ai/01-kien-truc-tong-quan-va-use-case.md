@@ -132,6 +132,7 @@ flowchart LR
         UC17["Hỏi đáp Trực tiếp & Gọi Công cụ Dữ liệu Có Chọn lọc"]
         UC18["Từ chối Tự động Yêu cầu Ngoài Phạm vi Dự án"]
         UC19["Gỡ khỏi Sprint / Hoàn tác Áp dụng & Xóa Công việc (Có Thẻ Xác nhận)"]
+        UC20["Phân rã Việc Con & Đề Xuất Phân Công Nhanh Không Qua Khung Chat (Lưu Tạm Bộ Đệm & Xác Nhận)"]
         UC11["Truy vấn Dữ liệu Dự án qua Giao thức Mở rộng"]
         UC12["Theo dõi Tài nguyên Tiêu thụ & Thống kê Sử dụng"]
         UC13["Khôi phục / Xóa Phiên Hội thoại Đã Lưu (Khóa Tổ chức - Dự án - User)"]
@@ -152,6 +153,7 @@ flowchart LR
     SM --> UC16
     SM --> UC17
     SM --> UC19
+    SM --> UC20
     SM --> UC12
     SM --> UC13
     SM --> UC14
@@ -161,6 +163,7 @@ flowchart LR
     DEV --> UC12
     DEV --> UC17
     DEV --> UC19
+    DEV --> UC20
 
     UC2 --> AI
     UC4 --> AI
@@ -171,6 +174,7 @@ flowchart LR
     UC17 --> AI
     UC18 --> AI
     UC19 --> AI
+    UC20 --> AI
     UC12 --> AI
     UC13 --> AI
     UC14 --> AI

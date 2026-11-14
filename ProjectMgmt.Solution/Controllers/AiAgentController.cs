@@ -44,6 +44,7 @@ public class AiAgentController : ControllerBase
     private readonly IAiTokenUsageTracker? _tokenTracker;
     private readonly IAiConversationSessionStore? _sessionStore;
     private readonly AiQuotaOptions? _quotaOptions;
+    private readonly IAiTaskQuickActionService? _quickActionService;
 
     public AiAgentController(
         IAiSprintDecompositionService decompositionService,
@@ -57,7 +58,8 @@ public class AiAgentController : ControllerBase
         IAiSprintCommitCoordinator? commitCoordinator = null,
         IAiTokenUsageTracker? tokenTracker = null,
         IAiConversationSessionStore? sessionStore = null,
-        IOptions<AiOptions>? aiOptions = null)
+        IOptions<AiOptions>? aiOptions = null,
+        IAiTaskQuickActionService? quickActionService = null)
     {
         _decompositionService = decompositionService;
         _textExtractor = textExtractor;
@@ -71,6 +73,7 @@ public class AiAgentController : ControllerBase
         _tokenTracker = tokenTracker;
         _sessionStore = sessionStore;
         _quotaOptions = aiOptions?.Value?.Quota;
+        _quickActionService = quickActionService;
     }
 
     /// <summary>
@@ -1167,6 +1170,294 @@ public class AiAgentController : ControllerBase
         await PersistUpdatedSessionAsync(scope, stagedProposal, ct);
 
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Thực thi Trợ Lý AI không qua khung chat dưới dạng SSE stream cho một công việc (Phân rã Sub-task hoặc Đề xuất phân công).
+    /// Kết quả chỉ được lưu tạm trên Redis cho tới khi người dùng bấm Xác nhận áp dụng.
+    /// </summary>
+    [HttpPost("quick-action/stream")]
+    public async Task QuickActionStream([FromBody] AiQuickActionRunRequest request)
+    {
+        var ct = HttpContext.RequestAborted;
+        var stopwatch = Stopwatch.StartNew();
+
+        var userId = _currentUser.UserId;
+        if (!userId.HasValue || userId.Value == Guid.Empty)
+        {
+            Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
+
+        if (request == null || request.ProjectId == Guid.Empty || request.IssueId == Guid.Empty)
+        {
+            Response.StatusCode = StatusCodes.Status400BadRequest;
+            return;
+        }
+
+        Response.StatusCode = StatusCodes.Status200OK;
+        Response.ContentType = "text/event-stream; charset=utf-8";
+        Response.Headers["Cache-Control"] = "no-cache, no-transform";
+        Response.Headers["X-Accel-Buffering"] = "no";
+        Response.Headers["Connection"] = "keep-alive";
+        HttpContext.Features.Get<IHttpResponseBodyFeature>()?.DisableBuffering();
+
+        async Task EmitEventAsync<T>(string eventType, T data)
+        {
+            if (ct.IsCancellationRequested) return;
+            try
+            {
+                var json = JsonSerializer.Serialize(data, SseJsonOptions);
+                var payload = $"event: {eventType}\ndata: {json}\n\n";
+                await Response.WriteAsync(payload, Encoding.UTF8, ct);
+                await Response.Body.FlushAsync(ct);
+            }
+            catch (OperationCanceledException)
+            {
+                // Client closed SSE connection
+            }
+        }
+
+        if (_quickActionService == null)
+        {
+            await EmitEventAsync(AiSseEventTypes.Error, new AiErrorPayload("QUICK_ACTION_UNAVAILABLE", "Dịch vụ Trợ Lý AI nhanh chưa được kích hoạt."));
+            return;
+        }
+
+        var (accessOk, errorCode, errorMsg, project, _) = await CheckQuickActionRunAccessAsync(request, userId.Value, ct);
+        if (!accessOk || project == null)
+        {
+            await EmitEventAsync(AiSseEventTypes.Error, new AiErrorPayload(errorCode ?? "FORBIDDEN", errorMsg ?? "Không có quyền thực hiện thao tác AI này."));
+            return;
+        }
+
+        var scope = new ProjectScopeContext(project.OrgId, request.ProjectId, userId.Value);
+        ProjectScopeGuard.Validate(scope, project.OrgId, request.ProjectId);
+
+        try
+        {
+            var plan = await _quickActionService.RunQuickActionAsync(
+                request,
+                scope,
+                onStepProgress: async (idx, total, name, labelVi, pct, detail) =>
+                    await EmitEventAsync(AiSseEventTypes.StepProgress, new AiStepProgressPayload(idx, total, name, labelVi, pct, detail)),
+                onToolCall: async (toolName, toolArgs, summaryVi, durMs) =>
+                {
+                    var (actionVerb, targetLabel, detailPreview) = BuildToolTraceMetadata(toolName, toolArgs, summaryVi);
+                    await EmitEventAsync(AiSseEventTypes.ToolCall, new AiToolCallPayload(
+                        toolName, toolArgs, summaryVi, durMs, actionVerb, targetLabel, detailPreview));
+                },
+                ct: ct);
+
+            await EmitEventAsync(AiSseEventTypes.ProposalReady, plan);
+            await EmitEventAsync(AiSseEventTypes.Completed, new AiCompletedPayload(
+                plan.ActionId,
+                stopwatch.ElapsedMilliseconds,
+                plan.ActionType == "assignee_suggestion" ? plan.AssigneeCandidates.Count : plan.ProposedSubtasks.Count,
+                plan.ProposedSubtasks.Sum(s => s.StoryPoints)));
+        }
+        catch (OperationCanceledException)
+        {
+            // Cancelled by caller
+        }
+        catch (InvalidOperationException ex)
+        {
+            await EmitEventAsync(AiSseEventTypes.Error, new AiErrorPayload("QUICK_ACTION_REJECTED", ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[AiAgentController] Lỗi QuickActionStream cho issue {IssueId}", request.IssueId);
+            await EmitEventAsync(AiSseEventTypes.Error, new AiErrorPayload("QUICK_ACTION_FAILED", "Đã xảy ra lỗi khi Trợ Lý AI phân tích công việc. Vui lòng thử lại."));
+        }
+    }
+
+    /// <summary>
+    /// Thực thi Trợ Lý AI không qua khung chat (dạng JSON một lượt) và lưu tạm đề xuất trên Redis.
+    /// </summary>
+    [HttpPost("quick-action/run")]
+    public async Task<IActionResult> RunQuickAction([FromBody] AiQuickActionRunRequest request)
+    {
+        if (request == null || request.ProjectId == Guid.Empty || request.IssueId == Guid.Empty)
+        {
+            return BadRequest(new { code = "INVALID_REQUEST", message = "Thiếu ProjectId hoặc IssueId hợp lệ." });
+        }
+
+        if (_quickActionService == null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { code = "QUICK_ACTION_UNAVAILABLE", message = "Dịch vụ Trợ Lý AI nhanh chưa sẵn sàng." });
+        }
+
+        var ct = HttpContext.RequestAborted;
+        var userId = _currentUser.UserId;
+        if (!userId.HasValue || userId.Value == Guid.Empty)
+        {
+            return Unauthorized(new { code = "UNAUTHORIZED", message = "Yêu cầu đăng nhập." });
+        }
+
+        var (accessOk, errorCode, errorMsg, project, statusCode) = await CheckQuickActionRunAccessAsync(request, userId.Value, ct);
+        if (!accessOk || project == null)
+        {
+            return StatusCode(statusCode, new { code = errorCode, message = errorMsg });
+        }
+
+        var scope = new ProjectScopeContext(project.OrgId, request.ProjectId, userId.Value);
+        ProjectScopeGuard.Validate(scope, project.OrgId, request.ProjectId);
+
+        try
+        {
+            var plan = await _quickActionService.RunQuickActionAsync(request, scope, ct: ct);
+            return Ok(plan);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { code = "QUICK_ACTION_REJECTED", message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Xác nhận áp dụng vào hệ thống hoặc hủy bỏ đề xuất AI đang được lưu tạm trên Redis.
+    /// </summary>
+    [HttpPost("quick-action/confirm")]
+    public async Task<IActionResult> ConfirmQuickAction([FromBody] AiQuickActionConfirmRequest request)
+    {
+        if (request == null || string.IsNullOrWhiteSpace(request.ActionId) ||
+            !request.ActionId.StartsWith("ai_quick_", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { code = "INVALID_ACTION_ID", message = "ActionId không hợp lệ." });
+        }
+
+        if (_commitCoordinator == null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { code = "COMMIT_COORDINATOR_UNAVAILABLE", message = "Bộ điều phối lưu trữ chưa sẵn sàng." });
+        }
+
+        var ct = HttpContext.RequestAborted;
+        var userId = _currentUser.UserId;
+        if (!userId.HasValue || userId.Value == Guid.Empty)
+        {
+            return Unauthorized(new { code = "UNAUTHORIZED", message = "Yêu cầu đăng nhập." });
+        }
+
+        var plan = await _stagingService.GetProposalAsync<AiQuickActionPlanDto>(request.ActionId, ct);
+        if (plan == null)
+        {
+            return NotFound(new { code = "QUICK_ACTION_NOT_FOUND", message = "Đề xuất AI tạm lưu trên Redis không tồn tại hoặc đã hết hạn (TTL 2 giờ)." });
+        }
+
+        var projectId = request.ProjectId.HasValue && request.ProjectId.Value != Guid.Empty
+            ? request.ProjectId.Value
+            : plan.ProjectId;
+
+        if (projectId == Guid.Empty || plan.ProjectId != projectId)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN_CROSS_PROJECT", message = "ActionId không thuộc dự án hiện tại." });
+        }
+
+        var project = await _planningDb.Projects.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == projectId && !p.IsDeleted, ct);
+        if (project == null)
+        {
+            return NotFound(new { code = "PROJECT_NOT_FOUND", message = "Dự án không tồn tại hoặc đã bị xóa." });
+        }
+
+        if ((plan.OrganizationId != Guid.Empty && plan.OrganizationId != project.OrgId) ||
+            (plan.UserId != Guid.Empty && plan.UserId != userId.Value))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                code = "FORBIDDEN_SESSION_SCOPE",
+                message = "Phiên thao tác AI trên Redis thuộc người dùng hoặc tổ chức khác."
+            });
+        }
+
+        if (!string.Equals(plan.Status, "pending", StringComparison.OrdinalIgnoreCase))
+        {
+            return Conflict(new
+            {
+                code = "PLAN_ALREADY_PROCESSED",
+                message = string.Equals(plan.Status, "cancelled", StringComparison.OrdinalIgnoreCase)
+                    ? "Đề xuất AI này đã được hủy bỏ trước đó."
+                    : "Đề xuất AI này đã được xác nhận áp dụng trước đó."
+            });
+        }
+
+        var isLead = project.LeadUserId == userId.Value;
+        var allowUpdate = isLead
+            || await _projectAccess.AllowsAsync(projectId, "issue.update")
+            || await _projectAccess.AllowsAsync(projectId, "issue.create")
+            || await _projectAccess.AllowsAsync(projectId, "sprint.create")
+            || await _projectAccess.AllowsAsync(projectId, "project.update");
+        var allowAssign = isLead
+            || await _projectAccess.AllowsAsync(projectId, "issue.assign")
+            || await _projectAccess.AllowsAsync(projectId, "sprint.create")
+            || await _projectAccess.AllowsAsync(projectId, "project.update");
+
+        var scope = new ProjectScopeContext(project.OrgId, projectId, userId.Value);
+        ProjectScopeGuard.Validate(scope, project.OrgId, projectId);
+
+        var result = await _commitCoordinator.ExecuteQuickActionCommitAsync(
+            plan,
+            request,
+            scope,
+            isLead,
+            allowUpdate,
+            allowAssign,
+            ct);
+
+        if (!result.Success)
+        {
+            if (result.ErrorCode?.StartsWith("FORBIDDEN", StringComparison.Ordinal) == true)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { code = result.ErrorCode, message = result.Message });
+            }
+            return BadRequest(new { code = result.ErrorCode ?? "QUICK_ACTION_CONFIRM_FAILED", message = result.Message });
+        }
+
+        var normalizedMode = (request.Mode ?? string.Empty).Trim().ToLowerInvariant();
+        plan.Status = normalizedMode == "cancel" ? "cancelled" : "executed";
+        plan.ExecutedMode = normalizedMode;
+        plan.ExecutedAtUtc = DateTime.UtcNow;
+        plan.CompletedMessage = result.Message;
+
+        await _stagingService.SaveProposalAsync(plan.ActionId, plan, TimeSpan.FromHours(2), ct);
+        return Ok(result);
+    }
+
+    private async Task<(bool Allowed, string? ErrorCode, string? ErrorMessage, Planning.Domain.Entities.Project? Project, int StatusCode)> CheckQuickActionRunAccessAsync(
+        AiQuickActionRunRequest request,
+        Guid userId,
+        CancellationToken ct)
+    {
+        var project = await _planningDb.Projects.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == request.ProjectId && !p.IsDeleted, ct);
+        if (project == null)
+        {
+            return (false, "PROJECT_NOT_FOUND", "Dự án không tồn tại hoặc đã bị xóa.", null, StatusCodes.Status404NotFound);
+        }
+
+        var isLead = project.LeadUserId == userId;
+        var normalizedType = (request.ActionType ?? string.Empty).Trim().ToLowerInvariant();
+        var isAssign = normalizedType is "assignee_suggestion" or "ai-assign" or "assign";
+
+        var allowed = isLead
+            || await _projectAccess.AllowsAsync(project.Id, "issue.update")
+            || await _projectAccess.AllowsAsync(project.Id, "issue.create")
+            || await _projectAccess.AllowsAsync(project.Id, "sprint.create")
+            || await _projectAccess.AllowsAsync(project.Id, "project.update")
+            || (isAssign && await _projectAccess.AllowsAsync(project.Id, "issue.assign"));
+
+        if (!allowed)
+        {
+            return (false, "FORBIDDEN", "Bạn không có quyền sử dụng Trợ Lý AI thao tác trên công việc của dự án này.", project, StatusCodes.Status403Forbidden);
+        }
+
+        var quotaCheck = _tokenTracker?.CheckPreExecutionQuota(userId, request.ProjectId, _quotaOptions);
+        if (quotaCheck is { Allowed: false })
+        {
+            return (false, quotaCheck.ErrorCode ?? "RATE_LIMIT_EXCEEDED", quotaCheck.Message ?? "Đã vượt giới hạn sử dụng AI cho phép.", project, StatusCodes.Status429TooManyRequests);
+        }
+
+        return (true, null, null, project, StatusCodes.Status200OK);
     }
 
     /// <summary>

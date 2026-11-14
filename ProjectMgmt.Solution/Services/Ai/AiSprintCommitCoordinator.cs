@@ -31,6 +31,15 @@ public interface IAiSprintCommitCoordinator
         bool allowDelete,
         bool allowDetach,
         CancellationToken ct = default);
+
+    Task<AiQuickActionConfirmResponse> ExecuteQuickActionCommitAsync(
+        AiQuickActionPlanDto plan,
+        AiQuickActionConfirmRequest request,
+        IProjectScopeContext scope,
+        bool isLead,
+        bool allowUpdate,
+        bool allowAssign,
+        CancellationToken ct = default);
 }
 
 public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
@@ -1220,6 +1229,548 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
             return RemovalFailure("REMOVAL_FAILED", $"Không thể gỡ/xóa công việc: {ex.Message}");
         }
     }
+
+    public async Task<AiQuickActionConfirmResponse> ExecuteQuickActionCommitAsync(
+        AiQuickActionPlanDto plan,
+        AiQuickActionConfirmRequest request,
+        IProjectScopeContext scope,
+        bool isLead,
+        bool allowUpdate,
+        bool allowAssign,
+        CancellationToken ct = default)
+    {
+        ProjectScopeGuard.EnsureValidScope(scope);
+
+        var mode = (request.Mode ?? string.Empty).Trim().ToLowerInvariant();
+        if (mode == "cancel")
+        {
+            return new AiQuickActionConfirmResponse
+            {
+                Success = true,
+                ActionId = plan.ActionId,
+                ActionType = plan.ActionType,
+                UpdatedIssueId = plan.IssueId,
+                Message = $"Đã hủy đề xuất AI cho [{plan.IssueKey}]; toàn bộ dữ liệu dự án không thay đổi."
+            };
+        }
+
+        if (mode != "apply")
+        {
+            return QuickFailure("INVALID_MODE", "Chế độ xác nhận phải là 'apply' hoặc 'cancel'.", plan);
+        }
+
+        try
+        {
+            var project = await _planningDb.Projects
+                .FirstOrDefaultAsync(p => p.Id == scope.ProjectId && !p.IsDeleted && !p.IsArchived, ct);
+            if (project == null)
+            {
+                return QuickFailure("PROJECT_NOT_FOUND", "Dự án không tồn tại hoặc đã bị lưu trữ/xóa.", plan);
+            }
+
+            ProjectScopeGuard.Validate(scope, project.OrgId, project.Id);
+
+            var parentIssue = await _deliveryDb.Issues
+                .FirstOrDefaultAsync(i => i.Id == plan.IssueId && i.ProjectId == project.Id && !i.IsDeleted, ct);
+            if (parentIssue == null)
+            {
+                return QuickFailure("ISSUE_NOT_FOUND", $"Công việc [{plan.IssueKey}] không còn tồn tại hoặc đã bị xóa.", plan);
+            }
+
+            Sprint? parentSprint = null;
+            if (parentIssue.SprintId.HasValue)
+            {
+                parentSprint = await _planningDb.Sprints.AsNoTracking()
+                    .FirstOrDefaultAsync(s => s.Id == parentIssue.SprintId.Value && s.ProjectId == project.Id, ct);
+                if (parentSprint != null && string.Equals(parentSprint.Status, "Completed", StringComparison.OrdinalIgnoreCase))
+                {
+                    return QuickFailure("SPRINT_COMPLETED", "Không thể áp dụng thay đổi AI cho công việc thuộc Sprint đã đóng (Completed).", plan);
+                }
+            }
+
+            return string.Equals(plan.ActionType, "assignee_suggestion", StringComparison.OrdinalIgnoreCase)
+                ? await ExecuteQuickAssigneeAssignmentAsync(plan, request, project, parentIssue, parentSprint, scope, isLead, allowUpdate, allowAssign, ct)
+                : await ExecuteQuickSubtaskBreakdownAsync(plan, request, project, parentIssue, parentSprint, scope, isLead, allowUpdate, ct);
+        }
+        catch (ProjectScopeException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[AiSprintCommitCoordinator] Lỗi khi xác nhận Quick Action {ActionId} cho dự án {ProjectId}", plan.ActionId, scope.ProjectId);
+            _deliveryDb.ChangeTracker.Clear();
+            _planningDb.ChangeTracker.Clear();
+            return QuickFailure("QUICK_ACTION_COMMIT_FAILED", $"Không thể áp dụng thay đổi AI: {ex.Message}", plan);
+        }
+    }
+
+    private async Task<AiQuickActionConfirmResponse> ExecuteQuickSubtaskBreakdownAsync(
+        AiQuickActionPlanDto plan,
+        AiQuickActionConfirmRequest request,
+        Project project,
+        Issue parentIssue,
+        Sprint? parentSprint,
+        IProjectScopeContext scope,
+        bool isLead,
+        bool allowUpdate,
+        CancellationToken ct)
+    {
+        if (!isLead && !allowUpdate)
+        {
+            return QuickFailure("FORBIDDEN_ISSUE_UPDATE", "Bạn không có quyền tạo công việc con trong dự án này (yêu cầu quyền issue.update hoặc issue.create).", plan);
+        }
+
+        if (parentIssue.ParentId.HasValue)
+        {
+            return QuickFailure("CANNOT_BREAKDOWN_SUBTASK", "Công việc này đã là việc con (Sub-task); không thể phân rã thêm cấp con.", plan);
+        }
+
+        var selectedInputs = request.SelectedSubtasks is { Count: > 0 }
+            ? request.SelectedSubtasks
+            : plan.ProposedSubtasks
+                .Where(s => s.Selected)
+                .Select(s => new AiQuickSelectedSubtaskInput { TempId = s.TempId })
+                .ToList();
+
+        if (selectedInputs.Count == 0)
+        {
+            return QuickFailure("NO_SUBTASKS_SELECTED", "Vui lòng chọn ít nhất một Sub-task để áp dụng.", plan);
+        }
+
+        var candidateById = plan.ProposedSubtasks.ToDictionary(s => s.TempId, StringComparer.OrdinalIgnoreCase);
+        var activeConfig = await ProjectActiveConfigResolver.ResolveAsync(_planningDb, _deliveryDb, project.Id, ct);
+        var issueTypes = await _planningDb.IssueTypes.AsNoTracking()
+            .Where(t => t.ProjectId == project.Id)
+            .OrderBy(t => t.OrderIndex)
+            .ToListAsync(ct);
+
+        var subtaskIssueType = issueTypes.FirstOrDefault(t => t.IsSubtask)
+            ?? issueTypes.FirstOrDefault(t => t.Name.Contains("Sub", StringComparison.OrdinalIgnoreCase))
+            ?? issueTypes.FirstOrDefault();
+        var initialStatus = activeConfig.Statuses
+            .FirstOrDefault(s => s.Name.Equals(activeConfig.InitialStatusName, StringComparison.OrdinalIgnoreCase))
+            ?? activeConfig.Statuses.FirstOrDefault();
+
+        if (subtaskIssueType == null || initialStatus == null)
+        {
+            return QuickFailure("PROJECT_CONFIG_MISSING", "Dự án chưa được cấu hình đầy đủ loại công việc hoặc trạng thái quy trình.", plan);
+        }
+
+        var (eligibleUsers, userById) = await LoadEligibleProjectUsersAsync(project, ct);
+        var projectDocs = await _planningDb.ProjectDocuments.AsNoTracking()
+            .Where(d => d.ProjectId == project.Id && !d.IsDirectory)
+            .Select(d => new ProjectDocMeta(d.Id, d.Name, d.Title, d.RelativePath))
+            .ToListAsync(ct);
+        var docById = projectDocs.ToDictionary(d => d.Id);
+        var skillCatalogItems = _skillCatalog != null ? await _skillCatalog.GetSkillsAsync() : [];
+        var skillByNormalizedName = BuildSkillLookup(skillCatalogItems);
+
+        var existingChildTitlesList = await _deliveryDb.Issues.AsNoTracking()
+            .Where(i => i.ParentId == parentIssue.Id && !i.IsDeleted)
+            .Select(i => i.Title)
+            .ToListAsync(ct);
+        var existingChildTitles = new HashSet<string>(existingChildTitlesList, StringComparer.OrdinalIgnoreCase);
+
+        var maxIssueNumber = await _deliveryDb.Issues
+            .Where(i => i.ProjectId == project.Id)
+            .MaxAsync(i => (int?)i.IssueNumber, ct) ?? 0;
+        var currentIssueNumber = Math.Max(project.IssueCounter, maxIssueNumber);
+        var maxRank = await _deliveryDb.Issues
+            .Where(i => i.ProjectId == project.Id)
+            .MaxAsync(i => (decimal?)i.RankOrder, ct) ?? 0m;
+
+        var now = DateTime.UtcNow;
+        var actionGuid = Guid.TryParseExact(plan.ActionId.Replace("ai_quick_", string.Empty, StringComparison.OrdinalIgnoreCase), "N", out var parsedGuid)
+            ? parsedGuid
+            : Guid.NewGuid();
+        var parentKey = $"{project.ProjectKey}-{parentIssue.IssueNumber}";
+        var destinationLabel = parentSprint?.Name ?? "Product Backlog";
+
+        var newIssues = new List<Issue>();
+        var newLabels = new List<Label>();
+        var newIssueLabels = new List<IssueLabel>();
+        var newCriteria = new List<AcceptanceCriteria>();
+        var newSpecLinks = new List<SpecStoryLink>();
+        var newRequiredSkills = new List<IssueRequiredSkill>();
+        var newLogs = new List<ActivityLog>();
+        var createdSummaries = new List<AiCreatedIssueItemDto>();
+
+        var existingLabels = await _deliveryDb.Labels.Where(l => l.ProjectId == project.Id).ToListAsync(ct);
+        var labelByName = existingLabels
+            .GroupBy(l => l.Name.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        var existingIssueLabelsByIssue = new Dictionary<Guid, HashSet<Guid>>();
+        var existingCriteriaByIssue = new Dictionary<Guid, HashSet<string>>();
+        var existingSpecLinksByIssue = new Dictionary<Guid, HashSet<Guid>>();
+        var existingSkillIdsByIssue = new Dictionary<Guid, HashSet<Guid>>();
+
+        foreach (var sel in selectedInputs)
+        {
+            if (!candidateById.TryGetValue(sel.TempId, out var subDto))
+            {
+                return QuickFailure("INVALID_SUBTASK_SELECTION", $"Không tìm thấy Sub-task '{sel.TempId}' trong bản staged Redis.", plan);
+            }
+
+            var rawTitle = !string.IsNullOrWhiteSpace(sel.Title) ? sel.Title : subDto.Title;
+            var safeTitle = InputGuardrail.StripUnsafeHtmlOrScript(rawTitle);
+            if (string.IsNullOrWhiteSpace(safeTitle)) continue;
+
+            var cleanRole = InputGuardrail.StripUnsafeHtmlOrScript(subDto.Role);
+            var finalTitle = !string.IsNullOrWhiteSpace(cleanRole) && !safeTitle.StartsWith("[", StringComparison.Ordinal)
+                ? $"[{cleanRole}] {safeTitle}"
+                : safeTitle;
+            if (!existingChildTitles.Add(finalTitle) || existingChildTitles.Contains(safeTitle))
+            {
+                continue;
+            }
+            existingChildTitles.Add(safeTitle);
+
+            currentIssueNumber++;
+            maxRank += 1000m;
+            var subId = Guid.NewGuid();
+            var hours = Math.Clamp(Math.Max(0m, subDto.EstimatedHours), 0m, 80m);
+            var assigneeId = sel.AssigneeUserId.HasValue && userById.ContainsKey(sel.AssigneeUserId.Value)
+                ? sel.AssigneeUserId.Value
+                : ResolveAssigneeId(subDto.SuggestedAssigneeUserId, subDto.SuggestedAssigneeName, userById, eligibleUsers);
+            var matchedPriority = activeConfig.ResolvePriorityEntity(subDto.Priority) ?? activeConfig.ResolvePriorityEntity(null);
+            var safeDescription = InputGuardrail.StripUnsafeHtmlOrScript(subDto.Description);
+
+            var subIssue = new Issue
+            {
+                Id = subId,
+                ProjectId = project.Id,
+                IssueNumber = currentIssueNumber,
+                SprintId = parentIssue.SprintId,
+                ParentId = parentIssue.Id,
+                EpicId = parentIssue.EpicId,
+                AssigneeId = assigneeId,
+                ReporterId = scope.UserId,
+                StatusId = initialStatus.Id,
+                IssueTypeId = subtaskIssueType.Id,
+                PriorityId = matchedPriority?.Id,
+                Title = finalTitle.Length > 300 ? finalTitle[..300] : finalTitle,
+                Description = !string.IsNullOrWhiteSpace(safeDescription)
+                    ? safeDescription
+                    : $"Công việc con thuộc {parentKey}: {parentIssue.Title}",
+                StoryPoints = Math.Clamp(subDto.StoryPoints, 0, 13),
+                EstimatedHours = hours,
+                RemainingHours = hours,
+                OriginalEstimateMinutes = (int)Math.Round(hours * 60m, MidpointRounding.AwayFromZero),
+                TimeSpentMinutes = 0,
+                RankOrder = maxRank,
+                IsAiGenerated = true,
+                AiGenerationLogId = actionGuid,
+                IsAiAssigned = assigneeId.HasValue,
+                IsDeleted = false,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+
+            newIssues.Add(subIssue);
+            if (!string.IsNullOrWhiteSpace(cleanRole))
+            {
+                AttachLabels([cleanRole], project.Id, subId, existingIssueLabelsByIssue, labelByName, newLabels, newIssueLabels);
+            }
+            AttachSpecLinks(subDto.DocumentId, subDto.DocumentCitations, projectDocs, docById, subId, existingSpecLinksByIssue, newSpecLinks, now);
+            AppendAcceptanceCriteria(subDto.AcceptanceCriteria, subId, existingCriteriaByIssue, newCriteria, now);
+            AttachRequiredSkills(subDto.SuggestedSkills, skillByNormalizedName, subId, existingSkillIdsByIssue, newRequiredSkills);
+
+            newLogs.Add(new ActivityLog
+            {
+                Id = Guid.NewGuid(),
+                IssueId = subId,
+                UserId = scope.UserId,
+                Action = "AiQuickSubtaskCreated",
+                Detail = BuildAiActivityDetail(
+                    plan.ActionId,
+                    parentIssue.SprintId,
+                    destinationLabel,
+                    !parentIssue.SprintId.HasValue,
+                    movedFromBacklog: false,
+                    aiRationale: plan.Rationale,
+                    subtaskRole: cleanRole,
+                    documentCitations: subDto.DocumentCitations,
+                    suggestedSkills: subDto.SuggestedSkills),
+                Source = "AI",
+                CreatedAt = now
+            });
+
+            createdSummaries.Add(new AiCreatedIssueItemDto
+            {
+                IssueId = subId,
+                IssueKey = $"{project.ProjectKey}-{subIssue.IssueNumber}",
+                Title = subIssue.Title,
+                Type = subtaskIssueType.Name,
+                ParentIssueId = parentIssue.Id,
+                StoryPoints = subIssue.StoryPoints,
+                MovedFromBacklog = false,
+                SprintId = parentIssue.SprintId,
+                SprintName = destinationLabel
+            });
+        }
+
+        if (createdSummaries.Count == 0)
+        {
+            return QuickFailure("NO_NEW_SUBTASKS", "Các Sub-task được chọn đã tồn tại hoặc không hợp lệ.", plan);
+        }
+
+        project.IssueCounter = currentIssueNumber;
+        parentIssue.UpdatedAt = now;
+
+        if (newIssues.Count > 0) await _deliveryDb.Issues.AddRangeAsync(newIssues, ct);
+        if (newLabels.Count > 0) await _deliveryDb.Labels.AddRangeAsync(newLabels, ct);
+        if (newIssueLabels.Count > 0) await _deliveryDb.IssueLabels.AddRangeAsync(newIssueLabels, ct);
+        if (newCriteria.Count > 0) await _deliveryDb.AcceptanceCriteria.AddRangeAsync(newCriteria, ct);
+        if (newSpecLinks.Count > 0) await _planningDb.SpecStoryLinks.AddRangeAsync(newSpecLinks, ct);
+        if (newRequiredSkills.Count > 0) await _deliveryDb.IssueRequiredSkills.AddRangeAsync(newRequiredSkills, ct);
+        if (newLogs.Count > 0) await _deliveryDb.ActivityLogs.AddRangeAsync(newLogs, ct);
+
+        await _planningDb.SaveChangesAsync(ct);
+        await _deliveryDb.SaveChangesAsync(ct);
+
+        return new AiQuickActionConfirmResponse
+        {
+            Success = true,
+            ActionId = plan.ActionId,
+            ActionType = plan.ActionType,
+            CreatedSubtaskCount = createdSummaries.Count,
+            UpdatedIssueId = parentIssue.Id,
+            CreatedIssues = createdSummaries,
+            Message = $"Đã tạo thành công {createdSummaries.Count} Sub-task AI cho [{parentKey}]."
+        };
+    }
+
+    private async Task<AiQuickActionConfirmResponse> ExecuteQuickAssigneeAssignmentAsync(
+        AiQuickActionPlanDto plan,
+        AiQuickActionConfirmRequest request,
+        Project project,
+        Issue parentIssue,
+        Sprint? parentSprint,
+        IProjectScopeContext scope,
+        bool isLead,
+        bool allowUpdate,
+        bool allowAssign,
+        CancellationToken ct)
+    {
+        var targetUserId = request.SelectedAssigneeUserId
+            ?? plan.RecommendedUserId
+            ?? plan.AssigneeCandidates.FirstOrDefault()?.UserId;
+
+        if (!targetUserId.HasValue || targetUserId.Value == Guid.Empty)
+        {
+            return QuickFailure("NO_ASSIGNEE_SELECTED", "Vui lòng chọn thành viên cần phân công.", plan);
+        }
+
+        var (eligibleUsers, userById) = await LoadEligibleProjectUsersAsync(project, ct);
+        if (!userById.TryGetValue(targetUserId.Value, out var targetUser))
+        {
+            return QuickFailure("ASSIGNEE_NOT_ELIGIBLE", "Thành viên được chọn không còn hoạt động hoặc không thuộc dự án này.", plan);
+        }
+
+        var isSelfAssign = targetUser.UserId == scope.UserId;
+        if (!isLead && !allowAssign && !(isSelfAssign && allowUpdate))
+        {
+            return QuickFailure("FORBIDDEN_ASSIGN", "Bạn không có quyền phân công cho thành viên khác (yêu cầu quyền issue.assign hoặc vai trò Quản lý).", plan);
+        }
+
+        var now = DateTime.UtcNow;
+        var parentKey = $"{project.ProjectKey}-{parentIssue.IssueNumber}";
+        var runId = Guid.NewGuid();
+        var run = new AiAssignmentRun
+        {
+            Id = runId,
+            ProjectId = project.Id,
+            SprintId = parentIssue.SprintId,
+            RequestedBy = scope.UserId,
+            TriggerSource = "Manual",
+            Strategy = "Hybrid",
+            Weights = JsonSerializer.Serialize(new { load = 0.35, skill = 0.35, history = 0.15, capacity = 0.15 }),
+            CandidateUserIds = JsonSerializer.Serialize(plan.AssigneeCandidates.Select(c => c.UserId).ToList()),
+            IssueCount = 1,
+            Status = "Completed",
+            CreatedAt = plan.CreatedAtUtc,
+            CompletedAt = now
+        };
+        _planningDb.AiAssignmentRuns.Add(run);
+
+        var candidateEntities = new List<AiAssignmentCandidate>();
+        AiAssignmentCandidate? recommendedEntity = null;
+        AiAssignmentCandidate? selectedEntity = null;
+
+        foreach (var cand in plan.AssigneeCandidates)
+        {
+            var featureJson = JsonSerializer.Serialize(new
+            {
+                activeSprintTasksCount = cand.ActiveSprintTasksCount,
+                remainingAvailableHours = cand.RemainingAvailableHours,
+                skills = cand.Skills,
+                roles = cand.Roles
+            });
+            var entity = new AiAssignmentCandidate
+            {
+                Id = Guid.NewGuid(),
+                RunId = runId,
+                IssueId = parentIssue.Id,
+                CandidateUserId = cand.UserId,
+                Rank = cand.Rank,
+                TotalScore = Math.Round(cand.TotalScore, 6),
+                LoadBalanceScore = Math.Round(cand.LoadBalanceScore, 6),
+                SkillMatchScore = Math.Round(cand.SkillMatchScore, 6),
+                HistoryScore = Math.Round(cand.HistoryScore, 6),
+                CapacityScore = Math.Round(cand.CapacityScore, 6),
+                IsColdStart = false,
+                FeatureSnapshot = featureJson,
+                Explanation = string.IsNullOrWhiteSpace(cand.Reason)
+                    ? null
+                    : (cand.Reason.Length > 1000 ? cand.Reason[..1000] : cand.Reason),
+                CreatedAt = now
+            };
+            candidateEntities.Add(entity);
+            if (cand.UserId == plan.RecommendedUserId || (plan.RecommendedUserId == null && cand.IsRecommended))
+            {
+                recommendedEntity ??= entity;
+            }
+            if (cand.UserId == targetUser.UserId)
+            {
+                selectedEntity = entity;
+            }
+        }
+
+        if (selectedEntity == null)
+        {
+            selectedEntity = new AiAssignmentCandidate
+            {
+                Id = Guid.NewGuid(),
+                RunId = runId,
+                IssueId = parentIssue.Id,
+                CandidateUserId = targetUser.UserId,
+                Rank = candidateEntities.Count + 1,
+                TotalScore = 0m,
+                IsColdStart = false,
+                FeatureSnapshot = JsonSerializer.Serialize(new { manualOverride = true }),
+                Explanation = "Thành viên được người dùng chọn thay thế từ danh sách dự án.",
+                CreatedAt = now
+            };
+            candidateEntities.Add(selectedEntity);
+        }
+
+        await _planningDb.AiAssignmentCandidates.AddRangeAsync(candidateEntities, ct);
+
+        var isAccepted = plan.RecommendedUserId.HasValue && plan.RecommendedUserId.Value == targetUser.UserId;
+        var overrideNote = !isAccepted
+            ? InputGuardrail.StripUnsafeHtmlOrScript(string.IsNullOrWhiteSpace(request.OverrideReason)
+                ? $"Người dùng chọn {targetUser.DisplayName} từ danh sách ứng viên AI."
+                : request.OverrideReason)
+            : null;
+        if (overrideNote is { Length: > 500 }) overrideNote = overrideNote[..500];
+
+        var decision = new AiAssignmentDecision
+        {
+            Id = Guid.NewGuid(),
+            RunId = runId,
+            IssueId = parentIssue.Id,
+            SuggestedUserId = plan.RecommendedUserId,
+            SuggestedCandidateId = recommendedEntity?.Id ?? selectedEntity.Id,
+            FinalUserId = targetUser.UserId,
+            Outcome = isAccepted ? "Accepted" : "Overridden",
+            OverrideReason = overrideNote,
+            DecidedBy = scope.UserId,
+            DecidedAt = now,
+            CreatedAt = now
+        };
+        _planningDb.AiAssignmentDecisions.Add(decision);
+
+        var previousAssigneeId = parentIssue.AssigneeId;
+        parentIssue.AssigneeId = targetUser.UserId;
+        parentIssue.IsAiAssigned = true;
+        parentIssue.UpdatedAt = now;
+
+        var matchedCandidate = plan.AssigneeCandidates.FirstOrDefault(c => c.UserId == targetUser.UserId);
+        var reasonText = matchedCandidate?.Reason ?? overrideNote ?? "Phân công theo đề xuất Trợ Lý AI";
+        if (reasonText.Length > 500) reasonText = reasonText[..500];
+
+        _deliveryDb.IssueAssignmentHistories.Add(new IssueAssignmentHistory
+        {
+            Id = Guid.NewGuid(),
+            IssueId = parentIssue.Id,
+            FromAssigneeId = previousAssigneeId,
+            ToAssigneeId = targetUser.UserId,
+            AssignedBy = scope.UserId,
+            AssignmentSource = "AiSuggested",
+            AiCandidateId = selectedEntity.Id,
+            StoryPointsAtTime = parentIssue.StoryPoints,
+            Reason = reasonText,
+            AssignedAt = now
+        });
+
+        _deliveryDb.ActivityLogs.Add(new ActivityLog
+        {
+            Id = Guid.NewGuid(),
+            IssueId = parentIssue.Id,
+            UserId = scope.UserId,
+            Action = "AiQuickAssigneeApplied",
+            Detail = JsonSerializer.Serialize(new
+            {
+                actionId = plan.ActionId,
+                issueKey = parentKey,
+                sprintName = parentSprint?.Name ?? "Product Backlog",
+                fromAssigneeId = previousAssigneeId,
+                toAssigneeId = targetUser.UserId,
+                toAssigneeName = targetUser.DisplayName,
+                outcome = decision.Outcome,
+                reason = reasonText
+            }),
+            Source = "AI",
+            CreatedAt = now
+        });
+
+        await _planningDb.SaveChangesAsync(ct);
+        await _deliveryDb.SaveChangesAsync(ct);
+
+        return new AiQuickActionConfirmResponse
+        {
+            Success = true,
+            ActionId = plan.ActionId,
+            ActionType = plan.ActionType,
+            UpdatedIssueId = parentIssue.Id,
+            AssignedUserId = targetUser.UserId,
+            AssignedUserName = targetUser.DisplayName,
+            Message = $"Đã phân công [{parentKey}] cho {targetUser.DisplayName} theo xác nhận của bạn."
+        };
+    }
+
+    private async Task<(IReadOnlyList<UserDisplayInfo> EligibleUsers, Dictionary<Guid, UserDisplayInfo> UserById)> LoadEligibleProjectUsersAsync(
+        Project project,
+        CancellationToken ct)
+    {
+        var allUsers = await _userLookup.GetAllActiveDisplayInfoAsync();
+        IReadOnlyList<UserDisplayInfo> eligibleUsers = allUsers;
+        if (_roleServices != null)
+        {
+            var membersDto = await _roleServices.GetProjectMembersAsync(project.Id);
+            var memberIds = membersDto.Items?
+                .Where(m => m.UserId.HasValue && m.UserId.Value != Guid.Empty)
+                .Select(m => m.UserId!.Value)
+                .ToHashSet() ?? [];
+            if (project.LeadUserId != Guid.Empty)
+            {
+                memberIds.Add(project.LeadUserId);
+            }
+            eligibleUsers = allUsers.Where(u => memberIds.Contains(u.UserId)).ToList();
+        }
+        return (eligibleUsers, eligibleUsers.ToDictionary(u => u.UserId));
+    }
+
+    private static AiQuickActionConfirmResponse QuickFailure(string code, string message, AiQuickActionPlanDto plan) => new()
+    {
+        Success = false,
+        ErrorCode = code,
+        Message = message,
+        ActionId = plan.ActionId,
+        ActionType = plan.ActionType,
+        UpdatedIssueId = plan.IssueId
+    };
 
     private static AiConfirmTaskRemovalResponse RemovalFailure(string code, string message) => new()
     {

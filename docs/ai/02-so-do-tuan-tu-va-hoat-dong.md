@@ -196,8 +196,12 @@ flowchart TD
     UserAction -- "Mở lại hoặc Xóa phiên cũ trong Lịch sử" --> ManageHist["Khôi phục ngữ cảnh phiên từ CSDL hoặc Xóa hẳn phiên thuộc quyền sở hữu"]
     UserAction -- "Đẩy Kho Backlog / Áp dụng Sprint" --> CommitDB["Ghi công việc vào CSDL chính & giữ mạch hội thoại liền mạch"]
     UserAction -- "Xác nhận Thẻ Gỡ / Xóa Công việc" --> ExecuteRemove["Gỡ công việc về Backlog / Xóa mềm (kèm kiểm tra quyền) & làm mới giao diện"]
+    UserAction -- "Menu Nhanh Phân rã Sub-task / Đề xuất Phân công" --> QuickHeadless["Chạy Trợ Lý AI ngầm (không cần khung chat) & chỉ lưu tạm trên Bộ nhớ đệm Tạm thời"]
+    QuickHeadless --> QuickTray["Hiển thị Khay Xác nhận Tác vụ Nhanh (Sửa tiêu đề / Chọn ứng viên)"]
+    QuickTray -- "Xác nhận áp dụng / Hủy bỏ" --> ExecuteQuick["Kiểm tra quyền hạn & Ghi việc con / Phân công kèm Nhật ký vào CSDL chính hoặc Hủy Bộ đệm"]
     CommitDB --> Finish(["Kết thúc lượt làm việc"])
     ExecuteRemove --> Finish
+    ExecuteQuick --> Finish
 ```
 
 ---
@@ -259,6 +263,7 @@ Hệ thống giải quyết triệt để thông qua bộ phân tách loại chu
 | **InputGuardrail** | Rào chắn bảo mật phát hiện Prompt Injection, trích xuất bí mật, truy cập chéo tenant, SQLi & XSS trước khi gọi mô hình | [`InputGuardrail.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Core/Security/InputGuardrail.cs) |
 | **AiTaskRemovalResolver** | Bộ phân giải phạm vi gỡ/xóa công việc có xác nhận (`detach_to_backlog`, `soft_delete`), phân biệt nguồn gốc `MovedFromBacklog`, chặn Sprint `Completed` & từ chối rỗng | [`AiTaskRemovalResolver.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiTaskRemovalResolver.cs) |
 | **AiTaskRemovalDtos** | Lược đồ hợp đồng kế hoạch gỡ/xóa (`AiTaskRemovalPlanDto`), ứng viên (`AiRemovalCandidateIssueDto`) & API xác nhận | [`AiTaskRemovalDtos.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Dtos/Ai/AiTaskRemovalDtos.cs) |
+| **AiTaskQuickActionService & DTOs** | Dịch vụ chạy ngầm **Phân rã Sub-task bằng AI** & **Đề xuất phân công bằng AI** (MCP ngữ cảnh + AI JSON, chỉ lưu tạm trên Redis `ai_quick_{Guid:N}` TTL 2h, xác nhận mới commit) | [`AiTaskQuickActionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiTaskQuickActionService.cs) |
 | **AiExcelExportResolver** | Phân giải thông minh phạm vi xuất Excel (Sprint, Backlog, Việc lẻ, Chi tiết, Đề xuất, Bộ lọc) & kiểm tra tồn tại thực thể | [`AiExcelExportResolver.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiExcelExportResolver.cs) |
 | **ExcelDataService** | Bộ sinh OpenXML `.xlsx` bảng sạch chuẩn ProjectMgmt (màu trạng thái động + bảng Chú thích + hồ sơ chi tiết) | [`excel-data.service.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/core/services/excel-data.service.ts) |
 | **AiIndexedMemoryEngine** | Lập kế hoạch gọi MCP chọn lọc và truy xuất chỉ mục trí nhớ `#mem-1..#mem-n` | [`AiIndexedMemoryEngine.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiIndexedMemoryEngine.cs) |
@@ -269,4 +274,6 @@ Hệ thống giải quyết triệt để thông qua bộ phân tách loại chu
 | **SpecHubTools** | Công cụ trích xuất đặc tả yêu cầu phục vụ Grounding | [`SpecHubTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SpecHubTools.cs#L15-L80) |
 | **ai-agent.service.ts** | Xử lý SSE theo `sessionId`, đẩy Kho Backlog, áp dụng Sprint, **xóa phiên cũ (`deleteSession`)** & 401 refresh | [`ai-agent.service.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/core/services/ai-agent.service.ts) |
 | **ai-decompose-modal.ts** | Giao diện **Trợ Lý AI** hội thoại 2 phía, **Thinking mặc định luôn đóng**, nút **Tạo mới**, khôi phục & xóa phiên | [`ai-decompose-modal.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/features/backlog/components/ai-decompose-modal/ai-decompose-modal.ts) |
+| **ai-quick-action.service.ts** | Store điều phối ngầm các tác vụ nhanh từ menu chuột phải / menu `...` (stream SSE, lưu tạm Redis, xác nhận áp dụng & làm mới dữ liệu) | [`ai-quick-action.service.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/core/services/ai-quick-action.service.ts) |
+| **ai-quick-action-tray.component.ts** | Khay xác nhận toàn cục hiển thị kế hoạch đang lưu tạm trên Redis kèm nút **Xác nhận áp dụng** / **Hủy bỏ** | [`ai-quick-action-tray.component.ts`](file:///c:/Users/hoang/Downloads/ProjectMgmt/frontend/projectmgmt-web/src/app/shared/components/ai-quick-action-tray/ai-quick-action-tray.component.ts) |
 

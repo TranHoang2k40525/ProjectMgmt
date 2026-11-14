@@ -20,6 +20,7 @@ import {
 import { IdentityService } from '../../core/services/identity.service';
 import { ExcelDataService } from '../../core/services/excel-data.service';
 import { ToastService } from '../../core/services/toast.service';
+import { AiQuickActionService } from '../../core/services/ai-quick-action.service';
 import { ContextMenuComponent, ContextMenuItemAction } from '../../shared/components/context-menu.component';
 
 import { NoProjectStateComponent } from '../../shared/components/no-project-state/no-project-state.component';
@@ -40,6 +41,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   readonly projectService = inject(ProjectManagementService);
   readonly excelService = inject(ExcelDataService);
   readonly toastService = inject(ToastService);
+  readonly aiQuickAction = inject(AiQuickActionService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly realtimeService = inject(RealtimeService);
@@ -384,13 +386,11 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
       }
 
       case 'ai-breakdown':
-        this.projectService.activeDrawerTask.set(item);
-        this.toastService.info('AI Breakdown', `Mở xem gợi ý Sub-task cho [${item.issueKey}]`);
+        this.aiQuickAction.triggerBreakdown(item);
         break;
 
       case 'ai-assign':
-        this.projectService.activeDrawerTask.set(item);
-        this.toastService.info('AI Assign', `Đang gợi ý người xử lý cho [${item.issueKey}]`);
+        this.aiQuickAction.triggerAssignSuggestion(item);
         break;
 
       case 'copy':
