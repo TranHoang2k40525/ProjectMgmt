@@ -118,6 +118,9 @@
                 <button type="button" class="button button-secondary" (click)="toggleSprintStatus(sprint, $event)"><span class="material-symbols-outlined" aria-hidden="true">{{ sprint.status === 'future' ? 'play_arrow' : (sprint.status === 'active' ? 'check_circle' : 'restart_alt') }}</span><span>{{ sprint.status === 'future' ? 'Bắt đầu' : (sprint.status === 'active' ? 'Hoàn thành' : 'Mở lại') }}</span></button>
               }
               <button type="button" class="button button-secondary" (click)="exportSprintExcel(sprint, $event)" [title]="'Xuất Excel chỉ riêng ' + sprint.name"><span class="material-symbols-outlined" aria-hidden="true">download</span></button>
+              @if (canManageSprints()) {
+                <button type="button" class="button button-secondary button-danger-subtle" (click)="promptDeleteSprint(sprint, $event)" [title]="'Xóa ' + sprint.name + ' (chuyển công việc về kho Backlog)'"><span class="material-symbols-outlined" aria-hidden="true">delete</span></button>
+              }
               <button type="button" class="button button-primary" (click)="toggleInlineCreate(sprint.id)"><span class="material-symbols-outlined" aria-hidden="true">add</span><span>Tạo việc</span></button>
             </div>
           </div>
@@ -473,9 +476,19 @@
           </label>
         </div>
 
-        <div class="modal-actions" style="margin-top: 4px;">
-          <button type="button" class="button button-secondary" (click)="closeSprintDetail()">Đóng</button>
-          <button type="button" class="button button-primary" [disabled]="!editingSprintName().trim()" (click)="saveSprintDetail()">Lưu thông tin</button>
+        <div class="modal-actions" style="margin-top: 4px; justify-content: space-between; align-items: center;">
+          <div>
+            @if (canManageSprints()) {
+              <button type="button" class="button button-secondary button-danger-subtle" (click)="promptDeleteSprint(sp, $event)">
+                <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+                <span>Xóa Sprint</span>
+              </button>
+            }
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" class="button button-secondary" (click)="closeSprintDetail()">Đóng</button>
+            <button type="button" class="button button-primary" [disabled]="!editingSprintName().trim()" (click)="saveSprintDetail()">Lưu thông tin</button>
+          </div>
         </div>
 
         <!-- Trao đổi & Bình luận Sprint (Tích hợp trực tiếp, Real-time Event-Driven) -->
@@ -929,6 +942,36 @@
         <button type="button" (click)="showRetroModal.set(false)" class="btn btn-secondary">Đóng</button>
       </div>
     </div>
+  </div>
+}
+
+@if (deletingSprint(); as targetSp) {
+  <div class="modal-backdrop" role="presentation" (click)="deletingSprint.set(null)">
+    <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="delete-sprint-title" style="width: min(460px, 95vw);" (click)="$event.stopPropagation()">
+      <div class="modal-title">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="material-symbols-outlined text-red-600" aria-hidden="true">delete_forever</span>
+          <h2 id="delete-sprint-title">Xác nhận xóa Sprint</h2>
+        </div>
+        <button type="button" class="icon-button" title="Đóng" (click)="deletingSprint.set(null)">
+          <span class="material-symbols-outlined" aria-hidden="true">close</span>
+        </button>
+      </div>
+      <div style="font-size: 13.5px; color: #334155; line-height: 1.6; display: flex; flex-direction: column; gap: 10px;">
+        <p style="margin: 0;">Bạn có chắc chắn muốn xóa chu kỳ <strong>{{ targetSp.name }}</strong> khỏi dự án?</p>
+        <div style="padding: 10px 12px; border-radius: 8px; background: #fffbeb; border: 1px solid #fde68a; color: #92400e; font-size: 12.5px; display: flex; align-items: flex-start; gap: 8px;">
+          <span class="material-symbols-outlined" style="font-size: 18px; flex-shrink: 0; margin-top: 1px;" aria-hidden="true">info</span>
+          <span>Toàn bộ công việc đang nằm trong <strong>{{ targetSp.name }}</strong> sẽ được tự động chuyển về <strong>Kho Product Backlog</strong> (không bị mất công việc).</span>
+        </div>
+      </div>
+      <div class="modal-actions" style="margin-top: 12px;">
+        <button type="button" class="button button-secondary" (click)="deletingSprint.set(null)">Hủy</button>
+        <button type="button" class="button button-danger" (click)="confirmDeleteSprint()">
+          <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+          <span>Xóa Sprint</span>
+        </button>
+      </div>
+    </section>
   </div>
 }
 

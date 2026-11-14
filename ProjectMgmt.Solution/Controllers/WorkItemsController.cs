@@ -388,6 +388,66 @@ public sealed class WorkItemsController(
         var sprint = await planning.Sprints.AsNoTracking().SingleOrDefaultAsync(s => s.Id == id);
         return sprint is null ? NotFound() : await SaveSprint(sprint.ProjectId, id, request);
     }
+    [HttpDelete("sprints/{id:guid}")]
+    public async Task<IActionResult> DeleteSprint(Guid id)
+    {
+        var sprint = await planning.Sprints.SingleOrDefaultAsync(s => s.Id == id);
+        if (sprint is null) return NotFound(new { message = "Không tìm thấy chu kỳ Sprint." });
+        if (!await access.AllowsAsync(sprint.ProjectId, "sprint.create") &&
+            !await access.AllowsAsync(sprint.ProjectId, "sprint.close"))
+        {
+            return Denied();
+        }
+
+        // 1. Đưa toàn bộ công việc thuộc Sprint này về kho Product Backlog (SprintId = null) để không mất dữ liệu
+        var sprintIssues = await delivery.Issues
+            .Where(i => i.SprintId == id && !i.IsDeleted)
+            .ToListAsync();
+        foreach (var issue in sprintIssues)
+        {
+            issue.SprintId = null;
+            issue.UpdatedAt = DateTime.UtcNow;
+        }
+        if (sprintIssues.Count > 0)
+        {
+            await delivery.SaveChangesAsync();
+        }
+
+        // 2. Dọn dẹp hoặc gỡ liên kết các bản ghi phụ thuộc Sprint
+        var pokerSessions = await planning.PlanningPokerSessions
+            .Where(p => p.SprintId == id)
+            .ToListAsync();
+        foreach (var ps in pokerSessions)
+        {
+            ps.SprintId = null;
+        }
+
+        var retroCards = await planning.SprintRetrospectiveCards
+            .Where(c => c.SprintId == id)
+            .ToListAsync();
+        if (retroCards.Count > 0)
+        {
+            planning.SprintRetrospectiveCards.RemoveRange(retroCards);
+        }
+
+        var sprintMessages = await planning.SprintMessages
+            .Where(m => m.SprintId == id)
+            .ToListAsync();
+        if (sprintMessages.Count > 0)
+        {
+            planning.SprintMessages.RemoveRange(sprintMessages);
+        }
+
+        // 3. Xóa Sprint khỏi cơ sở dữ liệu
+        planning.Sprints.Remove(sprint);
+        await planning.SaveChangesAsync();
+
+        return Ok(new
+        {
+            id = sprint.Id,
+            movedToBacklogCount = sprintIssues.Count
+        });
+    }
     private async Task<IActionResult> SaveSprint(Guid projectId, Guid? id, SprintRequest request)
     {
         if (!await access.AllowsAsync(projectId, "sprint.create")) return Denied();

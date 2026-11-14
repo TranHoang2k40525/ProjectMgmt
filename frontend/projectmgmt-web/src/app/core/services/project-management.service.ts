@@ -782,6 +782,17 @@ export class ProjectManagementService {
   updateSprintInfo(id: string, name: string, startDate?: string, endDate?: string, goal?: string): void {
     this.patchSprint(id, { name, ...(startDate ? { startDate } : {}), ...(endDate ? { endDate } : {}), ...(goal !== undefined ? { goal } : {}) });
   }
+  deleteSprint(id: string): void {
+    const sprint = this.sprints().find(s => s.id === id);
+    if (!sprint) return;
+    this.sprints.update(items => items.filter(s => s.id !== id));
+    this.workItems.update(items => items.map(i =>
+      i.sprintId === id
+        ? { ...i, sprintId: undefined, sprintName: 'Backlog Pool', updatedAt: new Date().toISOString() }
+        : i
+    ));
+    this.enqueue(() => this.http.delete(`${this.baseUrl}/sprints/${id}`));
+  }
   moveSprintItemsToBacklog(id: string): void { this.workItems().filter(i => i.sprintId === id).forEach(i => this.updateWorkItemSprint(i.id, '', 'Backlog')); }
   getSprintMessages(sprintId: string): Observable<SprintMessage[]> {
     return this.http.get<SprintMessage[]>(`${environment.apiBaseUrl}/sprints/${sprintId}/messages`);

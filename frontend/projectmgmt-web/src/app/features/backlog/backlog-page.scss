@@ -154,6 +154,27 @@ select:focus-visible {
   border-color: #94a3b8;
 }
 
+.button-danger-subtle {
+  color: #64748b;
+}
+
+.button-danger-subtle:hover {
+  color: #dc2626;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.button-danger {
+  color: #fff;
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+.button-danger:hover {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
+
 .button:disabled {
   cursor: not-allowed;
   opacity: .5;

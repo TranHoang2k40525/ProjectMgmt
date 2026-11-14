@@ -823,6 +823,25 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   readonly activeSprintDetail = signal<Sprint | null>(null);
+  readonly deletingSprint = signal<Sprint | null>(null);
+
+  promptDeleteSprint(sprint: Sprint, event?: Event): void {
+    if (event) event.stopPropagation();
+    if (!this.canManageSprints()) return;
+    this.deletingSprint.set(sprint);
+  }
+
+  confirmDeleteSprint(): void {
+    const sprint = this.deletingSprint();
+    if (!sprint) return;
+    const sprintName = sprint.name;
+    if (this.activeSprintDetail()?.id === sprint.id) {
+      this.closeSprintDetail();
+    }
+    this.projectService.deleteSprint(sprint.id);
+    this.deletingSprint.set(null);
+    this.toastService.success('Đã Xóa Sprint', `Chu kỳ "${sprintName}" đã được xóa; các công việc bên trong đã chuyển về kho Backlog.`);
+  }
 
   onSprintHeaderClick(sprint: Sprint, event: MouseEvent): void {
     const target = event.target as HTMLElement;
@@ -1024,6 +1043,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   onEscape(): void {
     this.closeAllPopups();
     this.showNewEpicModal.set(false);
+    this.deletingSprint.set(null);
   }
 
   openTask(item: WorkItem, event?: Event): void {
