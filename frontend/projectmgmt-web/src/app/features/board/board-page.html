@@ -7,6 +7,11 @@
   [statuses]="workflowStatuses()"
   [currentStatus]="contextMenuItem()?.statusName || ''"
   [workflowName]="projectService.currentProject().workflowName || projectService.currentProject().boardTabTitle || ''"
+  [canTransition]="canTransitionIssue()"
+  [canAssign]="canAssignIssue()"
+  [canDelete]="canDeleteIssue()"
+  [canAiBreakdown]="canAiBreakdown()"
+  [canAiAssign]="canAiAssign()"
   (action)="onContextMenuAction($event)"
   (menuClose)="closeAllPopups()"
 ></app-context-menu>
@@ -149,15 +154,19 @@
 
             <div
               cdkDrag
+              [cdkDragDisabled]="(!canTransitionIssue() && !canRankBacklog()) || inlineEditingTaskId() === item.id"
               appCardTilt
               [maxTilt]="3"
               [cdkDragData]="item"
               (click)="openTaskDrawer(item, $event)"
               (contextmenu)="onContextMenu($event, item)"
-              (dblclick)="startInlineEdit(item, $event)"
+              (dblclick)="canEditIssue() && startInlineEdit(item, $event)"
               role="button"
               tabindex="0"
-              class="board-task-card interactive-card p-3 rounded-md bg-white dark:bg-slate-800/90 border shadow-2xs hover:shadow-xs transition-all cursor-grab active:cursor-grabbing space-y-2 group relative"
+              class="board-task-card interactive-card p-3 rounded-md bg-white dark:bg-slate-800/90 border shadow-2xs hover:shadow-xs transition-all space-y-2 group relative"
+              [class.cursor-grab]="canTransitionIssue() || canRankBacklog()"
+              [class.active:cursor-grabbing]="canTransitionIssue() || canRankBacklog()"
+              [class.cursor-pointer]="!canTransitionIssue() && !canRankBacklog()"
               [class.border-red-500]="item.isBlocked"
               [class.ring-2]="item.isBlocked"
               [class.ring-red-500/20]="item.isBlocked"
@@ -194,12 +203,14 @@
                     <span class="material-symbols-outlined text-[15px] text-red-600 shrink-0">block</span>
                     <span class="truncate">Bị chặn: {{ item.blockReason }}</span>
                   </div>
-                  <button type="button" (click)="unblock(item, $event)" class="text-[11px] font-bold text-red-700 hover:text-red-900 underline shrink-0 cursor-pointer">Gỡ</button>
+                  @if (canEditIssue()) {
+                    <button type="button" (click)="unblock(item, $event)" class="text-[11px] font-bold text-red-700 hover:text-red-900 underline shrink-0 cursor-pointer">Gỡ</button>
+                  }
                 </div>
               }
 
               <!-- Title (Double click inline edit or plain text) -->
-              @if (inlineEditingTaskId() === item.id) {
+              @if (inlineEditingTaskId() === item.id && canEditIssue()) {
                 <div class="no-drawer flex items-center gap-1.5 focus:outline-none" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()" tabindex="0" role="region" aria-label="Chỉnh sửa tiêu đề">
                   <input 
                     type="text" 
@@ -227,23 +238,25 @@
               <!-- Card Bottom Quick Bar -->
               <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700/60 text-xs">
                 <div class="flex items-center gap-1 no-drawer">
-                  <button
-                    type="button"
-                    (click)="moveStatus(item, 'prev', $event)"
-                    class="p-1 rounded text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                    title="Lùi một bước"
-                  >
-                    <span class="material-symbols-outlined text-[14px]">arrow_back</span>
-                  </button>
-                  <button
-                    type="button"
-                    (click)="moveStatus(item, 'next', $event)"
-                    class="p-1 rounded text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                    title="Tiến một bước"
-                  >
-                    <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
-                  </button>
-                  @if (!item.isBlocked) {
+                  @if (canTransitionIssue()) {
+                    <button
+                      type="button"
+                      (click)="moveStatus(item, 'prev', $event)"
+                      class="p-1 rounded text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                      title="Lùi một bước"
+                    >
+                      <span class="material-symbols-outlined text-[14px]">arrow_back</span>
+                    </button>
+                    <button
+                      type="button"
+                      (click)="moveStatus(item, 'next', $event)"
+                      class="p-1 rounded text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                      title="Tiến một bước"
+                    >
+                      <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+                    </button>
+                  }
+                  @if (!item.isBlocked && canEditIssue()) {
                     <button
                       type="button"
                       (click)="openBlockModal(item, $event)"

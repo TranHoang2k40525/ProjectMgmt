@@ -66,6 +66,24 @@ public sealed class WorkItemsController(
     private ObjectResult Denied() => StatusCode(403, new { message = "Bạn không có quyền thực hiện thao tác này.", code = "PROJECT_PERMISSION_DENIED" });
     private BadRequestObjectResult Invalid(string message) => BadRequest(new { message });
 
+    private static readonly string[] WorkspacePermissionCodes =
+    [
+        "project.read",
+        "project.update",
+        "project.admin",
+        "project.settings.manage",
+        "sprint.create",
+        "sprint.start",
+        "sprint.close",
+        "issue.create",
+        "issue.update",
+        "issue.delete",
+        "issue.transition",
+        "issue.assign",
+        "backlog.rank",
+        "workflow.manage"
+    ];
+
     [HttpGet("projects/{projectId:guid}/workspace")]
     public async Task<IActionResult> Workspace(Guid projectId)
     {
@@ -74,7 +92,15 @@ public sealed class WorkItemsController(
         var views = await Views(issues);
         var sprints = await planning.Sprints.AsNoTracking().Where(s => s.ProjectId == projectId).OrderBy(s => s.OrderIndex).ToListAsync();
         var statuses = await planning.WorkflowStatuses.AsNoTracking().Where(s => s.ProjectId == projectId).OrderBy(s => s.OrderIndex).ToListAsync();
-        return Ok(new { workItems = views, sprints = sprints.Select(s => SprintView(s, issues)), statuses,
+        var myPermissions = new List<string>(WorkspacePermissionCodes.Length);
+        foreach (var code in WorkspacePermissionCodes)
+        {
+            if (await access.AllowsAsync(projectId, code))
+            {
+                myPermissions.Add(code);
+            }
+        }
+        return Ok(new { workItems = views, sprints = sprints.Select(s => SprintView(s, issues)), statuses, myPermissions,
             epics = issues.Where(i => views.Any(v => v.Id == i.Id && v.IssueType == "Epic")).Select(i => new { i.Id, name = i.Title, key = views.First(v => v.Id == i.Id).IssueKey, color = "indigo", i.Description, status = views.First(v => v.Id == i.Id).StatusName }) });
     }
 

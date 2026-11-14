@@ -3,6 +3,7 @@ namespace ProjectMgmt.Solution.Services.Ai;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using DeliveryIntelligence.Application.IServices;
 using DeliveryIntelligence.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -28,7 +29,7 @@ public interface IAiTaskQuickActionService
 /// Thực thi Trợ Lý AI không qua khung chat cho từng công việc (Phân rã Sub-task & Đề xuất phân công),
 /// gọi MCP Tools + mô hình AI thật và lưu tạm kết quả hoàn toàn trên Redis chờ người dùng xác nhận.
 /// </summary>
-public sealed class AiTaskQuickActionService : IAiTaskQuickActionService
+public sealed partial class AiTaskQuickActionService : IAiTaskQuickActionService
 {
     private const string ActionKeyPrefix = "ai_quick_";
 
@@ -888,14 +889,50 @@ Trả về DUY NHẤT JSON object theo cấu trúc:
         return string.Join(' ', words);
     }
 
-    private static string NormalizeRole(string? rawRole, string title)
+    [GeneratedRegex(@"(?i)(?<![\p{L}\p{N}])(qa|qc|tester?|e2e)(?![\p{L}\p{N}])|kiểm\s*thử|unit\s*test|integration\s*test")]
+    private static partial Regex QaRoleRegex();
+
+    [GeneratedRegex(@"(?i)(?<![\p{L}\p{N}])(frontend|front-end|angular|react|vue|tailwind|scss|css|html|ui|ux|ui/ux)(?![\p{L}\p{N}])|giao\s*diện")]
+    private static partial Regex FrontendRoleRegex();
+
+    [GeneratedRegex(@"(?i)(?<![\p{L}\p{N}])(devops|docker|kubernetes|k8s|ci/cd|terraform|infra)(?![\p{L}\p{N}])")]
+    private static partial Regex DevOpsRoleRegex();
+
+    [GeneratedRegex(@"(?i)(?<![\p{L}\p{N}])(design|designer|figma)(?![\p{L}\p{N}])|thiết\s*kế\s*(ui|ux|giao\s*diện|figma)")]
+    private static partial Regex DesignRoleRegex();
+
+    [GeneratedRegex(@"(?i)(?<![\p{L}\p{N}])(backend|back-end|api|server|sql|mysql|redis|database|microservice|middleware)(?![\p{L}\p{N}])|cơ\s*sở\s*dữ\s*liệu")]
+    private static partial Regex BackendRoleRegex();
+
+    private static string? TryMatchRoleText(string? text)
     {
-        var probe = $"{rawRole} {title}".ToLowerInvariant();
-        if (probe.Contains("qa") || probe.Contains("test") || probe.Contains("kiểm thử")) return "QA";
-        if (probe.Contains("frontend") || probe.Contains("angular") || probe.Contains("ui") || probe.Contains("giao diện")) return "Frontend";
-        if (probe.Contains("devops") || probe.Contains("docker") || probe.Contains("ci/cd")) return "DevOps";
-        if (probe.Contains("design") || probe.Contains("figma")) return "Design";
-        return string.IsNullOrWhiteSpace(rawRole) ? "Backend" : rawRole.Trim();
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        if (QaRoleRegex().IsMatch(text)) return "QA";
+        if (FrontendRoleRegex().IsMatch(text)) return "Frontend";
+        if (DevOpsRoleRegex().IsMatch(text)) return "DevOps";
+        if (DesignRoleRegex().IsMatch(text)) return "Design";
+        if (BackendRoleRegex().IsMatch(text)) return "Backend";
+        return null;
+    }
+
+    internal static string NormalizeRole(string? rawRole, string title)
+    {
+        if (!string.IsNullOrWhiteSpace(rawRole))
+        {
+            var explicitMatch = TryMatchRoleText(rawRole);
+            if (explicitMatch != null) return explicitMatch;
+
+            var trimmed = rawRole.Trim();
+            var isGenericRole = trimmed.Equals("developer", StringComparison.OrdinalIgnoreCase)
+                || trimmed.Equals("dev", StringComparison.OrdinalIgnoreCase)
+                || trimmed.Equals("engineer", StringComparison.OrdinalIgnoreCase)
+                || trimmed.Equals("task", StringComparison.OrdinalIgnoreCase)
+                || trimmed.Equals("general", StringComparison.OrdinalIgnoreCase);
+
+            if (!isGenericRole) return trimmed;
+        }
+
+        return TryMatchRoleText(title) ?? "Backend";
     }
 
     private static string StripRolePrefix(string title)

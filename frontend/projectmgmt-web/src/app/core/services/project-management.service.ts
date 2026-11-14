@@ -463,8 +463,43 @@ export class ProjectManagementService {
   };
   readonly currentProject = signal<Project>(this.emptyProject);
   readonly hasActiveProject = computed(() => !!this.currentProject().id && this.currentProject().id.trim() !== '');
+  readonly currentProjectPermissions = signal<string[] | null>(null);
+
+  hasProjectPermission(code: string): boolean {
+    const perms = this.currentProjectPermissions();
+    return !!perms && perms.includes(code);
+  }
+
+  readonly canCreateIssue = computed(() => this.hasProjectPermission('issue.create'));
+  readonly canEditIssue = computed(() => this.hasProjectPermission('issue.update'));
+  readonly canDeleteIssue = computed(() => this.hasProjectPermission('issue.delete'));
+  readonly canTransitionIssue = computed(() => this.hasProjectPermission('issue.transition'));
+  readonly canAssignIssue = computed(() => this.hasProjectPermission('issue.assign'));
+  readonly canRankBacklog = computed(() => this.hasProjectPermission('backlog.rank'));
+  readonly canManageSprints = computed(() =>
+    this.hasProjectPermission('sprint.create') ||
+    this.hasProjectPermission('sprint.start') ||
+    this.hasProjectPermission('sprint.close')
+  );
+  readonly canAiBreakdown = computed(() =>
+    this.hasProjectPermission('issue.create') || this.hasProjectPermission('issue.update')
+  );
+  readonly canAiAssign = computed(() =>
+    this.hasProjectPermission('issue.assign') ||
+    this.hasProjectPermission('issue.update') ||
+    this.hasProjectPermission('issue.create') ||
+    this.hasProjectPermission('sprint.create') ||
+    this.hasProjectPermission('project.update')
+  );
+  readonly canUseAiAssistant = computed(() =>
+    this.hasProjectPermission('issue.create') ||
+    this.hasProjectPermission('issue.update') ||
+    this.hasProjectPermission('sprint.create') ||
+    this.hasProjectPermission('project.update')
+  );
 
   clearActiveProject(): void {
+    this.currentProjectPermissions.set(null);
     this.currentProject.set(this.emptyProject);
   }
 
@@ -557,7 +592,7 @@ export class ProjectManagementService {
       this.selectedProjectId = id;
       untracked(() => {
         if (typeof sessionStorage !== 'undefined' && id) sessionStorage.setItem('projectmgmt.selected-project', id);
-        this.customIssueTypes.set([]); this.workItems.set([]); this.sprints.set([]); this.epics.set([]); this.activeDrawerTask.set(null);
+        this.currentProjectPermissions.set(null); this.customIssueTypes.set([]); this.workItems.set([]); this.sprints.set([]); this.epics.set([]); this.activeDrawerTask.set(null);
         if (id) this.loadWorkspace(id);
       });
     });
@@ -608,7 +643,7 @@ export class ProjectManagementService {
     this.workspaceLoading.set(true);
     this.saveError.set(null);
     forkJoin({
-      data: this.http.get<{ workItems: WorkItem[]; sprints: Sprint[]; epics: EpicItem[]; statuses: ProjectStatus[] }>(`${this.baseUrl}/projects/${projectId}/workspace`),
+      data: this.http.get<{ workItems: WorkItem[]; sprints: Sprint[]; epics: EpicItem[]; statuses: ProjectStatus[]; myPermissions?: string[] }>(`${this.baseUrl}/projects/${projectId}/workspace`),
       types: this.getIssueTypes(projectId),
       members: this.rbac.getProjectMembers(projectId).pipe(catchError(() => of({ members: [] }))),
       priorities: this.getProjectPriorities(projectId).pipe(catchError(() => of([]))),
@@ -657,6 +692,9 @@ export class ProjectManagementService {
           this.sprints.set(data.sprints);
           this.epics.set(data.epics);
           this.projectStatuses.set(this.sortStatuses(data.statuses));
+          if (Array.isArray(data.myPermissions)) {
+            this.currentProjectPermissions.set(data.myPermissions);
+          }
           if (priorities && priorities.length > 0) {
             this.projectPriorities.set(priorities);
           }

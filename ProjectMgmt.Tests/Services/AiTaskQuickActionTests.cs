@@ -1,6 +1,8 @@
 using System.Text.Json;
 using DeliveryIntelligence.Domain.Entities;
 using DeliveryIntelligence.Infrastructure;
+using IdentityExperience.Application.Dto;
+using IdentityExperience.Application.IServices;
 using IdentityExperience.Domain.Entities;
 using IdentityExperience.Infrastructure;
 using Microsoft.AspNetCore.Http;
@@ -134,6 +136,31 @@ public class AiTaskQuickActionTests
             => Task.FromResult(_store.ContainsKey(sessionId));
     }
 
+    private sealed class FakeMembersOnlyRoleServices(IReadOnlyCollection<Guid> memberIds) : IRoleServices
+    {
+        public Task<RoleDto> GetProjectMembersAsync(Guid projectId) => Task.FromResult(new RoleDto
+        {
+            Success = true,
+            // Giống hành vi thật của RoleServices.GetProjectMembersAsync: chỉ điền Members và để Items = null
+            Members = memberIds.Select(id => new RoleDto { UserId = id }).ToList(),
+            Items = null
+        });
+
+        public Task<RoleDto> GetRolesAsync(string? scope) => throw new NotImplementedException();
+        public Task<RoleDto> GetPermissionsAsync() => throw new NotImplementedException();
+        public Task<RoleDto> CreateRoleAsync(RoleDto request) => throw new NotImplementedException();
+        public Task<RoleDto> UpdateRolePermissionsAsync(Guid roleId, List<Guid>? permissionIds) => throw new NotImplementedException();
+        public Task<RoleDto> GetUserRolesAsync(Guid userId, string? scopeType, Guid? scopeId) => throw new NotImplementedException();
+        public Task<RoleDto> AssignUserRoleAsync(Guid actorUserId, Guid userId, RoleDto request) => throw new NotImplementedException();
+        public Task<RoleDto> RemoveUserRoleAsync(Guid actorUserId, Guid userId, Guid userRoleId) => throw new NotImplementedException();
+        public Task<RoleDto> AddProjectMemberAsync(Guid actorUserId, Guid projectId, Guid? userId, Guid? roleId) => throw new NotImplementedException();
+        public Task<RoleDto> ChangeProjectMemberRoleAsync(Guid actorUserId, Guid projectId, Guid userId, Guid? newRoleId) => throw new NotImplementedException();
+        public Task<RoleDto> RemoveProjectMemberAsync(Guid actorUserId, Guid projectId, Guid userId) => throw new NotImplementedException();
+        public Task<RoleDto> InviteProjectMemberByEmailAsync(Guid actorUserId, Guid projectId, string email, string roleName) => throw new NotImplementedException();
+        public Task<RoleDto> BatchInviteProjectMembersAsync(Guid actorUserId, Guid projectId, string emails, string? names, string roleName) => throw new NotImplementedException();
+        public Task<RoleDto> RespondProjectInvitationAsync(Guid actorUserId, Guid projectId, Guid notificationId, bool accept) => throw new NotImplementedException();
+    }
+
     private sealed class TestFixture
     {
         public required TestPlanningDbContext PlanningDb { get; init; }
@@ -157,11 +184,14 @@ public class AiTaskQuickActionTests
         public required JsonMemoryStateStagingService Staging { get; init; }
         public required FakeCurrentUserContext CurrentUser { get; init; }
         public required FakePermissionEvaluator Permissions { get; init; }
+        public required AiSprintCommitCoordinator CommitCoordinator { get; init; }
         public required AiTaskQuickActionService QuickActionService { get; init; }
         public required AiAgentController Controller { get; init; }
     }
 
-    private static async Task<TestFixture> CreateFixtureAsync(Func<AiPrompt, string> aiResponder)
+    private static async Task<TestFixture> CreateFixtureAsync(
+        Func<AiPrompt, string> aiResponder,
+        bool useMembersOnlyRoleServices = false)
     {
         var suffix = Guid.NewGuid().ToString("N");
         var planningDb = new TestPlanningDbContext(new DbContextOptionsBuilder<PlanningDbContext>().UseInMemoryDatabase($"Quick_Plan_{suffix}").Options);
@@ -330,12 +360,17 @@ public class AiTaskQuickActionTests
             new PromptTemplateService(NullLogger<PromptTemplateService>.Instance),
             NullLogger<AiSprintDecompositionService>.Instance);
 
+        var roleServices = useMembersOnlyRoleServices
+            ? new FakeMembersOnlyRoleServices([devBackendId, devFrontendId])
+            : null;
+
         var commitCoordinator = new AiSprintCommitCoordinator(
             planningDb,
             deliveryDb,
             staging,
             userLookup,
-            NullLogger<AiSprintCommitCoordinator>.Instance);
+            NullLogger<AiSprintCommitCoordinator>.Instance,
+            roleServices: roleServices);
 
         var quickActionService = new AiTaskQuickActionService(
             aiClient,
@@ -387,6 +422,7 @@ public class AiTaskQuickActionTests
             Staging = staging,
             CurrentUser = currentUser,
             Permissions = permissions,
+            CommitCoordinator = commitCoordinator,
             QuickActionService = quickActionService,
             Controller = controller
         };
@@ -684,4 +720,97 @@ public class AiTaskQuickActionTests
         });
         Assert.IsType<ConflictObjectResult>(replayAfterCancel);
     }
+
+    [Fact]
+    public void NormalizeRole_ShouldRespectWordBoundaries_NotFalseMatchUiInsideCircuit()
+    {
+        Assert.Equal("Backend", AiTaskQuickActionService.NormalizeRole("Backend", "Phát triển middleware Circuit Breaker cơ chế Half-Open thử nghiệm"));
+        Assert.Equal("Backend", AiTaskQuickActionService.NormalizeRole(null, "Phát triển middleware Circuit Breaker cơ chế Half-Open thử nghiệm"));
+        Assert.Equal("Backend", AiTaskQuickActionService.NormalizeRole("Developer", "Xây dựng cơ chế Circuit Breaker chịu lỗi cho dịch vụ"));
+        Assert.Equal("Frontend", AiTaskQuickActionService.NormalizeRole(null, "Thiết kế giao diện UI trang Backlog"));
+        Assert.Equal("Frontend", AiTaskQuickActionService.NormalizeRole("Frontend", "Xây dựng UI/UX dashboard giám sát Circuit Breaker"));
+        Assert.Equal("QA", AiTaskQuickActionService.NormalizeRole(null, "Viết integration test cho module thanh toán"));
+    }
+
+    [Fact]
+    public async Task QuickSubtaskAndSprintCommit_WithRoleServicesPopulatingMembersOnly_ShouldPreserveNonLeadAssignees()
+    {
+        var fx = await CreateFixtureAsync(_ => JsonSerializer.Serialize(new
+        {
+            rationale = "Phân rã Circuit Breaker middleware cho Backend.",
+            subtasks = new[]
+            {
+                new
+                {
+                    title = "Phát triển middleware Circuit Breaker cơ chế Half-Open thử nghiệm",
+                    role = "Backend",
+                    description = "Xây dựng middleware chống lỗi dây chuyền và phục hồi Half-Open",
+                    estimatedHours = 4,
+                    storyPoints = 2,
+                    priority = "Medium",
+                    assigneeName = "Phạm Đức Anh",
+                    acceptanceCriteria = new[] { "Chuyển trạng thái Closed -> Open -> Half-Open chính xác" },
+                    suggestedSkills = new[] { "C#" }
+                }
+            }
+        }), useMembersOnlyRoleServices: true);
+
+        var runResult = await fx.Controller.RunQuickAction(new AiQuickActionRunRequest
+        {
+            ProjectId = fx.ProjectId,
+            IssueId = fx.StoryIssueId,
+            ActionType = "subtask_breakdown"
+        });
+
+        var plan = Assert.IsType<AiQuickActionPlanDto>(Assert.IsType<OkObjectResult>(runResult).Value);
+        var proposed = Assert.Single(plan.ProposedSubtasks);
+        Assert.Equal("Backend", proposed.Role);
+        Assert.Equal(fx.DevBackendId, proposed.SuggestedAssigneeUserId);
+
+        var confirmResult = await fx.Controller.ConfirmQuickAction(new AiQuickActionConfirmRequest
+        {
+            ActionId = plan.ActionId,
+            ProjectId = fx.ProjectId,
+            Mode = "apply",
+            SelectedSubtasks =
+            [
+                new AiQuickSelectedSubtaskInput
+                {
+                    TempId = proposed.TempId,
+                    Title = proposed.Title
+                }
+            ]
+        });
+
+        var confirmDto = Assert.IsType<AiQuickActionConfirmResponse>(Assert.IsType<OkObjectResult>(confirmResult).Value);
+        Assert.True(confirmDto.Success);
+        var createdSub = await fx.DeliveryDb.Issues.AsNoTracking().FirstAsync(i => i.Id == confirmDto.CreatedIssues[0].IssueId);
+        Assert.StartsWith("[Backend]", createdSub.Title, StringComparison.Ordinal);
+        Assert.Equal(fx.DevBackendId, createdSub.AssigneeId);
+
+        var sprintApplyResponse = await fx.CommitCoordinator.ApplySprintProposalAsync(new AiApplySprintProposalRequest
+        {
+            SessionId = $"sprint_ai_mem_{Guid.NewGuid():N}",
+            ProjectId = fx.ProjectId,
+            PushToBacklog = true,
+            SprintGoal = "Kiểm tra giữ nguyên Assignee khi Members được điền",
+            Tasks =
+            [
+                new ProposedTaskDto
+                {
+                    Id = "t_mem_1",
+                    Title = "Xây dựng component UI màn hình lọc",
+                    StoryPoints = 3,
+                    AssigneeUserId = fx.DevFrontendId,
+                    AssigneeName = "Vũ Hoàng Nam"
+                }
+            ]
+        }, new ProjectScopeContext(fx.OrgId, fx.ProjectId, fx.LeadUserId));
+
+        Assert.True(sprintApplyResponse.Success);
+        var createdBacklogTaskId = Assert.Single(sprintApplyResponse.CreatedIssues).IssueId;
+        var createdBacklogTask = await fx.DeliveryDb.Issues.AsNoTracking().FirstAsync(i => i.Id == createdBacklogTaskId);
+        Assert.Equal(fx.DevFrontendId, createdBacklogTask.AssigneeId);
+    }
 }
+

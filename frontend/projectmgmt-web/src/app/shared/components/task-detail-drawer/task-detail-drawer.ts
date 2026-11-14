@@ -78,12 +78,16 @@ import { extractCiteDocName, filterUnlinkedCitations } from '../../../core/utils
               <button (click)="exportTaskDetailExcel()" class="w-8 h-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 flex items-center justify-center transition-colors cursor-pointer" title="Xuất chi tiết công việc ra Excel (.xlsx)">
                 <span class="material-symbols-outlined text-[18px]">download</span>
               </button>
-              <button (click)="cloneTask()" class="w-8 h-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 flex items-center justify-center transition-colors cursor-pointer" title="Nhân bản">
-                <span class="material-symbols-outlined text-[18px]">content_copy</span>
-              </button>
-              <button (click)="deleteTask()" class="w-8 h-8 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 flex items-center justify-center transition-colors cursor-pointer" title="Xóa">
-                <span class="material-symbols-outlined text-[18px]">delete</span>
-              </button>
+              @if (canCreate()) {
+                <button (click)="cloneTask()" class="w-8 h-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 flex items-center justify-center transition-colors cursor-pointer" title="Nhân bản">
+                  <span class="material-symbols-outlined text-[18px]">content_copy</span>
+                </button>
+              }
+              @if (canDelete()) {
+                <button (click)="deleteTask()" class="w-8 h-8 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 flex items-center justify-center transition-colors cursor-pointer" title="Xóa">
+                  <span class="material-symbols-outlined text-[18px]">delete</span>
+                </button>
+              }
               <div class="h-3.5 w-px bg-slate-200 dark:bg-slate-800 mx-1"></div>
               <button (click)="dismissed.emit()" class="w-8 h-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 flex items-center justify-center transition-colors cursor-pointer" title="Đóng">
                 <span class="material-symbols-outlined text-[18px]">close</span>
@@ -101,7 +105,9 @@ import { extractCiteDocName, filterUnlinkedCitations } from '../../../core/utils
                 <select
                   [(ngModel)]="task.issueType"
                   (ngModelChange)="onFieldChange()"
-                  class="h-7 px-2.5 rounded text-xs font-semibold bg-white text-slate-700 dark:bg-slate-900 dark:text-slate-200 border border-slate-200 dark:border-slate-700 focus:outline-none focus:border-slate-900 cursor-pointer transition-colors"
+                  [disabled]="!canEdit()"
+                  class="h-7 px-2.5 rounded text-xs font-semibold bg-white text-slate-700 dark:bg-slate-900 dark:text-slate-200 border border-slate-200 dark:border-slate-700 focus:outline-none focus:border-slate-900 transition-colors disabled:opacity-75 disabled:cursor-default"
+                  [class.cursor-pointer]="canEdit()"
                 >
                   @if (task.issueType && !availableIssueTypes().includes(task.issueType)) {
                     <option [value]="task.issueType">{{ task.issueType }}</option>
@@ -115,7 +121,9 @@ import { extractCiteDocName, filterUnlinkedCitations } from '../../../core/utils
                 <select
                   [ngModel]="task.epicName || ''"
                   (ngModelChange)="task.epicName = $event; onFieldChange()"
-                  class="h-7 px-2.5 rounded text-xs font-medium bg-white text-slate-600 dark:bg-slate-900 dark:text-slate-300 border border-slate-200 dark:border-slate-700 focus:outline-none focus:border-slate-900 cursor-pointer transition-colors"
+                  [disabled]="!canEdit()"
+                  class="h-7 px-2.5 rounded text-xs font-medium bg-white text-slate-600 dark:bg-slate-900 dark:text-slate-300 border border-slate-200 dark:border-slate-700 focus:outline-none focus:border-slate-900 transition-colors disabled:opacity-75 disabled:cursor-default"
+                  [class.cursor-pointer]="canEdit()"
                 >
                   <option value="">Gán Epic</option>
                   @if (task.epicName && !hasEpicName(task.epicName)) {
@@ -133,8 +141,11 @@ import { extractCiteDocName, filterUnlinkedCitations } from '../../../core/utils
                 type="text"
                 [(ngModel)]="task.title"
                 (ngModelChange)="onFieldChange()"
+                [readOnly]="!canEdit()"
                 placeholder="Tên công việc"
-                class="text-lg font-semibold text-slate-900 dark:text-white bg-transparent border-b border-transparent hover:border-slate-200 focus:border-slate-900 focus:outline-none py-1 transition-all"
+                class="text-lg font-semibold text-slate-900 dark:text-white bg-transparent border-b border-transparent focus:outline-none py-1 transition-all"
+                [class.hover:border-slate-200]="canEdit()"
+                [class.focus:border-slate-900]="canEdit()"
               />
             </div>
 
@@ -186,14 +197,16 @@ import { extractCiteDocName, filterUnlinkedCitations } from '../../../core/utils
                     <span class="text-xs font-medium truncate">{{ task.blockReason || 'Không có lý do chi tiết' }}</span>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  (click)="unblockTask()"
-                  class="h-6 px-2 rounded bg-rose-600 hover:bg-rose-700 text-white font-medium text-xs shrink-0 flex items-center gap-1 cursor-pointer transition-colors"
-                >
-                  <span class="material-symbols-outlined text-[13px]">check</span>
-                  <span>Gỡ cản trở</span>
-                </button>
+                @if (canEdit()) {
+                  <button
+                    type="button"
+                    (click)="unblockTask()"
+                    class="h-6 px-2 rounded bg-rose-600 hover:bg-rose-700 text-white font-medium text-xs shrink-0 flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <span class="material-symbols-outlined text-[13px]">check</span>
+                    <span>Gỡ cản trở</span>
+                  </button>
+                }
               </div>
             } @else {
               <div class="flex items-center justify-between py-0.5">
@@ -201,14 +214,16 @@ import { extractCiteDocName, filterUnlinkedCitations } from '../../../core/utils
                   <span class="material-symbols-outlined text-[15px] text-emerald-600">check_circle</span>
                   <span>Thông suốt</span>
                 </span>
-                <button
-                  type="button"
-                  (click)="openBlockTaskModal()"
-                  class="h-6 px-2 rounded text-xs font-medium text-slate-600 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 flex items-center gap-1 cursor-pointer transition-colors"
-                >
-                  <span class="material-symbols-outlined text-[13px]">block</span>
-                  <span>Báo cản trở</span>
-                </button>
+                @if (canEdit()) {
+                  <button
+                    type="button"
+                    (click)="openBlockTaskModal()"
+                    class="h-6 px-2 rounded text-xs font-medium text-slate-600 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <span class="material-symbols-outlined text-[13px]">block</span>
+                    <span>Báo cản trở</span>
+                  </button>
+                }
               </div>
             }
 
@@ -220,7 +235,9 @@ import { extractCiteDocName, filterUnlinkedCitations } from '../../../core/utils
                 <select
                   [(ngModel)]="task.statusName"
                   (ngModelChange)="onFieldChange()"
-                  class="h-8 px-2.5 rounded-lg text-xs font-semibold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary shadow-2xs cursor-pointer w-full"
+                  [disabled]="!canTransition()"
+                  class="h-8 px-2.5 rounded-lg text-xs font-semibold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary shadow-2xs w-full disabled:opacity-75 disabled:cursor-default"
+                  [class.cursor-pointer]="canTransition()"
                 >
                   @if (task.statusName && !availableStatusNames().includes(task.statusName)) {
                     <option [value]="task.statusName">{{ task.statusName }}</option>
@@ -237,7 +254,9 @@ import { extractCiteDocName, filterUnlinkedCitations } from '../../../core/utils
                 <select
                   [(ngModel)]="task.priority"
                   (ngModelChange)="onFieldChange()"
-                  class="h-8 px-2.5 rounded-lg text-xs font-semibold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary shadow-2xs cursor-pointer w-full"
+                  [disabled]="!canEdit()"
+                  class="h-8 px-2.5 rounded-lg text-xs font-semibold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary shadow-2xs w-full disabled:opacity-75 disabled:cursor-default"
+                  [class.cursor-pointer]="canEdit()"
                 >
                   @if (task.priority && !hasPriorityOption(task.priority)) {
                     <option [value]="task.priority">{{ task.priority }}</option>
@@ -262,7 +281,9 @@ import { extractCiteDocName, filterUnlinkedCitations } from '../../../core/utils
                   <select
                     [ngModel]="task.assigneeName || ''"
                     (ngModelChange)="task.assigneeName = $event; onFieldChange()"
-                    class="h-8 px-2 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary flex-1 min-w-0 shadow-2xs cursor-pointer"
+                    [disabled]="!canAssign()"
+                    class="h-8 px-2 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary flex-1 min-w-0 shadow-2xs disabled:opacity-75 disabled:cursor-default"
+                    [class.cursor-pointer]="canAssign()"
                   >
                     <option value="">Chưa chỉ định</option>
                     @for (m of projectMembers(); track m.id) {
@@ -278,7 +299,9 @@ import { extractCiteDocName, filterUnlinkedCitations } from '../../../core/utils
                 <select
                   [ngModel]="task.sprintId || ''"
                   (ngModelChange)="onSprintChange($event)"
-                  class="h-8 px-2.5 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary shadow-2xs cursor-pointer w-full"
+                  [disabled]="!canChangeSprint()"
+                  class="h-8 px-2.5 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary shadow-2xs w-full disabled:opacity-75 disabled:cursor-default"
+                  [class.cursor-pointer]="canChangeSprint()"
                 >
                   <option value="">Product Backlog</option>
                   @for (sp of availableSprints(); track sp.id) {
@@ -296,7 +319,8 @@ import { extractCiteDocName, filterUnlinkedCitations } from '../../../core/utils
                   max="100"
                   [(ngModel)]="task.storyPoints"
                   (ngModelChange)="onFieldChange()"
-                  class="h-8 w-full px-2.5 rounded-lg text-xs font-mono font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary shadow-2xs"
+                  [disabled]="!canEdit()"
+                  class="h-8 w-full px-2.5 rounded-lg text-xs font-mono font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary shadow-2xs disabled:opacity-75 disabled:cursor-default"
                 />
               </div>
 
@@ -309,8 +333,9 @@ import { extractCiteDocName, filterUnlinkedCitations } from '../../../core/utils
                   step="0.5"
                   [(ngModel)]="task.estimatedHours"
                   (ngModelChange)="onFieldChange()"
+                  [disabled]="!canEdit()"
                   placeholder="0.0"
-                  class="h-8 w-full px-2.5 rounded-lg text-xs font-mono font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary shadow-2xs"
+                  class="h-8 w-full px-2.5 rounded-lg text-xs font-mono font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary shadow-2xs disabled:opacity-75 disabled:cursor-default"
                 />
               </div>
 
@@ -323,8 +348,9 @@ import { extractCiteDocName, filterUnlinkedCitations } from '../../../core/utils
                   step="0.5"
                   [(ngModel)]="task.remainingHours"
                   (ngModelChange)="onFieldChange()"
+                  [disabled]="!canEdit()"
                   placeholder="0.0"
-                  class="h-8 w-full px-2.5 rounded-lg text-xs font-mono font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary shadow-2xs"
+                  class="h-8 w-full px-2.5 rounded-lg text-xs font-mono font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary shadow-2xs disabled:opacity-75 disabled:cursor-default"
                 />
               </div>
             </div>
@@ -336,6 +362,7 @@ import { extractCiteDocName, filterUnlinkedCitations } from '../../../core/utils
                 rows="3"
                 [(ngModel)]="task.description"
                 (ngModelChange)="onFieldChange()"
+                [readOnly]="!canEdit()"
                 placeholder="Mô tả công việc..."
                 class="w-full p-2.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-slate-900 transition-all leading-relaxed"
               ></textarea>
@@ -348,17 +375,19 @@ import { extractCiteDocName, filterUnlinkedCitations } from '../../../core/utils
                   <span class="material-symbols-outlined text-[15px] text-slate-500">sell</span>
                   <span>Nhãn phân loại &amp; Kỹ năng</span>
                 </span>
-                <button
-                  type="button"
-                  (click)="isTagEditorOpen.set(!isTagEditorOpen())"
-                  class="text-xs font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 flex items-center gap-0.5 cursor-pointer"
-                >
-                  <span class="material-symbols-outlined text-[13px]">add</span>
-                  <span>Thêm nhãn</span>
-                </button>
+                @if (canEdit()) {
+                  <button
+                    type="button"
+                    (click)="isTagEditorOpen.set(!isTagEditorOpen())"
+                    class="text-xs font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 flex items-center gap-0.5 cursor-pointer"
+                  >
+                    <span class="material-symbols-outlined text-[13px]">add</span>
+                    <span>Thêm nhãn</span>
+                  </button>
+                }
               </div>
 
-              @if (isTagEditorOpen()) {
+              @if (canEdit() && isTagEditorOpen()) {
                 <div class="flex flex-wrap gap-1.5 p-2 rounded bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
                   <input
                     type="text"
@@ -376,9 +405,11 @@ import { extractCiteDocName, filterUnlinkedCitations } from '../../../core/utils
                 @for (lbl of task.labels || []; track lbl) {
                   <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
                     <span>#{{ lbl }}</span>
-                    <button type="button" (click)="removeLabelFromDrawer(lbl)" class="text-slate-400 hover:text-rose-600 leading-none cursor-pointer" [attr.aria-label]="'Bỏ nhãn ' + lbl">
-                      <span class="material-symbols-outlined text-[12px]">close</span>
-                    </button>
+                    @if (canEdit()) {
+                      <button type="button" (click)="removeLabelFromDrawer(lbl)" class="text-slate-400 hover:text-rose-600 leading-none cursor-pointer" [attr.aria-label]="'Bỏ nhãn ' + lbl">
+                        <span class="material-symbols-outlined text-[12px]">close</span>
+                      </button>
+                    }
                   </span>
                 }
                 @for (skill of task.requiredSkills || []; track skill) {
@@ -409,52 +440,58 @@ import { extractCiteDocName, filterUnlinkedCitations } from '../../../core/utils
                       type="checkbox"
                       [checked]="c.isMet"
                       (change)="toggleCriterion(c)"
-                      [disabled]="isCriterionBusy()"
-                      class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer shrink-0"
+                      [disabled]="!canEdit() || isCriterionBusy()"
+                      class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 shrink-0 disabled:cursor-default"
+                      [class.cursor-pointer]="canEdit()"
                     />
                     <input
                       type="text"
                       [value]="c.content"
                       (blur)="updateCriterionText(c, $any($event.target).value)"
-                      [disabled]="isCriterionBusy()"
+                      [readOnly]="!canEdit()"
+                      [disabled]="!canEdit() || isCriterionBusy()"
                       [class.line-through]="c.isMet"
                       [class.text-slate-400]="c.isMet"
                       class="flex-1 min-w-0 bg-transparent border-0 text-xs text-slate-800 dark:text-slate-200 focus:outline-none"
                     />
-                    <button
-                      type="button"
-                      (click)="deleteCriterionFromDrawer(c.id)"
-                      [disabled]="isCriterionBusy()"
-                      class="text-slate-400 hover:text-rose-600 p-0.5 cursor-pointer shrink-0"
-                      title="Xóa tiêu chí"
-                    >
-                      <span class="material-symbols-outlined text-[14px]">close</span>
-                    </button>
+                    @if (canEdit()) {
+                      <button
+                        type="button"
+                        (click)="deleteCriterionFromDrawer(c.id)"
+                        [disabled]="isCriterionBusy()"
+                        class="text-slate-400 hover:text-rose-600 p-0.5 cursor-pointer shrink-0"
+                        title="Xóa tiêu chí"
+                      >
+                        <span class="material-symbols-outlined text-[14px]">close</span>
+                      </button>
+                    }
                   </div>
                 } @empty {
                   <p class="text-xs text-slate-400 italic">Chưa có tiêu chí nghiệm thu.</p>
                 }
               </div>
 
-              <div class="flex gap-1.5">
-                <input
-                  type="text"
-                  [ngModel]="newCriterionText()"
-                  (ngModelChange)="newCriterionText.set($event)"
-                  (keyup.enter)="addCriterionFromDrawer()"
-                  [disabled]="isCriterionBusy()"
-                  placeholder="Thêm tiêu chí nghiệm thu mới..."
-                  class="flex-1 h-7 px-2.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs focus:outline-none focus:border-slate-900"
-                />
-                <button
-                  type="button"
-                  (click)="addCriterionFromDrawer()"
-                  [disabled]="isCriterionBusy() || !newCriterionText().trim()"
-                  class="h-7 px-2.5 rounded bg-slate-900 disabled:opacity-40 text-white text-xs font-medium hover:bg-slate-800 cursor-pointer"
-                >
-                  Thêm
-                </button>
-              </div>
+              @if (canEdit()) {
+                <div class="flex gap-1.5">
+                  <input
+                    type="text"
+                    [ngModel]="newCriterionText()"
+                    (ngModelChange)="newCriterionText.set($event)"
+                    (keyup.enter)="addCriterionFromDrawer()"
+                    [disabled]="isCriterionBusy()"
+                    placeholder="Thêm tiêu chí nghiệm thu mới..."
+                    class="flex-1 h-7 px-2.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs focus:outline-none focus:border-slate-900"
+                  />
+                  <button
+                    type="button"
+                    (click)="addCriterionFromDrawer()"
+                    [disabled]="isCriterionBusy() || !newCriterionText().trim()"
+                    class="h-7 px-2.5 rounded bg-slate-900 disabled:opacity-40 text-white text-xs font-medium hover:bg-slate-800 cursor-pointer"
+                  >
+                    Thêm
+                  </button>
+                </div>
+              }
             </div>
 
             <!-- AI Rationale Card (when item was enriched by AI) -->
@@ -476,13 +513,15 @@ import { extractCiteDocName, filterUnlinkedCitations } from '../../../core/utils
                     <span class="material-symbols-outlined text-[15px] text-slate-500">subdirectory_arrow_right</span>
                     <span>Công việc con ({{ drawerSubtasks.length }})</span>
                   </span>
-                  <button (click)="isSubtaskComposerOpen.set(!isSubtaskComposerOpen())" class="text-xs font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 flex items-center gap-1 cursor-pointer">
-                    <span class="material-symbols-outlined text-[13px]">add</span>
-                    <span>Thêm việc con</span>
-                  </button>
+                  @if (canCreate()) {
+                    <button (click)="isSubtaskComposerOpen.set(!isSubtaskComposerOpen())" class="text-xs font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 flex items-center gap-1 cursor-pointer">
+                      <span class="material-symbols-outlined text-[13px]">add</span>
+                      <span>Thêm việc con</span>
+                    </button>
+                  }
                 </div>
 
-                @if (isSubtaskComposerOpen()) {
+                @if (canCreate() && isSubtaskComposerOpen()) {
                   <div class="flex flex-col sm:flex-row gap-2 p-2 rounded bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
                     <input
                       type="text"
@@ -603,6 +642,7 @@ import { extractCiteDocName, filterUnlinkedCitations } from '../../../core/utils
           </div>
 
           <!-- Pinned Fixed Bottom Comment Bar (Not scrolling with body) -->
+          @if (canEdit()) {
           <div class="pinned-comment-bar shrink-0 p-3 bg-slate-50 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 relative z-30">
             <!-- Mention Autocomplete Floating Dropdown -->
             @if (showMentionDropdown() && mentionCandidates().length > 0) {
@@ -686,6 +726,7 @@ import { extractCiteDocName, filterUnlinkedCitations } from '../../../core/utils
               </div>
             </div>
           </div>
+          }
 
         </div>
 
@@ -806,6 +847,12 @@ export class TaskDetailDrawerComponent implements OnDestroy {
   readonly currentUserAvatar = computed(() => resolveAvatarUrl(this.identityService.authState().currentUser?.avatarUrl));
 
   readonly epics = this.projectService.epics;
+  readonly canCreate = this.projectService.canCreateIssue;
+  readonly canEdit = this.projectService.canEditIssue;
+  readonly canDelete = this.projectService.canDeleteIssue;
+  readonly canTransition = this.projectService.canTransitionIssue;
+  readonly canAssign = this.projectService.canAssignIssue;
+  readonly canChangeSprint = computed(() => this.projectService.canEditIssue() || this.projectService.canManageSprints());
   newCommentText = '';
   readonly isUploadingAttachment = signal(false);
   readonly showMentionDropdown = signal(false);
@@ -995,6 +1042,7 @@ export class TaskDetailDrawerComponent implements OnDestroy {
   }
 
   openBlockTaskModal(): void {
+    if (!this.canEdit()) return;
     this.blockReasonInput.set('');
     this.isBlockModalOpen.set(true);
   }
@@ -1004,7 +1052,7 @@ export class TaskDetailDrawerComponent implements OnDestroy {
   }
 
   submitBlockTask(): void {
-    if (!this.task || !this.blockReasonInput().trim()) return;
+    if (!this.canEdit() || !this.task || !this.blockReasonInput().trim()) return;
     const reason = this.blockReasonInput().trim();
     this.projectService.blockIssue(this.task.id, reason).subscribe({
       next: () => {
@@ -1022,7 +1070,7 @@ export class TaskDetailDrawerComponent implements OnDestroy {
   }
 
   unblockTask(): void {
-    if (!this.task) return;
+    if (!this.canEdit() || !this.task) return;
     this.projectService.unblockIssue(this.task.id).subscribe({
       next: () => {
         if (this.task) {
@@ -1096,7 +1144,7 @@ export class TaskDetailDrawerComponent implements OnDestroy {
   }
 
   applyAiBreakdown(): void {
-    if (!this.task) return;
+    if (!this.canCreate() || !this.task) return;
     const selectedSubs = this.aiSubtaskSuggestions().filter(s => s.selected);
     const genId = this.currentGenerationId();
     if (genId && this.aiApi) {
@@ -1115,7 +1163,7 @@ export class TaskDetailDrawerComponent implements OnDestroy {
   }
 
   selectCandidate(candidateName: string): void {
-    if (!this.task) return;
+    if (!this.canAssign() || !this.task) return;
     this.task.assigneeName = candidateName;
     this.onFieldChange();
     this.toastService.success('Đồng Ý Đề Xuất AI 2', `Đã chọn người xử lý: ${candidateName}`);
@@ -1166,7 +1214,7 @@ export class TaskDetailDrawerComponent implements OnDestroy {
   }
 
   onSprintChange(sprintId: string): void {
-    if (!this.task) return;
+    if (!this.canChangeSprint() || !this.task) return;
     const cleanId = sprintId || '';
     this.task.sprintId = cleanId;
     this.task.sprintName = cleanId
@@ -1176,7 +1224,7 @@ export class TaskDetailDrawerComponent implements OnDestroy {
   }
 
   addLabelFromDrawer(): void {
-    if (!this.task) return;
+    if (!this.canEdit() || !this.task) return;
     const clean = this.newTagText().trim().replace(/^#+/, '');
     if (!clean) return;
     const current = [...(this.task.labels ?? [])];
@@ -1189,13 +1237,13 @@ export class TaskDetailDrawerComponent implements OnDestroy {
   }
 
   removeLabelFromDrawer(lbl: string): void {
-    if (!this.task) return;
+    if (!this.canEdit() || !this.task) return;
     this.task.labels = (this.task.labels ?? []).filter(l => l !== lbl);
     this.onFieldChange();
   }
 
   addCriterionFromDrawer(): void {
-    if (!this.task || this.isCriterionBusy()) return;
+    if (!this.canEdit() || !this.task || this.isCriterionBusy()) return;
     const content = this.newCriterionText().trim();
     if (!content) return;
     const taskId = this.task.id;
@@ -1219,7 +1267,7 @@ export class TaskDetailDrawerComponent implements OnDestroy {
   }
 
   toggleCriterion(criterion: { id: string; content: string; isMet: boolean }): void {
-    if (!this.task || this.isCriterionBusy()) return;
+    if (!this.canEdit() || !this.task || this.isCriterionBusy()) return;
     const taskId = this.task.id;
     const nextMet = !criterion.isMet;
     criterion.isMet = nextMet;
@@ -1243,7 +1291,7 @@ export class TaskDetailDrawerComponent implements OnDestroy {
   }
 
   updateCriterionText(criterion: { id: string; content: string; isMet: boolean }, nextValue: string): void {
-    if (!this.task || this.isCriterionBusy()) return;
+    if (!this.canEdit() || !this.task || this.isCriterionBusy()) return;
     const trimmed = nextValue.trim();
     if (!trimmed || trimmed === criterion.content) return;
     const taskId = this.task.id;
@@ -1267,7 +1315,7 @@ export class TaskDetailDrawerComponent implements OnDestroy {
   }
 
   deleteCriterionFromDrawer(criterionId: string): void {
-    if (!this.task || this.isCriterionBusy()) return;
+    if (!this.canEdit() || !this.task || this.isCriterionBusy()) return;
     const taskId = this.task.id;
     this.isCriterionBusy.set(true);
     this.projectService.deleteCriterion(criterionId).subscribe({
@@ -1298,6 +1346,7 @@ export class TaskDetailDrawerComponent implements OnDestroy {
   }
 
   onFieldChange(): void {
+    if (!this.canEdit() && !this.canTransition() && !this.canAssign() && !this.canChangeSprint()) return;
     if (this.task) {
       if (this.task.assigneeName) {
         const m = this.projectMembers().find(x => x.displayName === this.task?.assigneeName);
@@ -1322,7 +1371,7 @@ export class TaskDetailDrawerComponent implements OnDestroy {
   }
 
   addSubtaskFromDrawer(): void {
-    if (!this.task) return;
+    if (!this.canCreate() || !this.task) return;
     const title = this.newSubtaskTitle().trim();
     if (!title) return;
     this.projectService.createSubTask(this.task.id, title);
@@ -1348,7 +1397,7 @@ export class TaskDetailDrawerComponent implements OnDestroy {
   }
 
   cloneTask(): void {
-    if (!this.task) return;
+    if (!this.canCreate() || !this.task) return;
     const cloned = this.projectService.cloneWorkItem(this.task.id);
     if (cloned) {
       this.toastService.success('Nhân bản', `Đã tạo bản sao cho [${this.task.issueKey}].`);
@@ -1356,7 +1405,7 @@ export class TaskDetailDrawerComponent implements OnDestroy {
   }
 
   deleteTask(): void {
-    if (!this.task) return;
+    if (!this.canDelete() || !this.task) return;
     const taskId = this.task.id;
     const issueKey = this.task.issueKey;
     this.confirmDialog.confirm({
@@ -1410,6 +1459,7 @@ export class TaskDetailDrawerComponent implements OnDestroy {
   }
 
   triggerAttachmentUpload(): void {
+    if (!this.canEdit()) return;
     const input = document.getElementById('task-attachment-input') as HTMLInputElement;
     if (input) {
       input.value = '';
@@ -1418,6 +1468,7 @@ export class TaskDetailDrawerComponent implements OnDestroy {
   }
 
   onAttachmentSelected(event: Event): void {
+    if (!this.canEdit()) return;
     const input = event.target as HTMLInputElement;
     if (!input.files || input.files.length === 0 || !this.task) return;
     const file = input.files[0];
@@ -1447,6 +1498,7 @@ export class TaskDetailDrawerComponent implements OnDestroy {
   }
 
   submitComment(): void {
+    if (!this.canEdit()) return;
     const text = this.newCommentText.trim();
     if (this.task && text) {
       const mentionedUserIds: string[] = [];

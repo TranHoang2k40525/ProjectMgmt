@@ -289,9 +289,14 @@ public class AiAgentController : ControllerBase
 
                         if (!plan.CanDelete && !plan.CanDetachToBacklog)
                         {
-                            const string rbacDeniedMsg = "Bạn không có quyền gỡ công việc khỏi Sprint hoặc xóa công việc trong dự án này (yêu cầu quyền cập nhật/xóa công việc hoặc vai trò Quản lý).";
+                            var backlogOnlyWithoutDelete = !allowDelete && allowDetach && !plan.Candidates.Any(c => c.SprintId.HasValue);
+                            var rbacDeniedMsg = backlogOnlyWithoutDelete
+                                ? "Bạn không có quyền xóa vĩnh viễn công việc (`issue.delete`). Các công việc được chọn hiện đang nằm trong Kho Backlog (không thuộc Sprint nào nên không thể gỡ về Backlog)."
+                                : "Bạn không có quyền gỡ công việc khỏi Sprint hoặc xóa công việc trong dự án này (yêu cầu quyền cập nhật/xóa công việc hoặc vai trò Quản lý).";
+
                             proposal.PendingRemovalPlan = null;
                             proposal.TriggerAction = "none";
+                            proposal.AssistantReply = rbacDeniedMsg;
                             var lastTurn = proposal.ConversationHistory?.LastOrDefault(t => t.Role == "assistant");
                             if (lastTurn != null)
                             {
@@ -305,6 +310,16 @@ public class AiAgentController : ControllerBase
                             if (string.Equals(plan.RequestedMode, "soft_delete", StringComparison.OrdinalIgnoreCase) && !plan.CanDelete && plan.CanDetachToBacklog)
                             {
                                 plan.RequestedMode = "detach_to_backlog";
+                                var count = plan.Candidates.Count;
+                                var keys = string.Join(", ", plan.Candidates.Take(5).Select(c => c.IssueKey));
+                                var more = count > 5 ? $" và {count - 5} công việc khác" : string.Empty;
+                                var detachOnlyMsg = $"Bạn không có quyền xóa vĩnh viễn công việc (`issue.delete`), nên hệ thống chỉ hỗ trợ **Gỡ về Kho Backlog** cho {count} công việc đang thuộc Sprint ({keys}{more}). Vui lòng kiểm tra và nhấn nút xác nhận Gỡ về Backlog ở thẻ bên dưới.";
+                                proposal.AssistantReply = detachOnlyMsg;
+                                var assistantTurn = proposal.ConversationHistory?.LastOrDefault(t => t.Role == "assistant");
+                                if (assistantTurn != null)
+                                {
+                                    assistantTurn.Content = detachOnlyMsg;
+                                }
                             }
                             else if (string.Equals(plan.RequestedMode, "detach_to_backlog", StringComparison.OrdinalIgnoreCase) && !plan.CanDetachToBacklog && plan.CanDelete)
                             {

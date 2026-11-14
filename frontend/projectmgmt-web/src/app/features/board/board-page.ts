@@ -54,6 +54,14 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
 
   readonly items = this.projectService.workItems;
   readonly epics = this.projectService.epics;
+  readonly canCreateIssue = this.projectService.canCreateIssue;
+  readonly canEditIssue = this.projectService.canEditIssue;
+  readonly canDeleteIssue = this.projectService.canDeleteIssue;
+  readonly canTransitionIssue = this.projectService.canTransitionIssue;
+  readonly canAssignIssue = this.projectService.canAssignIssue;
+  readonly canRankBacklog = this.projectService.canRankBacklog;
+  readonly canAiBreakdown = this.projectService.canAiBreakdown;
+  readonly canAiAssign = this.projectService.canAiAssign;
 
   readonly boardTitle = computed(() => {
     const p = this.projectService.currentProject();
@@ -198,12 +206,14 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
 
   openBlockModal(item: WorkItem, event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canEditIssue()) return;
     this.blockingItem.set(item);
     this.blockReasonInput = '';
     this.showBlockModal.set(true);
   }
 
   confirmBlock(): void {
+    if (!this.canEditIssue()) return;
     const item = this.blockingItem();
     const reason = this.blockReasonInput.trim();
     if (!item || !reason) return;
@@ -218,6 +228,7 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
 
   unblock(item: WorkItem, event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canEditIssue()) return;
     this.projectService.unblockIssue(item.id).subscribe({
       next: () => this.toastService.success('Đã Gỡ Chặn', `Đã mở lại tiến độ cho ${item.issueKey}`),
       error: (err) => this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể gỡ chặn.'))
@@ -267,9 +278,11 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
   // CDK Drag & Drop Handler
   onDrop(event: CdkDragDrop<WorkItem[]>, targetStatus: string): void {
     if (event.previousContainer === event.container) {
+      if (!this.canRankBacklog()) return;
       const ordered = [...event.container.data]; moveItemInArray(ordered, event.previousIndex, event.currentIndex);
       this.projectService.reorderWorkItems(ordered.map(i => i.id)); return;
     }
+    if (!this.canTransitionIssue()) return;
     const item = event.item.data as WorkItem;
     if (item && item.statusName !== targetStatus) {
       this.animateBoardChange(() => this.projectService.updateWorkItemStatus(item.id, targetStatus));
@@ -292,23 +305,26 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
 
     switch (event.action) {
       case 'status':
-        if (event.value) {
+        if (event.value && this.canTransitionIssue()) {
           const targetStatus = event.value;
           this.animateBoardChange(() => this.projectService.updateWorkItemStatus(item.id, targetStatus));
         }
         break;
 
       case 'assign': {
+        if (!this.canAssignIssue()) break;
         const myName = this.identityService.authState().currentUser?.displayName || 'Tôi';
         this.projectService.updateWorkItemAssignee(item.id, myName);
         break;
       }
 
       case 'ai-breakdown':
+        if (!this.canAiBreakdown()) break;
         this.aiQuickAction.triggerBreakdown(item);
         break;
 
       case 'ai-assign':
+        if (!this.canAiAssign()) break;
         this.aiQuickAction.triggerAssignSuggestion(item);
         break;
 
@@ -318,6 +334,7 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
         break;
 
       case 'delete':
+        if (!this.canDeleteIssue()) break;
         this.animateBoardChange(() => this.projectService.deleteWorkItem(item.id));
         this.toastService.warning('Đã Xóa', `Đã xóa công việc [${item.issueKey}]`);
         break;
@@ -327,6 +344,7 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
   // Double Click for Quick Inline Editing
   startInlineEdit(item: WorkItem, event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canEditIssue()) return;
     this.projectService.activeDrawerTask.set(null);
     this.inlineEditingTaskId.set(item.id);
     this.inlineTitleValue.set(item.title);
@@ -334,6 +352,10 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
 
   saveInlineEdit(taskId: string, event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canEditIssue()) {
+      this.inlineEditingTaskId.set(null);
+      return;
+    }
     const newTitle = this.inlineTitleValue().trim();
     if (newTitle) {
       const item = this.items().find(i => i.id === taskId);
@@ -364,6 +386,7 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
   // Quick Inline Status Shift
   moveStatus(task: WorkItem, direction: 'prev' | 'next', event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canTransitionIssue()) return;
     const statuses = this.boardColumns().map(s => s.name);
     const idx = statuses.indexOf(task.statusName);
     if (direction === 'next' && idx < statuses.length - 1) {
@@ -377,17 +400,20 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
 
   updateInlineStatus(taskId: string, statusName: string, event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canTransitionIssue()) return;
     this.animateBoardChange(() => this.projectService.updateWorkItemStatus(taskId, statusName));
   }
 
   updateInlineAssignee(taskId: string, assigneeName: string, event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canAssignIssue()) return;
     this.projectService.updateWorkItemAssignee(taskId, assigneeName);
     this.toastService.info('Gán Người Xử Lý', `Đã gán cho ${assigneeName}`);
   }
 
   updateInlinePriority(taskId: string, priority: WorkItem['priority'], event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canEditIssue()) return;
     this.projectService.updateWorkItemPriority(taskId, priority);
     this.toastService.info('Đổi Mức Ưu Tiên', `Độ ưu tiên: ${priority}`);
   }
@@ -425,6 +451,10 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
 
   assignToMe(taskId: string, event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canAssignIssue()) {
+      this.activeMenuTaskId.set(null);
+      return;
+    }
     const myName = this.identityService.authState().currentUser?.displayName || 'Tôi';
     this.projectService.updateWorkItemAssignee(taskId, myName);
     this.activeMenuTaskId.set(null);
@@ -432,6 +462,10 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
 
   cloneItem(taskId: string, event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canCreateIssue()) {
+      this.activeMenuTaskId.set(null);
+      return;
+    }
     const cloned = this.projectService.cloneWorkItem(taskId);
     if (cloned) {
       this.toastService.success('Nhân bản', 'Đã tạo bản sao công việc thành công.');
@@ -441,6 +475,10 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
 
   deleteItem(taskId: string, event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canDeleteIssue()) {
+      this.activeMenuTaskId.set(null);
+      return;
+    }
     this.animateBoardChange(() => this.projectService.deleteWorkItem(taskId));
     this.toastService.warning('Đã Xóa Công Việc', 'Công việc đã xóa khỏi bảng.');
     this.activeMenuTaskId.set(null);

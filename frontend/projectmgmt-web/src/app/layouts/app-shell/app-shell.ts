@@ -302,11 +302,15 @@ export class AppShellComponent {
 
   readonly canEditProjectTasks = computed(() => {
     if (this.canManageActiveProject()) return true;
+    const perms = this.projectService.currentProjectPermissions();
+    if (perms !== null) {
+      return perms.includes('issue.create') || perms.includes('issue.update');
+    }
     const myId = this.identity.authState().currentUser?.id;
     if (!myId) return false;
     const proj = this.activeProject();
     const myMember = (proj.members || []).find(m => m.userId && m.userId.toLowerCase() === myId.toLowerCase());
-    return myMember ? myMember.role !== 'Viewer' : true;
+    return myMember ? myMember.role !== 'Viewer' : false;
   });
 
   @HostListener('document:keydown', ['$event'])

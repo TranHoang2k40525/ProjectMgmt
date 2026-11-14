@@ -732,5 +732,54 @@ public class AiTaskRemovalTests
         Assert.False(persisted.PendingRemovalPlan!.CanDelete);
         Assert.True(persisted.PendingRemovalPlan.CanDetachToBacklog);
         Assert.Equal("detach_to_backlog", persisted.PendingRemovalPlan.RequestedMode);
+        Assert.Contains("Gỡ về Kho Backlog", persisted.AssistantReply, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Xác nhận Xóa", persisted.AssistantReply, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task DecomposeStream_UserWithoutIssueDeleteOnBacklogIssue_ShouldDenyWithoutPhantomConfirmationCard()
+    {
+        var f = await CreateFixtureAsync();
+        await using var _p = f.PlanningDb;
+        await using var _d = f.DeliveryDb;
+        await using var _i = f.IdentityDb;
+
+        var issueId = Guid.NewGuid();
+        f.DeliveryDb.Issues.Add(new Issue
+        {
+            Id = issueId,
+            ProjectId = f.ProjectId,
+            IssueNumber = 43,
+            SprintId = null,
+            StatusId = f.StatusTodoId,
+            IssueTypeId = f.TaskTypeId,
+            Title = "Task trong Backlog không có quyền xóa",
+            StoryPoints = 2,
+            ReporterId = f.LeadUserId
+        });
+        await f.DeliveryDb.SaveChangesAsync();
+
+        var limitedUserId = Guid.NewGuid();
+        f.CurrentUser.UserId = limitedUserId;
+        f.Permissions.AllowedPermissions = ["project.read", "issue.create", "issue.update"];
+
+        const string sessionId = "sprint_ai_stream_rbac_backlog";
+        await f.Controller.DecomposeStream(new AiDecomposeStreamRequest
+        {
+            SessionId = sessionId,
+            ProjectId = f.ProjectId,
+            TargetSprintId = f.Sprint4Id,
+            Prompt = "xóa QLDA-43"
+        });
+
+        var persisted = await f.Staging.GetProposalAsync<AiSprintProposalDto>(sessionId);
+        Assert.NotNull(persisted);
+        Assert.Null(persisted!.PendingRemovalPlan);
+        Assert.Equal("none", persisted.TriggerAction);
+        Assert.Contains("issue.delete", persisted.AssistantReply, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("bên dưới", persisted.AssistantReply, StringComparison.OrdinalIgnoreCase);
+        var lastTurn = persisted.ConversationHistory!.Last(t => t.Role == "assistant");
+        Assert.Null(lastTurn.RemovalPlan);
+        Assert.Equal(persisted.AssistantReply, lastTurn.Content);
     }
 }

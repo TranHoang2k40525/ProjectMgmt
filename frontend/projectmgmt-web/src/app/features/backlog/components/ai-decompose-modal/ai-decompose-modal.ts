@@ -1850,9 +1850,13 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
     const referencedMemoryAnchors = lastBackendAssistantTurn?.referencedMemoryAnchors ?? [];
     const documentCitations = lastBackendAssistantTurn?.documentCitations ?? [];
     const turnExportSpec = lastBackendAssistantTurn?.exportSpec ?? prop.exportSpec ?? null;
-    const turnRemovalPlan =
+    const rawRemovalPlan =
       lastBackendAssistantTurn?.removalPlan ??
       (prop.pendingRemovalPlan?.status === 'pending' ? prop.pendingRemovalPlan : null);
+    const turnRemovalPlan =
+      rawRemovalPlan && !(rawRemovalPlan.canDelete === false && rawRemovalPlan.canDetachToBacklog === false)
+        ? rawRemovalPlan
+        : null;
     if (turnRemovalPlan) {
       this.initRemovalSelectionForPlan(turnRemovalPlan);
     }

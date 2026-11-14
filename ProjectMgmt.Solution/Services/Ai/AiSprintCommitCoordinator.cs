@@ -1749,17 +1749,36 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
         if (_roleServices != null)
         {
             var membersDto = await _roleServices.GetProjectMembersAsync(project.Id);
-            var memberIds = membersDto.Items?
-                .Where(m => m.UserId.HasValue && m.UserId.Value != Guid.Empty)
-                .Select(m => m.UserId!.Value)
-                .ToHashSet() ?? [];
-            if (project.LeadUserId != Guid.Empty)
-            {
-                memberIds.Add(project.LeadUserId);
-            }
+            var memberIds = ExtractProjectMemberIds(
+                membersDto.Members,
+                membersDto.Items,
+                m => m.UserId,
+                project.LeadUserId);
             eligibleUsers = allUsers.Where(u => memberIds.Contains(u.UserId)).ToList();
         }
         return (eligibleUsers, eligibleUsers.ToDictionary(u => u.UserId));
+    }
+
+    private static HashSet<Guid> ExtractProjectMemberIds<TMember>(
+        IEnumerable<TMember>? members,
+        IEnumerable<TMember>? items,
+        Func<TMember, Guid?> getUserId,
+        Guid leadUserId)
+    {
+        // RoleServices.GetProjectMembersAsync populates Members, while some mocks/tests populate Items; read both safely.
+        var ids = (members ?? Enumerable.Empty<TMember>())
+            .Concat(items ?? Enumerable.Empty<TMember>())
+            .Select(getUserId)
+            .Where(id => id.HasValue && id.Value != Guid.Empty)
+            .Select(id => id!.Value)
+            .ToHashSet();
+
+        if (leadUserId != Guid.Empty)
+        {
+            ids.Add(leadUserId);
+        }
+
+        return ids;
     }
 
     private static AiQuickActionConfirmResponse QuickFailure(string code, string message, AiQuickActionPlanDto plan) => new()
@@ -2177,15 +2196,11 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
         if (_roleServices != null)
         {
             var membersDto = await _roleServices.GetProjectMembersAsync(project.Id);
-            projectMemberIds = membersDto.Items?
-                .Where(m => m.UserId.HasValue && m.UserId.Value != Guid.Empty)
-                .Select(m => m.UserId!.Value)
-                .ToHashSet() ?? [];
-
-            if (project.LeadUserId != Guid.Empty)
-            {
-                projectMemberIds.Add(project.LeadUserId);
-            }
+            projectMemberIds = ExtractProjectMemberIds(
+                membersDto.Members,
+                membersDto.Items,
+                m => m.UserId,
+                project.LeadUserId);
 
             eligibleUsers = allUsers.Where(u => projectMemberIds.Contains(u.UserId)).ToList();
         }

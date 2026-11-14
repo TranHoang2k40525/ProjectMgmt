@@ -55,27 +55,16 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
   readonly projectMembers = computed(() => this.projectService.currentProject()?.members ?? []);
 
-  readonly canManageSprints = computed(() => {
-    if (this.identityService.isSystemAdmin()) return true;
-    const myId = this.identityService.authState().currentUser?.id;
-    if (!myId) return false;
-    const proj = this.projectService.currentProject();
-    if (proj.leadUserId && proj.leadUserId.toLowerCase() === myId.toLowerCase()) return true;
-    const myMember = (proj.members || []).find(m => m.userId && m.userId.toLowerCase() === myId.toLowerCase());
-    if (myMember && ['Project Lead', 'Lead', 'Giám đốc DA', 'ProjectManager', 'Scrum Master', 'ScrumMaster', 'ProductOwner'].includes(myMember.role)) return true;
-    return false;
-  });
-
-  readonly canUseAiAssistant = computed(() => {
-    if (this.identityService.isSystemAdmin()) return true;
-    const myId = this.identityService.authState().currentUser?.id;
-    if (!myId) return false;
-    const proj = this.projectService.currentProject();
-    if (proj.leadUserId && proj.leadUserId.toLowerCase() === myId.toLowerCase()) return true;
-    const myMember = (proj.members || []).find(m => m.userId && m.userId.toLowerCase() === myId.toLowerCase());
-    if (!myMember) return false;
-    return myMember.role !== 'Viewer';
-  });
+  readonly canManageSprints = this.projectService.canManageSprints;
+  readonly canUseAiAssistant = this.projectService.canUseAiAssistant;
+  readonly canCreateIssue = this.projectService.canCreateIssue;
+  readonly canEditIssue = this.projectService.canEditIssue;
+  readonly canDeleteIssue = this.projectService.canDeleteIssue;
+  readonly canTransitionIssue = this.projectService.canTransitionIssue;
+  readonly canAssignIssue = this.projectService.canAssignIssue;
+  readonly canRankBacklog = this.projectService.canRankBacklog;
+  readonly canAiBreakdown = this.projectService.canAiBreakdown;
+  readonly canAiAssign = this.projectService.canAiAssign;
 
   // Search & Filter State
   searchQuery = signal<string>('');
@@ -131,6 +120,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   activeInlineSprintId = signal<string | null>(null);
 
   toggleInlineCreate(sprintId: string): void {
+    if (!this.canCreateIssue()) return;
     if (this.activeInlineSprintId() === sprintId) {
       this.activeInlineSprintId.set(null);
     } else {
@@ -329,6 +319,10 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   // Nếu thả ra ngoài danh sách, CDK tự động hoàn vị trí ban đầu.
   onSprintDrop(event: CdkDragDrop<WorkItem[]>, targetSprintId: string, targetSprintName: string): void {
     if (event.previousContainer === event.container) {
+      if (!this.canRankBacklog()) {
+        event.item.reset();
+        return;
+      }
       if (event.previousIndex !== event.currentIndex) {
         const list = [...event.container.data];
         moveItemInArray(list, event.previousIndex, event.currentIndex);
@@ -336,6 +330,11 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
       } else {
         event.item.reset();
       }
+      return;
+    }
+
+    if (!this.canEditIssue() && !this.canManageSprints()) {
+      event.item.reset();
       return;
     }
 
@@ -367,22 +366,25 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
     switch (event.action) {
       case 'status':
-        if (event.value) {
+        if (event.value && this.canTransitionIssue()) {
           this.projectService.updateWorkItemStatus(item.id, event.value);
         }
         break;
 
       case 'assign': {
+        if (!this.canAssignIssue()) break;
         const myName = this.identityService.authState().currentUser?.displayName || 'Tôi';
         this.projectService.updateWorkItemAssignee(item.id, myName);
         break;
       }
 
       case 'ai-breakdown':
+        if (!this.canAiBreakdown()) break;
         this.aiQuickAction.triggerBreakdown(item);
         break;
 
       case 'ai-assign':
+        if (!this.canAiAssign()) break;
         this.aiQuickAction.triggerAssignSuggestion(item);
         break;
 
@@ -392,6 +394,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
         break;
 
       case 'delete':
+        if (!this.canDeleteIssue()) break;
         this.projectService.deleteWorkItem(item.id);
         this.toastService.warning('Đã Xóa', `Đã xóa [${item.issueKey}]`);
         break;
@@ -424,11 +427,16 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
   startEditingTaskTitle(item: WorkItem, event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canEditIssue()) return;
     this.editingTaskId.set(item.id);
     this.editingTaskTitle.set(item.title);
   }
 
   saveEditingTaskTitle(taskId: string): void {
+    if (!this.canEditIssue()) {
+      this.editingTaskId.set(null);
+      return;
+    }
     const title = this.editingTaskTitle().trim();
     if (title) {
       const item = this.workItems().find(task => task.id === taskId);
@@ -439,12 +447,17 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
   startEditingStoryPoints(item: WorkItem, event?: Event): void {
     event?.stopPropagation();
+    if (!this.canEditIssue()) return;
     this.editingStoryPointsTaskId.set(item.id);
     this.editingStoryPointsValue.set(item.storyPoints ?? 0);
   }
 
   saveStoryPoints(taskId: string, event?: Event): void {
     event?.stopPropagation();
+    if (!this.canEditIssue()) {
+      this.editingStoryPointsTaskId.set(null);
+      return;
+    }
     const value = Math.max(0, Math.min(999, Number(this.editingStoryPointsValue()) || 0));
     this.projectService.updateWorkItemStoryPoints(taskId, value);
     this.editingStoryPointsTaskId.set(null);
@@ -452,6 +465,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
   updateInlinePriorityNext(taskId: string, currentPriority: WorkItem['priority'], event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canEditIssue()) return;
     const priorities = this.projectService.projectPriorities();
     if (priorities && priorities.length > 0) {
       const names = priorities.map(p => p.name);
@@ -474,6 +488,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
   toggleStatusDropdown(taskId: string, event: Event): void {
     event.stopPropagation();
+    if (!this.canTransitionIssue()) return;
     this.activeStatusDropdownTaskId.update(curr => curr === taskId ? null : taskId);
     this.activeEpicDropdownTaskId.set(null);
     this.activeMenuTaskId.set(null);
@@ -484,6 +499,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   toggleEpicDropdown(taskId: string, event: Event): void {
     event.stopPropagation();
     event.preventDefault();
+    if (!this.canEditIssue()) return;
     this.activeEpicDropdownTaskId.update(curr => curr === taskId ? null : taskId);
     this.activeStatusDropdownTaskId.set(null);
     this.activeMenuTaskId.set(null);
@@ -505,6 +521,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
       event.stopPropagation();
       event.preventDefault();
     }
+    if (!this.canEditIssue()) return;
     const epic = this.epics().find(e => e.name === epicName);
     this.projectService.updateWorkItemEpic(taskId, epicName || '', epic?.color || 'indigo');
     this.activeEpicDropdownTaskId.set(null);
@@ -878,6 +895,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   saveSprintDetail(): void {
+    if (!this.canManageSprints()) return;
     const sprint = this.activeSprintDetail();
     if (!sprint) return;
     const name = this.editingSprintName().trim();
@@ -1009,6 +1027,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
   startEditingSprint(sprint: Sprint, event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canManageSprints()) return;
     this.editingSprintId.set(sprint.id);
     this.editingSprintName.set(sprint.name);
     this.editingSprintGoal.set(sprint.goal || '');
@@ -1017,6 +1036,10 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   saveEditingSprint(sprintId: string): void {
+    if (!this.canManageSprints()) {
+      this.editingSprintId.set(null);
+      return;
+    }
     const name = this.editingSprintName().trim();
     if (name) {
       this.projectService.updateSprintInfo(sprintId, name, this.editingStartDate(), this.editingEndDate(), this.editingSprintGoal());
@@ -1046,6 +1069,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   createSprint(): void {
+    if (!this.canManageSprints()) return;
     this.projectService.addNewSprint();
     this.toastService.success('Tạo Sprint', 'Đã thêm Sprint mới.');
   }
@@ -1088,7 +1112,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   createEpic(): void {
-    if (!this.newEpicName.trim()) return;
+    if (!this.canCreateIssue() || !this.newEpicName.trim()) return;
     const name = this.newEpicName.trim();
     this.projectService.addEpic(name, this.newEpicColor);
     this.toastService.success('Tạo Epic', `Đã tạo Epic "${name}".`);
@@ -1137,6 +1161,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
   openSubtaskInput(taskId: string, event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canCreateIssue()) return;
     this.activeSubtaskInputId.set(taskId);
     if (!this.expandedSubtasks()[taskId]) {
       this.expandedSubtasks.update(m => ({ ...m, [taskId]: true }));
@@ -1144,6 +1169,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   createInlineSubtask(parentId: string): void {
+    if (!this.canCreateIssue()) return;
     const title = this.subtaskTitleMap[parentId];
     if (!title || !title.trim()) return;
 
@@ -1155,6 +1181,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
   // --- Inline Quick Task Creation per Sprint ---
   createInlineSprintTask(sprintId: string, sprintName: string): void {
+    if (!this.canCreateIssue()) return;
     const title = this.inlineTaskTitleMap[sprintId];
     if (!title || !title.trim()) return;
 
@@ -1182,6 +1209,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   // --- Sprint Header Controls ---
   toggleSprintStatus(sprint: Sprint, event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canManageSprints()) return;
     if (sprint.status === 'future') {
       this.projectService.updateSprintStatus(sprint.id, 'active');
       this.toastService.success('Kích hoạt Sprint', `Sprint "${sprint.name}" đã bắt đầu.`);
@@ -1195,6 +1223,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
   moveSprintToBacklog(sprint: Sprint, event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canManageSprints()) return;
     this.projectService.moveSprintItemsToBacklog(sprint.id);
     this.toastService.info('Chuyển Công Việc', `Công việc trong ${sprint.name} đã chuyển về Backlog.`);
   }
@@ -1212,6 +1241,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
   updateInlineStatus(taskId: string, statusName: string, event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canTransitionIssue()) return;
     this.projectService.updateWorkItemStatus(taskId, statusName);
   }
 
@@ -1238,6 +1268,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
   updateWorkItemSprint(taskId: string, sprintId: string, sprintName: string, event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canEditIssue() && !this.canManageSprints()) return;
     this.projectService.updateWorkItemSprint(taskId, sprintId, sprintName);
     this.toastService.info('Chuyển Sprint', `Đã gán vào ${sprintName}`);
   }
@@ -1253,6 +1284,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
   assignToMe(taskId: string, event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canAssignIssue()) return;
     const myName = this.identityService.authState().currentUser?.displayName || 'Tôi';
     this.projectService.updateWorkItemAssignee(taskId, myName);
     this.activeMenuTaskId.set(null);
@@ -1260,6 +1292,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
   cloneItem(taskId: string, event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canCreateIssue()) return;
     const cloned = this.projectService.cloneWorkItem(taskId);
     if (cloned) {
       this.toastService.success('Nhân bản', 'Đã tạo bản sao công việc thành công.');
@@ -1269,6 +1302,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
 
   deleteItem(taskId: string, event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canDeleteIssue()) return;
     this.projectService.deleteWorkItem(taskId);
     this.toastService.warning('Đã Xóa Công Việc', 'Đã xóa công việc khỏi hệ thống.');
     this.activeMenuTaskId.set(null);
@@ -1291,6 +1325,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   bulkChangeStatus(newStatus: string): void {
+    if (!this.canTransitionIssue()) return;
     const ids = this.selectedTaskIds();
     if (ids.length === 0) return;
     this.projectService.bulkUpdateStatus(ids, newStatus);
@@ -1299,6 +1334,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   bulkChangeSprint(sprintId: string, fallbackSprintName: string = 'Sprint đã chọn'): void {
+    if (!this.canEditIssue() && !this.canManageSprints()) return;
     const ids = this.selectedTaskIds();
     if (ids.length === 0) return;
     const sprintName = this.sprints().find(s => s.id === sprintId)?.name ?? fallbackSprintName;
@@ -1308,6 +1344,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   bulkDeleteTasks(): void {
+    if (!this.canDeleteIssue()) return;
     const ids = this.selectedTaskIds();
     if (ids.length === 0) return;
     this.projectService.bulkDelete(ids);
