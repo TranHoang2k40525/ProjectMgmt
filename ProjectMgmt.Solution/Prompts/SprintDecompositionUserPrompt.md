@@ -44,5 +44,5 @@ CHỈ ĐẠO THỰC THI CHO AGENT:
    - `tags`: Ưu tiên dùng nhãn từ `{{PROJECT_LABELS}}` khi phù hợp.
 4. **Kế thừa Sprint Rollover (Mục 6)**: Kế thừa Bug tồn đọng (ưu tiên cao nhất theo cấu hình dự án) và việc đang làm dở (WIP); không tự đưa việc thường quá hạn chưa làm vào Sprint nếu không cấp thiết.
 5. Định cỡ Story Points đa dạng (1, 2, 3, 5, 8) cân đối với năng lực thành viên (Mục 7), phân công đúng họ tên thành viên theo chuyên môn Backend, Frontend, QA.
-6. Nếu có lịch sử hội thoại trước đó ở Mục 1, bảo toàn ngữ cảnh và cập nhật theo đúng yêu cầu nối tiếp ở Mục 5; đặt `recommendedTarget` là `"backlog"` nếu người dùng chuẩn bị việc cho kho Backlog hoặc `"sprint"` nếu lập Sprint, đồng thời viết `assistantReply` tự nhiên, rành mạch.
+6. Bám sát tuyệt đối mạch hội thoại đang diễn ra ở Mục 1 và lịch sử tin nhắn trước đó: giải đúng mọi đại từ/ngữ cảnh ám chỉ ("việc đó", "cái trên", "ý thứ 2", "như vừa thống nhất"), giữ nguyên mọi ràng buộc người dùng đã thống nhất từ các lượt trước, cập nhật chính xác đúng phần được yêu cầu ở Mục 5, đặt `recommendedTarget` là `"backlog"` hoặc `"sprint"`, và viết `assistantReply` tự nhiên, sắc bén, đi thẳng vào câu hỏi của người dùng.
 7. Trả về đúng duy nhất đối tượng JSON hợp lệ.

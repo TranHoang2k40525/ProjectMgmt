@@ -242,7 +242,9 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
      - Khi hoàn thành: hiển thị biểu tượng xác nhận xanh ngọc (`check_circle`) + tóm tắt (`Đã suy nghĩ xong trong X.Xs · N thao tác`).
      - Mặc định luôn đóng ở mọi trạng thái (streaming, hoàn tất, khôi phục từ DB). Chỉ khi người dùng nhấp vào thanh tiêu đề mới xổ ra từng bước thao tác chi tiết (`actionVerb`, `target`, `summary`, `durationMs`) và các chip `#mem-X` đã nạp.
   2. **Selective MCP Routing & Indexed Memory (`AiIndexedMemoryEngine`)**:
-     - Trước khi gọi MCP Tools, `PlanContextExecution` phân tích câu hỏi + lịch sử phiên: chào hỏi/hỏi khả năng $\rightarrow$ `0` MCP calls; câu hỏi nối tiếp hoặc nhắc lại `#mem-1` $\rightarrow$ chỉ gọi `memory_recall` trích xuất đúng mảnh trí nhớ tương ứng; hỏi đáp hẹp $\rightarrow$ chỉ gọi 1–2 tool cần thiết; lập kế hoạch Sprint/Backlog $\rightarrow$ gọi đầy đủ bộ MCP quy chuẩn.
+     - Trước khi gọi MCP Tools, `PlanContextExecution` phân tích câu hỏi + lịch sử phiên: chào hỏi/hỏi khả năng $\rightarrow$ `0` MCP calls; câu hỏi nối tiếp hoặc nhắc lại `#mem-1` $\rightarrow$ ưu tiên dùng trực tiếp trí nhớ phiên kết hợp `memory_recall` trích xuất đúng mảnh trí nhớ tương ứng (kèm kế thừa chủ đề lượt trước cho các câu đại từ rút gọn); hỏi đáp hẹp $\rightarrow$ chỉ gọi 1–2 tool cần thiết; lập kế hoạch Sprint/Backlog $\rightarrow$ gọi đầy đủ bộ MCP quy chuẩn.
+  3. **Bám sát Mạch Hội thoại Đa lượt Thực thụ (`BuildNativeConversationMessages`)**:
+     - Cả luồng Q&A và luồng lập/tinh chỉnh đề xuất đều gửi chuỗi `AiMessage` luân phiên thực thụ (`User` $\leftrightarrow$ `Assistant` $\leftrightarrow$ `User`) cùng danh mục **Ràng buộc & Thỏa thuận xuyên suốt phiên**, cửa sổ 8 lượt hội thoại gần nhất và chi tiết công việc đang staging (mô tả, tiêu chí nghiệm thu, trích dẫn). Đồng thời bộ phân loại hiểu đúng câu hỏi nối tiếp/mệnh lệnh không dấu `?` mà vẫn chặn triệt để yêu cầu ngoài luồng và giữ nguyên liên kết `sourceBacklogIssueId` qua các lần chỉnh sửa.
 
 ---
 

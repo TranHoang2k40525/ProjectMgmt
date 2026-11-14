@@ -39,7 +39,7 @@ flowchart TD
    - Quy chuẩn Bảo mật Tuyệt đối: Zero-Secret-Leakage & Khóa chặt Phạm vi Tổ chức - Dự án - Người dùng (`OrganizationId`, `ProjectId`, `UserId`).
 
 2. [**Chuyên đề 2: Sơ đồ Tuần tự & Sơ đồ Hoạt động**](file:///c:/Users/hoang/Downloads/ProjectMgmt/docs/ai/02-so-do-tuan-tu-va-hoat-dong.md)
-   - Bộ định tuyến Ý định Hội thoại & **Selective MCP Context Router**: chỉ gọi MCP Tools khi input + ngữ cảnh thực sự cần thiết; trả lời trực tiếp câu hỏi thông thường hoặc chỉ gọi `memory_recall` cho câu hỏi nối tiếp.
+   - Bộ định tuyến Ý định Hội thoại & **Selective MCP Context Router**: chỉ gọi MCP Tools khi input + ngữ cảnh thực sự cần thiết; hiểu tự nhiên câu hỏi nối tiếp/đại từ quy chiếu (*"nó"*, *"ý đầu tiên"*) và câu hỏi đáp mệnh lệnh (*"tóm tắt"*, *"liệt kê"*) thông qua chuỗi `AiMessage` đa lượt thực thụ (`User` $\leftrightarrow$ `Assistant`) kèm ràng buộc xuyên suốt phiên.
    - Giao diện **Thinking Log (Nhật ký Suy nghĩ & Thao tác Agent)** tông sáng chuẩn hệ thống, **mặc định luôn đóng (collapsed)** ở mọi trạng thái (đang chạy, hoàn thành, khôi phục phiên), chỉ hiển thị chi tiết từng hành động và `#mem-X` khi người dùng chủ động mở rộng.
    - Sơ đồ Tuần tự (Sequence Diagram) & Sơ đồ Hoạt động (Activity Diagram) quy trình Agentic Workflow đa lượt gắn bền vững với MySQL & Redis.
    - Luồng truyền dữ liệu thời gian thực Server-Sent Events (SSE) kèm `sessionId` phiên hội thoại và metadata thao tác (`actionVerb`, `targetLabel`, `detailPreview`).
@@ -47,7 +47,7 @@ flowchart TD
 3. [**Chuyên đề 3: Cơ chế Trí nhớ Đa tầng, Chỉ mục Ngữ cảnh & Lưu trữ Bền vững**](file:///c:/Users/hoang/Downloads/ProjectMgmt/docs/ai/03-co-che-tri-nho-redis-memory.md)
    - Kiến trúc Lưu trữ Kép (**Redis Hot Cache + MySQL Durable Session Persistence**): khôi phục phiên cũ kể cả khi Redis hết hạn hoặc khởi động lại (**Cold-Redis DB Fallback & Re-hydration**).
    - **Phân trang Ngược Kiểu Messenger & Tự Cuộn Xuống Mới Nhất**: Khi mở lại phiên làm việc, chỉ nạp trước cửa sổ 12 lượt mới nhất (`tailLimit=12`), tự động cuộn tức thì xuống cuối đoạn chat, tải nối tiếp tin cũ hơn qua `GET /api/ai/agent/sessions/{sessionId}/messages` kèm giữ nguyên vị trí đọc và giới hạn RAM/cache trình duyệt.
-   - **Hệ thống Đánh Chỉ Mục Trí Nhớ (`#mem-1`, `#mem-2`, ...)**: tách và đánh chỉ mục từng khối ngữ cảnh hội thoại để Agent trỏ thẳng vào mảnh trí nhớ liên quan thay vì nạp toàn bộ context thô.
+   - **Hệ thống Đánh Chỉ Mục Trí Nhớ (`#mem-1`, `#mem-2`, ...) & Bám sát Mạch Phiên**: tách và đánh chỉ mục từng khối ngữ cảnh hội thoại để Agent trỏ thẳng vào mảnh trí nhớ liên quan (có kế thừa chủ đề lượt trước cho câu hỏi rút gọn), kết hợp tổng hợp thỏa thuận phiên và bản tóm tắt đầy đủ công việc đang staging.
    - **Khóa chặt Phạm vi Đa chiều (`OrganizationId`, `ProjectId`, `UserId`)**: cô lập hoàn toàn danh sách phiên, xem/tiếp tục phiên, cập nhật staging, commit và xóa phiên (`DELETE /api/ai/agent/sessions/{sessionId}`).
    - Chuyển đổi nút **"Tạo mới"** không phá hủy (chỉ khởi tạo khung hội thoại trắng trên UI, bảo toàn toàn bộ phiên làm việc cũ trong DB).
 

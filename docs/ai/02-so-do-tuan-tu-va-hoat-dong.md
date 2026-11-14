@@ -145,7 +145,7 @@ Quy trình xử lý nội bộ của [`AiSprintDecompositionService.cs`](file://
 
 ```mermaid
 flowchart TD
-    Start(["Bắt đầu: Tiếp nhận lượt hội thoại từ Người dùng (hoặc mở lại phiên cũ)"]) --> Step1["BƯỚC 1: KHÓA PHẠM VI, NẠP TRÍ NHỚ KÉP & PHÂN LOẠI Ý ĐỊNH\n- Xác thực bộ ba (Tổ chức, Dự án, Người dùng)\n- Tải phiên từ Bộ nhớ đệm Nóng; nếu hết hạn thì nạp bù từ CSDL\n- Đọc danh mục chỉ mục trí nhớ (#mem-1..#mem-n)\n- Phân loại ý định người dùng"]
+    Start(["Bắt đầu: Tiếp nhận lượt hội thoại từ Người dùng (hoặc mở lại phiên cũ)"]) --> Step1["BƯỚC 1: KHÓA PHẠM VI, NẠP TRÍ NHỚ KÉP & PHÂN LOẠI Ý ĐỊNH\n- Xác thực bộ ba (Tổ chức, Dự án, Người dùng)\n- Tải phiên từ Bộ nhớ đệm Nóng; nếu hết hạn thì nạp bù từ CSDL\n- Trích xuất ràng buộc xuyên suốt phiên & kế thừa chủ đề lượt trước cho câu hỏi rút gọn\n- Phân loại ý định (nhận diện câu hỏi nối tiếp, hỏi đáp mệnh lệnh & rào chắn ngoài luồng)"]
 
     Step1 --> GuardIntent{"Kiểm tra Ý định\n& Kế hoạch Thực thi"}
 
@@ -161,13 +161,13 @@ flowchart TD
     GuardIntent -- "Chào hỏi / Hỏi khả năng" --> ZeroMcp["LUỒNG TRỰC TIẾP (0 CÔNG CỤ DỮ LIỆU)\n- Không gọi công cụ dự án thừa\n- Phản hồi súc tích đúng trọng tâm câu hỏi"]
     ZeroMcp --> SaveDual
 
-    GuardIntent -- "Câu hỏi nối tiếp / Nhắc lại #mem-X" --> RecallOnly["TRUY XUẤT CHỈ MỤC TRÍ NHỚ\n- Chỉ đọc đúng các mảnh trí nhớ (#mem-X) liên quan\n- Không gọi công cụ dự án ngoài cần thiết"]
-    RecallOnly --> Step4Focus["Suy luận câu trả lời tập trung từ mảnh trí nhớ vừa nạp"]
+    GuardIntent -- "Câu hỏi nối tiếp / Đại từ quy chiếu / Nhắc #mem-X" --> RecallOnly["TRUY XUẤT CHỈ MỤC TRÍ NHỚ & ĐỀ XUẤT ĐANG STAGING\n- Chỉ đọc đúng mảnh trí nhớ (#mem-X) + tóm tắt mô tả/tiêu chí việc đang staging\n- Xây dựng chuỗi hội thoại đa lượt thực thụ kèm thỏa thuận phiên trước đó"]
+    RecallOnly --> Step4Focus["Suy luận câu trả lời tập trung, giải mã đúng đại từ theo mạch phiên"]
     Step4Focus --> SaveDual
 
     GuardIntent -- "Hỏi đáp Hẹp hoặc Lập kế hoạch Sprint / Backlog" --> Step2["BƯỚC 2: GỌI CÔNG CỤ DỮ LIỆU CÓ CHỌN LỌC\n- Hỏi đáp hẹp: Chỉ gọi 1-2 công cụ mục tiêu\n- Lập kế hoạch: Gọi đặc tả, Backlog, vận tốc, quy chuẩn & năng lực\n- Ghi nhật ký từng bước kèm thời gian thực thi"]
 
-    Step2 --> Step4["BƯỚC 3: SUY LUẬN ĐÚNG TRỌNG TÂM\n- Trả lời thẳng câu hỏi hoặc bóc tách kế hoạch Sprint/Backlog\n- Kiểm tra khối lượng, nhân sự và trích dẫn hợp chuẩn"]
+    Step2 --> Step4["BƯỚC 3: SUY LUẬN ĐÚNG TRỌNG TÂM TRÊN CHUỖI ĐA LƯỢT\n- Truyền chuỗi hội thoại luân phiên Người dùng - Trợ lý kèm ràng buộc đã chốt\n- Sửa đổi vi phân hoặc bóc tách kế hoạch & bảo toàn liên kết nguồn Backlog"]
 
     Step4 --> SaveDual["BƯỚC 4: ĐÁNH CHỈ MỤC TRÍ NHỚ MỚI & LƯU KÉP\n- Đóng gói ngữ cảnh lượt mới thành mảnh #mem-k\n- Lưu đồng thời vào Bộ nhớ đệm Nóng và CSDL (khóa 3 chiều)"]
 

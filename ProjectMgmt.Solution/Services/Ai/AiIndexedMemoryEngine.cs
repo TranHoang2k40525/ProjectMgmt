@@ -50,11 +50,15 @@ public static partial class AiIndexedMemoryEngine
         string docContent,
         bool hasAttachedDoc,
         AiSprintProposalDto? existingProposal,
-        IReadOnlyList<AiMemoryAnchorDto> allMemories)
+        IReadOnlyList<AiMemoryAnchorDto> allMemories,
+        IReadOnlyList<AiConversationTurnDto>? conversationHistory = null)
     {
         var lower = (effectiveUserText ?? string.Empty).Trim().ToLowerInvariant();
         var combinedLower = $"{lower}\n{(docContent ?? string.Empty).ToLowerInvariant()}";
-        var recalled = SelectRelevantMemories(effectiveUserText, docContent, allMemories, maxMatches: 3);
+        var historyWindow = conversationHistory ?? existingProposal?.ConversationHistory;
+        var isFollowUp = IsConversationalFollowUp(lower) && (historyWindow?.Count > 0 || allMemories.Count > 0);
+        var topicHint = isFollowUp ? BuildRecentTopicHint(historyWindow) : string.Empty;
+        var recalled = SelectRelevantMemories(effectiveUserText, docContent, allMemories, maxMatches: 4, historyWindow);
 
         // 1. Guardrail & Direct Commands: Không gọi thừa các MCP tools không liên quan
         if (intent is "out_of_scope_refusal" or "push_backlog" or "apply_sprint" or "export_excel")
@@ -91,24 +95,33 @@ public static partial class AiIndexedMemoryEngine
                 RecalledMemories: []);
         }
 
-        // 3. Hỏi đáp hoặc tra cứu dựa trên đề xuất / trí nhớ đã đánh chỉ mục (#mem-X) mà không đòi hỏi dữ liệu DB mới
+        // 3. Hỏi đáp dựa trên mạch hội thoại / đề xuất / trí nhớ đã đánh chỉ mục (#mem-X) mà không đòi hỏi truy vấn DB mới
         bool explicitMemoryRef = MemoryAnchorRegex().IsMatch(lower) ||
                                  lower.Contains("lúc nãy") || lower.Contains("vừa nãy") ||
                                  lower.Contains("hồi nãy") || lower.Contains("vừa rồi") ||
                                  lower.Contains("đề xuất hiện tại") || lower.Contains("đoạn chat") ||
-                                 lower.Contains("chúng ta đã") || lower.Contains("nhắc lại");
+                                 lower.Contains("chúng ta đã") || lower.Contains("nhắc lại") ||
+                                 lower.Contains("phần trên") || lower.Contains("ở trên") ||
+                                 lower.Contains("vừa bàn") || lower.Contains("trong phiên");
         bool asksLiveDbData = MentionsSpecHub(combinedLower) || MentionsBacklog(combinedLower) ||
                               MentionsSprint(combinedLower) || MentionsTeam(combinedLower) ||
                               MentionsConfig(combinedLower) || lower.Contains("dự án này") ||
                               lower.Contains("hệ thống") || lower.Contains("dữ liệu thật");
+        bool asksDeeperDbFetch = asksLiveDbData &&
+                                 (lower.Contains("kiểm tra lại") || lower.Contains("đọc lại") ||
+                                  lower.Contains("đọc sâu") || lower.Contains("còn ") ||
+                                  lower.Contains("dữ liệu thật") || lower.Contains("trong db") ||
+                                  lower.Contains("mới nhất"));
 
-        if (intent == "project_qa" && (explicitMemoryRef || (recalled.Count > 0 && !asksLiveDbData)))
+        if (intent == "project_qa" &&
+            !asksDeeperDbFetch &&
+            (explicitMemoryRef ||
+             (isFollowUp && !asksLiveDbData && (recalled.Count > 0 || (historyWindow?.Count ?? 0) > 1)) ||
+             (recalled.Count > 0 && !asksLiveDbData)))
         {
             bool hasProposalMatch = existingProposal?.Tasks?.Count > 0 &&
-                                    (lower.Contains("task") || lower.Contains("story") || lower.Contains("công việc") ||
-                                     lower.Contains("đề xuất") || lower.Contains("sprint goal") || lower.Contains("sp") ||
-                                     lower.Contains("ưu tiên"));
-            if (explicitMemoryRef || hasProposalMatch || (recalled.Count > 0 && !asksLiveDbData))
+                                    (MentionsProposalOrWorkItem(lower) || isFollowUp);
+            if (explicitMemoryRef || hasProposalMatch || isFollowUp || (recalled.Count > 0 && !asksLiveDbData))
             {
                 return new AiContextExecutionPlan(
                     Intent: intent,
@@ -125,16 +138,20 @@ public static partial class AiIndexedMemoryEngine
             }
         }
 
-        // 4. Hỏi đáp dự án (project_qa): CHỈ chọn đúng các MCP Tools người dùng thực sự hỏi
+        // 4. Hỏi đáp dự án (project_qa): CHỈ chọn đúng các MCP Tools người dùng thực sự hỏi (có kế thừa chủ đề hội thoại gần nhất nếu là câu hỏi nối tiếp)
         if (intent == "project_qa")
         {
+            var topicAwareLower = string.IsNullOrWhiteSpace(topicHint)
+                ? combinedLower
+                : $"{combinedLower}\n{topicHint.ToLowerInvariant()}";
+
             bool asksOverview = lower.Contains("tổng quan") || lower.Contains("tóm tắt dự án") ||
                                 lower.Contains("dự án có gì") || lower.Contains("dự án này") ||
                                 lower.Contains("tình hình dự án");
 
-            bool needsSpec = asksOverview || MentionsSpecHub(combinedLower);
-            bool needsBacklog = asksOverview || MentionsBacklog(combinedLower);
-            bool needsSprint = asksOverview || MentionsSprint(combinedLower);
+            bool needsSpec = asksOverview || MentionsSpecHub(combinedLower) || (isFollowUp && MentionsSpecHub(topicAwareLower) && !asksLiveDbData);
+            bool needsBacklog = asksOverview || MentionsBacklog(combinedLower) || (isFollowUp && MentionsBacklog(topicAwareLower) && lower.Contains("còn "));
+            bool needsSprint = asksOverview || MentionsSprint(combinedLower) || (isFollowUp && MentionsSprint(topicAwareLower) && lower.Contains("còn "));
             bool needsTeam = asksOverview || MentionsTeam(combinedLower);
             bool needsConfig = asksOverview || MentionsConfig(combinedLower);
 
@@ -144,10 +161,10 @@ public static partial class AiIndexedMemoryEngine
                 needsSpec = false;
             }
 
-            // Nếu câu hỏi dự án ngắn không khớp từ khóa cụ thể nào -> thử dùng trí nhớ + config cơ bản thay vì gọi cả 5 MCP tool
+            // Nếu câu hỏi dự án ngắn không khớp từ khóa cụ thể nào -> tận dụng trí nhớ & mạch hội thoại hiện tại thay vì gọi thừa 5 MCP tool
             if (!needsSpec && !needsBacklog && !needsSprint && !needsTeam && !needsConfig)
             {
-                if (recalled.Count > 0 || (existingProposal?.ConversationHistory?.Count ?? 0) > 1)
+                if (recalled.Count > 0 || (historyWindow?.Count ?? 0) > 1 || (existingProposal?.Tasks?.Count ?? 0) > 0)
                 {
                     return new AiContextExecutionPlan(
                         Intent: intent,
@@ -167,12 +184,16 @@ public static partial class AiIndexedMemoryEngine
                 needsConfig = true;
             }
 
+            var specQuery = isFollowUp && !string.IsNullOrWhiteSpace(topicHint)
+                ? BuildSpecSearchQuery($"{effectiveUserText} {topicHint}")
+                : BuildSpecSearchQuery(effectiveUserText);
+
             return new AiContextExecutionPlan(
                 Intent: intent,
                 IsGreetingOrHelp: false,
                 UseMemoryOnly: false,
                 NeedsSpecHub: needsSpec,
-                SpecSearchKeyword: BuildSpecSearchQuery(effectiveUserText),
+                SpecSearchKeyword: specQuery,
                 MaxSpecDocsToRead: needsSpec ? 2 : 0,
                 NeedsBacklog: needsBacklog,
                 NeedsSprintHistory: needsSprint,
@@ -360,7 +381,8 @@ public static partial class AiIndexedMemoryEngine
         string? userQuery,
         string? docContent,
         IReadOnlyList<AiMemoryAnchorDto> anchors,
-        int maxMatches = 3)
+        int maxMatches = 3,
+        IReadOnlyList<AiConversationTurnDto>? conversationHistory = null)
     {
         if (anchors == null || anchors.Count == 0)
         {
@@ -380,11 +402,13 @@ public static partial class AiIndexedMemoryEngine
 
         var queryTokens = TokenizeNormalized(query);
         var lowerQuery = query.ToLowerInvariant();
-        bool mentionsPlanOrEdit = lowerQuery.Contains("đề xuất") || lowerQuery.Contains("task") ||
-                                  lowerQuery.Contains("công việc") || lowerQuery.Contains("story") ||
-                                  lowerQuery.Contains("sửa") || lowerQuery.Contains("đổi") ||
-                                  lowerQuery.Contains("thêm") || lowerQuery.Contains("xóa") ||
-                                  lowerQuery.Contains("sprint goal") || lowerQuery.Contains("ưu tiên");
+        var isFollowUp = IsConversationalFollowUp(lowerQuery) || queryTokens.Count <= 4;
+        var contextTopicTokens = isFollowUp && conversationHistory != null && conversationHistory.Count > 0
+            ? TokenizeNormalized(BuildRecentTopicHint(conversationHistory))
+            : [];
+
+        bool mentionsPlanOrEdit = MentionsProposalOrWorkItem(lowerQuery) || isFollowUp;
+        var maxTurn = anchors.Max(a => a.TurnIndex);
 
         var scored = new List<(AiMemoryAnchorDto Anchor, int Score)>();
         foreach (var anchor in anchors)
@@ -392,12 +416,12 @@ public static partial class AiIndexedMemoryEngine
             int score = 0;
             if (explicitNums.Contains(anchor.AnchorKey))
             {
-                score += 100;
+                score += 120;
             }
 
             if (mentionsPlanOrEdit && anchor.Category == "proposal_snapshot")
             {
-                score += 18;
+                score += 22;
             }
 
             var keyNorm = NormalizeForMatch($"{anchor.Title} {anchor.Keywords}");
@@ -406,15 +430,37 @@ public static partial class AiIndexedMemoryEngine
 
             foreach (var tok in queryTokens)
             {
-                if (keyNorm.Contains(tok, StringComparison.Ordinal)) score += 8;
-                else if (summaryNorm.Contains(tok, StringComparison.Ordinal)) score += 5;
-                else if (detailNorm.Contains(tok, StringComparison.Ordinal)) score += 2;
+                if (keyNorm.Contains(tok, StringComparison.Ordinal)) score += 9;
+                else if (summaryNorm.Contains(tok, StringComparison.Ordinal)) score += 6;
+                else if (detailNorm.Contains(tok, StringComparison.Ordinal)) score += 3;
+            }
+
+            // Nếu là câu hỏi nối tiếp / đại từ ám chỉ ("nó", "phần trên", "chi tiết hơn"):
+            // dùng từ khóa chủ đề của lượt thoại liền trước để neo đúng mảnh trí nhớ đang bàn
+            if (score == 0 && contextTopicTokens.Count > 0)
+            {
+                foreach (var ctxTok in contextTopicTokens.Take(10))
+                {
+                    if (keyNorm.Contains(ctxTok, StringComparison.Ordinal)) score += 4;
+                    else if (summaryNorm.Contains(ctxTok, StringComparison.Ordinal)) score += 2;
+                }
+            }
+
+            // Ưu tiên nhẹ các mảnh trí nhớ gần nhất khi điểm tương đồng gần nhau
+            if (score > 0 && anchor.TurnIndex == maxTurn)
+            {
+                score += 2;
             }
 
             if (score > 0)
             {
                 scored.Add((anchor, score));
             }
+        }
+
+        if (scored.Count == 0 && isFollowUp)
+        {
+            return anchors.TakeLast(Math.Min(2, maxMatches)).ToList();
         }
 
         return scored
@@ -437,7 +483,7 @@ public static partial class AiIndexedMemoryEngine
         if (allMemories.Count > 0)
         {
             sb.AppendLine("### CHỈ MỤC TRÍ NHỚ ĐƯỢC ĐÁNH DẤU (#mem) CỦA PHIÊN:");
-            foreach (var mem in allMemories.TakeLast(12))
+            foreach (var mem in allMemories.TakeLast(14))
             {
                 sb.AppendLine($"- [{mem.AnchorKey} | {mem.Category}] {mem.Title} -> {mem.Summary}");
             }
@@ -446,7 +492,7 @@ public static partial class AiIndexedMemoryEngine
         if (recalledMemories.Count > 0)
         {
             sb.AppendLine();
-            sb.AppendLine("### CHI TIẾT TRÍ NHỚ ĐƯỢC TRỎ (MEMORY RECALL - DÙNG TRỰC TIẾP KHÔNG CẦN NẠP LẠI HỘI THOẠI CŨ):");
+            sb.AppendLine("### CHI TIẾT TRÍ NHỚ ĐƯỢC TRỎ (MEMORY RECALL - DÙNG TRỰC TIẾP ĐỂ GIẢI ĐÁP & SUY LUẬN):");
             foreach (var mem in recalledMemories)
             {
                 sb.AppendLine($"#### {mem.AnchorKey} ({mem.Title})");
@@ -454,14 +500,36 @@ public static partial class AiIndexedMemoryEngine
             }
         }
 
-        if (history != null && history.Count > 1)
+        var priorTurns = history != null && history.Count > 1
+            ? history.Take(history.Count - 1).ToList()
+            : [];
+
+        var activeDirectives = ExtractActiveSessionDirectives(priorTurns);
+        if (activeDirectives.Count > 0)
         {
             sb.AppendLine();
-            sb.AppendLine("### LỊCH SỬ ĐOẠN HỘI THOẠI TRƯỚC ĐÓ (2 LƯỢT GẦN NHẤT):");
-            foreach (var turn in history.Take(Math.Max(0, history.Count - 1)).TakeLast(2))
+            sb.AppendLine("### RÀNG BUỘC & THỎA THUẬN XUYÊN SUỐT PHIÊN TỪ NGƯỜI DÙNG:");
+            foreach (var d in activeDirectives)
             {
-                var speaker = turn.Role == "user" ? "Người dùng (Tôi)" : "Trợ Lý AI";
-                var compactContent = turn.Content.Length > 450 ? turn.Content[..450] + "..." : turn.Content;
+                sb.AppendLine($"- {d}");
+            }
+        }
+
+        if (priorTurns.Count > 0)
+        {
+            var window = priorTurns.TakeLast(8).ToList();
+            sb.AppendLine();
+            sb.AppendLine($"### LỊCH SỬ ĐOẠN HỘI THOẠI TRƯỚC ĐÓ ({window.Count} LƯỢT GẦN NHẤT):");
+            for (int i = 0; i < window.Count; i++)
+            {
+                var turn = window[i];
+                bool isVeryRecent = i >= window.Count - 4;
+                int maxChars = isVeryRecent ? 1200 : 480;
+                var meta = turn.Role == "assistant" && (!string.IsNullOrWhiteSpace(turn.Intent) || (turn.TaskCount ?? 0) > 0)
+                    ? $" | {turn.Intent ?? "chat"}{(turn.TaskCount > 0 ? $" | {turn.TaskCount} việc" : string.Empty)}"
+                    : string.Empty;
+                var speaker = turn.Role == "user" ? "Người dùng (Tôi)" : $"Trợ Lý AI{meta}";
+                var compactContent = turn.Content.Length > maxChars ? turn.Content[..maxChars] + "..." : turn.Content;
                 sb.AppendLine($"- [{speaker}]: {compactContent}");
             }
         }
@@ -470,12 +538,32 @@ public static partial class AiIndexedMemoryEngine
         {
             sb.AppendLine();
             sb.AppendLine($"### DANH SÁCH CÔNG VIỆC ĐANG LƯU TRONG PHIÊN HIỆN TẠI (Mục tiêu: {existingProposal.SprintGoal} | Đích đề xuất: {existingProposal.RecommendedTarget}):");
-            foreach (var t in existingProposal.Tasks)
+            var tasks = existingProposal.Tasks;
+            for (int tIdx = 0; tIdx < tasks.Count; tIdx++)
             {
+                var t = tasks[tIdx];
+                bool includeRich = tIdx < 16;
                 var backlogRef = !string.IsNullOrWhiteSpace(t.SourceBacklogIssueKey)
                     ? $" | Nguồn Backlog: {t.SourceBacklogIssueKey} ({t.SourceBacklogIssueId})"
                     : string.Empty;
                 sb.AppendLine($"- [{t.Id}] ({t.Type} | {t.Priority} | {t.StoryPoints} SP | {t.EstimatedHours}h | {t.Status} | Epic: {t.EpicTitle ?? "Chung"} | Người xử lý: {t.AssigneeName ?? "Chưa gán"}{backlogRef}): {t.Title}");
+
+                if (includeRich)
+                {
+                    if (!string.IsNullOrWhiteSpace(t.Description) && !t.Description.Equals(t.Title, StringComparison.OrdinalIgnoreCase))
+                    {
+                        sb.AppendLine($"  Mô tả: {TruncateSingleLine(t.Description, 200)}");
+                    }
+                    if (t.AcceptanceCriteria != null && t.AcceptanceCriteria.Count > 0)
+                    {
+                        sb.AppendLine($"  Nghiệm thu: {string.Join("; ", t.AcceptanceCriteria.Take(3))}");
+                    }
+                    if (t.DocumentCitations != null && t.DocumentCitations.Count > 0)
+                    {
+                        sb.AppendLine($"  Trích dẫn: {string.Join(", ", t.DocumentCitations.Take(3))}");
+                    }
+                }
+
                 if (t.Subtasks != null && t.Subtasks.Count > 0)
                 {
                     foreach (var s in t.Subtasks)
@@ -552,6 +640,73 @@ public static partial class AiIndexedMemoryEngine
     private static bool ContainsProjectDataKeyword(string lower) =>
         MentionsSpecHub(lower) || MentionsBacklog(lower) || MentionsSprint(lower) ||
         MentionsTeam(lower) || MentionsConfig(lower);
+
+    public static bool IsConversationalFollowUp(string lower)
+    {
+        if (string.IsNullOrWhiteSpace(lower)) return false;
+        return lower.Contains("cái đó") || lower.Contains("cái này") ||
+               lower.Contains("việc đó") || lower.Contains("việc này") ||
+               lower.Contains("phần đó") || lower.Contains("phần này") ||
+               lower.Contains("mục đó") || lower.Contains("mục này") ||
+               lower.Contains("ý đó") || lower.Contains("ý này") ||
+               lower.Contains("câu trên") || lower.Contains("phần trên") ||
+               lower.Contains("ở trên") || lower.Contains("như trên") ||
+               lower.Contains("vừa nãy") || lower.Contains("lúc nãy") ||
+               lower.Contains("hồi nãy") || lower.Contains("vừa rồi") ||
+               lower.Contains("như đã") || lower.Contains("vừa bàn") ||
+               lower.Contains("như vừa") || lower.Contains("thứ hai") ||
+               lower.Contains("thứ ba") || lower.Contains("đầu tiên") ||
+               lower.Contains("cuối cùng") || lower.Contains("ý tôi là") ||
+               lower.Contains("chi tiết hơn") || lower.Contains("rõ hơn") ||
+               lower.Contains("kỹ hơn") || lower.Contains("cụ thể hơn") ||
+               lower.Contains("ngắn gọn") || lower.Contains("tại sao") ||
+               lower.Contains("vì sao") || lower.Contains("thế còn") ||
+               lower.Contains("tiếp đi") || lower.Contains("nói tiếp") ||
+               lower.Contains("giải thích thêm") || lower.Contains("bổ sung thêm") ||
+               lower.Contains("#mem-");
+    }
+
+    public static bool MentionsProposalOrWorkItem(string lower) =>
+        lower.Contains("task") || lower.Contains("story") || lower.Contains("subtask") ||
+        lower.Contains("sub-task") || lower.Contains("bug") || lower.Contains("công việc") ||
+        lower.Contains("đầu việc") || lower.Contains("đề xuất") || lower.Contains("kế hoạch") ||
+        lower.Contains("sprint goal") || lower.Contains("sp") || lower.Contains("ưu tiên") ||
+        lower.Contains("nghiệm thu") || lower.Contains("mô tả") || lower.Contains("trích dẫn") ||
+        lower.Contains("phụ trách") || lower.Contains("gán cho") || lower.Contains("giờ công") ||
+        lower.Contains("sửa") || lower.Contains("đổi") || lower.Contains("thêm") || lower.Contains("xóa");
+
+    public static string BuildRecentTopicHint(IReadOnlyList<AiConversationTurnDto>? history)
+    {
+        if (history == null || history.Count == 0) return string.Empty;
+        var prior = history.Where(t => !string.IsNullOrWhiteSpace(t.Content))
+                           .TakeLast(4)
+                           .Select(t => TruncateSingleLine(t.Content, 160));
+        return string.Join(" | ", prior);
+    }
+
+    private static List<string> ExtractActiveSessionDirectives(IReadOnlyList<AiConversationTurnDto> priorTurns)
+    {
+        if (priorTurns == null || priorTurns.Count == 0) return [];
+        var directives = new List<string>();
+        foreach (var turn in priorTurns)
+        {
+            if (turn.Role != "user" || string.IsNullOrWhiteSpace(turn.Content) || turn.Content.Length > 320)
+                continue;
+            var lower = turn.Content.ToLowerInvariant();
+            bool hasDirective = lower.Contains("chỉ giao") || lower.Contains("không giao") ||
+                                lower.Contains("không vượt") || lower.Contains("tối đa") ||
+                                lower.Contains("chỉ dùng") || lower.Contains("chỉ tạo") ||
+                                lower.Contains("ưu tiên") || lower.Contains("ngắn gọn") ||
+                                lower.Contains("tập trung") || lower.Contains("vào backlog") ||
+                                lower.Contains("kho backlog") || lower.Contains("vào sprint") ||
+                                lower.Contains("bắt buộc");
+            if (hasDirective)
+            {
+                directives.Add(TruncateSingleLine(turn.Content, 180));
+            }
+        }
+        return directives.Distinct(StringComparer.OrdinalIgnoreCase).TakeLast(5).ToList();
+    }
 
     private static bool MentionsSpecHub(string text) =>
         text.Contains("spec") || text.Contains("đặc tả") || text.Contains("tài liệu") ||

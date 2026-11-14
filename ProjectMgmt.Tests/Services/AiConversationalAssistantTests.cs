@@ -522,4 +522,290 @@ public class AiConversationalAssistantTests
         var lastAssistantTurn = turn2!.ConversationHistory!.Last(t => t.Role == "assistant");
         Assert.Contains("#mem-1", lastAssistantTurn.ReferencedMemoryAnchors);
     }
+
+    [Fact]
+    public async Task ExecutePipelineAsync_ShortEllipticalFollowUp_ShouldMaintainAlternatingMultiTurnMessages_AndNotRefuse()
+    {
+        var (planningDb, deliveryDb, identityDb, orgId, projectId, actorId) = await SeedProjectAsync();
+        await using var _p = planningDb;
+        await using var _d = deliveryDb;
+        await using var _i = identityDb;
+
+        var callIdx = 0;
+        var aiClient = new CapturingAiClient(_ =>
+        {
+            callIdx++;
+            return callIdx == 1
+                ? "Workflow gồm 3 trạng thái chính: To Do, In Progress và Done."
+                : "Ý đầu tiên (To Do) là trạng thái khởi tạo cho công việc mới trước khi chuyển sang triển khai.";
+        });
+
+        var service = CreateService(aiClient, planningDb, deliveryDb, identityDb);
+        var scope = new ProjectScopeContext(orgId, projectId, actorId);
+        const string sessionId = "sprint_ai_elliptical_followup";
+
+        // Lượt 1: Câu hỏi dự án kèm chỉ dẫn ràng buộc ngắn gọn
+        AiSprintProposalDto? turn1 = null;
+        await service.ExecutePipelineAsync(
+            sessionId: sessionId,
+            scope: scope,
+            targetSprintId: null,
+            extractedDocumentContent: string.Empty,
+            userPrompt: "Hãy trả lời ngắn gọn: Workflow của dự án có những trạng thái nào?",
+            onStepProgress: (_, _, _, _, _) => Task.CompletedTask,
+            onToolCall: (_, _, _, _) => Task.CompletedTask,
+            onThoughtDelta: _ => Task.CompletedTask,
+            onProposalReady: p => { turn1 = p; return Task.CompletedTask; });
+
+        Assert.NotNull(turn1);
+        Assert.Equal("project_qa", turn1!.Intent);
+
+        // Lượt 2: Câu hỏi nối tiếp ngắn không lặp lại từ khóa PM ("Giải thích rõ hơn ý đầu tiên và nói ngắn gọn thôi")
+        var turn2Tools = new List<string>();
+        AiSprintProposalDto? turn2 = null;
+        await service.ExecutePipelineAsync(
+            sessionId: sessionId,
+            scope: scope,
+            targetSprintId: null,
+            extractedDocumentContent: string.Empty,
+            userPrompt: "Giải thích rõ hơn ý đầu tiên và nói ngắn gọn thôi",
+            onStepProgress: (_, _, _, _, _) => Task.CompletedTask,
+            onToolCall: (toolName, _, _, _) => { turn2Tools.Add(toolName); return Task.CompletedTask; },
+            onThoughtDelta: _ => Task.CompletedTask,
+            onProposalReady: p => { turn2 = p; return Task.CompletedTask; },
+            existingProposal: turn1);
+
+        Assert.NotNull(turn2);
+        Assert.Equal("project_qa", turn2!.Intent);
+        Assert.DoesNotContain("project_get_active_config", turn2Tools);
+        Assert.DoesNotContain("backlog_get_pending_issues", turn2Tools);
+        Assert.DoesNotContain("spechub_get_latest_docs", turn2Tools);
+
+        // Xác minh chuỗi AiMessage luân phiên thực thụ User -> Assistant -> User và mang ràng buộc phiên
+        Assert.Equal(2, aiClient.CapturedPrompts.Count);
+        var turn2Messages = aiClient.CapturedPrompts[1].Messages;
+        Assert.Equal(3, turn2Messages.Count);
+        Assert.Equal(AiRole.User, turn2Messages[0].Role);
+        Assert.Equal(AiRole.Assistant, turn2Messages[1].Role);
+        Assert.Equal(AiRole.User, turn2Messages[2].Role);
+        Assert.Contains("To Do, In Progress và Done", turn2Messages[1].Content);
+        Assert.Contains("RÀNG BUỘC & THỎA THUẬN XUYÊN SUỐT PHIÊN", turn2Messages[2].Content);
+
+        // Lượt 3: Câu hỏi ngoài lề hoàn toàn dù đang trong phiên vẫn bị Guardrail từ chối
+        AiSprintProposalDto? turn3 = null;
+        await service.ExecutePipelineAsync(
+            sessionId: sessionId,
+            scope: scope,
+            targetSprintId: null,
+            extractedDocumentContent: string.Empty,
+            userPrompt: "Hôm nay ăn phở ở đâu?",
+            onStepProgress: (_, _, _, _, _) => Task.CompletedTask,
+            onToolCall: (_, _, _, _) => Task.CompletedTask,
+            onThoughtDelta: _ => Task.CompletedTask,
+            onProposalReady: p => { turn3 = p; return Task.CompletedTask; },
+            existingProposal: turn2);
+
+        Assert.NotNull(turn3);
+        Assert.Equal("out_of_scope_refusal", turn3!.Intent);
+    }
+
+    [Fact]
+    public async Task ExecutePipelineAsync_FollowUpQuestionAboutFirstWorkItemHours_ShouldReceiveStagedTaskDigestInQaPrompt()
+    {
+        var (planningDb, deliveryDb, identityDb, orgId, projectId, actorId) = await SeedProjectAsync();
+        await using var _p = planningDb;
+        await using var _d = deliveryDb;
+        await using var _i = identityDb;
+
+        var callIdx = 0;
+        var aiClient = new CapturingAiClient(_ =>
+        {
+            callIdx++;
+            if (callIdx == 1)
+            {
+                return JsonSerializer.Serialize(new
+                {
+                    assistantReply = "Đã lập kế hoạch 1 công việc cho Audit Log.",
+                    recommendedTarget = "sprint",
+                    sprintGoal = "Triển khai Audit Log bảo mật",
+                    tasks = new[]
+                    {
+                        new
+                        {
+                            id = "task_01",
+                            title = "Thiết kế bảng AuditLog",
+                            description = "Tạo schema MySQL và index theo AuditId",
+                            type = "Task",
+                            priority = "High",
+                            storyPoints = 5,
+                            estimatedHours = 12,
+                            acceptanceCriteria = new[] { "Lưu đầy đủ UserId và Timestamp khi cập nhật Issue" }
+                        }
+                    }
+                });
+            }
+
+            return "Công việc đầu tiên (task_01 - Thiết kế bảng AuditLog) ước lượng 12 giờ do bao gồm tạo schema MySQL, đánh index và viết kiểm thử lưu UserId/Timestamp.";
+        });
+
+        var service = CreateService(aiClient, planningDb, deliveryDb, identityDb);
+        var scope = new ProjectScopeContext(orgId, projectId, actorId);
+        const string sessionId = "sprint_ai_qa_task_digest";
+
+        // Lượt 1: Lập kế hoạch với ràng buộc tối đa công việc
+        AiSprintProposalDto? turn1 = null;
+        await service.ExecutePipelineAsync(
+            sessionId: sessionId,
+            scope: scope,
+            targetSprintId: null,
+            extractedDocumentContent: "Thiết kế lưu AuditLog cho mọi thao tác issue.",
+            userPrompt: "Lập kế hoạch Audit Log và chỉ tạo tối đa 2 công việc",
+            onStepProgress: (_, _, _, _, _) => Task.CompletedTask,
+            onToolCall: (_, _, _, _) => Task.CompletedTask,
+            onThoughtDelta: _ => Task.CompletedTask,
+            onProposalReady: p => { turn1 = p; return Task.CompletedTask; });
+
+        Assert.NotNull(turn1);
+        Assert.Single(turn1!.Tasks);
+
+        // Lượt 2: Hỏi "công việc đầu tiên ... 12 giờ" mà không dùng từ khóa "task" hay "đề xuất"
+        AiSprintProposalDto? turn2 = null;
+        await service.ExecutePipelineAsync(
+            sessionId: sessionId,
+            scope: scope,
+            targetSprintId: null,
+            extractedDocumentContent: string.Empty,
+            userPrompt: "Tại sao công việc đầu tiên lại ước lượng 12 giờ?",
+            onStepProgress: (_, _, _, _, _) => Task.CompletedTask,
+            onToolCall: (_, _, _, _) => Task.CompletedTask,
+            onThoughtDelta: _ => Task.CompletedTask,
+            onProposalReady: p => { turn2 = p; return Task.CompletedTask; },
+            existingProposal: turn1);
+
+        Assert.NotNull(turn2);
+        Assert.Equal("project_qa", turn2!.Intent);
+        Assert.Single(turn2.Tasks);
+
+        var qaMessages = aiClient.CapturedPrompts[1].Messages;
+        Assert.Equal(3, qaMessages.Count);
+        Assert.Equal(AiRole.User, qaMessages[0].Role);
+        Assert.Equal(AiRole.Assistant, qaMessages[1].Role);
+        Assert.Equal(AiRole.User, qaMessages[2].Role);
+
+        var qaPromptText = qaMessages[2].Content;
+        Assert.Contains("Thiết kế bảng AuditLog", qaPromptText);
+        Assert.Contains("Tạo schema MySQL và index theo AuditId", qaPromptText);
+        Assert.Contains("Lưu đầy đủ UserId và Timestamp", qaPromptText);
+        Assert.Contains("chỉ tạo tối đa 2 công việc", qaPromptText);
+    }
+
+    [Fact]
+    public async Task ExecutePipelineAsync_ImperativeBacklogQa_And_RefinementPreservesSourceBacklogLink()
+    {
+        Assert.Equal("project_qa", AiSprintDecompositionService.ClassifyConversationalIntent(
+            "Liệt kê các user story đang chờ trong backlog", string.Empty, null));
+
+        var (planningDb, deliveryDb, identityDb, orgId, projectId, actorId) = await SeedProjectAsync();
+        await using var _p = planningDb;
+        await using var _d = deliveryDb;
+        await using var _i = identityDb;
+
+        var backlogIssueId = Guid.NewGuid();
+        var callIdx = 0;
+        var aiClient = new CapturingAiClient(_ =>
+        {
+            callIdx++;
+            if (callIdx == 1)
+            {
+                return JsonSerializer.Serialize(new
+                {
+                    assistantReply = "Đã phân rã User Story PM-99 vào kế hoạch.",
+                    recommendedTarget = "sprint",
+                    sprintGoal = "Hoàn thiện PM-99 trong Sprint tới",
+                    tasks = new[]
+                    {
+                        new
+                        {
+                            id = "task_01",
+                            sourceBacklogIssueId = backlogIssueId.ToString(),
+                            sourceBacklogIssueKey = "PM-99",
+                            title = "Tích hợp thanh toán QR",
+                            description = "Kết nối cổng thanh toán VietQR",
+                            type = "Story",
+                            priority = "High",
+                            storyPoints = 3,
+                            estimatedHours = 10
+                        }
+                    }
+                });
+            }
+
+            // Lượt 2 cố tình bỏ sót sourceBacklogIssueId và sourceBacklogIssueKey trong JSON trả về
+            return JsonSerializer.Serialize(new
+            {
+                assistantReply = "Đã tăng công việc PM-99 lên 5 SP theo yêu cầu.",
+                recommendedTarget = "sprint",
+                sprintGoal = "Hoàn thiện PM-99 trong Sprint tới",
+                tasks = new[]
+                {
+                    new
+                    {
+                        id = "task_01",
+                        title = "Tích hợp thanh toán QR và giao diện xác nhận",
+                        description = "Kết nối cổng thanh toán VietQR và màn hình UI xác nhận",
+                        type = "Story",
+                        priority = "High",
+                        storyPoints = 5,
+                        estimatedHours = 16
+                    }
+                }
+            });
+        });
+
+        var service = CreateService(aiClient, planningDb, deliveryDb, identityDb);
+        var scope = new ProjectScopeContext(orgId, projectId, actorId);
+        const string sessionId = "sprint_ai_preserve_backlog_link";
+
+        AiSprintProposalDto? turn1 = null;
+        await service.ExecutePipelineAsync(
+            sessionId: sessionId,
+            scope: scope,
+            targetSprintId: null,
+            extractedDocumentContent: "Đưa User Story PM-99 vào Sprint",
+            userPrompt: "Lập kế hoạch Sprint cho PM-99",
+            onStepProgress: (_, _, _, _, _) => Task.CompletedTask,
+            onToolCall: (_, _, _, _) => Task.CompletedTask,
+            onThoughtDelta: _ => Task.CompletedTask,
+            onProposalReady: p => { turn1 = p; return Task.CompletedTask; });
+
+        Assert.NotNull(turn1);
+        Assert.Equal(backlogIssueId, turn1!.Tasks[0].SourceBacklogIssueId);
+        Assert.Equal("PM-99", turn1.Tasks[0].SourceBacklogIssueKey);
+
+        AiSprintProposalDto? turn2 = null;
+        await service.ExecutePipelineAsync(
+            sessionId: sessionId,
+            scope: scope,
+            targetSprintId: null,
+            extractedDocumentContent: string.Empty,
+            userPrompt: "Tăng lên 5 SP và bổ sung phần giao diện cho việc đó",
+            onStepProgress: (_, _, _, _, _) => Task.CompletedTask,
+            onToolCall: (_, _, _, _) => Task.CompletedTask,
+            onThoughtDelta: _ => Task.CompletedTask,
+            onProposalReady: p => { turn2 = p; return Task.CompletedTask; },
+            existingProposal: turn1);
+
+        Assert.NotNull(turn2);
+        Assert.Equal("refine_proposal", turn2!.Intent);
+        Assert.Single(turn2.Tasks);
+        Assert.Equal(5, turn2.Tasks[0].StoryPoints);
+        Assert.Equal(backlogIssueId, turn2.Tasks[0].SourceBacklogIssueId);
+        Assert.Equal("PM-99", turn2.Tasks[0].SourceBacklogIssueKey);
+
+        var refineMessages = aiClient.CapturedPrompts[1].Messages;
+        Assert.Equal(3, refineMessages.Count);
+        Assert.Equal(AiRole.User, refineMessages[0].Role);
+        Assert.Equal(AiRole.Assistant, refineMessages[1].Role);
+        Assert.Equal(AiRole.User, refineMessages[2].Role);
+    }
 }

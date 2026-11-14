@@ -63,7 +63,7 @@ flowchart TD
    - Quy chuẩn Bảo mật Tuyệt đối: Zero-Secret-Leakage & Khóa chặt Phạm vi Tổ chức - Dự án - Người dùng (`OrganizationId`, `ProjectId`, `UserId`).
 
 2. [**Chuyên đề 2: Sơ đồ Tuần tự & Sơ đồ Hoạt động**](file:///c:/Users/hoang/Downloads/ProjectMgmt/docs/ai/02-so-do-tuan-tu-va-hoat-dong.md)
-   - Bộ định tuyến Ý định Hội thoại & **Selective MCP Context Router**: chỉ gọi MCP Tools khi input + ngữ cảnh thực sự cần thiết; trả lời trực tiếp câu hỏi thông thường hoặc chỉ gọi `memory_recall` cho câu hỏi nối tiếp.
+   - Bộ định tuyến Ý định Hội thoại & **Selective MCP Context Router**: chỉ gọi MCP Tools khi input + ngữ cảnh thực sự cần thiết; hiểu tự nhiên câu hỏi nối tiếp/đại từ quy chiếu (*"nó"*, *"ý đầu tiên"*) và câu hỏi đáp mệnh lệnh (*"tóm tắt"*, *"liệt kê"*) thông qua chuỗi `AiMessage` đa lượt thực thụ (`User` $\leftrightarrow$ `Assistant`) kèm ràng buộc xuyên suốt phiên.
    - Giao diện **Thinking Log (Nhật ký Suy nghĩ & Thao tác Agent)** tông sáng chuẩn hệ thống, **mặc định luôn đóng (collapsed)** ở mọi trạng thái (đang chạy, hoàn thành, khôi phục phiên), chỉ hiển thị chi tiết từng hành động và `#mem-X` khi người dùng chủ động mở rộng.
    - Sơ đồ Tuần tự (Sequence Diagram) & Sơ đồ Hoạt động (Activity Diagram) quy trình Agentic Workflow đa lượt gắn bền vững với MySQL & Redis.
    - Luồng truyền dữ liệu thời gian thực Server-Sent Events (SSE) kèm `sessionId` phiên hội thoại và metadata thao tác (`actionVerb`, `targetLabel`, `detailPreview`).
@@ -71,7 +71,7 @@ flowchart TD
 3. [**Chuyên đề 3: Cơ chế Trí nhớ Đa tầng, Chỉ mục Ngữ cảnh & Lưu trữ Bền vững**](file:///c:/Users/hoang/Downloads/ProjectMgmt/docs/ai/03-co-che-tri-nho-redis-memory.md)
    - Kiến trúc Lưu trữ Kép (**Redis Hot Cache + MySQL Durable Session Persistence**): khôi phục phiên cũ kể cả khi Redis hết hạn hoặc khởi động lại (**Cold-Redis DB Fallback & Re-hydration**).
    - **Phân trang Ngược Kiểu Messenger & Tự Cuộn Xuống Mới Nhất**: Khi mở lại phiên làm việc, chỉ nạp trước cửa sổ 12 lượt mới nhất (`tailLimit=12`), tự động cuộn tức thì xuống cuối đoạn chat, tải nối tiếp tin cũ hơn qua `GET /api/ai/agent/sessions/{sessionId}/messages` kèm giữ nguyên vị trí đọc và giới hạn RAM/cache trình duyệt.
-   - **Hệ thống Đánh Chỉ Mục Trí Nhớ (`#mem-1`, `#mem-2`, ...)**: tách và đánh chỉ mục từng khối ngữ cảnh hội thoại để Agent trỏ thẳng vào mảnh trí nhớ liên quan thay vì nạp toàn bộ context thô.
+   - **Hệ thống Đánh Chỉ Mục Trí Nhớ (`#mem-1`, `#mem-2`, ...) & Bám sát Mạch Phiên**: tách và đánh chỉ mục từng khối ngữ cảnh hội thoại để Agent trỏ thẳng vào mảnh trí nhớ liên quan (có kế thừa chủ đề lượt trước cho câu hỏi rút gọn), kết hợp tổng hợp thỏa thuận phiên và bản tóm tắt đầy đủ công việc đang staging.
    - **Khóa chặt Phạm vi Đa chiều (`OrganizationId`, `ProjectId`, `UserId`)**: cô lập hoàn toàn danh sách phiên, xem/tiếp tục phiên, cập nhật staging, commit và xóa phiên (`DELETE /api/ai/agent/sessions/{sessionId}`).
    - Chuyển đổi nút **"Tạo mới"** không phá hủy (chỉ khởi tạo khung hội thoại trắng trên UI, bảo toàn toàn bộ phiên làm việc cũ trong DB).
 
@@ -145,6 +145,9 @@ Module AI được nâng cấp từ công cụ phân rã đơn lượt thành **
 - **Giao diện Đoạn hội thoại Liền mạch 2 Phía (Trái/Phải)**: Khối tin nhắn của **Trợ Lý AI** nằm bên trái và phản hồi của **Tôi (Người dùng)** nằm bên phải với khung trắng thống nhất, loại bỏ hoàn toàn các đường viền màu cạnh trái và các thẻ lồng ghép đứt đoạn.
 - **Nhật ký Suy nghĩ & Thao tác Agent (Thinking Log) Tông sáng Mặc định Luôn Đóng**: Ngay phía trên nội dung trả lời (hoặc khi AI đang chạy) hiển thị thanh trạng thái gọn nhẹ tông sáng hợp nhất giao diện (**mặc định luôn đóng `collapsed`** ở mọi trạng thái: đang chạy, đã xong hoặc khi mở lại phiên cũ). Khi người dùng nhấp mở rộng mới xổ ra toàn bộ dòng thời gian thao tác thực tế (`actionVerb`, `target`, `durationMs`, chi tiết đóng/mở từng bước) và các thẻ trí nhớ `#mem-X` vừa được truy xuất.
 - **Định tuyến MCP Có Chọn Lọc (Selective MCP Context Router)**: AI **không gọi MCP Tools máy móc ở mọi câu hỏi**. Với lời chào hoặc hỏi khả năng chung, Agent trả lời trực tiếp với `0` MCP calls; với câu hỏi nối tiếp tham chiếu ngữ cảnh cũ, Agent ưu tiên `memory_recall` trên chỉ mục `#mem-X`; chỉ khi người dùng hỏi số liệu dự án cụ thể hoặc lập kế hoạch Sprint/Backlog, Agent mới gọi đúng tập công cụ MCP cần thiết.
+- **Truyền Hội thoại Đa lượt Thực thụ & Bám sát Mạch Phiên (Native Multi-Turn & Follow-up Intelligence)**:
+  - Thay vì gộp phẳng thành một thông điệp đơn, backend truyền chuỗi tin nhắn luân phiên thực thụ (`User` $\leftrightarrow$ `Assistant`) cho mô hình AI (Gemini, Claude, OpenAI, Ollama) kèm cửa sổ 8 lượt gần nhất, khối tổng hợp **Ràng buộc & Thỏa thuận xuyên suốt phiên** từ người dùng và bản tóm tắt chi tiết công việc đang staging (mô tả, tiêu chí nghiệm thu, trích dẫn tài liệu).
+  - Bộ phân loại ý định hiểu tự nhiên các câu hỏi rút gọn/chứa đại từ trong phiên đang diễn ra (*"nó"*, *"ý đầu tiên"*, *"công việc thứ 2"*, *"tăng lên 5"*, *"rõ hơn"*) và các động từ hỏi đáp mệnh lệnh (*"tóm tắt"*, *"liệt kê"*, *"phân tích"*, *"so sánh"*) mà không từ chối nhầm, đồng thời kế thừa chủ đề lượt trước khi truy xuất `#mem-X` / Spec Hub nhưng vẫn giữ nghiêm rào chắn từ chối ngoài luồng (`out_of_scope_refusal`) và bảo toàn `sourceBacklogIssueId` khi tinh chỉnh đề xuất.
 - **Lưu trữ Phiên Hội thoại Đích thực Trong MySQL + Redis Hot Cache & Phân trang Kiểu Messenger**: Mỗi cuộc hội thoại hoàn chỉnh (kèm lịch sử đa lượt, log thao tác `TraceItems`, tóm tắt suy nghĩ `ThinkingSummary`, bản đề xuất `ProposalJson` và các mảnh trí nhớ đánh chỉ mục `#mem-1..#mem-n`) được lưu bền vững vào MySQL, gắn chặt theo bộ ba **`(OrganizationId, ProjectId, UserId)`** để tuyệt đối không nhầm lẫn giữa các dự án hay tổ chức khác nhau. Khi mở lại phiên cũ, hệ thống áp dụng **phân trang ngược kiểu Messenger** (`tailLimit=12` và `GET /api/ai/agent/sessions/{sessionId}/messages`) đồng thời **tự động cuộn ngay xuống tin nhắn mới nhất** và giữ nguyên vị trí đọc khi cuộn lên tải thêm tin cũ để tránh tràn RAM trình duyệt. Khi Redis hết hạn/lạnh, hệ thống tự động khôi phục từ MySQL và nạp lại lên Redis (**Cold-Redis Re-hydration**).
 - **Nút "Tạo mới" Không Phá Hủy & Quản lý Xóa Phiên Cũ**: Nút **"Tạo mới"** trên thanh tiêu đề chỉ bắt đầu khung hội thoại mới sạch sẽ trên giao diện mà **không xóa phiên cũ** trong lịch sử. Người dùng có thể mở lại bất kỳ phiên cũ nào để trò chuyện tiếp, hoặc chủ động bấm **Xóa** phiên cũ khỏi cơ sở dữ liệu ngay trong danh sách lịch sử phiên.
 - **Rào chắn Phạm vi Nghiệp vụ (Out-of-Scope Domain Guardrail)**: Trợ Lý AI chỉ phục vụ nghiệp vụ quản lý dự án (lập kế hoạch Sprint/Backlog, phân rã Story/Task, hỏi đáp số liệu dự án, xuất Excel, điều phối thành viên & workflow). Mọi yêu cầu ngoài luồng (viết thơ, code bài tập rời rạc, tư vấn đời sống, hỏi đáp ngoài công cụ quản lý dự án) đều bị từ chối lịch sự ngay tức thì (`Intent = "out_of_scope_refusal"`) mà vẫn giữ nguyên bản đề xuất hiện có.
@@ -598,7 +601,7 @@ Quy trình xử lý nội bộ của [`AiSprintDecompositionService.cs`](file://
 
 ```mermaid
 flowchart TD
-    Start(["Bắt đầu: Tiếp nhận lượt hội thoại từ Người dùng (hoặc mở lại phiên cũ)"]) --> Step1["BƯỚC 1: KHÓA PHẠM VI, NẠP TRÍ NHỚ KÉP & PHÂN LOẠI Ý ĐỊNH\n- Xác thực bộ ba (Tổ chức, Dự án, Người dùng)\n- Tải phiên từ Bộ nhớ đệm Nóng; nếu hết hạn thì nạp bù từ CSDL\n- Đọc danh mục chỉ mục trí nhớ (#mem-1..#mem-n)\n- Phân loại ý định người dùng"]
+    Start(["Bắt đầu: Tiếp nhận lượt hội thoại từ Người dùng (hoặc mở lại phiên cũ)"]) --> Step1["BƯỚC 1: KHÓA PHẠM VI, NẠP TRÍ NHỚ KÉP & PHÂN LOẠI Ý ĐỊNH\n- Xác thực bộ ba (Tổ chức, Dự án, Người dùng)\n- Tải phiên từ Bộ nhớ đệm Nóng; nếu hết hạn thì nạp bù từ CSDL\n- Trích xuất ràng buộc xuyên suốt phiên & kế thừa chủ đề lượt trước cho câu hỏi rút gọn\n- Phân loại ý định (nhận diện câu hỏi nối tiếp, hỏi đáp mệnh lệnh & rào chắn ngoài luồng)"]
 
     Step1 --> GuardIntent{"Kiểm tra Ý định\n& Kế hoạch Thực thi"}
 
@@ -614,13 +617,13 @@ flowchart TD
     GuardIntent -- "Chào hỏi / Hỏi khả năng" --> ZeroMcp["LUỒNG TRỰC TIẾP (0 CÔNG CỤ DỮ LIỆU)\n- Không gọi công cụ dự án thừa\n- Phản hồi súc tích đúng trọng tâm câu hỏi"]
     ZeroMcp --> SaveDual
 
-    GuardIntent -- "Câu hỏi nối tiếp / Nhắc lại #mem-X" --> RecallOnly["TRUY XUẤT CHỈ MỤC TRÍ NHỚ\n- Chỉ đọc đúng các mảnh trí nhớ (#mem-X) liên quan\n- Không gọi công cụ dự án ngoài cần thiết"]
-    RecallOnly --> Step4Focus["Suy luận câu trả lời tập trung từ mảnh trí nhớ vừa nạp"]
+    GuardIntent -- "Câu hỏi nối tiếp / Đại từ quy chiếu / Nhắc #mem-X" --> RecallOnly["TRUY XUẤT CHỈ MỤC TRÍ NHỚ & ĐỀ XUẤT ĐANG STAGING\n- Chỉ đọc đúng mảnh trí nhớ (#mem-X) + tóm tắt mô tả/tiêu chí việc đang staging\n- Xây dựng chuỗi hội thoại đa lượt thực thụ kèm thỏa thuận phiên trước đó"]
+    RecallOnly --> Step4Focus["Suy luận câu trả lời tập trung, giải mã đúng đại từ theo mạch phiên"]
     Step4Focus --> SaveDual
 
     GuardIntent -- "Hỏi đáp Hẹp hoặc Lập kế hoạch Sprint / Backlog" --> Step2["BƯỚC 2: GỌI CÔNG CỤ DỮ LIỆU CÓ CHỌN LỌC\n- Hỏi đáp hẹp: Chỉ gọi 1-2 công cụ mục tiêu\n- Lập kế hoạch: Gọi đặc tả, Backlog, vận tốc, quy chuẩn & năng lực\n- Ghi nhật ký từng bước kèm thời gian thực thi"]
 
-    Step2 --> Step4["BƯỚC 3: SUY LUẬN ĐÚNG TRỌNG TÂM\n- Trả lời thẳng câu hỏi hoặc bóc tách kế hoạch Sprint/Backlog\n- Kiểm tra khối lượng, nhân sự và trích dẫn hợp chuẩn"]
+    Step2 --> Step4["BƯỚC 3: SUY LUẬN ĐÚNG TRỌNG TÂM TRÊN CHUỖI ĐA LƯỢT\n- Truyền chuỗi hội thoại luân phiên Người dùng - Trợ lý kèm ràng buộc đã chốt\n- Sửa đổi vi phân hoặc bóc tách kế hoạch & bảo toàn liên kết nguồn Backlog"]
 
     Step4 --> SaveDual["BƯỚC 4: ĐÁNH CHỈ MỤC TRÍ NHỚ MỚI & LƯU KÉP\n- Đóng gói ngữ cảnh lượt mới thành mảnh #mem-k\n- Lưu đồng thời vào Bộ nhớ đệm Nóng và CSDL (khóa 3 chiều)"]
 
@@ -715,8 +718,8 @@ Dự án triển khai **Kiến trúc Trí nhớ 4 Tầng Kết hợp Chỉ mục
 ```mermaid
 flowchart TD
     subgraph T1["TẦNG 1: TRÍ NHỚ LÀM VIỆC TỨC THỜI (WORKING MEMORY)"]
-        WM1["Cửa sổ Ngữ cảnh Tập trung của Mô hình AI"]
-        WM2["Kết quả Truy xuất Công cụ Chọn lọc + Các mảnh Trí nhớ (#mem-X) Liên quan"]
+        WM1["Chuỗi Hội thoại Đa lượt Thực thụ + Tóm tắt Ràng buộc Phiên"]
+        WM2["Kết quả Truy xuất Chọn lọc + Mảnh Trí nhớ (#mem-X) + Chi tiết Việc Đang Staging"]
         WM3["Hiển thị Nhật ký Suy nghĩ (mặc định đóng) trong suốt lượt xử lý"]
     end
 
@@ -758,7 +761,7 @@ flowchart TD
     StartInput["Người dùng gửi yêu cầu (hoặc mở lại phiên cũ từ Lịch sử)"] --> ScopeLock["Xác thực Khóa Phạm vi Chặt chẽ:\nBộ ba (Tổ chức, Dự án, Người dùng)"]
     ScopeLock --> CheckHot{"Đọc phiên từ Bộ nhớ đệm Nóng theo mã phiên"}
 
-    CheckHot -- "Có sẵn" --> RecallIndex["Truy xuất Chỉ mục Trí nhớ (#mem-1..#mem-n)\nchỉ lấy mảnh ngữ cảnh khớp câu hỏi"]
+    CheckHot -- "Có sẵn" --> RecallIndex["Truy xuất Chỉ mục Trí nhớ (#mem-1..#mem-n)\nchỉ lấy mảnh khớp câu hỏi & kế thừa chủ đề lượt trước nếu là câu rút gọn"]
     CheckHot -- "Hết hạn / Khởi động lại" --> QueryDB["Truy vấn Kho Phiên & Bảng Chỉ mục Trí nhớ\ntrong CSDL đúng bộ ba phạm vi sở hữu"]
     QueryDB -- "Không đúng chủ sở hữu / Dự án" --> DenyScope["Chặn truy cập (Cô lập hoàn toàn dự án & người dùng)"]
     QueryDB -- "Khớp phạm vi" --> Rehydrate["Tái nạp phiên lên Bộ nhớ đệm Nóng\n(Cold-Cache Re-hydration)"]
@@ -1752,7 +1755,9 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
      - Khi hoàn thành: hiển thị biểu tượng xác nhận xanh ngọc (`check_circle`) + tóm tắt (`Đã suy nghĩ xong trong X.Xs · N thao tác`).
      - Mặc định luôn đóng ở mọi trạng thái (streaming, hoàn tất, khôi phục từ DB). Chỉ khi người dùng nhấp vào thanh tiêu đề mới xổ ra từng bước thao tác chi tiết (`actionVerb`, `target`, `summary`, `durationMs`) và các chip `#mem-X` đã nạp.
   2. **Selective MCP Routing & Indexed Memory (`AiIndexedMemoryEngine`)**:
-     - Trước khi gọi MCP Tools, `PlanContextExecution` phân tích câu hỏi + lịch sử phiên: chào hỏi/hỏi khả năng $\rightarrow$ `0` MCP calls; câu hỏi nối tiếp hoặc nhắc lại `#mem-1` $\rightarrow$ chỉ gọi `memory_recall` trích xuất đúng mảnh trí nhớ tương ứng; hỏi đáp hẹp $\rightarrow$ chỉ gọi 1–2 tool cần thiết; lập kế hoạch Sprint/Backlog $\rightarrow$ gọi đầy đủ bộ MCP quy chuẩn.
+     - Trước khi gọi MCP Tools, `PlanContextExecution` phân tích câu hỏi + lịch sử phiên: chào hỏi/hỏi khả năng $\rightarrow$ `0` MCP calls; câu hỏi nối tiếp hoặc nhắc lại `#mem-1` $\rightarrow$ ưu tiên dùng trực tiếp trí nhớ phiên kết hợp `memory_recall` trích xuất đúng mảnh trí nhớ tương ứng (kèm kế thừa chủ đề lượt trước cho các câu đại từ rút gọn); hỏi đáp hẹp $\rightarrow$ chỉ gọi 1–2 tool cần thiết; lập kế hoạch Sprint/Backlog $\rightarrow$ gọi đầy đủ bộ MCP quy chuẩn.
+  3. **Bám sát Mạch Hội thoại Đa lượt Thực thụ (`BuildNativeConversationMessages`)**:
+     - Cả luồng Q&A và luồng lập/tinh chỉnh đề xuất đều gửi chuỗi `AiMessage` luân phiên thực thụ (`User` $\leftrightarrow$ `Assistant` $\leftrightarrow$ `User`) cùng danh mục **Ràng buộc & Thỏa thuận xuyên suốt phiên**, cửa sổ 8 lượt hội thoại gần nhất và chi tiết công việc đang staging (mô tả, tiêu chí nghiệm thu, trích dẫn). Đồng thời bộ phân loại hiểu đúng câu hỏi nối tiếp/mệnh lệnh không dấu `?` mà vẫn chặn triệt để yêu cầu ngoài luồng và giữ nguyên liên kết `sourceBacklogIssueId` qua các lần chỉnh sửa.
 
 ---
 

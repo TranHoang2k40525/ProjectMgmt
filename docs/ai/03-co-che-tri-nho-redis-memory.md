@@ -10,8 +10,8 @@ Dự án triển khai **Kiến trúc Trí nhớ 4 Tầng Kết hợp Chỉ mục
 ```mermaid
 flowchart TD
     subgraph T1["TẦNG 1: TRÍ NHỚ LÀM VIỆC TỨC THỜI (WORKING MEMORY)"]
-        WM1["Cửa sổ Ngữ cảnh Tập trung của Mô hình AI"]
-        WM2["Kết quả Truy xuất Công cụ Chọn lọc + Các mảnh Trí nhớ (#mem-X) Liên quan"]
+        WM1["Chuỗi Hội thoại Đa lượt Thực thụ + Tóm tắt Ràng buộc Phiên"]
+        WM2["Kết quả Truy xuất Chọn lọc + Mảnh Trí nhớ (#mem-X) + Chi tiết Việc Đang Staging"]
         WM3["Hiển thị Nhật ký Suy nghĩ (mặc định đóng) trong suốt lượt xử lý"]
     end
 
@@ -53,7 +53,7 @@ flowchart TD
     StartInput["Người dùng gửi yêu cầu (hoặc mở lại phiên cũ từ Lịch sử)"] --> ScopeLock["Xác thực Khóa Phạm vi Chặt chẽ:\nBộ ba (Tổ chức, Dự án, Người dùng)"]
     ScopeLock --> CheckHot{"Đọc phiên từ Bộ nhớ đệm Nóng theo mã phiên"}
 
-    CheckHot -- "Có sẵn" --> RecallIndex["Truy xuất Chỉ mục Trí nhớ (#mem-1..#mem-n)\nchỉ lấy mảnh ngữ cảnh khớp câu hỏi"]
+    CheckHot -- "Có sẵn" --> RecallIndex["Truy xuất Chỉ mục Trí nhớ (#mem-1..#mem-n)\nchỉ lấy mảnh khớp câu hỏi & kế thừa chủ đề lượt trước nếu là câu rút gọn"]
     CheckHot -- "Hết hạn / Khởi động lại" --> QueryDB["Truy vấn Kho Phiên & Bảng Chỉ mục Trí nhớ\ntrong CSDL đúng bộ ba phạm vi sở hữu"]
     QueryDB -- "Không đúng chủ sở hữu / Dự án" --> DenyScope["Chặn truy cập (Cô lập hoàn toàn dự án & người dùng)"]
     QueryDB -- "Khớp phạm vi" --> Rehydrate["Tái nạp phiên lên Bộ nhớ đệm Nóng\n(Cold-Cache Re-hydration)"]
