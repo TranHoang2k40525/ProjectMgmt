@@ -70,6 +70,7 @@ flowchart TD
 
 3. [**Chuyên đề 3: Cơ chế Trí nhớ Đa tầng, Chỉ mục Ngữ cảnh & Lưu trữ Bền vững**](file:///c:/Users/hoang/Downloads/ProjectMgmt/docs/ai/03-co-che-tri-nho-redis-memory.md)
    - Kiến trúc Lưu trữ Kép (**Redis Hot Cache + MySQL Durable Session Persistence**): khôi phục phiên cũ kể cả khi Redis hết hạn hoặc khởi động lại (**Cold-Redis DB Fallback & Re-hydration**).
+   - **Phân trang Ngược Kiểu Messenger & Tự Cuộn Xuống Mới Nhất**: Khi mở lại phiên làm việc, chỉ nạp trước cửa sổ 12 lượt mới nhất (`tailLimit=12`), tự động cuộn tức thì xuống cuối đoạn chat, tải nối tiếp tin cũ hơn qua `GET /api/ai/agent/sessions/{sessionId}/messages` kèm giữ nguyên vị trí đọc và giới hạn RAM/cache trình duyệt.
    - **Hệ thống Đánh Chỉ Mục Trí Nhớ (`#mem-1`, `#mem-2`, ...)**: tách và đánh chỉ mục từng khối ngữ cảnh hội thoại để Agent trỏ thẳng vào mảnh trí nhớ liên quan thay vì nạp toàn bộ context thô.
    - **Khóa chặt Phạm vi Đa chiều (`OrganizationId`, `ProjectId`, `UserId`)**: cô lập hoàn toàn danh sách phiên, xem/tiếp tục phiên, cập nhật staging, commit và xóa phiên (`DELETE /api/ai/agent/sessions/{sessionId}`).
    - Chuyển đổi nút **"Tạo mới"** không phá hủy (chỉ khởi tạo khung hội thoại trắng trên UI, bảo toàn toàn bộ phiên làm việc cũ trong DB).
@@ -144,7 +145,7 @@ Module AI được nâng cấp từ công cụ phân rã đơn lượt thành **
 - **Giao diện Đoạn hội thoại Liền mạch 2 Phía (Trái/Phải)**: Khối tin nhắn của **Trợ Lý AI** nằm bên trái và phản hồi của **Tôi (Người dùng)** nằm bên phải với khung trắng thống nhất, loại bỏ hoàn toàn các đường viền màu cạnh trái và các thẻ lồng ghép đứt đoạn.
 - **Nhật ký Suy nghĩ & Thao tác Agent (Thinking Log) Tông sáng Mặc định Luôn Đóng**: Ngay phía trên nội dung trả lời (hoặc khi AI đang chạy) hiển thị thanh trạng thái gọn nhẹ tông sáng hợp nhất giao diện (**mặc định luôn đóng `collapsed`** ở mọi trạng thái: đang chạy, đã xong hoặc khi mở lại phiên cũ). Khi người dùng nhấp mở rộng mới xổ ra toàn bộ dòng thời gian thao tác thực tế (`actionVerb`, `target`, `durationMs`, chi tiết đóng/mở từng bước) và các thẻ trí nhớ `#mem-X` vừa được truy xuất.
 - **Định tuyến MCP Có Chọn Lọc (Selective MCP Context Router)**: AI **không gọi MCP Tools máy móc ở mọi câu hỏi**. Với lời chào hoặc hỏi khả năng chung, Agent trả lời trực tiếp với `0` MCP calls; với câu hỏi nối tiếp tham chiếu ngữ cảnh cũ, Agent ưu tiên `memory_recall` trên chỉ mục `#mem-X`; chỉ khi người dùng hỏi số liệu dự án cụ thể hoặc lập kế hoạch Sprint/Backlog, Agent mới gọi đúng tập công cụ MCP cần thiết.
-- **Lưu trữ Phiên Hội thoại Đích thực Trong MySQL + Redis Hot Cache & Khóa Phạm vi Chặt chẽ**: Mỗi cuộc hội thoại hoàn chỉnh (kèm lịch sử đa lượt, log thao tác `TraceItems`, tóm tắt suy nghĩ `ThinkingSummary`, bản đề xuất `ProposalJson` và các mảnh trí nhớ đánh chỉ mục `#mem-1..#mem-n`) được lưu bền vững vào MySQL, gắn chặt theo bộ ba **`(OrganizationId, ProjectId, UserId)`** để tuyệt đối không nhầm lẫn giữa các dự án hay tổ chức khác nhau. Khi Redis hết hạn/lạnh, hệ thống tự động khôi phục từ MySQL và nạp lại lên Redis (**Cold-Redis Re-hydration**).
+- **Lưu trữ Phiên Hội thoại Đích thực Trong MySQL + Redis Hot Cache & Phân trang Kiểu Messenger**: Mỗi cuộc hội thoại hoàn chỉnh (kèm lịch sử đa lượt, log thao tác `TraceItems`, tóm tắt suy nghĩ `ThinkingSummary`, bản đề xuất `ProposalJson` và các mảnh trí nhớ đánh chỉ mục `#mem-1..#mem-n`) được lưu bền vững vào MySQL, gắn chặt theo bộ ba **`(OrganizationId, ProjectId, UserId)`** để tuyệt đối không nhầm lẫn giữa các dự án hay tổ chức khác nhau. Khi mở lại phiên cũ, hệ thống áp dụng **phân trang ngược kiểu Messenger** (`tailLimit=12` và `GET /api/ai/agent/sessions/{sessionId}/messages`) đồng thời **tự động cuộn ngay xuống tin nhắn mới nhất** và giữ nguyên vị trí đọc khi cuộn lên tải thêm tin cũ để tránh tràn RAM trình duyệt. Khi Redis hết hạn/lạnh, hệ thống tự động khôi phục từ MySQL và nạp lại lên Redis (**Cold-Redis Re-hydration**).
 - **Nút "Tạo mới" Không Phá Hủy & Quản lý Xóa Phiên Cũ**: Nút **"Tạo mới"** trên thanh tiêu đề chỉ bắt đầu khung hội thoại mới sạch sẽ trên giao diện mà **không xóa phiên cũ** trong lịch sử. Người dùng có thể mở lại bất kỳ phiên cũ nào để trò chuyện tiếp, hoặc chủ động bấm **Xóa** phiên cũ khỏi cơ sở dữ liệu ngay trong danh sách lịch sử phiên.
 - **Rào chắn Phạm vi Nghiệp vụ (Out-of-Scope Domain Guardrail)**: Trợ Lý AI chỉ phục vụ nghiệp vụ quản lý dự án (lập kế hoạch Sprint/Backlog, phân rã Story/Task, hỏi đáp số liệu dự án, xuất Excel, điều phối thành viên & workflow). Mọi yêu cầu ngoài luồng (viết thơ, code bài tập rời rạc, tư vấn đời sống, hỏi đáp ngoài công cụ quản lý dự án) đều bị từ chối lịch sự ngay tức thì (`Intent = "out_of_scope_refusal"`) mà vẫn giữ nguyên bản đề xuất hiện có.
 - **Hành động Hội thoại Trực tiếp (Xuất Excel & Đẩy Kho Backlog)**: Hỗ trợ xuất tệp Excel toàn bộ dữ liệu dự án (`TriggerAction = "export_excel"`) hoặc đẩy trực tiếp toàn bộ công việc đề xuất vào **Kho Product Backlog** (`PushToBacklog = true`, `SprintId = null`) ngay trong cuộc hội thoại hoặc qua nút thao tác trực tiếp cạnh nút **Áp dụng vào Sprint**.
@@ -441,9 +442,10 @@ Thay thế các thẻ khối rời rạc có viền màu cạnh trái trước �
     - Khi người dùng chủ động mở rộng: hiển thị từng bước hành động theo dòng thời gian (`actionVerb`, `target`, `summary`, `durationMs`, có thể nhấp từng dòng để xem chi tiết thực thi), các chip trí nhớ `#mem-X` vừa nạp và suy luận tổng hợp sạch sẽ.
   - Phần giải thích tự nhiên (`assistantReply`), nút tải lại tệp Excel khi vừa xuất qua chat, và bảng công việc đề xuất tích hợp ngay bên dưới (chỉ rõ mục tiêu Sprint hoặc **Kho Product Backlog** kèm nút **Đẩy vào Kho Backlog** và **Áp dụng vào Sprint**).
 - **Bên phải — Tôi (Người dùng)**: Hiển thị tin nhắn yêu cầu, tệp đính kèm và liên kết mở xem nội dung văn bản đã gửi trong ngăn trượt riêng biệt.
-- **Thanh Tiêu Đề: Nút "Tạo mới" & Lịch Sử Phiên Thực Sự**:
+- **Thanh Tiêu Đề: Nút "Tạo mới" & Lịch Sử Phiên Phân Trang Kiểu Messenger**:
   - Nút **"Tạo mới"** chỉ khởi tạo một phiên trò chuyện mới sạch sẽ trên giao diện mà **tuyệt đối không xóa sạch các phiên làm việc đã lưu** trong cơ sở dữ liệu.
   - Popover **Lịch sử phiên** hiển thị danh sách các cuộc hội thoại hoàn chỉnh thuộc đúng bộ ba `(OrganizationId, ProjectId, UserId)` kèm số lượt trao đổi (`TurnCount`), số mảnh trí nhớ (`MemoryCount`), thời điểm cập nhật và nút **Xóa phiên** cho phép dọn bỏ các phiên cũ không còn cần thiết.
+  - Khi mở hoặc khôi phục một phiên, hệ thống chỉ nạp trang đuôi gồm 12 tin nhắn mới nhất (`tailLimit=12`) và **tự động cuộn ngay xuống đoạn hội thoại mới nhất**; khi người dùng cuộn lên đỉnh để đọc lại, giao diện tự động tải thêm từng trang tin nhắn cũ hơn theo cơ chế Messenger (`beforeIndex` + `limit=12`) mà giữ nguyên vị trí cuộn, đồng thời hiển thị nút nổi **"Xuống mới nhất"** khi người dùng cuộn xa đáy nhằm ngăn tràn RAM trình duyệt.
 
 ### 8.2. Hệ Thống Đo Lường & Giám Sát Token AI (IAiTokenUsageTracker)
 - Toàn bộ các tương tác với LLM đều được đo lường chính xác và lưu trữ qua [`AiTokenUsageTracker.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiTokenUsageTracker.cs).
@@ -544,11 +546,11 @@ sequenceDiagram
     Pipeline-->>UI: Phát sự kiện hoàn tất kèm tóm tắt suy nghĩ (mặc định thu gọn, nhấp để mở)
 
     %% Giai đoạn 5: Hậu tương tác
-    opt Người dùng mở Lịch sử phiên để xem lại hoặc xóa phiên cũ
+    opt Người dùng mở Lịch sử phiên để xem lại, cuộn tin cũ hoặc xóa phiên cũ
         SM->>UI: Chọn phiên cũ từ danh sách (hoặc bấm Xóa phiên)
-        UI->>Gateway: Yêu cầu nạp lại hoặc xóa phiên theo đúng phạm vi sở hữu
-        Gateway->>DB: Nạp hoặc xóa bản ghi phiên thuộc đúng người dùng, dự án và tổ chức
-        DB-->>UI: Đồng bộ giao diện (mở lại với khối suy nghĩ thu gọn mặc định)
+        UI->>Gateway: Yêu cầu nạp 12 tin mới nhất (hoặc tải thêm trang cũ hơn / xóa phiên)
+        Gateway->>DB: Nạp phân trang ngược hoặc xóa bản ghi phiên thuộc đúng phạm vi sở hữu
+        DB-->>UI: Trả về trang tin nhắn & tự động cuộn ngay xuống cuối đoạn chat (Thinking luôn đóng)
     end
 
     %% Giai đoạn 6: Phê duyệt Kho Backlog hoặc Sprint
@@ -1029,10 +1031,11 @@ Bên cạnh bộ nhớ đề xuất tức thời (Staging Session), hệ thống
 - **Hệ thống Đánh Chỉ Mục Trí Nhớ (`AiIndexedMemoryEngine.cs` & `#mem-X`)**:
   - Mỗi lượt hội thoại hoặc câu trả lời phân tích quan trọng được tách thành nút trí nhớ có mã định danh (`AnchorKey = "#mem-1"`, `Category`, `Title`, `Keywords`, `Summary`, `DetailContent`).
   - Ở các lượt hỏi nối tiếp, thay vì nhồi toàn bộ lịch sử trò chuyện thô vào Prompt gây loãng suy luận, [`AiIndexedMemoryEngine.SelectRelevantMemories`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiIndexedMemoryEngine.cs) đối chiếu từ khóa câu hỏi (hoặc tham chiếu trực tiếp `#mem-1`) để **trỏ thẳng vào đúng 1–3 mảnh trí nhớ liên quan nhất**.
-- **Khôi phục & Xóa Phiên Cũ (Session History Restore & Delete)**:
+- **Khôi phục & Xóa Phiên Cũ (Session History Restore, Messenger Reverse Pagination & Delete)**:
   - Trên thanh tiêu đề của Modal **Trợ Lý AI** có biểu tượng **Lịch sử phiên (đồng hồ)**.
   - Khi nhấp vào, popover hiển thị danh sách các cuộc hội thoại thực sự thuộc đúng **người dùng + dự án + tổ chức hiện tại** từ API `GET /api/ai/agent/sessions?projectId=...` (kèm số lượt trao đổi `TurnCount` và số mảnh trí nhớ `MemoryCount`).
-  - Nhấp vào phiên bất kỳ để khôi phục toàn bộ lịch sử đoạn chat, bảng đề xuất và các dòng Thinking (mặc định ở trạng thái đóng) qua `GET /api/ai/agent/proposal/{sessionId}` — tự động đọc từ MySQL và nạp bù lên Redis nếu cache đã hết hạn.
+  - Nhấp vào phiên bất kỳ để nạp cửa sổ 12 lượt hội thoại mới nhất qua `GET /api/ai/agent/proposal/{sessionId}?tailLimit=12` (tự động đọc từ MySQL và nạp bù lên Redis nếu cache đã hết hạn), đồng thời **tự động cuộn tức thì xuống tin nhắn mới nhất** cuối phiên với khối Thinking mặc định ở trạng thái đóng.
+  - Khi người dùng cuộn lên gần đỉnh danh sách (hoặc bấm nút **"Tải thêm tin nhắn cũ hơn"**), giao diện gọi `GET /api/ai/agent/sessions/{sessionId}/messages?projectId=...&beforeIndex=...&limit=12` để tải nối tiếp các lượt cũ hơn theo cơ chế phân trang ngược kiểu Messenger và **bảo toàn chính xác vị trí đang đọc** (scroll anchor preservation); đồng thời xuất hiện nút nổi **"Xuống mới nhất"** khi cuộn xa đáy và chỉ lưu tối đa 12 lượt đuôi vào `localStorage` để chống tràn RAM trình duyệt với các cuộc hội thoại dài hàng trăm lượt.
   - Bấm biểu tượng thùng rác cạnh từng phiên để gọi `DELETE /api/ai/agent/sessions/{sessionId}?projectId=...` (kiểm tra chặt quyền sở hữu 3 chiều trước khi xóa cả bảng MySQL lẫn khóa Redis tương ứng).
 
 ### 6.2. Đo lường & Giám sát Tiêu thụ Token (Token Consumption Management)
@@ -1712,8 +1715,8 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
 ### Câu hỏi 8.2: Làm thế nào để lưu trữ, xem lại, tiếp tục hoặc xóa các phiên làm việc cũ mà không bị nhầm giữa các dự án/tổ chức?
 - **Trả lời & Thao tác chứng minh**:
   1. **Lưu trữ đích thực cuộc hội thoại trong MySQL + Redis (`AiConversationSessionStore`)**: Mỗi cuộc hội thoại hoàn chỉnh (kèm lịch sử chat nhiều lượt, bản đề xuất, log suy nghĩ `TraceItems` và các mảnh trí nhớ `#mem-1..#mem-n`) được lưu vào bảng `AiConversationSessions` và `AiConversationMemoryEntries` trong MySQL song song với Redis Hot Cache.
-  2. **Khóa chặt 3 chiều (`OrganizationId`, `ProjectId`, `UserId`)**: Mọi endpoint (`GET /api/ai/agent/sessions`, `GET /api/ai/agent/proposal/{sessionId}`, `POST /api/ai/agent/decompose/stream`, `DELETE /api/ai/agent/sessions/{sessionId}`) đều đối chiếu đồng thời cả 3 định danh để không bao giờ lẫn phiên giữa hai dự án, hai tổ chức hay hai người dùng khác nhau.
-  3. **Nút "Tạo mới" không xóa phiên cũ & Cold-Redis Fallback**: Bấm nút **"Tạo mới"** trên thanh tiêu đề chỉ mở đoạn chat trống mới trên giao diện mà không gọi `clear-cache` xóa lịch sử cũ. Khi mở lại phiên cũ từ popover Lịch sử (`history`), kể cả khi Redis đã hết hạn hoặc restart, hệ thống vẫn nạp đầy đủ từ MySQL và tái nạp lên Redis; người dùng cũng có thể bấm biểu tượng thùng rác để xóa hẳn phiên cũ (`DELETE /api/ai/agent/sessions/{sessionId}?projectId=...`).
+  2. **Khóa chặt 3 chiều (`OrganizationId`, `ProjectId`, `UserId`)**: Mọi endpoint (`GET /api/ai/agent/sessions`, `GET /api/ai/agent/proposal/{sessionId}`, `GET /api/ai/agent/sessions/{sessionId}/messages`, `POST /api/ai/agent/decompose/stream`, `DELETE /api/ai/agent/sessions/{sessionId}`) đều đối chiếu đồng thời cả 3 định danh để không bao giờ lẫn phiên giữa hai dự án, hai tổ chức hay hai người dùng khác nhau.
+  3. **Tự Cuộn Xuống Mới Nhất, Phân Trang Ngược Kiểu Messenger & Nút "Tạo mới"**: Bấm nút **"Tạo mới"** trên thanh tiêu đề chỉ mở đoạn chat trống mới trên giao diện mà không gọi `clear-cache` xóa lịch sử cũ. Khi mở lại phiên cũ từ popover Lịch sử (`history`), kể cả khi Redis đã hết hạn hoặc restart, hệ thống nạp trước 12 tin nhắn cuối cùng (`tailLimit=12`) từ MySQL/Redis và **tự động cuộn tức thì xuống tin nhắn mới nhất**. Khi người dùng cuộn lên đỉnh hoặc bấm **"Tải thêm tin nhắn cũ hơn"**, `GET /api/ai/agent/sessions/{sessionId}/messages?projectId=...&beforeIndex=...&limit=12` tải từng trang tin cũ và bảo toàn nguyên vị trí đọc (scroll anchor), đồng thời chỉ giữ cửa sổ gọn nhẹ trong DOM và `localStorage` để không bao giờ tràn RAM; người dùng cũng có thể bấm biểu tượng thùng rác để xóa hẳn phiên cũ (`DELETE /api/ai/agent/sessions/{sessionId}?projectId=...`).
 
 ### Câu hỏi 8.3: Tại sao trước đây có hiện tượng xả code JSON thô vào ô tư duy (CoT) và hệ thống đã khắc phục thế nào?
 - **Trả lời**:

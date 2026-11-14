@@ -321,10 +321,10 @@ public class AiAgentController : ControllerBase
     }
 
     /// <summary>
-    /// Retrieves a currently staged proposal by sessionId.
+    /// Retrieves a currently staged proposal by sessionId, optionally slicing conversation history to the latest tailLimit turns.
     /// </summary>
     [HttpGet("proposal/{sessionId}")]
-    public async Task<IActionResult> GetStagedProposal(string sessionId)
+    public async Task<IActionResult> GetStagedProposal(string sessionId, [FromQuery] int? tailLimit = null)
     {
         if (string.IsNullOrWhiteSpace(sessionId))
         {
@@ -359,7 +359,134 @@ public class AiAgentController : ControllerBase
             }
         }
 
-        return Ok(proposal);
+        return Ok(BuildScopedProposalView(proposal, tailLimit));
+    }
+
+    /// <summary>
+    /// Tải phân trang ngược các lượt hội thoại cũ hơn theo kiểu Messenger (cursor beforeIndex + limit).
+    /// </summary>
+    [HttpGet("sessions/{sessionId}/messages")]
+    public async Task<IActionResult> GetSessionMessages(
+        string sessionId,
+        [FromQuery] Guid projectId,
+        [FromQuery] int? beforeIndex = null,
+        [FromQuery] int limit = 12)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return BadRequest(new { code = "INVALID_SESSION_ID", message = "Mã phiên không được để trống." });
+        }
+
+        if (projectId == Guid.Empty)
+        {
+            return BadRequest(new { code = "INVALID_PROJECT_ID", message = "Thiếu mã dự án hợp lệ." });
+        }
+
+        if (!await _projectAccess.AllowsAsync(projectId, "project.read"))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Không có quyền truy cập dự án." });
+        }
+
+        var ct = HttpContext.RequestAborted;
+        var userId = _currentUser.UserId;
+        var (proposal, isForbidden) = await LoadScopedProposalAsync(sessionId, userId, ct);
+        if (isForbidden)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN", message = "Phiên hội thoại AI này thuộc về người dùng hoặc tổ chức khác." });
+        }
+
+        if (proposal == null)
+        {
+            return NotFound(new { code = "SESSION_NOT_FOUND", message = "Phiên hội thoại không tồn tại hoặc đã hết hạn." });
+        }
+
+        if (proposal.ProjectId != projectId)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN_PROJECT_SCOPE", message = "Phiên hội thoại không thuộc dự án hiện tại." });
+        }
+
+        if (proposal.OrganizationId.HasValue && proposal.OrganizationId.Value != Guid.Empty)
+        {
+            var project = await _planningDb.Projects.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Id == projectId && !p.IsDeleted, ct);
+            if (project == null || project.OrgId != proposal.OrganizationId.Value)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { code = "FORBIDDEN_ORG_SCOPE", message = "Phiên hội thoại không thuộc tổ chức của dự án này." });
+            }
+        }
+
+        var history = proposal.ConversationHistory ?? [];
+        var totalCount = history.Count;
+        var take = Math.Clamp(limit, 1, 50);
+        var endExclusive = beforeIndex.HasValue ? Math.Clamp(beforeIndex.Value, 0, totalCount) : totalCount;
+        var startIndex = Math.Max(0, endExclusive - take);
+        var count = Math.Max(0, endExclusive - startIndex);
+        var slice = count > 0 ? history.GetRange(startIndex, count) : [];
+
+        return Ok(new AiConversationMessagesPageDto
+        {
+            SessionId = proposal.SessionId,
+            TotalCount = totalCount,
+            OldestLoadedIndex = count > 0 ? startIndex : (totalCount > 0 ? Math.Min(endExclusive, totalCount - 1) : null),
+            HasOlderMessages = startIndex > 0,
+            Messages = slice
+        });
+    }
+
+    private static AiSprintProposalDto BuildScopedProposalView(AiSprintProposalDto source, int? tailLimit)
+    {
+        var history = source.ConversationHistory ?? [];
+        var totalTurns = history.Count;
+
+        List<AiConversationTurnDto> slicedHistory;
+        int? oldestIdx;
+        bool hasOlder;
+
+        if (tailLimit is > 0)
+        {
+            var cappedLimit = Math.Clamp(tailLimit.Value, 1, 50);
+            var skip = Math.Max(0, totalTurns - cappedLimit);
+            slicedHistory = history.Skip(skip).ToList();
+            oldestIdx = totalTurns > 0 ? skip : null;
+            hasOlder = skip > 0;
+        }
+        else
+        {
+            slicedHistory = history.ToList();
+            oldestIdx = totalTurns > 0 ? 0 : null;
+            hasOlder = false;
+        }
+
+        return new AiSprintProposalDto
+        {
+            SessionId = source.SessionId,
+            OrganizationId = source.OrganizationId,
+            ProjectId = source.ProjectId,
+            UserId = source.UserId,
+            TargetSprintId = source.TargetSprintId,
+            SprintGoal = source.SprintGoal,
+            Rationale = source.Rationale,
+            Intent = source.Intent,
+            AssistantReply = source.AssistantReply,
+            RecommendedTarget = source.RecommendedTarget,
+            TriggerAction = source.TriggerAction,
+            ConversationHistory = slicedHistory,
+            IndexedMemories = source.IndexedMemories,
+            Tags = source.Tags,
+            TotalEstimatedHours = source.TotalEstimatedHours,
+            TotalStoryPoints = source.TotalStoryPoints,
+            WorkflowName = source.WorkflowName,
+            InitialStatus = source.InitialStatus,
+            AppliedWorkflowStatuses = source.AppliedWorkflowStatuses,
+            AppliedPriorities = source.AppliedPriorities,
+            AppliedIssueTypes = source.AppliedIssueTypes,
+            AppliedLabels = source.AppliedLabels,
+            Tasks = source.Tasks,
+            TotalConversationTurns = totalTurns,
+            HasOlderMessages = hasOlder,
+            OldestLoadedTurnIndex = oldestIdx,
+            CreatedAtUtc = source.CreatedAtUtc
+        };
     }
 
     /// <summary>

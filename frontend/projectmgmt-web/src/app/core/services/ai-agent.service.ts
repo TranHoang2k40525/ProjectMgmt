@@ -121,6 +121,17 @@ export interface AiSprintProposalDto {
   triggerAction?: 'none' | 'export_excel' | 'push_backlog' | 'apply_sprint' | string | null;
   conversationHistory?: AiConversationTurnDto[];
   indexedMemories?: AiMemoryAnchorDto[];
+  totalConversationTurns?: number;
+  hasOlderMessages?: boolean;
+  oldestLoadedTurnIndex?: number | null;
+}
+
+export interface AiConversationMessagesPageDto {
+  sessionId: string;
+  totalCount: number;
+  oldestLoadedIndex?: number | null;
+  hasOlderMessages: boolean;
+  messages: AiConversationTurnDto[];
 }
 
 export interface AiStepProgressEvent {
@@ -421,8 +432,30 @@ export class AiAgentService {
     });
   }
 
-  getStagedProposal(sessionId: string): Observable<AiSprintProposalDto> {
-    return this.http.get<AiSprintProposalDto>(`${this.baseUrl}/proposal/${encodeURIComponent(sessionId)}`);
+  getStagedProposal(sessionId: string, tailLimit?: number): Observable<AiSprintProposalDto> {
+    let params = new HttpParams();
+    if (tailLimit && tailLimit > 0) {
+      params = params.set('tailLimit', String(tailLimit));
+    }
+    return this.http.get<AiSprintProposalDto>(`${this.baseUrl}/proposal/${encodeURIComponent(sessionId)}`, { params });
+  }
+
+  getSessionMessages(
+    sessionId: string,
+    projectId: string,
+    beforeIndex?: number | null,
+    limit = 12
+  ): Observable<AiConversationMessagesPageDto> {
+    let params = new HttpParams()
+      .set('projectId', projectId)
+      .set('limit', String(limit));
+    if (beforeIndex !== undefined && beforeIndex !== null) {
+      params = params.set('beforeIndex', String(beforeIndex));
+    }
+    return this.http.get<AiConversationMessagesPageDto>(
+      `${this.baseUrl}/sessions/${encodeURIComponent(sessionId)}/messages`,
+      { params }
+    );
   }
 
   applyProposal(payload: {

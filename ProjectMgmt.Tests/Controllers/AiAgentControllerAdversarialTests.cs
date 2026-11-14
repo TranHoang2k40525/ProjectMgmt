@@ -901,4 +901,106 @@ public class AiAgentControllerAdversarialTests
     }
 
     #endregion
+
+    #region 7. Messenger-Style Reverse Pagination & Tail Slicing
+
+    [Fact]
+    public async Task GetStagedProposal_WithTailLimit_ReturnsLatestSliceWithoutMutatingStagedSession()
+    {
+        var (controller, db, _, currentUser, staging, _, _, _) = CreateTestHarness();
+        var project = await SeedProjectAsync(db);
+        const string sessionId = "messenger_tail_session";
+
+        var turns = Enumerable.Range(0, 10).Select(i => new AiConversationTurnDto
+        {
+            Id = $"turn-{i}",
+            Role = i % 2 == 0 ? "user" : "assistant",
+            Content = $"Nội dung tin nhắn thứ {i}"
+        }).ToList();
+
+        var proposal = new AiSprintProposalDto
+        {
+            SessionId = sessionId,
+            OrganizationId = project.OrgId,
+            ProjectId = project.Id,
+            UserId = currentUser.UserId,
+            SprintGoal = "Kiểm thử phân trang đuôi hội thoại",
+            ConversationHistory = turns
+        };
+        await staging.SaveProposalAsync(sessionId, proposal, TimeSpan.FromHours(2));
+
+        var tailActionResult = await controller.GetStagedProposal(sessionId, tailLimit: 4);
+        var tailOk = Assert.IsType<OkObjectResult>(tailActionResult);
+        var tailDto = Assert.IsType<AiSprintProposalDto>(tailOk.Value);
+
+        Assert.Equal(10, tailDto.TotalConversationTurns);
+        Assert.True(tailDto.HasOlderMessages);
+        Assert.Equal(6, tailDto.OldestLoadedTurnIndex);
+        Assert.Equal(4, tailDto.ConversationHistory.Count);
+        Assert.Equal(["turn-6", "turn-7", "turn-8", "turn-9"], tailDto.ConversationHistory.Select(t => t.Id).ToArray());
+
+        // Đảm bảo dữ liệu cache gốc không bị cắt xén sau khi trả về tail slice
+        var fullActionResult = await controller.GetStagedProposal(sessionId);
+        var fullOk = Assert.IsType<OkObjectResult>(fullActionResult);
+        var fullDto = Assert.IsType<AiSprintProposalDto>(fullOk.Value);
+        Assert.Equal(10, fullDto.ConversationHistory.Count);
+        Assert.False(fullDto.HasOlderMessages);
+    }
+
+    [Fact]
+    public async Task GetSessionMessages_ReversePaginationCursors_ReturnsExactChunksAndBlocksCrossScope()
+    {
+        var (controller, db, _, currentUser, staging, _, _, _) = CreateTestHarness();
+        var ownerId = currentUser.UserId!.Value;
+        var project = await SeedProjectAsync(db);
+        const string sessionId = "messenger_cursor_session";
+
+        var turns = Enumerable.Range(0, 10).Select(i => new AiConversationTurnDto
+        {
+            Id = $"turn-{i}",
+            Role = i % 2 == 0 ? "user" : "assistant",
+            Content = $"Tin nhắn lịch sử {i}"
+        }).ToList();
+
+        await staging.SaveProposalAsync(sessionId, new AiSprintProposalDto
+        {
+            SessionId = sessionId,
+            OrganizationId = project.OrgId,
+            ProjectId = project.Id,
+            UserId = ownerId,
+            SprintGoal = "Kiểm thử cursor phân trang",
+            ConversationHistory = turns
+        }, TimeSpan.FromHours(2));
+
+        // Trang 1: trước index 6, lấy 4 tin -> index 2..5
+        var page1Result = await controller.GetSessionMessages(sessionId, project.Id, beforeIndex: 6, limit: 4);
+        var page1Ok = Assert.IsType<OkObjectResult>(page1Result);
+        var page1 = Assert.IsType<AiConversationMessagesPageDto>(page1Ok.Value);
+        Assert.Equal(10, page1.TotalCount);
+        Assert.Equal(2, page1.OldestLoadedIndex);
+        Assert.True(page1.HasOlderMessages);
+        Assert.Equal(["turn-2", "turn-3", "turn-4", "turn-5"], page1.Messages.Select(m => m.Id).ToArray());
+
+        // Trang 2: trước index 2, lấy 4 tin -> còn lại index 0..1 và hết lịch sử cũ
+        var page2Result = await controller.GetSessionMessages(sessionId, project.Id, beforeIndex: 2, limit: 4);
+        var page2Ok = Assert.IsType<OkObjectResult>(page2Result);
+        var page2 = Assert.IsType<AiConversationMessagesPageDto>(page2Ok.Value);
+        Assert.Equal(10, page2.TotalCount);
+        Assert.Equal(0, page2.OldestLoadedIndex);
+        Assert.False(page2.HasOlderMessages);
+        Assert.Equal(["turn-0", "turn-1"], page2.Messages.Select(m => m.Id).ToArray());
+
+        // Kiểm tra khóa phạm vi: sai ProjectId -> 403
+        var wrongProjectResult = await controller.GetSessionMessages(sessionId, Guid.NewGuid(), beforeIndex: 6, limit: 4);
+        var wrongProjectObj = Assert.IsType<ObjectResult>(wrongProjectResult);
+        Assert.Equal(StatusCodes.Status403Forbidden, wrongProjectObj.StatusCode);
+
+        // Kiểm tra khóa phạm vi: người dùng khác -> 403
+        currentUser.UserId = Guid.NewGuid();
+        var foreignUserResult = await controller.GetSessionMessages(sessionId, project.Id, beforeIndex: 6, limit: 4);
+        var foreignUserObj = Assert.IsType<ObjectResult>(foreignUserResult);
+        Assert.Equal(StatusCodes.Status403Forbidden, foreignUserObj.StatusCode);
+    }
+
+    #endregion
 }

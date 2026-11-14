@@ -1,4 +1,5 @@
 import {
+  AfterViewInit,
   ChangeDetectionStrategy,
   Component,
   ElementRef,
@@ -18,6 +19,7 @@ import { Router } from '@angular/router';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import {
   AiAgentService,
+  AiConversationTurnDto,
   AiSprintProposalDto,
   AiStepProgressEvent,
   AiToolCallEvent,
@@ -98,13 +100,17 @@ export interface SpecDocPreview {
   styleUrl: './ai-decompose-modal.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class AiDecomposeModalComponent implements OnInit, OnDestroy {
+export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestroy {
+  private static readonly MESSAGE_PAGE_SIZE = 12;
+  private static readonly MAX_DOM_TURNS = 24;
+
   private readonly aiService = inject(AiAgentService);
   private readonly toastService = inject(ToastService);
   private readonly router = inject(Router);
   private readonly projectManagementService = inject(ProjectManagementService);
   private readonly sanitizer = inject(DomSanitizer);
   private readonly excelDataService = inject(ExcelDataService);
+  private loadingOlderGuard = false;
 
   @ViewChild('promptTextarea') promptTextarea?: ElementRef<HTMLTextAreaElement>;
   @ViewChild('chatScrollBody') chatScrollBody?: ElementRef<HTMLElement>;
@@ -128,6 +134,12 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
   readonly attachedFile = signal<File | null>(null);
   readonly isDragOver = signal<boolean>(false);
   readonly chatHistory = signal<ChatTurn[]>([]);
+  readonly hasOlderMessages = signal<boolean>(false);
+  readonly oldestLoadedIndex = signal<number | null>(null);
+  readonly totalMessagesCount = signal<number>(0);
+  readonly isLoadingOlderMessages = signal<boolean>(false);
+  readonly showScrollToBottom = signal<boolean>(false);
+  readonly remainingOlderCount = computed(() => Math.max(0, this.oldestLoadedIndex() ?? 0));
   readonly expandedTurnTraces = signal<Record<string, boolean>>({});
   readonly isPushingBacklog = signal<boolean>(false);
 
@@ -315,6 +327,12 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.restoreSession();
+  }
+
+  ngAfterViewInit(): void {
+    if (this.chatHistory().length > 0 || this.proposal()) {
+      this.scrollChatToBottom(false);
+    }
   }
 
   toggleToolLog(idx: number): void {
@@ -817,13 +835,28 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
   saveSession(): void {
     if (typeof localStorage === 'undefined' || !this.projectId) return;
     try {
+      const fullList = this.chatHistory();
+      const tailChat = fullList.slice(-AiDecomposeModalComponent.MESSAGE_PAGE_SIZE);
+      const effectiveTotal = Math.max(this.totalMessagesCount(), fullList.length);
+      const sessionId = this.activeSessionId();
+      const savedOldest =
+        effectiveTotal > tailChat.length
+          ? effectiveTotal - tailChat.length
+          : tailChat.length > 0
+            ? 0
+            : null;
+      const savedHasOlder = Boolean(sessionId && savedOldest !== null && savedOldest > 0);
+
       const data = {
-        chatHistory: this.chatHistory(),
+        chatHistory: tailChat,
         proposal: this.proposal(),
         toolCallsLog: this.toolCallsLog(),
         streamedThoughts: this.streamedThoughts(),
-        activeSessionId: this.activeSessionId(),
+        activeSessionId: sessionId,
         selectedModel: this.selectedModel(),
+        totalMessagesCount: effectiveTotal,
+        oldestLoadedIndex: savedOldest,
+        hasOlderMessages: savedHasOlder,
       };
       localStorage.setItem(this.getStorageKey(), JSON.stringify(data));
     } catch {
@@ -839,12 +872,31 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
       const data = JSON.parse(serialized);
       if (data) {
         if (Array.isArray(data.chatHistory) && data.chatHistory.length > 0) {
-          data.chatHistory.forEach((turn: ChatTurn) => {
+          const rawList = data.chatHistory as ChatTurn[];
+          rawList.forEach((turn: ChatTurn) => {
             if (turn.role === 'user' && !turn.fullContent && turn.text) {
               turn.fullContent = turn.text;
             }
           });
-          this.chatHistory.set(data.chatHistory);
+          const tail = rawList.slice(-AiDecomposeModalComponent.MESSAGE_PAGE_SIZE);
+          const effectiveTotal =
+            typeof data.totalMessagesCount === 'number'
+              ? Math.max(data.totalMessagesCount, rawList.length)
+              : rawList.length;
+          const computedOldest = Math.max(0, effectiveTotal - tail.length);
+          const restoredOldest =
+            typeof data.oldestLoadedIndex === 'number'
+              ? Math.max(data.oldestLoadedIndex, computedOldest)
+              : computedOldest;
+
+          this.chatHistory.set(tail);
+          this.totalMessagesCount.set(effectiveTotal);
+          this.oldestLoadedIndex.set(restoredOldest);
+          this.hasOlderMessages.set(
+            typeof data.hasOlderMessages === 'boolean'
+              ? data.hasOlderMessages || (Boolean(data.activeSessionId) && restoredOldest > 0)
+              : Boolean(data.activeSessionId && restoredOldest > 0)
+          );
         }
         if (data.proposal) {
           this.proposal.set(data.proposal);
@@ -861,6 +913,27 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
         if (data.selectedModel) {
           this.selectedModel.set(data.selectedModel);
         }
+        // Đồng bộ chỉ số phân trang nếu dữ liệu cache cũ chưa lưu tổng số lượt
+        if (data.activeSessionId && typeof data.totalMessagesCount !== 'number') {
+          this.aiService
+            .getSessionMessages(data.activeSessionId, this.projectId, undefined, AiDecomposeModalComponent.MESSAGE_PAGE_SIZE)
+            .subscribe({
+              next: (page) => {
+                if (this.activeSessionId() !== data.activeSessionId) return;
+                this.totalMessagesCount.set(page.totalCount);
+                this.oldestLoadedIndex.set(page.oldestLoadedIndex ?? 0);
+                this.hasOlderMessages.set(page.hasOlderMessages);
+                if (page.messages.length > 0) {
+                  const currentHasTable = this.proposal()?.tasks?.length ? true : false;
+                  this.chatHistory.set(this.mapDtoTurnsToChatTurns(page.messages, currentHasTable));
+                  this.scrollChatToBottom(false);
+                }
+              },
+            });
+        }
+        if (this.chatHistory().length > 0 || this.proposal()) {
+          this.scrollChatToBottom(false);
+        }
       }
     } catch {
       // Ignore malformed storage
@@ -870,6 +943,12 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
   private resetDraftUiState(): void {
     this.cancelStream();
     this.chatHistory.set([]);
+    this.hasOlderMessages.set(false);
+    this.oldestLoadedIndex.set(null);
+    this.totalMessagesCount.set(0);
+    this.isLoadingOlderMessages.set(false);
+    this.showScrollToBottom.set(false);
+    this.loadingOlderGuard = false;
     this.proposal.set(null);
     this.toolCallsLog.set([]);
     this.streamedThoughts.set('');
@@ -1242,9 +1321,29 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
       (lastBackendAssistantTurn?.thinkingSummary || '').trim() ||
       this.buildFallbackThinkingSummary(newTurn);
 
-    this.chatHistory.update((list) => [...list, newTurn]);
+    this.chatHistory.update((list) => {
+      const appended = [...list, newTurn];
+      if (appended.length > AiDecomposeModalComponent.MAX_DOM_TURNS && this.activeSessionId()) {
+        return appended.slice(-AiDecomposeModalComponent.MAX_DOM_TURNS);
+      }
+      return appended;
+    });
+    const serverTotal = prop.totalConversationTurns ?? prop.conversationHistory?.length ?? 0;
+    const loadedLen = this.chatHistory().length;
+    const nextTotal =
+      serverTotal > 0
+        ? Math.max(serverTotal, loadedLen)
+        : Math.max(this.totalMessagesCount() + 2, loadedLen);
+    this.totalMessagesCount.set(nextTotal);
+    if (this.activeSessionId() && nextTotal > loadedLen) {
+      const newOldest = nextTotal - loadedLen;
+      if (this.oldestLoadedIndex() === null || this.oldestLoadedIndex()! < newOldest) {
+        this.oldestLoadedIndex.set(newOldest);
+        this.hasOlderMessages.set(newOldest > 0);
+      }
+    }
     this.saveSession();
-    this.scrollChatToBottom();
+    this.scrollChatToBottom(true);
 
     // Thực thi hành động hội thoại trên dữ liệu thật
     if (action === 'export_excel') {
@@ -1354,11 +1453,138 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
     }
   }
 
-  private scrollChatToBottom(): void {
-    setTimeout(() => {
+  scrollToLatestMessage(smooth = true): void {
+    this.scrollChatToBottom(smooth);
+  }
+
+  onChatScroll(event: Event): void {
+    const el = event.target as HTMLElement | null;
+    if (!el) return;
+
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    this.showScrollToBottom.set(distanceFromBottom > 180 && this.chatHistory().length > 0);
+
+    if (
+      el.scrollTop <= 64 &&
+      this.hasOlderMessages() &&
+      !this.isLoadingOlderMessages() &&
+      !this.isStreaming() &&
+      !this.loadingOlderGuard
+    ) {
+      this.loadOlderMessages();
+    }
+  }
+
+  loadOlderMessages(): void {
+    const sessionId = this.activeSessionId();
+    const beforeIdx = this.oldestLoadedIndex();
+    if (!sessionId || !this.projectId || !this.hasOlderMessages() || this.isLoadingOlderMessages()) {
+      return;
+    }
+    if (beforeIdx === null || beforeIdx <= 0) {
+      this.hasOlderMessages.set(false);
+      return;
+    }
+
+    this.isLoadingOlderMessages.set(true);
+    this.loadingOlderGuard = true;
+
+    const scrollEl = this.chatScrollBody?.nativeElement;
+    const prevScrollHeight = scrollEl?.scrollHeight ?? 0;
+    const prevScrollTop = scrollEl?.scrollTop ?? 0;
+
+    this.aiService
+      .getSessionMessages(sessionId, this.projectId, beforeIdx, AiDecomposeModalComponent.MESSAGE_PAGE_SIZE)
+      .subscribe({
+        next: (page) => {
+          const olderTurns = this.mapDtoTurnsToChatTurns(page.messages ?? [], false);
+          if (olderTurns.length > 0) {
+            this.chatHistory.update((curr) => {
+              const existingIds = new Set(curr.map((t) => t.id));
+              const uniqueOlder = olderTurns.filter((t) => !existingIds.has(t.id));
+              return uniqueOlder.length > 0 ? [...uniqueOlder, ...curr] : curr;
+            });
+          }
+          this.totalMessagesCount.set(page.totalCount);
+          this.oldestLoadedIndex.set(page.oldestLoadedIndex ?? 0);
+          this.hasOlderMessages.set(page.hasOlderMessages);
+
+          // Giữ nguyên vị trí đang đọc sau khi chèn thêm tin nhắn cũ ở đỉnh danh sách
+          requestAnimationFrame(() => {
+            const el = this.chatScrollBody?.nativeElement;
+            if (el) {
+              const heightDelta = el.scrollHeight - prevScrollHeight;
+              el.scrollTop = Math.max(0, prevScrollTop + heightDelta);
+            }
+            this.isLoadingOlderMessages.set(false);
+            setTimeout(() => {
+              this.loadingOlderGuard = false;
+            }, 180);
+          });
+        },
+        error: () => {
+          this.isLoadingOlderMessages.set(false);
+          setTimeout(() => {
+            this.loadingOlderGuard = false;
+          }, 300);
+          this.toastService.error('Tải tin nhắn cũ', 'Không thể tải thêm lịch sử hội thoại cũ hơn.');
+        },
+      });
+  }
+
+  private mapDtoTurnsToChatTurns(dtos: AiConversationTurnDto[], markLatestProposalTable: boolean): ChatTurn[] {
+    const mapped: ChatTurn[] = dtos.map((h, idx) => {
+      const turn: ChatTurn = {
+        id: h.id || `restored_${idx}_${Date.now()}`,
+        role: h.role === 'user' ? 'user' : 'agent',
+        text: h.content || '',
+        fullContent: h.role === 'user' && h.fullContent && h.fullContent !== h.content ? h.fullContent : undefined,
+        fileName: h.fileName || undefined,
+        timestamp: h.timestampUtc
+          ? new Date(h.timestampUtc).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+          : '',
+        intent: h.intent ?? undefined,
+        actionType: h.actionType ?? undefined,
+        traceItems: h.traceItems ?? [],
+        thinkingSummary: h.thinkingSummary ?? null,
+        durationMs: h.durationMs ?? null,
+        thoughts: h.thoughts ?? null,
+        referencedMemoryAnchors: h.referencedMemoryAnchors ?? [],
+      };
+      if (turn.role === 'agent' && !turn.thinkingSummary && ((turn.traceItems?.length ?? 0) > 0 || (turn.durationMs ?? 0) > 0)) {
+        turn.thinkingSummary = this.buildFallbackThinkingSummary(turn);
+      }
+      return turn;
+    });
+
+    if (markLatestProposalTable) {
+      for (let i = mapped.length - 1; i >= 0; i--) {
+        if (mapped[i].role === 'agent' && ['sprint_plan', 'backlog_plan', 'refine_proposal'].includes(mapped[i].intent || '')) {
+          mapped[i].hasProposalTable = true;
+          break;
+        }
+      }
+    }
+    return mapped;
+  }
+
+  private scrollChatToBottom(smooth = true): void {
+    const performScroll = () => {
       const el = this.chatScrollBody?.nativeElement;
-      if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-    }, 60);
+      if (!el) return;
+      el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+      this.showScrollToBottom.set(false);
+    };
+
+    requestAnimationFrame(() => {
+      performScroll();
+      if (!smooth) {
+        setTimeout(performScroll, 60);
+        setTimeout(performScroll, 180);
+      } else {
+        setTimeout(performScroll, 120);
+      }
+    });
   }
 
   private appendAssistantNote(text: string, actionType: string = 'none'): void {
@@ -1587,7 +1813,7 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
     this.isSessionHistoryOpen.set(false);
     const titleLabel = session.title || session.sprintGoal || 'Phiên làm việc';
     this.toastService.info('Phiên làm việc', `Đang khôi phục phiên "${titleLabel}"...`);
-    this.aiService.getStagedProposal(session.sessionId).subscribe({
+    this.aiService.getStagedProposal(session.sessionId, AiDecomposeModalComponent.MESSAGE_PAGE_SIZE).subscribe({
       next: (prop: AiSprintProposalDto) => {
         this.normalizeProposal(prop);
         this.proposal.set(prop);
@@ -1598,51 +1824,42 @@ export class AiDecomposeModalComponent implements OnInit, OnDestroy {
         this.expandedTraceRows.set({});
         this.toolCallsLog.set([]);
         this.streamedThoughts.set('');
+        this.isLoadingOlderMessages.set(false);
+        this.showScrollToBottom.set(false);
+        this.loadingOlderGuard = false;
 
-        // Khôi phục nguyên vẹn đoạn hội thoại cùng Thinking Log & #mem-X từ DB/Redis
-        if (prop.conversationHistory && prop.conversationHistory.length > 0) {
-          const restored: ChatTurn[] = prop.conversationHistory.map((h, idx) => {
-            const turn: ChatTurn = {
-              id: h.id || `restored_${idx}_${Date.now()}`,
-              role: h.role === 'user' ? 'user' : 'agent',
-              text: h.content || '',
-              fullContent: h.role === 'user' && h.fullContent && h.fullContent !== h.content ? h.fullContent : undefined,
-              fileName: h.fileName || undefined,
-              timestamp: h.timestampUtc
-                ? new Date(h.timestampUtc).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
-                : '',
-              intent: h.intent,
-              actionType: h.actionType,
-              traceItems: h.traceItems ?? [],
-              thinkingSummary: h.thinkingSummary ?? null,
-              durationMs: h.durationMs ?? null,
-              thoughts: h.thoughts ?? null,
-              referencedMemoryAnchors: h.referencedMemoryAnchors ?? [],
-            };
-            if (turn.role === 'agent' && !turn.thinkingSummary && ((turn.traceItems?.length ?? 0) > 0 || (turn.durationMs ?? 0) > 0)) {
-              turn.thinkingSummary = this.buildFallbackThinkingSummary(turn);
-            }
-            return turn;
-          });
-          // Bảng đề xuất gắn vào lượt trả lời cuối cùng có sinh/cập nhật kế hoạch
-          for (let i = restored.length - 1; i >= 0; i--) {
-            if (restored[i].role === 'agent' && ['sprint_plan', 'backlog_plan', 'refine_proposal'].includes(restored[i].intent || '')) {
-              restored[i].hasProposalTable = prop.tasks.length > 0;
-              break;
+        const dtoHistory = prop.conversationHistory ?? [];
+        const totalTurns = prop.totalConversationTurns ?? dtoHistory.length;
+        this.totalMessagesCount.set(totalTurns);
+        this.hasOlderMessages.set(Boolean(prop.hasOlderMessages));
+        this.oldestLoadedIndex.set(
+          prop.oldestLoadedTurnIndex ?? (dtoHistory.length > 0 ? Math.max(0, totalTurns - dtoHistory.length) : null)
+        );
+
+        // Khôi phục trang tin nhắn mới nhất theo kiểu Messenger cùng Thinking Log & #mem-X
+        if (dtoHistory.length > 0) {
+          const restored = this.mapDtoTurnsToChatTurns(dtoHistory, prop.tasks.length > 0);
+          if (prop.tasks.length > 0 && !restored.some((t) => t.hasProposalTable)) {
+            for (let i = restored.length - 1; i >= 0; i--) {
+              if (restored[i].role === 'agent') {
+                restored[i].hasProposalTable = true;
+                break;
+              }
             }
           }
           this.chatHistory.set(restored);
         } else {
           this.chatHistory.set([]);
         }
-        this.scrollChatToBottom();
         const autoExpand: Record<string, boolean> = {};
         for (const t of prop.tasks) {
           if (t.subtasks && t.subtasks.length > 0) autoExpand[t.id] = true;
         }
         this.expandedSubtasks.set(autoExpand);
         this.saveSession();
-        this.toastService.success('Khôi phục phiên', 'Đã nạp lại toàn bộ hội thoại và ngữ cảnh làm việc.');
+        // Luôn tự cuộn ngay xuống đoạn hội thoại mới nhất trong phiên vừa mở
+        this.scrollChatToBottom(false);
+        this.toastService.success('Khôi phục phiên', 'Đã nạp các tin nhắn mới nhất và tự động cuộn xuống cuối phiên.');
       },
       error: () => {
         this.toastService.error('Khôi phục', 'Không thể mở phiên này (không tồn tại hoặc không thuộc quyền sở hữu của bạn).');

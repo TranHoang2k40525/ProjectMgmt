@@ -84,11 +84,11 @@ sequenceDiagram
     Pipeline-->>UI: Phát sự kiện hoàn tất kèm tóm tắt suy nghĩ (mặc định thu gọn, nhấp để mở)
 
     %% Giai đoạn 5: Hậu tương tác
-    opt Người dùng mở Lịch sử phiên để xem lại hoặc xóa phiên cũ
+    opt Người dùng mở Lịch sử phiên để xem lại, cuộn tin cũ hoặc xóa phiên cũ
         SM->>UI: Chọn phiên cũ từ danh sách (hoặc bấm Xóa phiên)
-        UI->>Gateway: Yêu cầu nạp lại hoặc xóa phiên theo đúng phạm vi sở hữu
-        Gateway->>DB: Nạp hoặc xóa bản ghi phiên thuộc đúng người dùng, dự án và tổ chức
-        DB-->>UI: Đồng bộ giao diện (mở lại với khối suy nghĩ thu gọn mặc định)
+        UI->>Gateway: Yêu cầu nạp 12 tin mới nhất (hoặc tải thêm trang cũ hơn / xóa phiên)
+        Gateway->>DB: Nạp phân trang ngược hoặc xóa bản ghi phiên thuộc đúng phạm vi sở hữu
+        DB-->>UI: Trả về trang tin nhắn & tự động cuộn ngay xuống cuối đoạn chat (Thinking luôn đóng)
     end
 ```
         Pipeline->>Staging: Cập nhật lịch sử hội thoại và bản đề xuất vào bộ nhớ phiên

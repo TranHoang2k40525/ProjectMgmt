@@ -117,7 +117,7 @@
     </header>
 
     <!-- Main Scrollable Body -->
-    <div class="ai-modal-body" #chatScrollBody>
+    <div class="ai-modal-body" #chatScrollBody (scroll)="onChatScroll($event)">
       <!-- Upper Workspace: Chat History & Realtime Agent Execution Pipeline -->
       <section class="ai-conversation-zone" aria-label="Nội dung tương tác và tiến trình thực thi">
         @if (chatHistory().length === 0 && !isStreaming() && !proposal()) {
@@ -137,6 +137,31 @@
         <!-- Đoạn hội thoại: Trợ Lý AI bên trái, Tôi bên phải -->
         @if (chatHistory().length > 0 || isStreaming()) {
           <div class="chat-thread" data-testid="ai-chat-thread">
+            @if (hasOlderMessages() || isLoadingOlderMessages()) {
+              <div class="chat-older-loader" data-testid="ai-chat-older-loader">
+                @if (isLoadingOlderMessages()) {
+                  <span class="chat-older-pill is-loading">
+                    <span class="mini-spinner" aria-hidden="true"></span>
+                    <span>Đang tải tin nhắn cũ hơn...</span>
+                  </span>
+                } @else {
+                  <button
+                    type="button"
+                    class="chat-older-pill"
+                    data-testid="btn-load-older-messages"
+                    (click)="loadOlderMessages()"
+                  >
+                    <span class="material-symbols-outlined" aria-hidden="true">expand_less</span>
+                    <span>
+                      Tải thêm tin nhắn cũ hơn
+                      @if (remainingOlderCount() > 0) {
+                        (còn {{ remainingOlderCount() }} tin)
+                      }
+                    </span>
+                  </button>
+                }
+              </div>
+            }
             @for (turn of chatHistory(); track turn.id) {
               @if (turn.role === 'user') {
                 <div class="msg-row msg-row-user" data-testid="ai-msg-user">
@@ -944,6 +969,18 @@
 
     <!-- Bottom Input Bar (Reference Image 3 Style: Clean Minimal Pill Bar + Attachments + Paste) -->
     <footer class="ai-input-dock">
+      @if (showScrollToBottom() && chatHistory().length > 0) {
+        <button
+          type="button"
+          class="scroll-latest-pill"
+          data-testid="btn-scroll-to-latest"
+          (click)="scrollToLatestMessage(true)"
+          title="Cuộn xuống đoạn hội thoại mới nhất"
+        >
+          <span class="material-symbols-outlined" aria-hidden="true">south</span>
+          <span>Xuống mới nhất</span>
+        </button>
+      }
       <!-- Attachment / Pasted Document Chips -->
       @if (attachedFile() || pastedDocumentText()) {
         <div class="input-attachments-bar">

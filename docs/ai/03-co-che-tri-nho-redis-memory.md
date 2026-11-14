@@ -326,10 +326,11 @@ Bên cạnh bộ nhớ đề xuất tức thời (Staging Session), hệ thống
 - **Hệ thống Đánh Chỉ Mục Trí Nhớ (`AiIndexedMemoryEngine.cs` & `#mem-X`)**:
   - Mỗi lượt hội thoại hoặc câu trả lời phân tích quan trọng được tách thành nút trí nhớ có mã định danh (`AnchorKey = "#mem-1"`, `Category`, `Title`, `Keywords`, `Summary`, `DetailContent`).
   - Ở các lượt hỏi nối tiếp, thay vì nhồi toàn bộ lịch sử trò chuyện thô vào Prompt gây loãng suy luận, [`AiIndexedMemoryEngine.SelectRelevantMemories`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiIndexedMemoryEngine.cs) đối chiếu từ khóa câu hỏi (hoặc tham chiếu trực tiếp `#mem-1`) để **trỏ thẳng vào đúng 1–3 mảnh trí nhớ liên quan nhất**.
-- **Khôi phục & Xóa Phiên Cũ (Session History Restore & Delete)**:
+- **Khôi phục & Xóa Phiên Cũ (Session History Restore, Messenger Reverse Pagination & Delete)**:
   - Trên thanh tiêu đề của Modal AI có biểu tượng **Lịch sử phiên (đồng hồ)**.
   - Khi nhấp vào, popover hiển thị danh sách các cuộc hội thoại thực sự thuộc đúng **người dùng + dự án + tổ chức hiện tại** từ API `GET /api/ai/agent/sessions?projectId=...` (kèm số lượt trao đổi `TurnCount` và số mảnh trí nhớ `MemoryCount`).
-  - Nhấp vào phiên bất kỳ để khôi phục toàn bộ lịch sử đoạn chat, bảng đề xuất và các dòng Thinking (mặc định ở trạng thái đóng) qua `GET /api/ai/agent/proposal/{sessionId}` — tự động đọc từ MySQL và nạp bù lên Redis nếu cache đã hết hạn.
+  - Nhấp vào phiên bất kỳ để nạp cửa sổ 12 lượt hội thoại mới nhất qua `GET /api/ai/agent/proposal/{sessionId}?tailLimit=12` (tự động đọc từ MySQL và nạp bù lên Redis nếu cache đã hết hạn), đồng thời **tự động cuộn tức thì xuống tin nhắn mới nhất** cuối phiên với khối Thinking mặc định ở trạng thái đóng.
+  - Khi người dùng cuộn lên gần đỉnh danh sách (hoặc bấm nút **"Tải thêm tin nhắn cũ hơn"**), giao diện gọi `GET /api/ai/agent/sessions/{sessionId}/messages?projectId=...&beforeIndex=...&limit=12` để tải nối tiếp các lượt cũ hơn theo cơ chế phân trang ngược kiểu Messenger và **bảo toàn chính xác vị trí đang đọc** (scroll anchor preservation); đồng thời xuất hiện nút nổi **"Xuống mới nhất"** khi cuộn xa đáy và chỉ lưu tối đa 12 lượt đuôi vào `localStorage` để chống tràn RAM trình duyệt với các cuộc hội thoại dài hàng trăm lượt.
   - Bấm biểu tượng thùng rác cạnh từng phiên để gọi `DELETE /api/ai/agent/sessions/{sessionId}?projectId=...` (kiểm tra chặt quyền sở hữu 3 chiều trước khi xóa cả bảng MySQL lẫn khóa Redis tương ứng).
 
 ### 6.2. Đo lường & Giám sát Tiêu thụ Token (Token Consumption Management)

@@ -79,7 +79,22 @@ public sealed class AiSprintProposalDto
     public List<string> AppliedIssueTypes { get; set; } = [];
     public List<string> AppliedLabels { get; set; } = [];
     public List<ProposedTaskDto> Tasks { get; set; } = [];
+    public int TotalConversationTurns { get; set; }
+    public bool HasOlderMessages { get; set; }
+    public int? OldestLoadedTurnIndex { get; set; }
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// Trang tin nhắn hội thoại AI phân trang ngược kiểu Messenger (tải dần lịch sử cũ khi cuộn lên).
+/// </summary>
+public sealed class AiConversationMessagesPageDto
+{
+    public string SessionId { get; set; } = string.Empty;
+    public int TotalCount { get; set; }
+    public int? OldestLoadedIndex { get; set; }
+    public bool HasOlderMessages { get; set; }
+    public List<AiConversationTurnDto> Messages { get; set; } = [];
 }
 
 public sealed class ProposedTaskDto
