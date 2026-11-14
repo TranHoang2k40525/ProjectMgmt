@@ -6,7 +6,9 @@ using System.Text.Json;
 using DeliveryIntelligence.Application.IServices;
 using DeliveryIntelligence.Domain.Entities;
 using DeliveryIntelligence.Infrastructure;
+using IdentityExperience.Application.IServices;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Planning.Domain.Entities;
 using Planning.Infrastructure;
@@ -30,21 +32,25 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
     private readonly IStateStagingService _stagingService;
     private readonly IUserLookupService _userLookup;
     private readonly ISkillCatalogReader? _skillCatalog;
+    private readonly IRoleServices? _roleServices;
     private readonly ILogger<AiSprintCommitCoordinator> _logger;
 
+    [ActivatorUtilitiesConstructor]
     public AiSprintCommitCoordinator(
         PlanningDbContext planningDb,
         DeliveryIntelligenceDbContext deliveryDb,
         IStateStagingService stagingService,
         IUserLookupService userLookup,
         ILogger<AiSprintCommitCoordinator> logger,
-        ISkillCatalogReader? skillCatalog = null)
+        ISkillCatalogReader? skillCatalog = null,
+        IRoleServices? roleServices = null)
     {
         _planningDb = planningDb;
         _deliveryDb = deliveryDb;
         _stagingService = stagingService;
         _userLookup = userLookup;
         _skillCatalog = skillCatalog;
+        _roleServices = roleServices;
         _logger = logger;
     }
 
@@ -173,7 +179,16 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
 
             // 2. Load active users, docs, and skill catalog for assignee/spec/skill enrichment
             var allUsers = await _userLookup.GetAllActiveDisplayInfoAsync();
-            var userById = allUsers.ToDictionary(u => u.UserId);
+            var revalidation = await PreCommitRevalidateAsync(
+                project,
+                request,
+                activeConfig,
+                targetSprintIdForIssues,
+                allUsers,
+                ct);
+
+            var eligibleUsers = revalidation.EligibleUsers;
+            var userById = eligibleUsers.ToDictionary(u => u.UserId);
             var projectDocs = await _planningDb.ProjectDocuments.AsNoTracking()
                 .Where(d => d.ProjectId == project.Id && !d.IsDirectory)
                 .Select(d => new ProjectDocMeta(d.Id, d.Name, d.Title, d.RelativePath))
@@ -270,15 +285,22 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
             var createdTaskCount = 0;
             var createdSubtaskCount = 0;
             var movedFromBacklogCount = 0;
+            var committedStoryPoints = 0m;
             var aiLogId = Guid.NewGuid();
 
             foreach (var taskDto in request.Tasks)
             {
+                if (revalidation.SkippedTasks.Contains(taskDto))
+                {
+                    continue;
+                }
+
                 var safeTaskTitle = InputGuardrail.StripUnsafeHtmlOrScript(taskDto.Title);
                 if (string.IsNullOrWhiteSpace(safeTaskTitle))
                 {
                     continue;
                 }
+                committedStoryPoints += Math.Max(0m, taskDto.StoryPoints);
                 var safeTaskDescription = InputGuardrail.StripUnsafeHtmlOrScript(taskDto.Description);
 
                 // Resolve EpicId
@@ -339,34 +361,39 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                 var matchedStatus = activeConfig.Statuses.FirstOrDefault(s =>
                     s.Name.Equals(resolvedStatusName, StringComparison.OrdinalIgnoreCase)) ?? initialStatus;
 
-                // Resolve Assignee
-                var resolvedAssigneeId = ResolveAssigneeId(taskDto.AssigneeUserId, taskDto.AssigneeName, userById, allUsers);
+                // Resolve Assignee (chỉ chấp nhận thành viên còn hợp lệ trong dự án)
+                var resolvedAssigneeId = revalidation.UnassignedTasks.Contains(taskDto)
+                    ? null
+                    : ResolveAssigneeId(taskDto.AssigneeUserId, taskDto.AssigneeName, userById, eligibleUsers);
 
                 // Match existing Product Backlog item so it is MOVED into Sprint instead of duplicated
                 Issue? matchedBacklogIssue = null;
-                if (taskDto.SourceBacklogIssueId.HasValue &&
-                    backlogById.TryGetValue(taskDto.SourceBacklogIssueId.Value, out var byIdCandidate) &&
-                    !movedBacklogIds.Contains(byIdCandidate.Id))
+                if (!revalidation.ForceCreateNewTasks.Contains(taskDto))
                 {
-                    matchedBacklogIssue = byIdCandidate;
-                }
-                else if (!string.IsNullOrWhiteSpace(taskDto.SourceBacklogIssueKey))
-                {
-                    var dashIdx = taskDto.SourceBacklogIssueKey.LastIndexOf('-');
-                    var numStr = dashIdx >= 0 ? taskDto.SourceBacklogIssueKey[(dashIdx + 1)..] : taskDto.SourceBacklogIssueKey;
-                    if (int.TryParse(numStr.Trim(), out var issueNum) &&
-                        backlogByNumber.TryGetValue(issueNum, out var byKeyCandidate) &&
-                        !movedBacklogIds.Contains(byKeyCandidate.Id))
+                    if (taskDto.SourceBacklogIssueId.HasValue &&
+                        backlogById.TryGetValue(taskDto.SourceBacklogIssueId.Value, out var byIdCandidate) &&
+                        !movedBacklogIds.Contains(byIdCandidate.Id))
                     {
-                        matchedBacklogIssue = byKeyCandidate;
+                        matchedBacklogIssue = byIdCandidate;
                     }
-                }
-                else
-                {
-                    var normalizedTitle = taskDto.Title.Trim();
-                    matchedBacklogIssue = backlogIssues.FirstOrDefault(b =>
-                        !movedBacklogIds.Contains(b.Id) &&
-                        string.Equals(b.Title?.Trim(), normalizedTitle, StringComparison.OrdinalIgnoreCase));
+                    else if (!string.IsNullOrWhiteSpace(taskDto.SourceBacklogIssueKey))
+                    {
+                        var dashIdx = taskDto.SourceBacklogIssueKey.LastIndexOf('-');
+                        var numStr = dashIdx >= 0 ? taskDto.SourceBacklogIssueKey[(dashIdx + 1)..] : taskDto.SourceBacklogIssueKey;
+                        if (int.TryParse(numStr.Trim(), out var issueNum) &&
+                            backlogByNumber.TryGetValue(issueNum, out var byKeyCandidate) &&
+                            !movedBacklogIds.Contains(byKeyCandidate.Id))
+                        {
+                            matchedBacklogIssue = byKeyCandidate;
+                        }
+                    }
+                    else
+                    {
+                        var normalizedTitle = taskDto.Title.Trim();
+                        matchedBacklogIssue = backlogIssues.FirstOrDefault(b =>
+                            !movedBacklogIds.Contains(b.Id) &&
+                            string.Equals(b.Title?.Trim(), normalizedTitle, StringComparison.OrdinalIgnoreCase));
+                    }
                 }
 
                 Guid parentIssueId;
@@ -395,6 +422,11 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                     {
                         matchedBacklogIssue.AssigneeId = resolvedAssigneeId.Value;
                         matchedBacklogIssue.IsAiAssigned = true;
+                    }
+                    else if (revalidation.UnassignedTasks.Contains(taskDto))
+                    {
+                        matchedBacklogIssue.AssigneeId = null;
+                        matchedBacklogIssue.IsAiAssigned = false;
                     }
                     matchedBacklogIssue.Title = safeTaskTitle;
                     if (!string.IsNullOrWhiteSpace(safeTaskDescription))
@@ -560,8 +592,10 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                         var subId = Guid.NewGuid();
                         var subHours = Math.Clamp(Math.Max(0m, subDto.EstimatedHours), 0m, 80m);
 
-                        var subAssigneeId = ResolveAssigneeId(subDto.AssigneeUserId, subDto.AssigneeName, userById, allUsers)
-                            ?? resolvedAssigneeId;
+                        var subAssigneeId = revalidation.UnassignedSubtasks.Contains(subDto)
+                            ? null
+                            : ResolveAssigneeId(subDto.AssigneeUserId, subDto.AssigneeName, userById, eligibleUsers)
+                              ?? (revalidation.UnassignedTasks.Contains(taskDto) ? null : resolvedAssigneeId);
 
                         var subStatusName = activeConfig.ResolveStatusName(subDto.Status);
                         var subStatus = activeConfig.Statuses.FirstOrDefault(s =>
@@ -702,6 +736,11 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
 
                     foreach (var unfinished in unfinishedIssues)
                     {
+                        if (revalidation.SkippedIssueIds.Contains(unfinished.Id))
+                        {
+                            continue;
+                        }
+
                         var isBug = bugTypeId.HasValue && unfinished.IssueTypeId == bugTypeId.Value;
                         var isInProgress = unfinished.TimeSpentMinutes > 0 ||
                                            activeConfig.Statuses.Any(s => s.Id == unfinished.StatusId && (s.IsActiveWork || s.Category.Equals("InProgress", StringComparison.OrdinalIgnoreCase)));
@@ -808,14 +847,17 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                 await _stagingService.RemoveProposalAsync(request.SessionId, ct);
             }
 
-            var totalSp = request.Tasks.Sum(t => Math.Max(0m, t.StoryPoints));
+            var totalSp = committedStoryPoints;
+            var warningNote = revalidation.Warnings.Count > 0
+                ? $" (Lưu ý {revalidation.Warnings.Count} cảnh báo đối soát dữ liệu trước khi lưu)."
+                : string.Empty;
 
             if (request.PushToBacklog)
             {
                 return new AiApplySprintProposalResponse
                 {
                     Success = true,
-                    Message = $"Đã đẩy thành công {createdTaskCount} công việc và {createdSubtaskCount} công việc con vào kho Product Backlog.",
+                    Message = $"Đã đẩy thành công {createdTaskCount} công việc và {createdSubtaskCount} công việc con vào kho Product Backlog.{warningNote}",
                     SprintId = Guid.Empty,
                     SprintName = "Product Backlog",
                     SprintGoal = effectiveGoal,
@@ -826,6 +868,7 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                     RolloverTaskCount = 0,
                     BacklogReturnedCount = 0,
                     TotalStoryPoints = totalSp,
+                    Warnings = revalidation.Warnings,
                     CreatedIssues = createdSummaries
                 };
             }
@@ -843,7 +886,7 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
             return new AiApplySprintProposalResponse
             {
                 Success = true,
-                Message = $"Đã áp dụng thành công {createdTaskCount} công việc{movedSummary} và {createdSubtaskCount} công việc con vào {targetSprint!.Name}.{rolloverSummary}{backlogSummary}",
+                Message = $"Đã áp dụng thành công {createdTaskCount} công việc{movedSummary} và {createdSubtaskCount} công việc con vào {targetSprint!.Name}.{rolloverSummary}{backlogSummary}{warningNote}",
                 SprintId = targetSprint.Id,
                 SprintName = targetSprint.Name,
                 SprintGoal = targetSprint.Goal ?? effectiveGoal,
@@ -854,6 +897,7 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                 RolloverTaskCount = rolloverCount,
                 BacklogReturnedCount = backlogReturnedCount,
                 TotalStoryPoints = totalSp,
+                Warnings = revalidation.Warnings,
                 CreatedIssues = createdSummaries
             };
         }
@@ -1237,5 +1281,257 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
             documentCitations = cleanCitations,
             suggestedSkills = cleanSkills
         });
+    }
+
+    private sealed class PreCommitRevalidationResult
+    {
+        public List<string> Warnings { get; } = [];
+        public HashSet<ProposedTaskDto> SkippedTasks { get; } = new(ReferenceEqualityComparer.Instance);
+        public HashSet<Guid> SkippedIssueIds { get; } = [];
+        public HashSet<ProposedTaskDto> ForceCreateNewTasks { get; } = new(ReferenceEqualityComparer.Instance);
+        public HashSet<ProposedTaskDto> UnassignedTasks { get; } = new(ReferenceEqualityComparer.Instance);
+        public HashSet<ProposedSubTaskDto> UnassignedSubtasks { get; } = new(ReferenceEqualityComparer.Instance);
+        public IReadOnlyList<UserDisplayInfo> EligibleUsers { get; init; } = [];
+    }
+
+    /// <summary>
+    /// Đối soát lại toàn bộ cấu hình Workflow/Priority/IssueType/Labels, thành viên khả dụng của dự án
+    /// và trạng thái thực tế của các hạng mục nguồn từ Backlog ngay trước khi ghi DB để chống xung đột stale state.
+    /// </summary>
+    private async Task<PreCommitRevalidationResult> PreCommitRevalidateAsync(
+        Project project,
+        AiApplySprintProposalRequest request,
+        ProjectActiveConfig activeConfig,
+        Guid? targetSprintIdForIssues,
+        IReadOnlyList<UserDisplayInfo> allUsers,
+        CancellationToken ct)
+    {
+        var warnings = new List<string>();
+        var skippedTasks = new HashSet<ProposedTaskDto>(ReferenceEqualityComparer.Instance);
+        var skippedIssueIds = new HashSet<Guid>();
+        var forceCreateNew = new HashSet<ProposedTaskDto>(ReferenceEqualityComparer.Instance);
+        var unassignedTasks = new HashSet<ProposedTaskDto>(ReferenceEqualityComparer.Instance);
+        var unassignedSubtasks = new HashSet<ProposedSubTaskDto>(ReferenceEqualityComparer.Instance);
+
+        // 1. Lọc danh sách thành viên thực sự còn thuộc dự án tại thời điểm commit
+        IReadOnlyList<UserDisplayInfo> eligibleUsers = allUsers;
+        HashSet<Guid>? projectMemberIds = null;
+        if (_roleServices != null)
+        {
+            var membersDto = await _roleServices.GetProjectMembersAsync(project.Id);
+            projectMemberIds = membersDto.Items?
+                .Where(m => m.UserId.HasValue && m.UserId.Value != Guid.Empty)
+                .Select(m => m.UserId!.Value)
+                .ToHashSet() ?? [];
+
+            if (project.LeadUserId != Guid.Empty)
+            {
+                projectMemberIds.Add(project.LeadUserId);
+            }
+
+            eligibleUsers = allUsers.Where(u => projectMemberIds.Contains(u.UserId)).ToList();
+        }
+
+        var allUserById = allUsers.ToDictionary(u => u.UserId);
+        var eligibleById = eligibleUsers.ToDictionary(u => u.UserId);
+
+        // 2. Truy vấn thực tế các issue Backlog được tham chiếu (kể cả đã xóa hoặc đã gán Sprint khác)
+        var requestedIds = request.Tasks
+            .Where(t => t.SourceBacklogIssueId.HasValue && t.SourceBacklogIssueId.Value != Guid.Empty)
+            .Select(t => t.SourceBacklogIssueId!.Value)
+            .Distinct()
+            .ToList();
+
+        var requestedNumbers = new List<int>();
+        foreach (var taskDto in request.Tasks)
+        {
+            if (TryParseIssueNumber(taskDto.SourceBacklogIssueKey, out var num))
+            {
+                requestedNumbers.Add(num);
+            }
+        }
+        requestedNumbers = requestedNumbers.Distinct().ToList();
+
+        var referencedIssues = (requestedIds.Count > 0 || requestedNumbers.Count > 0)
+            ? await _deliveryDb.Issues.AsNoTracking()
+                .Where(i => i.ProjectId == project.Id &&
+                            (requestedIds.Contains(i.Id) || requestedNumbers.Contains(i.IssueNumber)))
+                .ToListAsync(ct)
+            : [];
+
+        var issueById = referencedIssues.ToDictionary(i => i.Id);
+        var issueByNum = referencedIssues
+            .GroupBy(i => i.IssueNumber)
+            .ToDictionary(g => g.Key, g => g.OrderBy(i => i.IsDeleted).First());
+
+        var defaultPriorityName = activeConfig.GetDefaultPriorityName();
+
+        foreach (var taskDto in request.Tasks)
+        {
+            var taskLabel = string.IsNullOrWhiteSpace(taskDto.Title) ? "(Không tiêu đề)" : taskDto.Title.Trim();
+
+            // 2a. Kiểm tra trạng thái tồn tại & Sprint hiện tại của hạng mục Backlog nguồn
+            if (taskDto.SourceBacklogIssueId.HasValue || !string.IsNullOrWhiteSpace(taskDto.SourceBacklogIssueKey))
+            {
+                Issue? existingRef = null;
+                if (taskDto.SourceBacklogIssueId.HasValue && issueById.TryGetValue(taskDto.SourceBacklogIssueId.Value, out var foundById))
+                {
+                    existingRef = foundById;
+                }
+                else if (TryParseIssueNumber(taskDto.SourceBacklogIssueKey, out var issueNum) &&
+                         issueByNum.TryGetValue(issueNum, out var foundByNum))
+                {
+                    existingRef = foundByNum;
+                }
+
+                var refKey = !string.IsNullOrWhiteSpace(taskDto.SourceBacklogIssueKey)
+                    ? taskDto.SourceBacklogIssueKey.Trim()
+                    : (existingRef != null ? $"{project.ProjectKey}-{existingRef.IssueNumber}" : taskDto.SourceBacklogIssueId?.ToString() ?? taskLabel);
+
+                if (existingRef == null || existingRef.IsDeleted)
+                {
+                    forceCreateNew.Add(taskDto);
+                    taskDto.SourceBacklogIssueId = null;
+                    taskDto.SourceBacklogIssueKey = null;
+                    warnings.Add($"Hạng mục nguồn Backlog '{refKey}' ({taskLabel}) không còn tồn tại hoặc đã bị xóa; hệ thống đã tự động chuyển sang tạo mới công việc.");
+                }
+                else if (existingRef.SprintId.HasValue &&
+                         (!targetSprintIdForIssues.HasValue || existingRef.SprintId.Value != targetSprintIdForIssues.Value))
+                {
+                    skippedTasks.Add(taskDto);
+                    skippedIssueIds.Add(existingRef.Id);
+                    warnings.Add($"Hạng mục Backlog '{project.ProjectKey}-{existingRef.IssueNumber}' ({taskLabel}) hiện đã nằm trong một Sprint khác; hệ thống bỏ qua thao tác di chuyển để không ghi đè dữ liệu Sprint khác.");
+                    continue;
+                }
+            }
+
+            // 2b. Kiểm tra & ánh xạ lại Workflow Status / Priority nếu cấu hình dự án vừa thay đổi
+            if (!string.IsNullOrWhiteSpace(taskDto.Status))
+            {
+                var trimmedStatus = taskDto.Status.Trim();
+                var hasExactStatus = activeConfig.Statuses.Any(s => s.Name.Equals(trimmedStatus, StringComparison.OrdinalIgnoreCase));
+                if (!hasExactStatus)
+                {
+                    var remappedStatus = activeConfig.ResolveStatusName(trimmedStatus);
+                    if (!remappedStatus.Equals(trimmedStatus, StringComparison.OrdinalIgnoreCase))
+                    {
+                        warnings.Add($"Trạng thái '{trimmedStatus}' của '{taskLabel}' không còn hợp lệ trong quy trình '{activeConfig.WorkflowName}'; đã ánh xạ về '{remappedStatus}'.");
+                        taskDto.Status = remappedStatus;
+                    }
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(taskDto.Priority) && activeConfig.Priorities.Count > 0)
+            {
+                var trimmedPriority = taskDto.Priority.Trim();
+                var hasExactPriority = activeConfig.Priorities.Any(p => p.Name.Equals(trimmedPriority, StringComparison.OrdinalIgnoreCase));
+                if (!hasExactPriority)
+                {
+                    warnings.Add($"Mức ưu tiên '{trimmedPriority}' của '{taskLabel}' không còn tồn tại; đã ánh xạ về mức mặc định '{defaultPriorityName}'.");
+                    taskDto.Priority = defaultPriorityName;
+                }
+            }
+
+            // 2c. Kiểm tra thành viên phụ trách Task còn thuộc dự án không
+            if (IsInvalidProjectAssignee(taskDto.AssigneeUserId, taskDto.AssigneeName, projectMemberIds, allUserById, allUsers, eligibleById, eligibleUsers))
+            {
+                unassignedTasks.Add(taskDto);
+                taskDto.AssigneeUserId = null;
+                taskDto.AssigneeName = null;
+                warnings.Add($"Thành viên được gán cho công việc '{taskLabel}' không còn thuộc dự án hiện tại; đã chuyển sang Chưa gán (Unassigned).");
+            }
+
+            // 2d. Kiểm tra Subtasks tương ứng
+            foreach (var subDto in taskDto.Subtasks ?? [])
+            {
+                var subLabel = string.IsNullOrWhiteSpace(subDto.Title) ? taskLabel : subDto.Title.Trim();
+
+                if (!string.IsNullOrWhiteSpace(subDto.Status))
+                {
+                    var trimmedSubStatus = subDto.Status.Trim();
+                    var hasExactSubStatus = activeConfig.Statuses.Any(s => s.Name.Equals(trimmedSubStatus, StringComparison.OrdinalIgnoreCase));
+                    if (!hasExactSubStatus)
+                    {
+                        var remappedSubStatus = activeConfig.ResolveStatusName(trimmedSubStatus);
+                        warnings.Add($"Trạng thái '{trimmedSubStatus}' của việc con '{subLabel}' không còn hợp lệ; đã ánh xạ về '{remappedSubStatus}'.");
+                        subDto.Status = remappedSubStatus;
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(subDto.Priority) && activeConfig.Priorities.Count > 0)
+                {
+                    var trimmedSubPriority = subDto.Priority.Trim();
+                    var hasExactSubPriority = activeConfig.Priorities.Any(p => p.Name.Equals(trimmedSubPriority, StringComparison.OrdinalIgnoreCase));
+                    if (!hasExactSubPriority)
+                    {
+                        warnings.Add($"Mức ưu tiên '{trimmedSubPriority}' của việc con '{subLabel}' không còn tồn tại; đã ánh xạ về '{defaultPriorityName}'.");
+                        subDto.Priority = defaultPriorityName;
+                    }
+                }
+
+                if (IsInvalidProjectAssignee(subDto.AssigneeUserId, subDto.AssigneeName, projectMemberIds, allUserById, allUsers, eligibleById, eligibleUsers))
+                {
+                    unassignedSubtasks.Add(subDto);
+                    subDto.AssigneeUserId = null;
+                    subDto.AssigneeName = null;
+                    warnings.Add($"Thành viên được gán cho việc con '{subLabel}' không còn thuộc dự án; đã chuyển sang Chưa gán (Unassigned).");
+                }
+            }
+        }
+
+        var result = new PreCommitRevalidationResult
+        {
+            EligibleUsers = eligibleUsers
+        };
+        result.Warnings.AddRange(warnings);
+        foreach (var item in skippedTasks) result.SkippedTasks.Add(item);
+        foreach (var skippedId in skippedIssueIds) result.SkippedIssueIds.Add(skippedId);
+        foreach (var item in forceCreateNew) result.ForceCreateNewTasks.Add(item);
+        foreach (var item in unassignedTasks) result.UnassignedTasks.Add(item);
+        foreach (var item in unassignedSubtasks) result.UnassignedSubtasks.Add(item);
+        return result;
+    }
+
+    private static bool TryParseIssueNumber(string? issueKey, out int issueNumber)
+    {
+        issueNumber = 0;
+        if (string.IsNullOrWhiteSpace(issueKey)) return false;
+        var dashIdx = issueKey.LastIndexOf('-');
+        var numStr = dashIdx >= 0 ? issueKey[(dashIdx + 1)..] : issueKey;
+        return int.TryParse(numStr.Trim(), out issueNumber) && issueNumber > 0;
+    }
+
+    private static bool IsInvalidProjectAssignee(
+        Guid? explicitUserId,
+        string? assigneeName,
+        HashSet<Guid>? projectMemberIds,
+        IReadOnlyDictionary<Guid, UserDisplayInfo> allUserById,
+        IReadOnlyList<UserDisplayInfo> allUsers,
+        IReadOnlyDictionary<Guid, UserDisplayInfo> eligibleById,
+        IReadOnlyList<UserDisplayInfo> eligibleUsers)
+    {
+        if (explicitUserId.HasValue && explicitUserId.Value != Guid.Empty)
+        {
+            if (projectMemberIds != null)
+            {
+                return !projectMemberIds.Contains(explicitUserId.Value) || !eligibleById.ContainsKey(explicitUserId.Value);
+            }
+
+            return !allUserById.ContainsKey(explicitUserId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(assigneeName) && projectMemberIds != null)
+        {
+            var matchedGlobal = ResolveAssigneeId(null, assigneeName, allUserById, allUsers);
+            if (matchedGlobal.HasValue)
+            {
+                return !projectMemberIds.Contains(matchedGlobal.Value);
+            }
+
+            var matchedEligible = ResolveAssigneeId(null, assigneeName, eligibleById, eligibleUsers);
+            return matchedEligible == null && allUsers.Count > 0;
+        }
+
+        return false;
     }
 }

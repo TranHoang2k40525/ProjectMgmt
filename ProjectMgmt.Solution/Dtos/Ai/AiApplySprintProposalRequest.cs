@@ -58,6 +58,7 @@ public sealed class AiApplySprintProposalResponse
     public int RolloverTaskCount { get; set; }
     public int BacklogReturnedCount { get; set; }
     public decimal TotalStoryPoints { get; set; }
+    public List<string> Warnings { get; set; } = [];
     public List<AiCreatedIssueItemDto> CreatedIssues { get; set; } = [];
 }
 

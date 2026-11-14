@@ -24,6 +24,7 @@
     <ProjectReference Include="..\ProjectMgmt.Modules.IdentityExperience\Infrastructure\IdentityExperience.Infrastructure.csproj" />
     <ProjectReference Include="..\ProjectMgmt.Modules.Planning\Application\Planning.Application.csproj" />
     <ProjectReference Include="..\ProjectMgmt.Modules.Planning\Infrastructure\Planning.Infrastructure.csproj" />
+    <ProjectReference Include="..\ProjectMgmt.McpServer\ProjectMgmt.McpServer.csproj" />
     <ProjectReference Include="..\ProjectMgmt.Solution\ProjectMgmt.Solution.csproj" />
   </ItemGroup>
 </Project>

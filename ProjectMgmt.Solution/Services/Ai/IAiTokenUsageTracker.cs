@@ -1,5 +1,7 @@
 namespace ProjectMgmt.Solution.Services.Ai;
 
+using ProjectMgmt.Core.Ai;
+
 public record AiUsageRecord(
     string SessionId,
     Guid UserId,
@@ -39,6 +41,17 @@ public record AiTokenUsageSummary(
     Dictionary<string, int> ModelBreakdown,
     List<AiUsageRecord> RecentHistory);
 
+public record AiQuotaCheckResult(
+    bool Allowed,
+    string? ErrorCode = null,
+    string? Message = null,
+    int RequestsInLastMinute = 0,
+    int MaxRequestsPerMinute = 0,
+    long UserDailyTokensUsed = 0,
+    long UserDailyTokenLimit = 0,
+    long ProjectDailyTokensUsed = 0,
+    long ProjectDailyTokenLimit = 0);
+
 public interface IAiTokenUsageTracker
 {
     void RecordUsage(AiUsageRecord record);
@@ -46,5 +59,6 @@ public interface IAiTokenUsageTracker
     AiTokenUsageSummary GetProjectUsageSummary(Guid projectId);
     void RecordSession(AiSessionSummary session);
     List<AiSessionSummary> GetProjectSessions(Guid projectId, int limit = 10);
+    AiQuotaCheckResult CheckPreExecutionQuota(Guid userId, Guid projectId, AiQuotaOptions? quotaOverride = null);
 }
 

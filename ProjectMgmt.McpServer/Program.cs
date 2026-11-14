@@ -1,21 +1,71 @@
 #pragma warning disable CA1305, CA1310, CA1845, CA1848, CA1869, CA2024
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Xml;
 using System.Xml.Linq;
 using DeliveryIntelligence.Infrastructure;
+using IdentityExperience.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Planning.Infrastructure;
+using ProjectMgmt.Core.Security;
 
 namespace ProjectMgmt.McpServer;
 
+internal sealed record McpScopeAuthContext(
+    Guid? UserId,
+    Guid? OrgId,
+    IReadOnlySet<Guid> AllowedProjectIds,
+    string? ProvidedApiToken,
+    string? ExpectedApiToken)
+{
+    public static McpScopeAuthContext FromEnvironment(IConfiguration? configuration)
+    {
+        var userIdStr = Environment.GetEnvironmentVariable("PROJECTMGMT_MCP_USER_ID");
+        var orgIdStr = Environment.GetEnvironmentVariable("PROJECTMGMT_MCP_ORG_ID");
+        var allowedRaw = Environment.GetEnvironmentVariable("PROJECTMGMT_MCP_ALLOWED_PROJECTS");
+        var providedToken = Environment.GetEnvironmentVariable("PROJECTMGMT_API_TOKEN");
+        var expectedToken = configuration?["Ai:McpServer:ApiToken"]
+            ?? Environment.GetEnvironmentVariable("PROJECTMGMT_MCP_SERVER_API_TOKEN");
+
+        Guid? userId = Guid.TryParse(userIdStr?.Trim(), out var u) && u != Guid.Empty ? u : null;
+        Guid? orgId = Guid.TryParse(orgIdStr?.Trim(), out var o) && o != Guid.Empty ? o : null;
+
+        var allowed = new HashSet<Guid>();
+        if (!string.IsNullOrWhiteSpace(allowedRaw))
+        {
+            foreach (var token in allowedRaw.Split([',', ';', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (Guid.TryParse(token, out var pid) && pid != Guid.Empty)
+                {
+                    allowed.Add(pid);
+                }
+            }
+        }
+
+        return new McpScopeAuthContext(
+            userId,
+            orgId,
+            allowed,
+            string.IsNullOrWhiteSpace(providedToken) ? null : providedToken.Trim(),
+            string.IsNullOrWhiteSpace(expectedToken) ? null : expectedToken.Trim());
+    }
+}
+
 public static class Program
 {
+    private const long MaxSingleEntryUncompressedBytes = 25L * 1024 * 1024;
+    private const long MaxTotalUncompressedBytes = 50L * 1024 * 1024;
+    private const int MaxZipEntries = 1000;
+    private const int MaxExtractedTextLength = 500_000;
+
     private static IConfiguration? _configuration;
     private static string? _connectionString;
     private static string? _specHubRoot;
+    private static McpScopeAuthContext? _authContext;
 
     public static async Task Main(string[] args)
     {
@@ -29,12 +79,14 @@ public static class Program
             .SetBasePath(Path.Combine(repoRoot, "ProjectMgmt.Solution"))
             .AddJsonFile("appsettings.json", optional: true)
             .AddJsonFile("appsettings.Development.json", optional: true)
+            .AddJsonFile("appsettings.Local.json", optional: true)
             .AddEnvironmentVariables();
 
         _configuration = builder.Build();
         _connectionString = _configuration.GetConnectionString("ProjectMgmt")
             ?? Environment.GetEnvironmentVariable("ConnectionStrings__ProjectMgmt")
             ?? "Server=127.0.0.1;Port=3306;Database=projectmgmt;User=root;Password=;SslMode=None;AllowPublicKeyRetrieval=True;";
+        _authContext = McpScopeAuthContext.FromEnvironment(_configuration);
 
         // JSON-RPC 2.0 Stdio loop
         using var reader = new StreamReader(Console.OpenStandardInput(), Encoding.UTF8);
@@ -49,88 +101,10 @@ public static class Program
                 var request = JsonNode.Parse(line);
                 if (request is not JsonObject jsonReq) continue;
 
-                var id = jsonReq["id"];
-                var method = jsonReq["method"]?.GetValue<string>();
-
-                if (method == "initialize")
+                var response = await ProcessJsonRpcRequestAsync(jsonReq, _authContext);
+                if (response != null)
                 {
-                    var response = new JsonObject
-                    {
-                        ["jsonrpc"] = "2.0",
-                        ["id"] = id?.DeepClone(),
-                        ["result"] = new JsonObject
-                        {
-                            ["protocolVersion"] = "2024-11-05",
-                            ["capabilities"] = new JsonObject
-                            {
-                                ["tools"] = new JsonObject()
-                            },
-                            ["serverInfo"] = new JsonObject
-                            {
-                                ["name"] = "ProjectMgmt-AiSprintPlanner-McpServer",
-                                ["version"] = "1.0.0"
-                            }
-                        }
-                    };
                     await writer.WriteLineAsync(response.ToJsonString());
-                }
-                else if (method == "notifications/initialized")
-                {
-                    // No-op for initialized notification
-                }
-                else if (method == "tools/list")
-                {
-                    var toolsResponse = new JsonObject
-                    {
-                        ["jsonrpc"] = "2.0",
-                        ["id"] = id?.DeepClone(),
-                        ["result"] = new JsonObject
-                        {
-                            ["tools"] = GetToolsList()
-                        }
-                    };
-                    await writer.WriteLineAsync(toolsResponse.ToJsonString());
-                }
-                else if (method == "tools/call")
-                {
-                    var toolName = jsonReq["params"]?["name"]?.GetValue<string>() ?? "";
-                    var arguments = jsonReq["params"]?["arguments"] as JsonObject ?? new JsonObject();
-
-                    var toolResult = await HandleToolCallAsync(toolName, arguments);
-                    var callResponse = new JsonObject
-                    {
-                        ["jsonrpc"] = "2.0",
-                        ["id"] = id?.DeepClone(),
-                        ["result"] = new JsonObject
-                        {
-                            ["content"] = new JsonArray
-                            {
-                                new JsonObject
-                                {
-                                    ["type"] = "text",
-                                    ["text"] = toolResult
-                                }
-                            }
-                        }
-                    };
-                    await writer.WriteLineAsync(callResponse.ToJsonString());
-                }
-                else
-                {
-                    if (id != null)
-                    {
-                        var methodNotFound = new JsonObject
-                        {
-                            ["jsonrpc"] = "2.0",
-                            ["id"] = id.DeepClone(),
-                            ["error"] = new JsonObject
-                            {
-                                ["code"] = -32601,
-                                ["message"] = $"Method '{method}' không được hỗ trợ."
-                            }
-                        };
-                        await writer.WriteLineAsync(methodNotFound.ToJsonString());
-                    }
                 }
             }
             catch (Exception ex)
@@ -148,6 +122,237 @@ public static class Program
                 await writer.WriteLineAsync(errorResponse.ToJsonString());
             }
         }
+    }
+
+    internal static async Task<JsonObject?> ProcessJsonRpcRequestAsync(
+        JsonObject jsonReq,
+        McpScopeAuthContext? authContext = null,
+        Func<PlanningDbContext>? planningFactory = null,
+        Func<DeliveryIntelligenceDbContext>? deliveryFactory = null,
+        Func<IdentityExperienceDbContext>? identityFactory = null)
+    {
+        var id = jsonReq["id"];
+        var method = jsonReq["method"]?.GetValue<string>();
+
+        if (method == "initialize")
+        {
+            return new JsonObject
+            {
+                ["jsonrpc"] = "2.0",
+                ["id"] = id?.DeepClone(),
+                ["result"] = new JsonObject
+                {
+                    ["protocolVersion"] = "2024-11-05",
+                    ["capabilities"] = new JsonObject
+                    {
+                        ["tools"] = new JsonObject()
+                    },
+                    ["serverInfo"] = new JsonObject
+                    {
+                        ["name"] = "ProjectMgmt-AiSprintPlanner-McpServer",
+                        ["version"] = "1.0.0"
+                    }
+                }
+            };
+        }
+
+        if (method == "notifications/initialized")
+        {
+            return null;
+        }
+
+        if (method == "tools/list")
+        {
+            return new JsonObject
+            {
+                ["jsonrpc"] = "2.0",
+                ["id"] = id?.DeepClone(),
+                ["result"] = new JsonObject
+                {
+                    ["tools"] = GetToolsList()
+                }
+            };
+        }
+
+        if (method == "tools/call")
+        {
+            var toolName = jsonReq["params"]?["name"]?.GetValue<string>() ?? "";
+            var arguments = jsonReq["params"]?["arguments"] as JsonObject ?? new JsonObject();
+
+            var effectiveAuth = authContext ?? _authContext ?? McpScopeAuthContext.FromEnvironment(_configuration);
+            var createPlanning = planningFactory ?? CreatePlanningDbContext;
+            var createDelivery = deliveryFactory ?? CreateDeliveryDbContext;
+            var createIdentity = identityFactory ?? CreateIdentityDbContext;
+
+            await using var planningForAuth = createPlanning();
+            await using var identityForAuth = createIdentity();
+            var (authorized, authError) = await AuthorizeToolCallAsync(arguments, effectiveAuth, planningForAuth, identityForAuth);
+            if (!authorized)
+            {
+                return new JsonObject
+                {
+                    ["jsonrpc"] = "2.0",
+                    ["id"] = id?.DeepClone(),
+                    ["error"] = new JsonObject
+                    {
+                        ["code"] = -32001,
+                        ["message"] = authError ?? "Unauthorized project scope access"
+                    }
+                };
+            }
+
+            var toolResult = await HandleToolCallAsync(toolName, arguments, createPlanning, createDelivery);
+            return new JsonObject
+            {
+                ["jsonrpc"] = "2.0",
+                ["id"] = id?.DeepClone(),
+                ["result"] = new JsonObject
+                {
+                    ["content"] = new JsonArray
+                    {
+                        new JsonObject
+                        {
+                            ["type"] = "text",
+                            ["text"] = toolResult
+                        }
+                    }
+                }
+            };
+        }
+
+        if (id != null)
+        {
+            return new JsonObject
+            {
+                ["jsonrpc"] = "2.0",
+                ["id"] = id.DeepClone(),
+                ["error"] = new JsonObject
+                {
+                    ["code"] = -32601,
+                    ["message"] = $"Method '{method}' không được hỗ trợ."
+                }
+            };
+        }
+
+        return null;
+    }
+
+    internal static async Task<(bool Authorized, string? ErrorMessage)> AuthorizeToolCallAsync(
+        JsonObject args,
+        McpScopeAuthContext auth,
+        PlanningDbContext planning,
+        IdentityExperienceDbContext? identity = null)
+    {
+        if (!string.IsNullOrWhiteSpace(auth.ExpectedApiToken))
+        {
+            var expectedBytes = Encoding.UTF8.GetBytes(auth.ExpectedApiToken);
+            var providedBytes = Encoding.UTF8.GetBytes(auth.ProvidedApiToken ?? string.Empty);
+            if (providedBytes.Length != expectedBytes.Length ||
+                !CryptographicOperations.FixedTimeEquals(providedBytes, expectedBytes))
+            {
+                return (false, "Unauthorized project scope access: PROJECTMGMT_API_TOKEN không hợp lệ hoặc bị thiếu.");
+            }
+        }
+
+        var hasProjectArg = args.ContainsKey("projectId");
+        var hasDocumentArg = args.ContainsKey("documentId");
+        if (!hasProjectArg && !hasDocumentArg)
+        {
+            return (true, null);
+        }
+
+        // Fail-closed: không cho phép truy vấn bất kỳ projectId/documentId nào nếu thiếu hoàn toàn danh tính phạm vi
+        if (!auth.UserId.HasValue && !auth.OrgId.HasValue && auth.AllowedProjectIds.Count == 0)
+        {
+            return (false, "Unauthorized project scope access: Chưa cấu hình danh tính phạm vi (PROJECTMGMT_MCP_USER_ID, PROJECTMGMT_MCP_ORG_ID hoặc PROJECTMGMT_MCP_ALLOWED_PROJECTS).");
+        }
+
+        Guid? targetProjectId = null;
+        if (hasProjectArg)
+        {
+            var projectIdStr = args["projectId"]?.GetValue<string>();
+            if (!Guid.TryParse(projectIdStr, out var parsedProjectId) || parsedProjectId == Guid.Empty)
+            {
+                return (false, "Unauthorized project scope access: projectId không hợp lệ.");
+            }
+            targetProjectId = parsedProjectId;
+        }
+
+        if (hasDocumentArg)
+        {
+            var docIdStr = args["documentId"]?.GetValue<string>();
+            if (!Guid.TryParse(docIdStr, out var parsedDocId) || parsedDocId == Guid.Empty)
+            {
+                return (false, "Unauthorized project scope access: documentId không hợp lệ.");
+            }
+
+            var doc = await planning.ProjectDocuments.AsNoTracking().FirstOrDefaultAsync(d => d.Id == parsedDocId);
+            if (doc == null)
+            {
+                return (false, "Unauthorized project scope access: Không tìm thấy tài liệu trong phạm vi được phép.");
+            }
+
+            if (targetProjectId.HasValue && targetProjectId.Value != doc.ProjectId)
+            {
+                return (false, "Unauthorized project scope access: documentId không thuộc projectId được yêu cầu.");
+            }
+
+            targetProjectId = doc.ProjectId;
+        }
+
+        if (!targetProjectId.HasValue)
+        {
+            return (false, "Unauthorized project scope access: Không xác định được phạm vi dự án.");
+        }
+
+        if (auth.AllowedProjectIds.Count > 0 && !auth.AllowedProjectIds.Contains(targetProjectId.Value))
+        {
+            return (false, "Unauthorized project scope access: Dự án không nằm trong danh sách PROJECTMGMT_MCP_ALLOWED_PROJECTS được cấp phép.");
+        }
+
+        var project = await planning.Projects.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == targetProjectId.Value && !p.IsDeleted);
+        if (project == null)
+        {
+            return (false, "Unauthorized project scope access: Dự án không tồn tại hoặc đã bị vô hiệu hóa.");
+        }
+
+        if (auth.OrgId.HasValue && project.OrgId != auth.OrgId.Value)
+        {
+            return (false, "Unauthorized project scope access: Dự án không thuộc phạm vi tổ chức PROJECTMGMT_MCP_ORG_ID.");
+        }
+
+        if (auth.UserId.HasValue && project.LeadUserId != auth.UserId.Value)
+        {
+            if (identity == null)
+            {
+                return (false, "Unauthorized project scope access: Thiếu ngữ cảnh kiểm tra vai trò người dùng.");
+            }
+
+            var isDeactivated = await identity.Users.AsNoTracking()
+                .AnyAsync(u => u.Id == auth.UserId.Value && !u.IsActive);
+            if (isDeactivated)
+            {
+                return (false, "Unauthorized project scope access: Tài khoản người dùng đã bị khóa.");
+            }
+
+            var userRoles = await identity.UserRoles.AsNoTracking()
+                .Where(ur => ur.UserId == auth.UserId.Value)
+                .ToListAsync();
+
+            var hasScopedAccess = userRoles.Any(ur =>
+                (string.Equals(ur.ScopeType, "Project", StringComparison.OrdinalIgnoreCase) && ur.ScopeId == project.Id) ||
+                ((string.Equals(ur.ScopeType, "Organization", StringComparison.OrdinalIgnoreCase) ||
+                  string.Equals(ur.ScopeType, "Org", StringComparison.OrdinalIgnoreCase)) && ur.ScopeId == project.OrgId) ||
+                string.Equals(ur.ScopeType, "System", StringComparison.OrdinalIgnoreCase));
+
+            if (!hasScopedAccess)
+            {
+                return (false, "Unauthorized project scope access: Người dùng không có quyền truy cập dự án hoặc tổ chức này.");
+            }
+        }
+
+        return (true, null);
     }
 
     private static string FindRepoRoot(string startPath)
@@ -316,8 +521,23 @@ public static class Program
         return new DeliveryIntelligenceDbContext(options);
     }
 
-    private static async Task<string> HandleToolCallAsync(string toolName, JsonObject args)
+    private static IdentityExperienceDbContext CreateIdentityDbContext()
     {
+        var options = new DbContextOptionsBuilder<IdentityExperienceDbContext>()
+            .UseMySql(_connectionString!, new MySqlServerVersion(new Version(8, 0, 46)))
+            .Options;
+        return new IdentityExperienceDbContext(options);
+    }
+
+    private static async Task<string> HandleToolCallAsync(
+        string toolName,
+        JsonObject args,
+        Func<PlanningDbContext>? planningFactory = null,
+        Func<DeliveryIntelligenceDbContext>? deliveryFactory = null)
+    {
+        PlanningDbContext OpenPlanningDb() => (planningFactory ?? CreatePlanningDbContext)();
+        DeliveryIntelligenceDbContext OpenDeliveryDb() => (deliveryFactory ?? CreateDeliveryDbContext)();
+
         switch (toolName)
         {
             case "spec_hub_list_documents":
@@ -325,7 +545,7 @@ public static class Program
                 var projectIdStr = args["projectId"]?.GetValue<string>();
                 if (!Guid.TryParse(projectIdStr, out var projectId)) return "Lỗi: projectId không hợp lệ.";
 
-                await using var planning = CreatePlanningDbContext();
+                await using var planning = OpenPlanningDb();
                 var docs = await planning.ProjectDocuments.AsNoTracking()
                     .Where(d => d.ProjectId == projectId)
                     .OrderBy(d => !d.IsDirectory)
@@ -353,7 +573,7 @@ public static class Program
                 var docIdStr = args["documentId"]?.GetValue<string>();
                 if (!Guid.TryParse(docIdStr, out var docId)) return "Lỗi: documentId không hợp lệ.";
 
-                await using var planning = CreatePlanningDbContext();
+                await using var planning = OpenPlanningDb();
                 var doc = await planning.ProjectDocuments.AsNoTracking().FirstOrDefaultAsync(d => d.Id == docId);
                 if (doc == null) return "Lỗi: Không tìm thấy tài liệu với ID chỉ định.";
 
@@ -387,6 +607,12 @@ public static class Program
                     }
                 }
 
+                var safeContent = InputGuardrail.SanitizeDocumentContent(extractedText).SanitizedText;
+                if (safeContent.Length > MaxExtractedTextLength)
+                {
+                    safeContent = safeContent[..MaxExtractedTextLength] + "\n...[Đã cắt gọn do vượt giới hạn kích thước văn bản an toàn]";
+                }
+
                 var result = new
                 {
                     doc.Id,
@@ -396,7 +622,7 @@ public static class Program
                     doc.Extension,
                     doc.Status,
                     doc.Version,
-                    ExtractedContent = extractedText
+                    ExtractedContent = safeContent
                 };
 
                 return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
@@ -409,7 +635,7 @@ public static class Program
                 if (!Guid.TryParse(projectIdStr, out var projectId)) return "Lỗi: projectId không hợp lệ.";
                 if (string.IsNullOrWhiteSpace(keyword)) return "Vui lòng nhập từ khóa tìm kiếm.";
 
-                await using var planning = CreatePlanningDbContext();
+                await using var planning = OpenPlanningDb();
                 var docs = await planning.ProjectDocuments.AsNoTracking()
                     .Where(d => d.ProjectId == projectId && !d.IsDirectory)
                     .ToListAsync();
@@ -427,7 +653,7 @@ public static class Program
                             doc.Name,
                             doc.RelativePath,
                             doc.Status,
-                            Snippet = GetSnippet(doc.Content, keyword)
+                            Snippet = InputGuardrail.SanitizeDocumentContent(GetSnippet(doc.Content, keyword)).SanitizedText
                         });
                     }
                 }
@@ -440,8 +666,8 @@ public static class Program
                 var projectIdStr = args["projectId"]?.GetValue<string>();
                 if (!Guid.TryParse(projectIdStr, out var projectId)) return "Lỗi: projectId không hợp lệ.";
 
-                await using var delivery = CreateDeliveryDbContext();
-                await using var planning = CreatePlanningDbContext();
+                await using var delivery = OpenDeliveryDb();
+                await using var planning = OpenPlanningDb();
 
                 var project = await planning.Projects.AsNoTracking().FirstOrDefaultAsync(p => p.Id == projectId);
                 var projectKey = project?.ProjectKey ?? "PRJ";
@@ -480,8 +706,8 @@ public static class Program
                 var projectIdStr = args["projectId"]?.GetValue<string>();
                 if (!Guid.TryParse(projectIdStr, out var projectId)) return "Lỗi: projectId không hợp lệ.";
 
-                await using var planning = CreatePlanningDbContext();
-                await using var delivery = CreateDeliveryDbContext();
+                await using var planning = OpenPlanningDb();
+                await using var delivery = OpenDeliveryDb();
 
                 var customPriorities = await planning.Priorities.AsNoTracking()
                     .Where(p => p.ProjectId == projectId)
@@ -534,8 +760,8 @@ public static class Program
                 var projectIdStr = args["projectId"]?.GetValue<string>();
                 if (!Guid.TryParse(projectIdStr, out var projectId)) return "Lỗi: projectId không hợp lệ.";
 
-                await using var planning = CreatePlanningDbContext();
-                await using var delivery = CreateDeliveryDbContext();
+                await using var planning = OpenPlanningDb();
+                await using var delivery = OpenDeliveryDb();
 
                 var pastSprints = await planning.Sprints.AsNoTracking()
                     .Where(s => s.ProjectId == projectId && s.Status == "completed")
@@ -571,7 +797,7 @@ public static class Program
                 var projectIdStr = args["projectId"]?.GetValue<string>();
                 if (!Guid.TryParse(projectIdStr, out var projectId)) return "Lỗi: projectId không hợp lệ.";
 
-                await using var planning = CreatePlanningDbContext();
+                await using var planning = OpenPlanningDb();
                 var project = await planning.Projects.AsNoTracking().FirstOrDefaultAsync(p => p.Id == projectId);
                 if (project == null) return "Không tìm thấy dự án.";
 
@@ -606,8 +832,8 @@ public static class Program
                 var meetingNotes = args["meetingNotes"]?.GetValue<string>() ?? "";
                 if (!Guid.TryParse(projectIdStr, out var projectId)) return "Lỗi: projectId không hợp lệ.";
 
-                await using var delivery = CreateDeliveryDbContext();
-                await using var planning = CreatePlanningDbContext();
+                await using var delivery = OpenDeliveryDb();
+                await using var planning = OpenPlanningDb();
 
                 var project = await planning.Projects.AsNoTracking().FirstOrDefaultAsync(p => p.Id == projectId);
                 var projectKey = project?.ProjectKey ?? "PRJ";
@@ -664,23 +890,75 @@ public static class Program
         return string.IsNullOrEmpty(res) ? "Item" : res;
     }
 
+    private static XDocument LoadSafeXmlEntry(ZipArchiveEntry entry, ref long totalUncompressedBytes)
+    {
+        if (entry.Length > MaxSingleEntryUncompressedBytes)
+        {
+            throw new InvalidOperationException(
+                $"Entry '{entry.FullName}' có kích thước giải nén vượt ngưỡng an toàn {MaxSingleEntryUncompressedBytes / (1024 * 1024)}MB.");
+        }
+
+        using var rawStream = entry.Open();
+        using var bounded = new MemoryStream();
+        var buffer = new byte[81920];
+        long entryBytes = 0;
+        int read;
+        while ((read = rawStream.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            entryBytes += read;
+            if (entryBytes > MaxSingleEntryUncompressedBytes)
+            {
+                throw new InvalidOperationException(
+                    $"Entry '{entry.FullName}' vượt dung lượng giải nén tối đa ({MaxSingleEntryUncompressedBytes / (1024 * 1024)}MB).");
+            }
+            if (totalUncompressedBytes + read > MaxTotalUncompressedBytes)
+            {
+                throw new InvalidOperationException(
+                    $"Tổng dung lượng giải nén của gói tài liệu vượt ngưỡng an toàn ({MaxTotalUncompressedBytes / (1024 * 1024)}MB).");
+            }
+            totalUncompressedBytes += read;
+            bounded.Write(buffer, 0, read);
+        }
+
+        bounded.Position = 0;
+        var xmlSettings = new XmlReaderSettings
+        {
+            DtdProcessing = DtdProcessing.Prohibit,
+            XmlResolver = null
+        };
+        using var xmlReader = XmlReader.Create(bounded, xmlSettings);
+        return XDocument.Load(xmlReader);
+    }
+
     private static string ExtractTextFromDocx(string filePath)
     {
         try
         {
             using var archive = ZipFile.OpenRead(filePath);
+            if (archive.Entries.Count > MaxZipEntries)
+            {
+                return $"[Cảnh báo bảo mật Docx: Số lượng tệp nén ({archive.Entries.Count}) vượt ngưỡng tối đa {MaxZipEntries}.]";
+            }
+
+            long totalUncompressed = 0;
+            var hasImages = archive.Entries.Any(e =>
+                e.FullName.StartsWith("word/media/", StringComparison.OrdinalIgnoreCase) && e.Length > 0);
             var entry = archive.GetEntry("word/document.xml");
             if (entry == null) return "";
-            using var stream = entry.Open();
-            var doc = XDocument.Load(stream);
+            var doc = LoadSafeXmlEntry(entry, ref totalUncompressed);
             XNamespace w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
             var sb = new StringBuilder();
             foreach (var p in doc.Descendants(w + "p"))
             {
                 var text = string.Concat(p.Descendants(w + "t").Select(t => t.Value));
                 if (!string.IsNullOrWhiteSpace(text)) sb.AppendLine(text);
+                if (sb.Length >= MaxExtractedTextLength) break;
             }
-            return sb.ToString();
+            if (hasImages)
+            {
+                sb.Insert(0, "[CẢNH BÁO TRÍCH XUẤT HÌNH ẢNH/SCAN]: Tài liệu Word chứa hình ảnh hoặc sơ đồ nhúng không thể đọc hết bằng văn bản thuần.\n");
+            }
+            return sb.Length > MaxExtractedTextLength ? sb.ToString(0, MaxExtractedTextLength) : sb.ToString();
         }
         catch (Exception ex)
         {
@@ -693,12 +971,17 @@ public static class Program
         try
         {
             using var archive = ZipFile.OpenRead(filePath);
+            if (archive.Entries.Count > MaxZipEntries)
+            {
+                return $"[Cảnh báo bảo mật Xlsx: Số lượng tệp nén ({archive.Entries.Count}) vượt ngưỡng tối đa {MaxZipEntries}.]";
+            }
+
+            long totalUncompressed = 0;
             var sharedStrings = new List<string>();
             var ssEntry = archive.GetEntry("xl/sharedStrings.xml");
             if (ssEntry != null)
             {
-                using var ssStream = ssEntry.Open();
-                var ssDoc = XDocument.Load(ssStream);
+                var ssDoc = LoadSafeXmlEntry(ssEntry, ref totalUncompressed);
                 XNamespace ssNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
                 foreach (var si in ssDoc.Descendants(ssNs + "si"))
                     sharedStrings.Add(string.Concat(si.Descendants(ssNs + "t").Select(t => t.Value)));
@@ -708,8 +991,7 @@ public static class Program
             XNamespace sNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
             foreach (var entry in archive.Entries.Where(e => e.FullName.StartsWith("xl/worksheets/sheet") && e.FullName.EndsWith(".xml")))
             {
-                using var sStream = entry.Open();
-                var sDoc = XDocument.Load(sStream);
+                var sDoc = LoadSafeXmlEntry(entry, ref totalUncompressed);
                 sb.AppendLine($"--- {entry.Name} ---");
                 foreach (var row in sDoc.Descendants(sNs + "row"))
                 {
@@ -725,9 +1007,11 @@ public static class Program
                     }
                     if (cells.Any(cell => !string.IsNullOrWhiteSpace(cell)))
                         sb.AppendLine(string.Join("\t | ", cells));
+                    if (sb.Length >= MaxExtractedTextLength) break;
                 }
+                if (sb.Length >= MaxExtractedTextLength) break;
             }
-            return sb.ToString();
+            return sb.Length > MaxExtractedTextLength ? sb.ToString(0, MaxExtractedTextLength) : sb.ToString();
         }
         catch (Exception ex)
         {
@@ -740,11 +1024,19 @@ public static class Program
         try
         {
             var bytes = File.ReadAllBytes(filePath);
+            if (bytes.Length == 0)
+            {
+                return "[Tài liệu PDF định dạng quét/hình ảnh hoặc bảo vệ mật khẩu]";
+            }
+
             var content = Encoding.ASCII.GetString(bytes);
+            var hasEmbeddedImages = content.Contains("/Subtype /Image", StringComparison.Ordinal)
+                || content.Contains("/Subtype/Image", StringComparison.Ordinal);
             var sb = new StringBuilder();
 
-            // Extract plain streams between stream ... endstream
+            // Extract plain streams between stream ... endstream (bounded to prevent zip-bomb/OOM)
             var streamIdx = 0;
+            long totalDecompressed = 0;
             while ((streamIdx = content.IndexOf("stream", streamIdx, StringComparison.Ordinal)) != -1)
             {
                 var endStreamIdx = content.IndexOf("endstream", streamIdx, StringComparison.Ordinal);
@@ -757,26 +1049,51 @@ public static class Program
                 var streamBytes = bytes.Skip(streamStart).Take(endStreamIdx - streamStart).ToArray();
                 try
                 {
-                    // Attempt inflate
                     using var ms = new MemoryStream(streamBytes);
                     using var ds = new DeflateStream(ms, CompressionMode.Decompress);
                     using var decompressed = new MemoryStream();
-                    ds.CopyTo(decompressed);
+                    var buffer = new byte[65536];
+                    int read;
+                    while ((read = ds.Read(buffer, 0, buffer.Length)) > 0)
+                    {
+                        totalDecompressed += read;
+                        if (decompressed.Length + read > MaxSingleEntryUncompressedBytes ||
+                            totalDecompressed > MaxTotalUncompressedBytes)
+                        {
+                            throw new InvalidOperationException("Luồng PDF giải nén vượt ngưỡng bộ nhớ an toàn.");
+                        }
+                        decompressed.Write(buffer, 0, read);
+                    }
                     var text = Encoding.UTF8.GetString(decompressed.ToArray());
                     ExtractPdfTextCommands(text, sb);
                 }
+                catch (InvalidOperationException)
+                {
+                    throw;
+                }
                 catch
                 {
-                    // Uncompressed or raw text
                     var rawText = Encoding.ASCII.GetString(streamBytes);
                     ExtractPdfTextCommands(rawText, sb);
                 }
 
+                if (sb.Length >= MaxExtractedTextLength) break;
                 streamIdx = endStreamIdx + 9;
             }
 
             var res = sb.ToString().Trim();
-            return string.IsNullOrEmpty(res) ? "[Tài liệu PDF định dạng quét/hình ảnh hoặc bảo vệ mật khẩu]" : res;
+            if (string.IsNullOrEmpty(res))
+            {
+                return "[Tài liệu PDF định dạng quét/hình ảnh hoặc bảo vệ mật khẩu]";
+            }
+
+            var alnumCount = res.Count(char.IsLetterOrDigit);
+            if ((bytes.Length >= 2048 && alnumCount < 50) || hasEmbeddedImages)
+            {
+                return $"[CẢNH BÁO TRÍCH XUẤT HÌNH ẢNH/SCAN]: Tài liệu PDF có ít văn bản khả đọc hoặc chứa hình ảnh/scan.\n{res}";
+            }
+
+            return res.Length > MaxExtractedTextLength ? res[..MaxExtractedTextLength] : res;
         }
         catch (Exception ex)
         {

@@ -10,7 +10,9 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Planning.Infrastructure;
+using ProjectMgmt.Core.Ai;
 using ProjectMgmt.Core.Security;
 using ProjectMgmt.Core.Staging;
 using ProjectMgmt.IdentityAccess.Contracts;
@@ -41,6 +43,7 @@ public class AiAgentController : ControllerBase
     private readonly IAiSprintCommitCoordinator? _commitCoordinator;
     private readonly IAiTokenUsageTracker? _tokenTracker;
     private readonly IAiConversationSessionStore? _sessionStore;
+    private readonly AiQuotaOptions? _quotaOptions;
 
     public AiAgentController(
         IAiSprintDecompositionService decompositionService,
@@ -53,7 +56,8 @@ public class AiAgentController : ControllerBase
         ILogger<AiAgentController> logger,
         IAiSprintCommitCoordinator? commitCoordinator = null,
         IAiTokenUsageTracker? tokenTracker = null,
-        IAiConversationSessionStore? sessionStore = null)
+        IAiConversationSessionStore? sessionStore = null,
+        IOptions<AiOptions>? aiOptions = null)
     {
         _decompositionService = decompositionService;
         _textExtractor = textExtractor;
@@ -66,6 +70,7 @@ public class AiAgentController : ControllerBase
         _commitCoordinator = commitCoordinator;
         _tokenTracker = tokenTracker;
         _sessionStore = sessionStore;
+        _quotaOptions = aiOptions?.Value?.Quota;
     }
 
     /// <summary>
@@ -154,6 +159,15 @@ public class AiAgentController : ControllerBase
 
             var scope = new ProjectScopeContext(project.OrgId, request.ProjectId, userId.Value);
             ProjectScopeGuard.Validate(scope, project.OrgId, request.ProjectId);
+
+            var quotaCheck = _tokenTracker?.CheckPreExecutionQuota(userId.Value, request.ProjectId, _quotaOptions);
+            if (quotaCheck is { Allowed: false })
+            {
+                await EmitEventAsync(
+                    AiSseEventTypes.Error,
+                    new AiErrorPayload(quotaCheck.ErrorCode ?? "RATE_LIMIT_EXCEEDED", quotaCheck.Message ?? "Đã vượt giới hạn sử dụng AI cho phép."));
+                return;
+            }
 
             if (!string.IsNullOrWhiteSpace(requestedSessionId) && requestedSessionId.StartsWith("sprint_ai_", StringComparison.Ordinal))
             {
@@ -552,6 +566,16 @@ public class AiAgentController : ControllerBase
         var scope = new ProjectScopeContext(project.OrgId, proposal.ProjectId, userId.Value);
         ProjectScopeGuard.Validate(scope, project.OrgId, proposal.ProjectId);
 
+        var quotaCheck = _tokenTracker?.CheckPreExecutionQuota(userId.Value, proposal.ProjectId, _quotaOptions);
+        if (quotaCheck is { Allowed: false })
+        {
+            return StatusCode(StatusCodes.Status429TooManyRequests, new
+            {
+                code = quotaCheck.ErrorCode ?? "RATE_LIMIT_EXCEEDED",
+                message = quotaCheck.Message ?? "Đã vượt giới hạn sử dụng AI cho phép."
+            });
+        }
+
         try
         {
             var updatedTask = await _decompositionService.RegenerateSingleTaskAsync(
@@ -633,6 +657,16 @@ public class AiAgentController : ControllerBase
 
         var scope = new ProjectScopeContext(project.OrgId, proposal.ProjectId, userId.Value);
         ProjectScopeGuard.Validate(scope, project.OrgId, proposal.ProjectId);
+
+        var quotaCheck = _tokenTracker?.CheckPreExecutionQuota(userId.Value, proposal.ProjectId, _quotaOptions);
+        if (quotaCheck is { Allowed: false })
+        {
+            return StatusCode(StatusCodes.Status429TooManyRequests, new
+            {
+                code = quotaCheck.ErrorCode ?? "RATE_LIMIT_EXCEEDED",
+                message = quotaCheck.Message ?? "Đã vượt giới hạn sử dụng AI cho phép."
+            });
+        }
 
         var updatedProposal = await _decompositionService.RegenerateFullProposalAsync(
             proposal,

@@ -326,7 +326,7 @@ Thay thế các thẻ khối rời rạc có viền màu cạnh trái trước �
   1. Tổng số Token đầu vào (Prompt Tokens) và Token sinh ra (Completion Tokens).
   2. Số lượng cuộc gọi API thành công và tỷ lệ thành công.
   3. Chi phí vận hành AI ước tính (USD).
-  4. Biểu đồ phân bổ theo mô hình: Gemini 2.5 Flash, Gemini 2.5 Pro, Flash-Lite.
+  4. Biểu đồ phân bổ theo mô hình: `gemini-3.6-flash`, `gemini-3.5-flash`, `gemini-3-flash-preview`.
   5. Bảng nhật ký 15 phiên thực thi gần nhất với thời gian xử lý (latency ms) và mã phiên tương ứng.
 
 

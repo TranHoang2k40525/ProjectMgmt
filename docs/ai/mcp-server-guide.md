@@ -53,7 +53,11 @@ Thêm vào tệp `claude_desktop_config.json` (nằm tại `%APPDATA%\Claude\cla
         "C:\\Users\\hoang\\Downloads\\ProjectMgmt\\ProjectMgmt.McpServer\\ProjectMgmt.McpServer.csproj"
       ],
       "env": {
-        "ConnectionStrings__ProjectMgmt": "Server=127.0.0.1;Port=3306;Database=projectmgmt;User=root;Password=;SslMode=None;AllowPublicKeyRetrieval=True;"
+        "ConnectionStrings__ProjectMgmt": "Server=127.0.0.1;Port=3306;Database=projectmgmt;User=YOUR_DB_USER;Password=YOUR_DATABASE_PASSWORD;SslMode=None;AllowPublicKeyRetrieval=True;",
+        "PROJECTMGMT_MCP_USER_ID": "YOUR_USER_ID",
+        "PROJECTMGMT_MCP_ORG_ID": "YOUR_ORG_ID",
+        "PROJECTMGMT_MCP_ALLOWED_PROJECTS": "YOUR_ALLOWED_PROJECT_IDS",
+        "PROJECTMGMT_API_TOKEN": "YOUR_API_TOKEN"
       }
     }
   }
@@ -61,9 +65,10 @@ Thêm vào tệp `claude_desktop_config.json` (nằm tại `%APPDATA%\Claude\cla
 ```
 
 ### 3.2. Cấu hình với Cursor / VS Code / Roo Code
-Thêm vào cài đặt MCP server của trình soạn thảo:
+Thêm vào cài đặt MCP server của trình soạn thảo (kèm đầy đủ biến môi trường phạm vi & API token giống mục 3.1; mọi giá trị thực tế giữ tại máy cục bộ, không commit lên Git):
 - Command: `dotnet`
 - Arguments: `["run", "--project", "C:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.McpServer/ProjectMgmt.McpServer.csproj"]`
+- Environment (`env`): `ConnectionStrings__ProjectMgmt`, `PROJECTMGMT_MCP_USER_ID`, `PROJECTMGMT_MCP_ORG_ID`, `PROJECTMGMT_MCP_ALLOWED_PROJECTS`, `PROJECTMGMT_API_TOKEN` (khi cấu hình `PROJECTMGMT_MCP_*` hoặc `PROJECTMGMT_MCP_SERVER_API_TOKEN`, server kiểm tra fail-closed và trả JSON-RPC `-32001` nếu vượt phạm vi hoặc sai token).
 
 ### 3.3. Chạy kiểm tra trực tiếp qua dòng lệnh Stdio
 Tại thư mục gốc dự án:

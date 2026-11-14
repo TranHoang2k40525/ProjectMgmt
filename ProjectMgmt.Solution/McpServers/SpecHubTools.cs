@@ -214,6 +214,8 @@ public class SpecHubTools
             _logger.LogWarning(ex, "[SpecHubTools] Không thể đọc nội dung vật lý của tài liệu {DocId}, dùng fallback DB", documentId);
         }
 
+        var sanitizedExtracted = InputGuardrail.SanitizeDocumentContent(extractedText).SanitizedText;
+
         var result = new
         {
             doc.Id,
@@ -223,7 +225,7 @@ public class SpecHubTools
             doc.Extension,
             doc.Status,
             doc.Version,
-            ExtractedContent = extractedText
+            ExtractedContent = sanitizedExtracted
         };
 
         return SerializeJson(result, indented: true);
@@ -262,13 +264,14 @@ public class SpecHubTools
                 (doc.Title?.Contains(keyword, StringComparison.OrdinalIgnoreCase) == true) ||
                 (doc.Content?.Contains(keyword, StringComparison.OrdinalIgnoreCase) == true))
             {
+                var safeSnippet = InputGuardrail.SanitizeDocumentContent(GetSnippet(doc.Content, keyword)).SanitizedText;
                 matches.Add(new
                 {
                     doc.Id,
                     doc.Name,
                     doc.RelativePath,
                     doc.Status,
-                    Snippet = GetSnippet(doc.Content, keyword)
+                    Snippet = safeSnippet
                 });
             }
         }

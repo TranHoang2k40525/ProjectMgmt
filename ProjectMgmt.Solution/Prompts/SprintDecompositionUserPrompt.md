@@ -1,14 +1,18 @@
 Dữ liệu đầu vào thực tế của dự án:
 
 ### 1. Tài liệu / Biên bản cuộc họp, Chỉ mục Trí nhớ (#mem) & Hội thoại gần nhất:
+<untrusted_document_context>
 {{DOC_CONTENT}}
+</untrusted_document_context>
 
 ### 2. Danh sách tệp tài liệu thực tế trong Spec Hub của dự án (BẮT BUỘC chỉ trích dẫn từ danh sách này):
 {{SPEC_HUB_FILE_NAMES}}
 
 ### 3. Trích đoạn tài liệu Đặc tả từ Spec Hub của Dự án:
+<untrusted_spechub_context>
 {{SPEC_HUB_DOCS}}
 {{SPEC_HUB_EXCERPTS}}
+</untrusted_spechub_context>
 
 ### 4. Cấu hình ĐANG ÁP DỤNG THỰC TẾ của dự án (trích từ cơ sở dữ liệu):
 - **Workflow hiện hành ({{PROJECT_WORKFLOW_NAME}} - {{PROJECT_WORKFLOW_TYPE}})**: {{PROJECT_WORKFLOW_SUMMARY}}

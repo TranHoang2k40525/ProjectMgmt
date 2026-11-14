@@ -14,6 +14,7 @@ public sealed class AiOptions
     public ClaudeProviderOptions Claude { get; set; } = new();
     public OpenAiProviderOptions OpenAi { get; set; } = new();
     public LocalModelProviderOptions Local { get; set; } = new();
+    public AiQuotaOptions Quota { get; set; } = new();
 
     public (string ApiKey, string Endpoint, string ModelName, int MaxTokens, double Temperature) GetActiveProviderSettings()
     {
@@ -75,4 +76,12 @@ public sealed class LocalModelProviderOptions
     public string ModelName { get; set; } = "qwen2.5:32b";
     public int? MaxTokens { get; set; }
     public double? Temperature { get; set; }
+}
+
+public sealed class AiQuotaOptions
+{
+    public bool Enabled { get; set; } = true;
+    public int MaxRequestsPerMinutePerUser { get; set; } = 12;
+    public int DailyTokenLimitPerUser { get; set; } = 1_500_000;
+    public int DailyTokenLimitPerProject { get; set; } = 5_000_000;
 }

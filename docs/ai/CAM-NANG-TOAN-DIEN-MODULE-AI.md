@@ -471,7 +471,7 @@ Thay thế các thẻ khối rời rạc có viền màu cạnh trái trước �
   1. Tổng số Token đầu vào (Prompt Tokens) và Token sinh ra (Completion Tokens).
   2. Số lượng cuộc gọi API thành công và tỷ lệ thành công.
   3. Chi phí vận hành AI ước tính (USD).
-  4. Biểu đồ phân bổ theo mô hình: Gemini 2.5 Flash, Gemini 2.5 Pro, Flash-Lite.
+  4. Biểu đồ phân bổ theo mô hình: `gemini-3.6-flash`, `gemini-3.5-flash`, `gemini-3-flash-preview`.
   5. Bảng nhật ký 15 phiên thực thi gần nhất với thời gian xử lý (latency ms) và mã phiên tương ứng.
 
 
@@ -883,7 +883,7 @@ Toàn bộ đề xuất phân rã kèm trạng thái đoạn hội thoại đa l
       "subtasks": [
         {
           "id": "subtask-2-1",
-          "title": "Cấu hình Controller phát event-stream trong .NET 8",
+          "title": "Cấu hình Controller phát event-stream trong .NET 10",
           "role": "Backend",
           "estimatedHours": 6,
           "storyPoints": 2,
@@ -1060,7 +1060,7 @@ Bên cạnh bộ nhớ đề xuất tức thời (Staging Session), hệ thống
 - **Bộ ghi nhận mức tiêu thụ**: Ghi nhận `AiUsageRecord` theo từng phiên làm việc (Prompt Tokens, Completion Tokens, Latency mili-giây, Model, trạng thái Success/Failed).
 - **Dashboard Quản trị trên Trang Cá nhân (Profile - Tab "Mức tiêu thụ Token AI")**:
   - **4 Thẻ Chỉ số (KPIs)**: Tổng Token tiêu thụ, Tổng cuộc gọi AI, Tỷ lệ hoàn tất thành công, Chi phí ước tính (USD).
-  - **Phân bổ theo Mô hình**: Tỷ lệ phần trăm và số lượng token giữa `Gemini Flash`, `Gemini Pro`, `Gemini Flash-Lite`.
+  - **Phân bổ theo Mô hình**: Tỷ lệ phần trăm và số lượng token giữa `gemini-3.6-flash`, `gemini-3.5-flash`, `gemini-3-flash-preview`.
   - **Bảng Nhật ký Thực thi**: Hiển thị chi tiết 15 lượt gọi gần nhất với thời gian thực thi, số token vào/ra và trạng thái.
 
 ### 6.3. Nút "Tạo mới" Không Phá Hủy & Giải Phóng Cache Chọn Lọc
@@ -1097,7 +1097,7 @@ Bên cạnh bộ nhớ đề xuất tức thời (Staging Session), hệ thống
 
 ### 1.1. Hiện tượng Ảo giác trong Mô hình Ngôn ngữ Lớn (LLM)
 Khi yêu cầu một mô hình AI thông thường (Zero-shot Prompting) lập kế hoạch cho một Sprint, AI thường mắc phải các lỗi nghiêm trọng:
-- Tự "bịa" ra các thư viện công nghệ không có trong dự án (ví dụ: dự án dùng Angular và .NET 8, nhưng AI lại sinh task cấu hình React và Django).
+- Tự "bịa" ra các thư viện công nghệ không có trong dự án (ví dụ: dự án dùng Angular và .NET 10, nhưng AI lại sinh task cấu hình React và Django).
 - Đặt tiêu chí nghiệm thu chung chung, không gắn liền với các ràng buộc bảo mật hay quy tắc nghiệp vụ nội bộ của tổ chức.
 - Không biết được tiến độ thực tế: việc nào đã làm ở Sprint trước, việc nào còn dở dang.
 
@@ -1225,6 +1225,7 @@ sequenceDiagram
 Khi AI bắt đầu suy luận, giao diện hiển thị danh sách các hành động với biểu tượng `check_circle` xanh lục chuẩn xác và thời gian thực thi (latency ms):
 - `Tìm kiếm tài liệu đặc tả liên quan trong Spec Hub · 7ms`
 - `Đọc phân đoạn tài liệu đặc tả: Cam-nang-ky-thuat.md · 14ms`
+- `Đọc cấu hình Workflow, Độ ưu tiên, Loại việc và Nhãn đang áp dụng của dự án · 9ms`
 - `Lấy danh sách các User Story đang có trong Backlog · 13ms`
 - `Truy xuất vận tốc Scrum và các hạng mục dở dang · 37ms`
 - `Phân tích kỹ năng và số giờ khả dụng của thành viên đội Scrum · 25ms`
@@ -1407,7 +1408,7 @@ Hệ thống cung cấp **8 công cụ cốt lõi** phục vụ lập kế hoạ
     "content": [
       {
         "type": "text",
-        "text": "Danh sách nhân sự dự án (Tổng khả dụng: 120 giờ):\n1. Hoàng Văn A - Backend Lead (C#, .NET 8, MySQL) - Khả dụng: 40 giờ\n2. Trần Thị B - Frontend Dev (Angular, TypeScript, SCSS) - Khả dụng: 40 giờ\n3. Lê Văn C - QA / Tester (Playwright, Postman, Automation) - Khả dụng: 40 giờ"
+        "text": "Danh sách nhân sự dự án (Tổng khả dụng: 120 giờ):\n1. Hoàng Văn A - Backend Lead (C#, .NET 10, MySQL) - Khả dụng: 40 giờ\n2. Trần Thị B - Frontend Dev (Angular, TypeScript, SCSS) - Khả dụng: 40 giờ\n3. Lê Văn C - QA / Tester (Playwright, Postman, Automation) - Khả dụng: 40 giờ"
       }
     ]
   }
@@ -1441,6 +1442,30 @@ Hệ thống cung cấp **8 công cụ cốt lõi** phục vụ lập kế hoạ
 }
 ```
 
+### 3.4. Tool: `project_get_active_config`
+- **Mục đích**: Đọc chính xác cấu hình quản trị đang được **áp dụng thực tế** của dự án, bao gồm:
+  - `Workflow`: Tên bảng (`Name`), loại quy trình (`Type`), trạng thái khởi tạo (`InitialStatus`), danh sách `Statuses` theo đúng thứ tự cột `BoardColumns` (kèm `IsInitial`, `IsActiveWork`, `IsDone`, `IsCanceled`, `WipLimit`) và danh sách `Transitions` (`FromStatus -> ToStatus`).
+  - `Priorities`: Chỉ lấy bộ mức ưu tiên tùy chỉnh của dự án (`ProjectId == projectId`) nếu dự án có cấu hình riêng (`IsCustomProjectConfiguration = true`); chỉ khi không có mới lấy mặc định hệ thống (`ProjectId == null`).
+  - `IssueTypes`: Tách rõ `ParentWorkItems` (`Story`, `Task`, `Bug`), `Subtasks` (`Sub-task`) và `Epic`.
+  - `Labels`: Danh sách nhãn đang sử dụng trong dự án.
+- **Request JSON-RPC mẫu**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "method": "tools/call",
+  "params": {
+    "name": "project_get_active_config",
+    "arguments": {
+      "projectId": "12"
+    }
+  }
+}
+```
+
+### 3.5. Tool: `backlog_get_stories`
+- **Mục đích**: Truy xuất toàn bộ các hạng mục đang nằm trong kho Product Backlog (`SprintId = null`), làm giàu đầy đủ `IssueKey`, `IssueType`, `IsUserStory`, `Priority`, `StatusName`, `Labels`, `EpicTitle`, `StoryPoints`, `EstimatedHours`, `ExistingSubtasks` và `AcceptanceCriteria` để AI vừa chuyển hóa các User Story thành đầu việc kỹ thuật hợp lý, vừa gắn `sourceBacklogIssueId` / `sourceBacklogIssueKey` giúp di chuyển hạng mục từ kho Backlog vào Sprint mà không bị trùng lặp.
+
 ---
 
 ## 4. Hướng Dẫn Cấu Hình Kết Nối cho AI Agents Bên Ngoài
@@ -1459,7 +1484,14 @@ Mở tệp cấu hình của Claude Desktop: `%APPDATA%\Claude\claude_desktop_co
         "run",
         "--project",
         "C:\\Users\\hoang\\Downloads\\ProjectMgmt\\ProjectMgmt.McpServer\\ProjectMgmt.McpServer.csproj"
-      ]
+      ],
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "PROJECTMGMT_MCP_USER_ID": "YOUR_USER_ID",
+        "PROJECTMGMT_MCP_ORG_ID": "YOUR_ORG_ID",
+        "PROJECTMGMT_MCP_ALLOWED_PROJECTS": "YOUR_ALLOWED_PROJECT_IDS",
+        "PROJECTMGMT_API_TOKEN": "YOUR_API_TOKEN"
+      }
     }
   }
 }
@@ -1474,10 +1506,14 @@ Thêm vào tệp cấu hình MCP của Cursor / Roo Code (`.cursor/mcp.json`):
     "projectmgmt-ai-planner": {
       "command": "dotnet",
       "args": [
-        "C:\\Users\\hoang\\Downloads\\ProjectMgmt\\ProjectMgmt.McpServer\\bin\\Debug\\net8.0\\ProjectMgmt.McpServer.dll"
+        "C:\\Users\\hoang\\Downloads\\ProjectMgmt\\ProjectMgmt.McpServer\\bin\\Debug\\net10.0\\ProjectMgmt.McpServer.dll"
       ],
       "env": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "PROJECTMGMT_MCP_USER_ID": "YOUR_USER_ID",
+        "PROJECTMGMT_MCP_ORG_ID": "YOUR_ORG_ID",
+        "PROJECTMGMT_MCP_ALLOWED_PROJECTS": "YOUR_ALLOWED_PROJECT_IDS",
+        "PROJECTMGMT_API_TOKEN": "YOUR_API_TOKEN"
       }
     }
   }
@@ -1628,9 +1664,9 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
 ### Câu hỏi 3.1: Dữ liệu đề xuất phân rã và hội thoại của AI được lưu trữ ở đâu trước khi vào bảng `Issues`?
 - **Trả lời**:
   Công việc đề xuất **hoàn toàn KHÔNG ghi vào bảng `Issues` của dự án** cho đến khi người dùng xác nhận áp dụng hoặc đẩy Backlog. Trạng thái đề xuất staging (`ProposalJson`), lịch sử trò chuyện đa lượt, nhật ký `TraceItems` và các mảnh trí nhớ `#mem-1..#mem-n` được lưu song song theo cơ chế kép: **Redis Hot Cache (`ProjectMgmt:Ai:staging:{sessionId}`, TTL 24 giờ)** để truy xuất tức thời và **MySQL (`AiConversationSessions` + `AiConversationMemoryEntries`)** để lưu bền vững theo phạm vi `(OrganizationId, ProjectId, UserId)`.
-  - Chỉ khi người dùng bấm nút **"Áp dụng vào Sprint"** hoặc **"Đẩy vào Kho Backlog"**, API mới đọc từ Redis (hoặc tự động nạp bù từ MySQL nếu Redis hết hạn), mở một Database Transaction và ghi chính thức vào các bảng MySQL (`Issues`, `Sprints`, `AcceptanceCriteria`, `SpecStoryLinks`, `IssueLabels`, `IssueRequiredSkills`).
+  - Chỉ khi người dùng có quyền bấm nút **"Áp dụng vào Sprint"** hoặc **"Đẩy vào Kho Backlog"**, API mới đọc từ Redis (hoặc tự động nạp bù từ MySQL nếu Redis hết hạn), chạy bước **Pre-Commit Revalidation** và mở Database Transaction ghi chính thức vào các bảng nghiệp vụ MySQL (`Issues`, `Sprints`, `AcceptanceCriteria`, `SpecStoryLinks`, `IssueLabels`, `IssueRequiredSkills`).
 
-### Câu hỏi 3.2: Làm thế nào chứng minh dữ liệu đang nằm ở Redis chứ chưa có trong Database?
+### Câu hỏi 3.2: Làm thế nào chứng minh dữ liệu đề xuất đang nằm ở Staging Redis & Bảng Phiên AI chứ chưa tạo rác trong bảng `Issues`?
 - **Trả lời & Câu lệnh kiểm tra thực tế**:
   1. Khi AI vừa phân rã xong trên giao diện, mở terminal chạy câu lệnh:
      ```bash
@@ -1640,14 +1676,17 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
      127.0.0.1:6379> TTL ProjectMgmt:Ai:staging:e7c4f1a2-...
      # Kết quả: 86395 (còn ~24 giờ)
      ```
-  2. Mở MySQL Workbench hoặc HeidiSQL truy vấn bảng `Issues`:
+  2. Mở MySQL Workbench hoặc HeidiSQL kiểm tra **2 nhóm bảng tách biệt**:
      ```sql
-     SELECT COUNT(*) FROM Issues WHERE SprintId = 5;
-     -- Số lượng vẫn là 0! Chứng minh dữ liệu chưa hề được ghi vào DB.
+     -- A. Bảng lịch sử & trí nhớ AI ĐÃ lưu phiên hội thoại ngay:
+     SELECT Id, SessionId, TurnCount, MemoryCount FROM AiConversationSessions ORDER BY UpdatedAtUtc DESC LIMIT 5;
+     -- B. Bảng công việc nghiệp vụ VẪN LÀ 0 cho tới khi người dùng bấm Áp dụng / Đẩy Backlog:
+     SELECT COUNT(*) FROM Issues WHERE IsAiGenerated = 1;
+     -- Số lượng bản ghi mới từ phiên đang xem vẫn là 0!
      ```
-  3. Sau đó, trên giao diện bấm nút **"Áp dụng vào Sprint"**:
-     - Kiểm tra lại MySQL: bảng `Issues` xuất hiện đầy đủ các Task mới.
-     - Kiểm tra lại Redis CLI: Khóa `ProjectMgmt:Ai:staging:e7c4f1a2-...` đã bị xóa tự động (`nil`).
+  3. Sau đó, trên giao diện bấm nút **"Áp dụng vào Sprint"** hoặc **"Đẩy vào Kho Backlog"**:
+     - Kiểm tra lại bảng nghiệp vụ `Issues` trong MySQL: xuất hiện đầy đủ Task/Sub-task, `AcceptanceCriteria`, `SpecStoryLinks`, `IssueLabels` và `IssueRequiredSkills`.
+     - Kiểm tra lại Redis CLI (`ProjectMgmt:Ai:staging:e7c4f1a2-...`): trường `tasks` đề xuất đã được dọn sạch (`tasks: []`) để chống áp dụng trùng lặp (`409 ALREADY_COMMITTED`), trong khi `conversationHistory` vẫn được giữ lại kèm tin nhắn xác nhận để người dùng tiếp tục trò chuyện; chỉ khi bấm xóa phiên hoặc hết TTL/clear-cache khóa staging mới bị xóa (`nil`).
 
 ### Câu hỏi 3.3: Nếu máy chủ Redis bị sập hoặc mất mạng, hệ thống có bị lỗi không?
 - **Trả lời**:
@@ -1690,7 +1729,7 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
   - Gửi: `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"Tester","version":"1.0"}}}`
   - Nhận: Server phản hồi JSON `ProjectMgmt-AiSprintPlanner-McpServer` phiên bản `1.0.0`.
   - Gửi: `{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`
-  - Nhận: Server trả về đầy đủ **8 công cụ** (và tập tool In-Process) với schema chi tiết.
+  - Nhận: Server trả về đầy đủ **8 công cụ** (`spec_hub_list_documents`, `spec_hub_read_document`, `spec_hub_search`, `project_get_active_config`, `backlog_get_stories`, `sprint_get_history_and_velocity`, `team_get_dev_capacities`, `ai_sprint_plan_propose`) kèm `inputSchema` chi tiết.
 
 ---
 
@@ -1726,6 +1765,17 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
      - Khi phân tách Sprint/Backlog: Nếu prompt đưa thông số lệch chuẩn (SP `100`, trạng thái/mức ưu tiên/thành viên hoặc tên tài liệu Spec Hub bịa đặt), `AiSprintDecompositionService` tự động ép lại thang Fibonacci (`1..13`) và lọc chỉ giữ các thực thể có thật từ `ProjectActiveConfigResolver`, `TeamTools` và `SpecHubTools`.
   4. **Chống Tamper Payload & Khóa Idempotency**: Từ chối `400 INVALID_TARGET_SPRINT` khi chèn `TargetSprintId` khác dự án, từ chối tệp `.exe` / `0 byte` ở UI và khóa áp dụng trùng lặp nhiều lần bằng `409 ALREADY_COMMITTED`.
 
+### Câu hỏi 7.5: Hệ thống áp dụng 8 lớp gia cố an toàn kỹ thuật (Hardening A1–A8) nào cho Module AI & MCP Server?
+- **Trả lời**:
+  1. **A1 — Pre-Commit Revalidation chống Stale State (`AiSprintCommitCoordinator.PreCommitRevalidateAsync`)**: Ngay trước khi mở Transaction ghi MySQL từ bản Staging (TTL 24h), hệ thống nạp lại `ProjectActiveConfigResolver` (tự ánh xạ status/priority cũ không còn hợp lệ về mặc định dự án), bỏ gán (`AssigneeId = null`) nếu thành viên đã rời dự án, tạo mới nếu Issue nguồn Backlog đã xóa mềm (`IsDeleted`), và bỏ qua (`SkippedTasks`/`SkippedIssueIds`) kèm cảnh báo nếu Issue nguồn đã chuyển sang Sprint khác (đồng thời ngăn bước Rollover tự động di chuyển nhầm issue đã skip).
+  2. **A2 — Phòng chống Indirect Prompt Injection (`InputGuardrail.SanitizeDocumentContent`)**: Quét và vô hiệu hóa chỉ thị ẩn/thẻ giả mạo hệ thống (`<system>`, `[SYSTEM OVERRIDE]`, `[Cảnh báo bảo mật...]`) và secret ngay trong `AiDocumentTextExtractor` và `SpecHubTools.ReadDocumentAsync`; đồng thời cô lập dữ liệu đầu vào bằng cặp thẻ `<untrusted_document_context>` / `<untrusted_spechub_context>` và Quy tắc #9 trong System Prompt.
+  3. **A3 — Chống Zip Bomb & Tràn bộ nhớ RAM (OOM)**: Giới hạn giải nén OpenXML (`.docx`, `.xlsx`) tối đa `1.000` entries, `25 MB`/entry (`MaxSingleEntryUncompressedBytes`), `50 MB` tổng giải nén (`MaxTotalUncompressedBytes`), `500.000` ký tự văn bản (`MaxExtractedTextLength`) và tắt DTD (`DtdProcessing.Prohibit`, `XmlResolver = null`) trên cả API chính lẫn `ProjectMgmt.McpServer`.
+  4. **A4 — Cảnh báo Tài liệu PDF Quét Ảnh / Tài liệu Có Ảnh Nhúng**: Phát hiện PDF scan chứa `/Subtype /Image` ít chữ (`ScannedPdfMarker`) và `.docx` chứa ảnh trong `word/media/*`, lan truyền cảnh báo qua `ExtractDocumentWarnings` vào `proposal.Warnings` và phần `Lưu ý hệ thống` trong `assistantReply`.
+  5. **A5 — Cửa sổ Trượt 8 lượt & Fallback Ngữ nghĩa `#mem-latest` (`AiIndexedMemoryEngine`)**: Khi câu hỏi tiếp nối dùng đại từ (`nó`, `phần vừa rồi`, `việc đó`) không khớp từ khóa tĩnh, tự động fallback về 1–2 mảnh trí nhớ mới nhất (`#mem-latest`) cùng cửa sổ trượt 8 lượt hội thoại gần nhất.
+  6. **A6 — Bảo mật Phạm vi & API Token cho Standalone MCP Server (`McpScopeAuthContext`)**: Hỗ trợ khóa phạm vi 3 chiều (`PROJECTMGMT_MCP_USER_ID`, `PROJECTMGMT_MCP_ORG_ID`, `PROJECTMGMT_MCP_ALLOWED_PROJECTS`) và xác thực token thời gian hằng (`PROJECTMGMT_API_TOKEN` so khớp `Ai:McpServer:ApiToken` / `PROJECTMGMT_MCP_SERVER_API_TOKEN`), trả JSON-RPC `-32001` theo nguyên tắc fail-closed.
+  7. **A7 — Tự Phục Hồi JSON Bị Cắt Cụt (`TryRepairTruncatedJson`)**: Vá chuỗi/ngoặc và cứu các hạng mục `tasks` hoàn chỉnh khi phản hồi LLM bị cắt giữa chừng ở giới hạn token, kèm thông báo rõ trong `proposal.Warnings`.
+  8. **A8 — Kiểm Soát Tần Suất & Hạn Mức Token Trước Thực Thi (`AiTokenUsageTracker.CheckPreExecutionQuota`)**: Chặn ngay tại `AiAgentController` trước khi gọi LLM theo cấu hình `AiQuotaOptions` (mặc định `12` lượt/phút/người dùng, `1.500.000` token/ngày/người dùng, `5.000.000` token/ngày/dự án), trả `RATE_LIMIT_EXCEEDED` / `QUOTA_EXCEEDED` (HTTP `429` hoặc SSE `event: error`).
+
 ---
 
 ## 8. Nhóm Câu Hỏi 7: Quản Trị Chi Phí, Lịch Sử Phiên & Trải Nghiệm Giao Diện Mới
@@ -1736,7 +1786,7 @@ Tài liệu này tổng hợp toàn bộ câu hỏi và câu trả lời chuẩn
   2. Người dùng truy cập **Quản lý cá nhân (`/profile`) $\rightarrow$ Tab "Mức tiêu thụ Token AI"**.
   3. Giao diện hiển thị:
      - 4 thẻ KPI: Tổng Token, Cuộc gọi AI, Tỷ lệ thành công, Chi phí ước tính (USD).
-     - Thanh phân bổ theo mô hình: Tỷ lệ sử dụng `Gemini 2.5 Flash`, `Gemini 2.5 Pro`, `Gemini 2.5 Flash-Lite`.
+     - Thanh phân bổ theo mô hình: Tỷ lệ sử dụng `gemini-3.6-flash`, `gemini-3.5-flash`, `gemini-3-flash-preview`.
      - Bảng nhật ký 15 lần thực thi gần nhất với thời gian xử lý và mã phiên.
   4. API cung cấp: `GET /api/ai/agent/token-usage?projectId=...` bảo mật theo người dùng và dự án.
 

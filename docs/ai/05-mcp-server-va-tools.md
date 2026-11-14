@@ -212,7 +212,14 @@ Mở tệp cấu hình của Claude Desktop: `%APPDATA%\Claude\claude_desktop_co
         "run",
         "--project",
         "C:\\Users\\hoang\\Downloads\\ProjectMgmt\\ProjectMgmt.McpServer\\ProjectMgmt.McpServer.csproj"
-      ]
+      ],
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "PROJECTMGMT_MCP_USER_ID": "YOUR_USER_ID",
+        "PROJECTMGMT_MCP_ORG_ID": "YOUR_ORG_ID",
+        "PROJECTMGMT_MCP_ALLOWED_PROJECTS": "YOUR_ALLOWED_PROJECT_IDS",
+        "PROJECTMGMT_API_TOKEN": "YOUR_API_TOKEN"
+      }
     }
   }
 }
@@ -230,7 +237,11 @@ Thêm vào tệp cấu hình MCP của Cursor / Roo Code (`.cursor/mcp.json`):
         "C:\\Users\\hoang\\Downloads\\ProjectMgmt\\ProjectMgmt.McpServer\\bin\\Debug\\net10.0\\ProjectMgmt.McpServer.dll"
       ],
       "env": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "PROJECTMGMT_MCP_USER_ID": "YOUR_USER_ID",
+        "PROJECTMGMT_MCP_ORG_ID": "YOUR_ORG_ID",
+        "PROJECTMGMT_MCP_ALLOWED_PROJECTS": "YOUR_ALLOWED_PROJECT_IDS",
+        "PROJECTMGMT_API_TOKEN": "YOUR_API_TOKEN"
       }
     }
   }

@@ -78,6 +78,7 @@ public sealed class AiSprintProposalDto
     public List<string> AppliedPriorities { get; set; } = [];
     public List<string> AppliedIssueTypes { get; set; } = [];
     public List<string> AppliedLabels { get; set; } = [];
+    public List<string> Warnings { get; set; } = [];
     public List<ProposedTaskDto> Tasks { get; set; } = [];
     public int TotalConversationTurns { get; set; }
     public bool HasOlderMessages { get; set; }

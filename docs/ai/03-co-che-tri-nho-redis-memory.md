@@ -160,7 +160,7 @@ Toàn bộ đề xuất phân rã kèm trạng thái đoạn hội thoại đa l
       "subtasks": [
         {
           "id": "subtask-2-1",
-          "title": "Cấu hình Controller phát event-stream trong .NET 8",
+          "title": "Cấu hình Controller phát event-stream trong .NET 10",
           "role": "Backend",
           "estimatedHours": 6,
           "storyPoints": 2,
@@ -337,7 +337,7 @@ Bên cạnh bộ nhớ đề xuất tức thời (Staging Session), hệ thống
 - **Bộ ghi nhận mức tiêu thụ**: Ghi nhận `AiUsageRecord` theo từng phiên làm việc (Prompt Tokens, Completion Tokens, Latency mili-giây, Model, trạng thái Success/Failed).
 - **Dashboard Quản trị trên Trang Cá nhân (Profile - Tab "Mức tiêu thụ Token AI")**:
   - **4 Thẻ Chỉ số (KPIs)**: Tổng Token tiêu thụ, Tổng cuộc gọi AI, Tỷ lệ hoàn tất thành công, Chi phí ước tính (USD).
-  - **Phân bổ theo Mô hình**: Tỷ lệ phần trăm và số lượng token giữa `Gemini Flash`, `Gemini Pro`, `Gemini Flash-Lite`.
+  - **Phân bổ theo Mô hình**: Tỷ lệ phần trăm và số lượng token giữa `gemini-3.6-flash`, `gemini-3.5-flash`, `gemini-3-flash-preview`.
   - **Bảng Nhật ký Thực thi**: Hiển thị chi tiết 15 lượt gọi gần nhất với thời gian thực thi, số token vào/ra và trạng thái.
 
 ### 6.3. Nút "Tạo mới" Không Phá Hủy & Giải Phóng Cache Chọn Lọc

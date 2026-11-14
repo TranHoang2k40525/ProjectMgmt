@@ -106,19 +106,43 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
             cancellationToken);
 
         // Sanitize inputs via InputGuardrail (Zero-Secret-Leakage & Prompt Injection Defense)
-        var rawSecurityCombined = string.Join("\n", new[] { userPrompt, extractedDocumentContent }.Where(s => !string.IsNullOrWhiteSpace(s)));
-        var securityViolationDetected = InputGuardrail.ContainsPromptInjectionOrExfiltration(rawSecurityCombined, out _) ||
-                                        InputGuardrail.ContainsUnsafeScript(rawSecurityCombined);
-        var docGuardrail = InputGuardrail.Sanitize(extractedDocumentContent ?? string.Empty);
         var promptGuardrail = string.IsNullOrWhiteSpace(userPrompt)
             ? new InputGuardrailResult(string.Empty, 0, false)
             : InputGuardrail.Sanitize(userPrompt);
-        if (docGuardrail.InjectionNeutralized || promptGuardrail.InjectionNeutralized)
-        {
-            securityViolationDetected = true;
-        }
+        var docGuardrail = InputGuardrail.SanitizeDocumentContent(extractedDocumentContent ?? string.Empty);
+
+        var promptHasViolation = !string.IsNullOrWhiteSpace(userPrompt) &&
+                                 (InputGuardrail.ContainsPromptInjectionOrExfiltration(userPrompt, out _) ||
+                                  InputGuardrail.ContainsUnsafeScript(userPrompt) ||
+                                  promptGuardrail.InjectionNeutralized);
+
+        var docHadRawInjection = docGuardrail.InjectionNeutralized ||
+                                 (!string.IsNullOrWhiteSpace(extractedDocumentContent) &&
+                                  extractedDocumentContent.Contains("[Cảnh báo bảo mật:", StringComparison.Ordinal));
+
+        var remainingDocText = System.Text.RegularExpressions.Regex.Replace(
+            docGuardrail.SanitizedText,
+            @"\[(?:Cảnh báo bảo mật|MASKED_SECRET)[^\]]*\]",
+            string.Empty,
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        var docHasSubstantiveContent = remainingDocText.Count(char.IsLetterOrDigit) >= 20;
+
+        // Chỉ từ chối toàn bộ luồng nếu câu lệnh người dùng vi phạm hoặc tài liệu hoàn toàn chỉ chứa payload độc hại
+        var securityViolationDetected = promptHasViolation ||
+                                        (docHadRawInjection && !docHasSubstantiveContent && string.IsNullOrWhiteSpace(userPrompt));
+
         var sanitizedDoc = docGuardrail.SanitizedText;
         var sanitizedPrompt = string.IsNullOrWhiteSpace(userPrompt) ? null : promptGuardrail.SanitizedText;
+
+        var pipelineWarnings = AiDocumentTextExtractor.ExtractDocumentWarnings(extractedDocumentContent);
+        if (docHadRawInjection && !securityViolationDetected)
+        {
+            const string indirectWarning = "Phát hiện và đã vô hiệu hóa các chỉ dẫn khả nghi trong tài liệu đầu vào để bảo vệ hệ thống (Indirect Prompt Injection Guard).";
+            if (!pipelineWarnings.Contains(indirectWarning, StringComparer.Ordinal))
+            {
+                pipelineWarnings.Add(indirectWarning);
+            }
+        }
 
         var effectiveUserText = !string.IsNullOrWhiteSpace(sanitizedPrompt)
             ? sanitizedPrompt.Trim()
@@ -614,6 +638,17 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
         // =========================================================================
         // INTENT: Tra cứu / Hỏi đáp thông tin dự án (project_qa) - Đúng trọng tâm
         // =========================================================================
+        if (specHubExcerpts.Length > 0 || !string.IsNullOrWhiteSpace(relevantDocs))
+        {
+            foreach (var specWarn in AiDocumentTextExtractor.ExtractDocumentWarnings(specHubExcerpts + "\n" + relevantDocs))
+            {
+                if (!pipelineWarnings.Contains(specWarn, StringComparer.Ordinal))
+                {
+                    pipelineWarnings.Add(specWarn);
+                }
+            }
+        }
+
         if (intent == "project_qa")
         {
             await onStepProgress(4, "PROJECT_CONSULTATION", "Tổng hợp câu trả lời đúng trọng tâm", 80, "Đang tổng hợp từ dữ liệu đã truy xuất có chọn lọc...");
@@ -645,6 +680,17 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
 
             var qaProposal = BuildPreservedProposalShell(sessionId, scope.ProjectId, targetSprintId, existingProposal);
             if (activeConfig != null) ApplyConfigMetadata(qaProposal, activeConfig);
+            foreach (var pw in pipelineWarnings)
+            {
+                if (!qaProposal.Warnings.Contains(pw, StringComparer.Ordinal))
+                {
+                    qaProposal.Warnings.Add(pw);
+                }
+            }
+            if (pipelineWarnings.Count > 0 && !qaReply.Contains("ảnh quét", StringComparison.OrdinalIgnoreCase) && !qaReply.Contains("Cảnh báo", StringComparison.OrdinalIgnoreCase))
+            {
+                qaReply = $"{qaReply}\n\nLưu ý tài liệu: {string.Join(" ", pipelineWarnings)}".Trim();
+            }
             qaProposal.Intent = "project_qa";
             qaProposal.TriggerAction = "none";
             FinalizeAssistantTurn(qaProposal, qaReply, "project_qa", "none", recalledKeys);
@@ -709,9 +755,16 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
         {
             var validDocNames = userVariables["SPEC_HUB_FILE_NAMES"];
             userPromptContent = $@"Dữ liệu đầu vào:
-### 1. Tài liệu/Ghi chú, Chỉ mục Trí nhớ (#mem) & Hội thoại gần nhất: {userVariables["DOC_CONTENT"]}
+### 1. Tài liệu/Ghi chú, Chỉ mục Trí nhớ (#mem) & Hội thoại gần nhất:
+<untrusted_document_context>
+{userVariables["DOC_CONTENT"]}
+</untrusted_document_context>
 ### 2. Danh sách tệp Spec Hub thực tế trong dự án: {validDocNames}
-### 3. Trích đoạn tài liệu: {userVariables["SPEC_HUB_DOCS"]} {userVariables["SPEC_HUB_EXCERPTS"]}
+### 3. Trích đoạn tài liệu:
+<untrusted_spechub_context>
+{userVariables["SPEC_HUB_DOCS"]}
+{userVariables["SPEC_HUB_EXCERPTS"]}
+</untrusted_spechub_context>
 ### 4. Yêu cầu của bạn: {sanitizedPrompt}
 ### 5. Vận tốc & Lịch sử: {userVariables["SPRINT_HISTORY"]}
 ### 6. Năng lực nhóm: {userVariables["TEAM_CAPACITIES"]}
@@ -789,7 +842,14 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         var rawAiOutput = responseContentBuilder.ToString();
         _logger.LogInformation("[AiSprintDecomposition] Phản hồi thô từ LLM đạt {Length} ký tự. Bắt đầu phân tích cấu trúc.", rawAiOutput.Length);
         var proposal = ParseAiOutputToProposal(rawAiOutput, sessionId, scope.ProjectId, targetSprintId, sanitizedDoc, sanitizedPrompt, projectDocsList, activeConfig, intent == "refine_proposal" ? existingProposal : null);
-        _logger.LogInformation("[AiSprintDecomposition] Phân tích hoàn tất: {TaskCount} tasks, {StoryPoints} SP.", proposal.Tasks.Count, proposal.TotalStoryPoints);
+        foreach (var pw in pipelineWarnings)
+        {
+            if (!proposal.Warnings.Contains(pw, StringComparer.Ordinal))
+            {
+                proposal.Warnings.Add(pw);
+            }
+        }
+        _logger.LogInformation("[AiSprintDecomposition] Phân tích hoàn tất: {TaskCount} tasks, {StoryPoints} SP, {WarningCount} cảnh báo.", proposal.Tasks.Count, proposal.TotalStoryPoints, proposal.Warnings.Count);
 
         if (!string.IsNullOrWhiteSpace(teamCapacities))
         {
@@ -821,6 +881,14 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                 : intent == "refine_proposal"
                     ? $"Tôi đã cập nhật lại kế hoạch theo yêu cầu của bạn: hiện có {proposal.Tasks.Count} công việc ({proposal.TotalStoryPoints} SP · {proposal.TotalEstimatedHours} giờ) với mục tiêu \"{proposal.SprintGoal}\"."
                     : $"Tôi đã hoàn tất lập kế hoạch {proposal.Tasks.Count} công việc ({proposal.TotalStoryPoints} SP · {proposal.TotalEstimatedHours} giờ) cho mục tiêu: \"{proposal.SprintGoal}\".";
+
+        if (proposal.Warnings.Count > 0 &&
+            !finalReply.Contains("lưu ý", StringComparison.OrdinalIgnoreCase) &&
+            !finalReply.Contains("cảnh báo", StringComparison.OrdinalIgnoreCase) &&
+            !finalReply.Contains("giới hạn token", StringComparison.OrdinalIgnoreCase))
+        {
+            finalReply = $"{finalReply}\n\nLưu ý hệ thống: {string.Join(" ", proposal.Warnings)}".Trim();
+        }
 
         FinalizeAssistantTurn(proposal, finalReply, intent, "none", recalledKeys);
 
@@ -1046,7 +1114,7 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         return existingTask;
     }
 
-    private static AiSprintProposalDto ParseAiOutputToProposal(
+    internal static AiSprintProposalDto ParseAiOutputToProposal(
         string rawJson,
         string sessionId,
         Guid projectId,
@@ -1057,12 +1125,27 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         ProjectActiveConfig? activeConfig = null,
         AiSprintProposalDto? preserveOnFailure = null)
     {
+        const string truncationWarning = "Tài liệu có quy mô lớn nên một phần danh sách cuối đã được tự động gói gọn để đảm bảo giới hạn Token; bạn có thể yêu cầu Trợ Lý AI phân rã tiếp phần còn lại trong lượt chat kế tiếp.";
+        var wasRepairedFromTruncation = false;
         try
         {
             if (!string.IsNullOrWhiteSpace(rawJson))
             {
                 var cleaned = ExtractJsonObject(rawJson);
-                var docNode = System.Text.Json.Nodes.JsonNode.Parse(cleaned);
+                System.Text.Json.Nodes.JsonNode? docNode;
+                try
+                {
+                    docNode = System.Text.Json.Nodes.JsonNode.Parse(cleaned);
+                }
+                catch (JsonException)
+                {
+                    if (!TryRepairTruncatedJson(rawJson, out var repairedJson))
+                    {
+                        throw;
+                    }
+                    wasRepairedFromTruncation = true;
+                    docNode = System.Text.Json.Nodes.JsonNode.Parse(repairedJson);
+                }
 
                 if (docNode is System.Text.Json.Nodes.JsonObject obj)
                 {
@@ -1316,6 +1399,11 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
 
                         proposal.TotalStoryPoints = proposal.Tasks.Sum(t => t.StoryPoints);
                         proposal.TotalEstimatedHours = proposal.Tasks.Sum(t => t.EstimatedHours);
+                        if (wasRepairedFromTruncation &&
+                            !proposal.Warnings.Contains(truncationWarning, StringComparer.Ordinal))
+                        {
+                            proposal.Warnings.Add(truncationWarning);
+                        }
                         return proposal;
                     }
                     else if (preserveOnFailure != null && preserveOnFailure.Tasks.Count > 0)
@@ -1328,6 +1416,11 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                         if (!string.IsNullOrWhiteSpace(goalOverride))
                         {
                             preservedFromReply.SprintGoal = goalOverride;
+                        }
+                        if (wasRepairedFromTruncation &&
+                            !preservedFromReply.Warnings.Contains(truncationWarning, StringComparer.Ordinal))
+                        {
+                            preservedFromReply.Warnings.Add(truncationWarning);
                         }
                         return preservedFromReply;
                     }
@@ -2180,6 +2273,348 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
             return cleaned.Substring(firstBrace, lastBrace - firstBrace + 1);
         }
         return cleaned;
+    }
+
+    private sealed class JsonRepairFrame
+    {
+        public char Kind { get; init; }
+        public int Phase { get; set; }
+        public int CompletedObjectItems { get; set; }
+    }
+
+    /// <summary>
+    /// Phục hồi chuỗi JSON đề xuất Sprint bị cắt cụt giữa chừng khi chạm giới hạn MaxTokens:
+    /// lùi về ranh giới phần tử hoàn chỉnh gần nhất, đóng chuỗi đang mở (nếu hợp lệ) và đóng các ngoặc `]`/`}` còn thiếu theo stack cú pháp.
+    /// </summary>
+    internal static bool TryRepairTruncatedJson(string? rawJson, out string repairedJson)
+    {
+        repairedJson = string.Empty;
+        if (string.IsNullOrWhiteSpace(rawJson))
+        {
+            return false;
+        }
+
+        var cleaned = rawJson.Trim();
+        if (cleaned.StartsWith("```json", StringComparison.OrdinalIgnoreCase)) cleaned = cleaned[7..];
+        else if (cleaned.StartsWith("```")) cleaned = cleaned[3..];
+        if (cleaned.EndsWith("```")) cleaned = cleaned[..^3];
+        cleaned = cleaned.Trim();
+
+        var firstBrace = cleaned.IndexOf('{');
+        if (firstBrace < 0)
+        {
+            return false;
+        }
+
+        var candidate = cleaned[firstBrace..].TrimEnd();
+        var stack = new List<JsonRepairFrame>();
+        var checkpoints = new List<(int CutIndex, string Suffix, bool IsContainerEnd)>();
+
+        bool inString = false;
+        bool escaped = false;
+        bool currentStringIsValue = false;
+        int openCurly = 0, closeCurly = 0, openBracket = 0, closeBracket = 0;
+
+        static string BuildSuffix(List<JsonRepairFrame> frames)
+        {
+            if (frames.Count == 0) return string.Empty;
+            var chars = new char[frames.Count];
+            for (int k = 0; k < frames.Count; k++)
+            {
+                chars[k] = frames[frames.Count - 1 - k].Kind == '{' ? '}' : ']';
+            }
+            return new string(chars);
+        }
+
+        static bool CanParseValidObject(string json)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                return doc.RootElement.ValueKind == JsonValueKind.Object;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        int i = 0;
+        bool syntaxAbort = false;
+        while (i < candidate.Length)
+        {
+            char ch = candidate[i];
+            if (inString)
+            {
+                if (escaped)
+                {
+                    escaped = false;
+                    i++;
+                    continue;
+                }
+                if (ch == '\\')
+                {
+                    escaped = true;
+                    i++;
+                    continue;
+                }
+                if (ch == '"')
+                {
+                    inString = false;
+                    if (stack.Count > 0)
+                    {
+                        var top = stack[^1];
+                        if (top.Kind == '{')
+                        {
+                            if (top.Phase == 0) top.Phase = 1;
+                            else if (top.Phase == 2)
+                            {
+                                top.Phase = 3;
+                                checkpoints.Add((i + 1, BuildSuffix(stack), false));
+                            }
+                        }
+                        else
+                        {
+                            top.Phase = 1;
+                            checkpoints.Add((i + 1, BuildSuffix(stack), false));
+                        }
+                    }
+                    i++;
+                    continue;
+                }
+                i++;
+                continue;
+            }
+
+            if (char.IsWhiteSpace(ch))
+            {
+                i++;
+                continue;
+            }
+
+            if (ch == '"')
+            {
+                if (stack.Count == 0) { syntaxAbort = true; break; }
+                var top = stack[^1];
+                currentStringIsValue = top.Kind == '[' || (top.Kind == '{' && top.Phase == 2);
+                inString = true;
+                escaped = false;
+                i++;
+                continue;
+            }
+
+            if (ch == '{')
+            {
+                if (stack.Count > 0)
+                {
+                    var top = stack[^1];
+                    if (!((top.Kind == '[' && top.Phase == 0) || (top.Kind == '{' && top.Phase == 2)))
+                    {
+                        syntaxAbort = true;
+                        break;
+                    }
+                }
+                openCurly++;
+                stack.Add(new JsonRepairFrame { Kind = '{', Phase = 0 });
+                i++;
+                continue;
+            }
+
+            if (ch == '[')
+            {
+                if (stack.Count == 0) { syntaxAbort = true; break; }
+                var top = stack[^1];
+                if (!((top.Kind == '[' && top.Phase == 0) || (top.Kind == '{' && top.Phase == 2)))
+                {
+                    syntaxAbort = true;
+                    break;
+                }
+                openBracket++;
+                stack.Add(new JsonRepairFrame { Kind = '[', Phase = 0 });
+                checkpoints.Add((i + 1, BuildSuffix(stack), true));
+                i++;
+                continue;
+            }
+
+            if (ch == ':')
+            {
+                if (stack.Count == 0 || stack[^1].Kind != '{' || stack[^1].Phase != 1)
+                {
+                    syntaxAbort = true;
+                    break;
+                }
+                stack[^1].Phase = 2;
+                i++;
+                continue;
+            }
+
+            if (ch == ',')
+            {
+                if (stack.Count == 0) { syntaxAbort = true; break; }
+                var top = stack[^1];
+                if ((top.Kind == '{' && top.Phase == 3) || (top.Kind == '[' && top.Phase == 1))
+                {
+                    top.Phase = 0;
+                    i++;
+                    continue;
+                }
+                syntaxAbort = true;
+                break;
+            }
+
+            if (ch == '}')
+            {
+                closeCurly++;
+                if (stack.Count == 0 || stack[^1].Kind != '{' || (stack[^1].Phase != 0 && stack[^1].Phase != 3))
+                {
+                    syntaxAbort = true;
+                    break;
+                }
+                stack.RemoveAt(stack.Count - 1);
+                if (stack.Count > 0)
+                {
+                    var parent = stack[^1];
+                    if (parent.Kind == '{') parent.Phase = 3;
+                    else
+                    {
+                        parent.Phase = 1;
+                        parent.CompletedObjectItems++;
+                    }
+                    checkpoints.Add((i + 1, BuildSuffix(stack), true));
+                }
+                else
+                {
+                    checkpoints.Add((i + 1, string.Empty, true));
+                    break;
+                }
+                i++;
+                continue;
+            }
+
+            if (ch == ']')
+            {
+                closeBracket++;
+                if (stack.Count == 0 || stack[^1].Kind != '[' || (stack[^1].Phase != 0 && stack[^1].Phase != 1))
+                {
+                    syntaxAbort = true;
+                    break;
+                }
+                stack.RemoveAt(stack.Count - 1);
+                if (stack.Count > 0)
+                {
+                    var parent = stack[^1];
+                    parent.Phase = parent.Kind == '{' ? 3 : 1;
+                    checkpoints.Add((i + 1, BuildSuffix(stack), true));
+                }
+                i++;
+                continue;
+            }
+
+            if (stack.Count > 0)
+            {
+                var top = stack[^1];
+                if (!((top.Kind == '[' && top.Phase == 0) || (top.Kind == '{' && top.Phase == 2)))
+                {
+                    syntaxAbort = true;
+                    break;
+                }
+            }
+
+            int tokenStart = i;
+            while (i < candidate.Length && candidate[i] != ',' && candidate[i] != '}' && candidate[i] != ']' && !char.IsWhiteSpace(candidate[i]))
+            {
+                i++;
+            }
+            var literal = candidate[tokenStart..i];
+            bool isCompletePrimitive =
+                literal == "true" || literal == "false" || literal == "null" ||
+                (decimal.TryParse(literal, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out _)
+                 && !literal.EndsWith('.') && !literal.EndsWith('-') && !literal.EndsWith('+'));
+            if (!isCompletePrimitive)
+            {
+                break;
+            }
+
+            if (stack.Count > 0)
+            {
+                var top = stack[^1];
+                top.Phase = top.Kind == '{' ? 3 : 1;
+                checkpoints.Add((i, BuildSuffix(stack), false));
+            }
+        }
+
+        bool isTruncated = stack.Count > 0 || inString || openCurly > closeCurly || openBracket > closeBracket;
+        if (!isTruncated && !syntaxAbort)
+        {
+            return false;
+        }
+
+        string? closedOpenStringCandidate = null;
+        if (!syntaxAbort && inString && currentStringIsValue && stack.Count > 0)
+        {
+            var trimmed = candidate;
+            if (escaped && trimmed.Length > 0)
+            {
+                trimmed = trimmed[..^1];
+            }
+            else
+            {
+                // Tránh cắt dở chuỗi unicode escape \uXX cuối cùng
+                var tailCount = Math.Min(6, trimmed.Length);
+                var uIdx = trimmed.LastIndexOf("\\u", trimmed.Length - 1, tailCount, StringComparison.Ordinal);
+                if (uIdx >= 0 && trimmed.Length - uIdx < 6)
+                {
+                    trimmed = trimmed[..uIdx];
+                }
+            }
+            closedOpenStringCandidate = trimmed + "\"" + BuildSuffix(stack);
+        }
+
+        bool preferCompletedSibling = stack.Count >= 2 &&
+                                      stack[^1].Kind == '{' &&
+                                      stack[^2].Kind == '[' &&
+                                      stack[^2].CompletedObjectItems > 0;
+
+        if (!preferCompletedSibling && closedOpenStringCandidate != null && CanParseValidObject(closedOpenStringCandidate))
+        {
+            repairedJson = closedOpenStringCandidate;
+            return true;
+        }
+
+        for (int idx = checkpoints.Count - 1; idx >= 0; idx--)
+        {
+            var cp = checkpoints[idx];
+            if (preferCompletedSibling && !cp.IsContainerEnd)
+            {
+                continue;
+            }
+
+            var assembled = candidate[..cp.CutIndex] + cp.Suffix;
+            if (CanParseValidObject(assembled))
+            {
+                repairedJson = assembled;
+                return true;
+            }
+        }
+
+        for (int idx = checkpoints.Count - 1; idx >= 0; idx--)
+        {
+            var cp = checkpoints[idx];
+            var assembled = candidate[..cp.CutIndex] + cp.Suffix;
+            if (CanParseValidObject(assembled))
+            {
+                repairedJson = assembled;
+                return true;
+            }
+        }
+
+        if (closedOpenStringCandidate != null && CanParseValidObject(closedOpenStringCandidate))
+        {
+            repairedJson = closedOpenStringCandidate;
+            return true;
+        }
+
+        return false;
     }
 
     private sealed class TeamMemberProfile

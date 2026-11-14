@@ -44,6 +44,9 @@ public static partial class AiIndexedMemoryEngine
     [GeneratedRegex(@"[\p{L}\p{N}_\-]{2,}", RegexOptions.Compiled)]
     private static partial Regex TokenRegex();
 
+    [GeneratedRegex(@"(?<!\p{L})nó(?!\p{L})", RegexOptions.IgnoreCase | RegexOptions.Compiled)]
+    private static partial Regex PronounItRegex();
+
     public static AiContextExecutionPlan PlanContextExecution(
         string intent,
         string effectiveUserText,
@@ -58,7 +61,7 @@ public static partial class AiIndexedMemoryEngine
         var historyWindow = conversationHistory ?? existingProposal?.ConversationHistory;
         var isFollowUp = IsConversationalFollowUp(lower) && (historyWindow?.Count > 0 || allMemories.Count > 0);
         var topicHint = isFollowUp ? BuildRecentTopicHint(historyWindow) : string.Empty;
-        var recalled = SelectRelevantMemories(effectiveUserText, docContent, allMemories, maxMatches: 4, historyWindow);
+        var recalled = SelectRelevantMemories(effectiveUserText, docContent, allMemories, maxMatches: 4, historyWindow, intent);
 
         // 1. Guardrail & Direct Commands: Không gọi thừa các MCP tools không liên quan
         if (intent is "out_of_scope_refusal" or "security_refusal" or "push_backlog" or "apply_sprint" or "export_excel")
@@ -387,7 +390,8 @@ public static partial class AiIndexedMemoryEngine
         string? docContent,
         IReadOnlyList<AiMemoryAnchorDto> anchors,
         int maxMatches = 3,
-        IReadOnlyList<AiConversationTurnDto>? conversationHistory = null)
+        IReadOnlyList<AiConversationTurnDto>? conversationHistory = null,
+        string? intent = null)
     {
         if (anchors == null || anchors.Count == 0)
         {
@@ -407,7 +411,13 @@ public static partial class AiIndexedMemoryEngine
 
         var queryTokens = TokenizeNormalized(query);
         var lowerQuery = query.ToLowerInvariant();
-        var isFollowUp = IsConversationalFollowUp(lowerQuery) || queryTokens.Count <= 4;
+        var trimmedUserOnly = (userQuery ?? string.Empty).Trim().ToLowerInvariant();
+        var isShortQa = string.Equals(intent, "project_qa", StringComparison.OrdinalIgnoreCase) && trimmedUserOnly.Length <= 140;
+        var isRefineIntent = string.Equals(intent, "refine_proposal", StringComparison.OrdinalIgnoreCase);
+        var isFollowUp = IsConversationalFollowUp(lowerQuery)
+            || isRefineIntent
+            || isShortQa
+            || queryTokens.Count <= 4;
         var contextTopicTokens = isFollowUp && conversationHistory != null && conversationHistory.Count > 0
             ? TokenizeNormalized(BuildRecentTopicHint(conversationHistory))
             : [];
@@ -465,7 +475,13 @@ public static partial class AiIndexedMemoryEngine
 
         if (scored.Count == 0 && isFollowUp)
         {
-            return anchors.TakeLast(Math.Min(2, maxMatches)).ToList();
+            // Fallback ngữ nghĩa (#mem-latest): lấy 1-2 mảnh trí nhớ mới nhất khi lọc từ khóa tĩnh trả về rỗng
+            var latestCount = Math.Clamp(maxMatches, 1, 2);
+            return anchors
+                .OrderByDescending(a => a.TurnIndex)
+                .Take(latestCount)
+                .OrderBy(a => a.TurnIndex)
+                .ToList();
         }
 
         return scored
@@ -522,14 +538,15 @@ public static partial class AiIndexedMemoryEngine
 
         if (priorTurns.Count > 0)
         {
+            // Cửa sổ trượt Working Memory: luôn giữ tối thiểu 2 lượt hội thoại hoàn chỉnh gần nhất (4 thông điệp User/Assistant) ở độ nét cao
             var window = priorTurns.TakeLast(8).ToList();
             sb.AppendLine();
-            sb.AppendLine($"### LỊCH SỬ ĐOẠN HỘI THOẠI TRƯỚC ĐÓ ({window.Count} LƯỢT GẦN NHẤT):");
+            sb.AppendLine($"### LỊCH SỬ ĐOẠN HỘI THOẠI TRƯỚC ĐÓ ({window.Count} LƯỢT GẦN NHẤT - SLIDING WINDOW):");
             for (int i = 0; i < window.Count; i++)
             {
                 var turn = window[i];
                 bool isVeryRecent = i >= window.Count - 4;
-                int maxChars = isVeryRecent ? 1200 : 480;
+                int maxChars = isVeryRecent ? 1800 : 480;
                 var meta = turn.Role == "assistant" && (!string.IsNullOrWhiteSpace(turn.Intent) || (turn.TaskCount ?? 0) > 0)
                     ? $" | {turn.Intent ?? "chat"}{(turn.TaskCount > 0 ? $" | {turn.TaskCount} việc" : string.Empty)}"
                     : string.Empty;
@@ -651,6 +668,8 @@ public static partial class AiIndexedMemoryEngine
         if (string.IsNullOrWhiteSpace(lower)) return false;
         return lower.Contains("cái đó") || lower.Contains("cái này") ||
                lower.Contains("việc đó") || lower.Contains("việc này") ||
+               lower.Contains("task đó") || lower.Contains("task này") ||
+               lower.Contains("hạng mục đó") || lower.Contains("hạng mục này") ||
                lower.Contains("phần đó") || lower.Contains("phần này") ||
                lower.Contains("mục đó") || lower.Contains("mục này") ||
                lower.Contains("ý đó") || lower.Contains("ý này") ||
@@ -668,6 +687,7 @@ public static partial class AiIndexedMemoryEngine
                lower.Contains("vì sao") || lower.Contains("thế còn") ||
                lower.Contains("tiếp đi") || lower.Contains("nói tiếp") ||
                lower.Contains("giải thích thêm") || lower.Contains("bổ sung thêm") ||
+               PronounItRegex().IsMatch(lower) ||
                lower.Contains("#mem-");
     }
 
