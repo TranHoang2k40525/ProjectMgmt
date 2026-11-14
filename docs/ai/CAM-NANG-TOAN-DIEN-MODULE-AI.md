@@ -1239,6 +1239,7 @@ Khi AI bắt đầu suy luận, giao diện hiển thị danh sách các hành �
 2. Gõ yêu cầu phân rã Sprint hoặc phân tích kế hoạch.
 3. Quan sát kết quả đề xuất:
    - Danh sách đề xuất bên ngoài giữ giao diện gọn sạch (lược bỏ thẻ trích dẫn xanh trùng lặp trên dòng cha và việc con); khi bấm vào công việc cha hoặc việc con, ngăn kéo chi tiết hiển thị đầy đủ mục **Tài liệu căn cứ & Trích dẫn đặc tả** (việc con tự động thừa hưởng trích dẫn từ cha nếu chưa tách riêng).
+   - Đối với các lượt hỏi đáp / tra cứu tài liệu trong khung chat (`project_qa`, ví dụ *"liệt kê các tài liệu đặc tả"*), mỗi lượt trả lời của Trợ Lý AI cũng tự động đính kèm khối nút **Tài liệu căn cứ & Đặc tả Spec Hub (`DocumentCitations`)** ngay dưới nội dung trả lời (định dạng Markdown sạch sẽ) để người dùng nhấn mở trực tiếp Drawer xem nội dung tài liệu y hệt như khi mở từ chi tiết công việc.
    - Nhấp vào nhãn trích dẫn: Drawer nội tuyến mở ra, hiển thị tiêu đề, vị trí trích dẫn và nội dung đặc tả.
    - Nhấp vào nút "Mở trang Spec Hub": Trình duyệt mở tab Spec Hub với đầy đủ tham số `?docId=...&docName=...&section=...`. Hệ thống tự động mở tab tài liệu, cuộn mượt đến đề mục `Phần II` và kích hoạt hiệu ứng viền vàng nổi bật.
    - Nhấp "Quay lại đoạn chat": Hệ thống quay trở lại giao diện phân rã Sprint nguyên vẹn.

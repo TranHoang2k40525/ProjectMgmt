@@ -114,6 +114,7 @@ export interface AiConversationTurnDto {
   durationMs?: number;
   thoughts?: string | null;
   referencedMemoryAnchors?: string[];
+  documentCitations?: string[];
   traceItems?: AiTurnTraceItemDto[];
   exportSpec?: AiExcelExportSpecDto | null;
   timestampUtc?: string;

@@ -148,7 +148,7 @@
             }
           </div>
           }
-          @for (turn of chatHistory(); track turn.id) {
+          @for (turn of chatHistory(); track turn.id; let turnIdx = $index) {
           @if (turn.role === 'user') {
           <div class="msg-row msg-row-user" data-testid="ai-msg-user">
             <div class="msg-user-stack">
@@ -264,7 +264,28 @@
               </div>
               }
 
-              <div class="msg-assistant-text">{{ turn.text }}</div>
+              <div class="msg-assistant-text" [innerHTML]="formatAssistantText(turn.text)"></div>
+
+              @let turnDocCites = getTurnDocumentCitations(turn, turnIdx);
+              @if (turnDocCites.length > 0) {
+              <div class="drawer-citations-card msg-doc-citations-card" data-testid="ai-msg-doc-citations">
+                <div class="drawer-citations-label">
+                  <span class="material-symbols-outlined text-[15px] text-primary" aria-hidden="true">description</span>
+                  <strong>Tài liệu căn cứ &amp; Đặc tả Spec Hub (Nhấn để mở xem nội dung):</strong>
+                </div>
+                <div class="drawer-citations-pills">
+                  @for (cite of turnDocCites; track cite) {
+                  <button type="button" class="drawer-citation-pill" data-testid="btn-chat-open-doc"
+                    (click)="openSpecDoc(cite); $event.stopPropagation()"
+                    title="Nhấn để mở xem nội dung tài liệu này ngay trong cửa sổ Trợ Lý AI">
+                    <span class="material-symbols-outlined" aria-hidden="true">description</span>
+                    <span class="cite-text">{{ cite }}</span>
+                    <span class="material-symbols-outlined link-icon" aria-hidden="true">open_in_new</span>
+                  </button>
+                  }
+                </div>
+              </div>
+              }
 
               @if (turn.actionType === 'export_excel') {
               <button type="button" class="msg-inline-action" data-testid="btn-ai-chat-export-excel"
@@ -1103,12 +1124,15 @@
           <p class="rationale-text">{{ detailTask.aiRationale }}</p>
           }
           @if (detailTask.documentCitations && detailTask.documentCitations.length > 0) {
-          <div class="citation-chips">
+          <div class="drawer-citations-pills">
             @for (cite of detailTask.documentCitations; track $index) {
-            <span class="citation-badge">
+            <button type="button" class="drawer-citation-pill"
+              (click)="openSpecDoc(cite, detailTask.documentId); $event.stopPropagation()"
+              title="Nhấn để xem trước tài liệu này trong Spec Hub">
               <span class="material-symbols-outlined" aria-hidden="true">description</span>
-              <span>{{ cite }}</span>
-            </span>
+              <span class="cite-text">{{ cite }}</span>
+              <span class="material-symbols-outlined link-icon" aria-hidden="true">open_in_new</span>
+            </button>
             }
           </div>
           }

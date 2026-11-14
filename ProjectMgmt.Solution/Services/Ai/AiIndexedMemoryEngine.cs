@@ -121,8 +121,11 @@ public static partial class AiIndexedMemoryEngine
                                   lower.Contains("dữ liệu thật") || lower.Contains("trong db") ||
                                   lower.Contains("mới nhất"));
 
+        bool explicitAnchorTag = MemoryAnchorRegex().IsMatch(lower);
+        bool mentionsSpecDocs = MentionsSpecHub(combinedLower);
         if (intent == "project_qa" &&
             !asksDeeperDbFetch &&
+            (!mentionsSpecDocs || explicitAnchorTag) &&
             (historyWindow?.Count > 1 || allMemories.Count > 0 || existingProposal?.Tasks?.Count > 0) &&
             (explicitMemoryRef ||
              (isFollowUp && !asksLiveDbData && (recalled.Count > 0 || (historyWindow?.Count ?? 0) > 1)) ||
@@ -162,7 +165,7 @@ public static partial class AiIndexedMemoryEngine
                                     lower.Contains("thực hư") || lower.Contains("đã hủy") ||
                                     lower.Contains("đã bỏ");
 
-            bool needsSpec = asksOverview || MentionsSpecHub(combinedLower) || (isFollowUp && MentionsSpecHub(topicAwareLower) && !asksLiveDbData);
+            bool needsSpec = asksOverview || mentionsSpecDocs || (isFollowUp && MentionsSpecHub(topicAwareLower) && !asksLiveDbData);
             bool needsBacklog = asksOverview || MentionsBacklog(combinedLower) || (isFollowUp && MentionsBacklog(topicAwareLower) && lower.Contains("còn "));
             bool needsSprint = asksOverview || asksVerification || MentionsSprint(combinedLower) || (isFollowUp && MentionsSprint(topicAwareLower) && lower.Contains("còn "));
             bool needsTeam = asksOverview || asksVerification || MentionsTeam(combinedLower);
@@ -207,7 +210,7 @@ public static partial class AiIndexedMemoryEngine
                 UseMemoryOnly: false,
                 NeedsSpecHub: needsSpec,
                 SpecSearchKeyword: specQuery,
-                MaxSpecDocsToRead: needsSpec ? 2 : 0,
+                MaxSpecDocsToRead: needsSpec ? 4 : 0,
                 NeedsBacklog: needsBacklog,
                 NeedsSprintHistory: needsSprint,
                 NeedsTeamCapacity: needsTeam,
@@ -765,11 +768,24 @@ public static partial class AiIndexedMemoryEngine
         return directives.Distinct(StringComparer.OrdinalIgnoreCase).TakeLast(5).ToList();
     }
 
-    private static bool MentionsSpecHub(string text) =>
-        text.Contains("spec") || text.Contains("đặc tả") || text.Contains("tài liệu") ||
-        text.Contains("srs") || text.Contains("brd") || text.Contains("prd") ||
-        text.Contains("kiến trúc") || text.Contains("nghiệp vụ") || text.Contains("chức năng") ||
-        text.Contains("yêu cầu");
+    public static bool MentionsSpecHub(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        if (text.Contains("spec") || text.Contains("đặc tả") || text.Contains("tài liệu") ||
+            text.Contains("trích dẫn") || text.Contains("văn bản") || text.Contains("readme") ||
+            text.Contains("srs") || text.Contains("brd") || text.Contains("prd") ||
+            text.Contains("kiến trúc") || text.Contains("nghiệp vụ") || text.Contains("chức năng") ||
+            text.Contains("yêu cầu") || text.Contains(".md") || text.Contains(".txt") ||
+            text.Contains(".docx") || text.Contains(".pdf"))
+        {
+            return true;
+        }
+
+        var folded = NormalizeForMatch(text);
+        return folded.Contains("tai lieu") || folded.Contains("dac ta") ||
+               folded.Contains("trich dan") || folded.Contains("van ban") ||
+               folded.Contains("spec hub");
+    }
 
     private static bool MentionsBacklog(string text) =>
         text.Contains("backlog") || text.Contains("user story") || text.Contains("story") ||

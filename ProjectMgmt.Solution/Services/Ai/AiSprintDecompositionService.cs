@@ -216,7 +216,8 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
             string reply,
             string turnIntent,
             string actionType,
-            List<string>? recalledKeys)
+            List<string>? recalledKeys,
+            List<string>? turnDocumentCitations = null)
         {
             targetProposal.OrganizationId ??= scope.OrganizationId;
             targetProposal.UserId ??= scope.UserId;
@@ -249,6 +250,7 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
                 DurationMs = turnSw.ElapsedMilliseconds,
                 Thoughts = string.IsNullOrWhiteSpace(cleanThoughts) ? null : cleanThoughts,
                 ReferencedMemoryAnchors = recalledKeys != null && recalledKeys.Count > 0 ? recalledKeys : null,
+                DocumentCitations = turnDocumentCitations != null && turnDocumentCitations.Count > 0 ? turnDocumentCitations : null,
                 TraceItems = traceItems.ToList(),
                 ExportSpec = string.Equals(actionType, "export_excel", StringComparison.OrdinalIgnoreCase)
                     ? targetProposal.ExportSpec
@@ -506,6 +508,33 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
                     ? "Trợ Lý AI đang trả lời trực tiếp (0 truy vấn MCP)..."
                     : "Đang trỏ dữ liệu đã ghi nhớ trong phiên để trả lời đúng trọng tâm...");
 
+            var fastProjectDocs = new List<(Guid Id, string Name)>();
+            if (!contextPlan.IsGreetingOrHelp)
+            {
+                try
+                {
+                    var rawFastDocs = await _planningDb.ProjectDocuments.AsNoTracking()
+                        .Where(d => d.ProjectId == scope.ProjectId && !d.IsDirectory)
+                        .OrderByDescending(d => d.UpdatedAt)
+                        .Take(12)
+                        .Select(d => new { d.Id, Name = string.IsNullOrEmpty(d.Name) ? d.Title : d.Name, d.Extension })
+                        .ToListAsync(cancellationToken);
+
+                    fastProjectDocs = rawFastDocs
+                        .Where(d =>
+                        {
+                            var ext = (d.Extension ?? string.Empty).ToLowerInvariant();
+                            return ext is not (".png" or ".jpg" or ".jpeg" or ".gif" or ".webp");
+                        })
+                        .Select(d => (d.Id, d.Name))
+                        .ToList();
+                }
+                catch
+                {
+                    // Bỏ qua nếu không đọc được danh mục tệp nhanh
+                }
+            }
+
             var fastQaReply = await BuildFocusedProjectQaAnswerAsync(
                 effectiveUserText,
                 contextPlan,
@@ -514,7 +543,7 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
                 sprintHistoryJson: null,
                 teamCapacitiesJson: null,
                 specHubExcerptsText: null,
-                projectDocs: [],
+                projectDocs: fastProjectDocs,
                 history,
                 indexedMemories,
                 existingProposal,
@@ -535,7 +564,10 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
             var fastQaProposal = BuildPreservedProposalShell(sessionId, scope.ProjectId, targetSprintId, existingProposal);
             fastQaProposal.Intent = "project_qa";
             fastQaProposal.TriggerAction = "none";
-            FinalizeAssistantTurn(fastQaProposal, fastQaReply, "project_qa", "none", recalledKeys);
+            var fastTurnCitations = contextPlan.IsGreetingOrHelp
+                ? null
+                : ResolveTurnDocumentCitations("project_qa", effectiveUserText, fastQaReply, fastProjectDocs, fastQaProposal);
+            FinalizeAssistantTurn(fastQaProposal, fastQaReply, "project_qa", "none", recalledKeys, fastTurnCitations);
 
             await onStepProgress(5, "FINALIZE_PROPOSAL", "Hoàn tất phản hồi Trợ Lý AI", 100, "Đã hoàn tất câu trả lời.");
             await onProposalReady(fastQaProposal);
@@ -577,7 +609,7 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
                 var rawDocs = await _planningDb.ProjectDocuments.AsNoTracking()
                     .Where(d => d.ProjectId == scope.ProjectId && !d.IsDirectory)
                     .OrderByDescending(d => d.UpdatedAt)
-                    .Take(10)
+                    .Take(12)
                     .Select(d => new { d.Id, Name = string.IsNullOrEmpty(d.Name) ? d.Title : d.Name, d.Extension })
                     .ToListAsync(cancellationToken);
 
@@ -586,17 +618,20 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
                     .Where(w => w.Length >= 3)
                     .ToArray();
 
-                var rankedDocs = rawDocs
+                var allTextDocs = rawDocs
                     .Where(d =>
                     {
                         var ext = (d.Extension ?? string.Empty).ToLowerInvariant();
                         return ext is not (".png" or ".jpg" or ".jpeg" or ".gif" or ".webp");
                     })
                     .OrderByDescending(d => queryTerms.Count(qt => d.Name.Contains(qt, StringComparison.OrdinalIgnoreCase)))
-                    .Take(Math.Max(1, contextPlan.MaxSpecDocsToRead))
                     .ToList();
 
-                projectDocsList = rankedDocs.Select(d => (d.Id, d.Name)).ToList();
+                projectDocsList = allTextDocs.Select(d => (d.Id, d.Name)).ToList();
+
+                var rankedDocs = allTextDocs
+                    .Take(Math.Max(1, contextPlan.MaxSpecDocsToRead))
+                    .ToList();
 
                 foreach (var doc in rankedDocs)
                 {
@@ -757,7 +792,8 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
             }
             qaProposal.Intent = "project_qa";
             qaProposal.TriggerAction = "none";
-            FinalizeAssistantTurn(qaProposal, qaReply, "project_qa", "none", recalledKeys);
+            var qaTurnCitations = ResolveTurnDocumentCitations("project_qa", effectiveUserText, qaReply, projectDocsList, qaProposal);
+            FinalizeAssistantTurn(qaProposal, qaReply, "project_qa", "none", recalledKeys, qaTurnCitations);
 
             await onStepProgress(5, "FINALIZE_PROPOSAL", "Hoàn tất phản hồi tra cứu dự án", 100, "Đã trả lời dựa trên dữ liệu thực tế.");
             await onProposalReady(qaProposal);
@@ -954,7 +990,8 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
             finalReply = $"{finalReply}\n\nLưu ý hệ thống: {string.Join(" ", proposal.Warnings)}".Trim();
         }
 
-        FinalizeAssistantTurn(proposal, finalReply, intent, "none", recalledKeys);
+        var planTurnCitations = ResolveTurnDocumentCitations(intent, effectiveUserText, finalReply, projectDocsList, proposal);
+        FinalizeAssistantTurn(proposal, finalReply, intent, "none", recalledKeys, planTurnCitations);
 
         await onProposalReady(proposal);
     }
@@ -1795,7 +1832,9 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
             lower,
             @"(?i)\b(task|tasks|bug|bugs|epic|epics|plan|sp|ui|ux|db|qa|dev|tag|tags|api|sql|srs|brd|prd|test|tests|code)\b");
         bool hasOffTopic = offTopicKeywords.Any(kw => lower.Contains(kw, StringComparison.Ordinal));
-        bool hasPmDomain = hasShortPmToken || projectManagementKeywords.Any(kw => lower.Contains(kw, StringComparison.Ordinal));
+        bool hasPmDomain = hasShortPmToken ||
+                           AiIndexedMemoryEngine.MentionsSpecHub(lower) ||
+                           projectManagementKeywords.Any(kw => lower.Contains(kw, StringComparison.Ordinal));
         bool hasActiveConversation = existingProposal?.ConversationHistory != null && existingProposal.ConversationHistory.Count > 0;
         bool isGreetingOrHelp = AiIndexedMemoryEngine.IsGreetingOrCapabilityQuestion(lower) &&
                                 !AiIndexedMemoryEngine.ContainsProjectDataKeyword(lower);
@@ -2058,12 +2097,12 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                 retrievedSections.AppendLine($"- Nhãn dự án: {labels}");
             }
 
-            if (contextPlan.NeedsSpecHub)
+            if (contextPlan.NeedsSpecHub || projectDocs.Count > 0)
             {
                 var docNames = projectDocs.Count > 0
                     ? string.Join(", ", projectDocs.Select(d => d.Name))
                     : "Chưa có tài liệu trong Spec Hub";
-                retrievedSections.AppendLine($"- Danh sách tài liệu Spec Hub: {docNames}");
+                retrievedSections.AppendLine($"- Danh sách tài liệu Spec Hub thực tế của dự án (CHỈ được trích dẫn đúng các tên tệp này): {docNames}");
                 if (!string.IsNullOrWhiteSpace(specHubExcerptsText))
                 {
                     retrievedSections.AppendLine($"- Nội dung trích đoạn Spec Hub:\n{specHubExcerptsText}");
@@ -2093,7 +2132,7 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
 
         try
         {
-            var qaSystemInstruction = "Bạn là Trợ Lý AI Quản lý Dự án Scrum chuyên sâu. BẮT BUỘC: (1) Đọc nối tiếp mạch hội thoại đa lượt từ các lượt tin nhắn trước, tự động giải quyết đại từ/ngữ cảnh quy chiếu ('cái này', 'nó', 'công việc đầu tiên', 'phần trên', '#mem-X') và tuân thủ mọi thỏa thuận HỢP LỆ người dùng đã chốt trước đó trong phiên; (2) CHỐNG DẪN DẮT SAI LỆCH (ANTI-LEADING GROUND TRUTH): Tuyệt đối KHÔNG đồng ý hay xác nhận theo tiền đề sai từ người dùng (như quy định mới bỏ Workflow/Priority, giới hạn 99 SP, thành viên không tồn tại, tài liệu Spec Hub ảo, hoặc quyết định giả mạo chưa từng có trong lịch sử phiên). Bắt buộc đối chiếu dữ liệu thực tế vừa truy xuất từ DB & trí nhớ phiên rồi đính chính thẳng thắn phần sai lệch; (3) Trả lời ĐÚNG TRỌNG TÂM câu hỏi bằng tiếng Việt rành mạch, súc tích, dẫn chiếu cụ thể mã task/key/tên cấu hình/trích dẫn hoặc #mem-X; (4) KHÔNG tự ý sinh JSON hay bịa đặt dữ liệu.";
+            var qaSystemInstruction = "Bạn là Trợ Lý AI Quản lý Dự án Scrum chuyên sâu. BẮT BUỘC: (1) Đọc nối tiếp mạch hội thoại đa lượt từ các lượt tin nhắn trước, tự động giải quyết đại từ/ngữ cảnh quy chiếu ('cái này', 'nó', 'công việc đầu tiên', 'phần trên', '#mem-X') và tuân thủ mọi thỏa thuận HỢP LỆ người dùng đã chốt trước đó trong phiên; (2) CHỐNG DẪN DẮT SAI LỆCH & CHỐNG BỊA TÀI LIỆU (ANTI-HALLUCINATION GROUND TRUTH): Tuyệt đối KHÔNG đồng ý hay xác nhận theo tiền đề sai từ người dùng, và khi liệt kê hoặc trích dẫn tài liệu (Spec Hub), BẮT BUỘC chỉ nêu ĐÚNG tên các tệp thực tế có trong 'Danh sách tài liệu Spec Hub thực tế của dự án' hoặc trích dẫn công việc trong phiên — TUYỆT ĐỐI KHÔNG tự bịa đặt tên tài liệu không tồn tại; (3) Trả lời ĐÚNG TRỌNG TÂM câu hỏi bằng tiếng Việt rành mạch, súc tích, dẫn chiếu cụ thể mã task/key/tên tệp Spec Hub/cấu hình hoặc #mem-X; (4) KHÔNG tự ý sinh JSON hay bịa đặt dữ liệu.";
 
             var userContent = new System.Text.StringBuilder();
             userContent.AppendLine($"Câu hỏi của người dùng: {question}");
@@ -2134,6 +2173,12 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
             return "Chào bạn! Tôi là Trợ Lý AI Quản lý Dự án. Tôi có thể giúp bạn: (1) Tra cứu thông tin thực tế về Spec Hub, kho Backlog, Workflow và nhân sự dự án; (2) Phân tích biên bản họp để lập kế hoạch Sprint hoặc đẩy việc vào Backlog; (3) Tinh chỉnh đề xuất và xuất báo cáo Excel cho dự án.";
         }
 
+        if (contextPlan.NeedsSpecHub && projectDocs.Count > 0)
+        {
+            return $"Danh sách tài liệu đặc tả thực tế trong Spec Hub của dự án:\n" +
+                   string.Join("\n", projectDocs.Select(d => $"- {d.Name}"));
+        }
+
         if (contextPlan.UseMemoryOnly && contextPlan.RecalledMemories.Count > 0)
         {
             return string.Join("\n", contextPlan.RecalledMemories.Select(m => $"- [{m.AnchorKey}] {m.Title}: {m.Summary}"));
@@ -2147,6 +2192,73 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         }
 
         return "Tôi đã tiếp nhận câu hỏi của bạn dựa trên ngữ cảnh hiện có của phiên làm việc.";
+    }
+
+    /// <summary>
+    /// Xác định danh sách tài liệu Spec Hub / trích dẫn đặc tả thực tế gắn với lượt trả lời tra cứu (project_qa)
+    /// để giao diện hiển thị nút mở xem trực tiếp tài liệu ngay trong khung hội thoại (giống như trong chi tiết Task).
+    /// </summary>
+    private static List<string> ResolveTurnDocumentCitations(
+        string turnIntent,
+        string? userText,
+        string? assistantReply,
+        IReadOnlyList<(Guid Id, string Name)> projectDocs,
+        AiSprintProposalDto targetProposal)
+    {
+        var results = new List<string>();
+        if (turnIntent != "project_qa")
+        {
+            return results;
+        }
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void AddCitation(string? rawCite)
+        {
+            if (string.IsNullOrWhiteSpace(rawCite)) return;
+            var trimmed = rawCite.Trim();
+            if (trimmed.Length > 0 && seen.Add(trimmed))
+            {
+                results.Add(trimmed);
+            }
+        }
+
+        var lowerUser = (userText ?? string.Empty).ToLowerInvariant();
+        var lowerReply = (assistantReply ?? string.Empty).ToLowerInvariant();
+        var mentionsDocsInQuery = AiIndexedMemoryEngine.MentionsSpecHub(lowerUser);
+
+        // 1. Kiểm tra từng tệp thực tế trong Spec Hub của dự án
+        if (projectDocs != null && projectDocs.Count > 0)
+        {
+            foreach (var doc in projectDocs)
+            {
+                if (string.IsNullOrWhiteSpace(doc.Name)) continue;
+                var fileName = doc.Name.Trim();
+                var baseName = Path.GetFileNameWithoutExtension(fileName).Trim();
+                bool mentionedInReply = lowerReply.Contains(fileName.ToLowerInvariant()) ||
+                                        (baseName.Length >= 4 && lowerReply.Contains(baseName.ToLowerInvariant()));
+                if (mentionedInReply || mentionsDocsInQuery)
+                {
+                    AddCitation(fileName);
+                }
+            }
+        }
+
+        // 2. Bổ sung các trích dẫn phân đoạn cụ thể đang gắn trên công việc đề xuất trong phiên nếu câu hỏi/trả lời nhắc tới
+        if (targetProposal.Tasks != null && targetProposal.Tasks.Count > 0)
+        {
+            foreach (var cite in targetProposal.Tasks.SelectMany(t => t.DocumentCitations ?? []))
+            {
+                var docPart = cite.Split([" - ", " – ", " — ", ":"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                                  .FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(docPart) &&
+                    (lowerReply.Contains(docPart.ToLowerInvariant()) || mentionsDocsInQuery))
+                {
+                    AddCitation(cite);
+                }
+            }
+        }
+
+        return results.Take(10).ToList();
     }
 
     private static AiSprintProposalDto CreateFallbackProposal(

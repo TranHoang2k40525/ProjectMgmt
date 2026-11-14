@@ -47,6 +47,7 @@ public sealed class AiConversationTurnDto
     public long? DurationMs { get; set; }
     public string? Thoughts { get; set; }
     public List<string>? ReferencedMemoryAnchors { get; set; }
+    public List<string>? DocumentCitations { get; set; }
     public List<AiTurnTraceItemDto>? TraceItems { get; set; }
     public AiExcelExportSpecDto? ExportSpec { get; set; }
     public DateTime TimestampUtc { get; set; } = DateTime.UtcNow;

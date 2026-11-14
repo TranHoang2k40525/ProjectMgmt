@@ -80,6 +80,8 @@ export interface ChatTurn {
   thoughts?: string | null;
   /** Các thẻ trí nhớ (#mem-X) mà Agent đã trỏ tới */
   referencedMemoryAnchors?: string[];
+  /** Danh sách tài liệu Spec Hub / trích dẫn đặc tả gắn với lượt trả lời tra cứu */
+  documentCitations?: string[];
   /** Lượt trả lời này sinh ra / cập nhật bảng đề xuất công việc */
   hasProposalTable?: boolean;
   /** Đặc tả phạm vi & bộ lọc xuất tệp Excel (.xlsx) gắn riêng cho lượt này */
@@ -340,8 +342,163 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
     return Array.from(citeSet);
   });
 
+  readonly projectSpecDocs = signal<{ id: string; name: string }[]>([]);
+
   ngOnInit(): void {
     this.restoreSession();
+    this.loadProjectSpecDocs();
+  }
+
+  private loadProjectSpecDocs(): void {
+    const projId =
+      this.projectId ||
+      this.projectManagementService.currentProject()?.id ||
+      (typeof localStorage !== 'undefined' ? localStorage.getItem('pm_active_project_id') : null);
+    if (!projId) return;
+    this.projectManagementService.getSpecTree(projId).subscribe({
+      next: (nodes) => {
+        const docs: { id: string; name: string }[] = [];
+        const walk = (list: SpecTreeNode[]) => {
+          for (const node of list) {
+            if (!node.isDirectory && node.name) {
+              const ext = (node.name.split('.').pop() || '').toLowerCase();
+              if (!['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) {
+                docs.push({ id: node.id, name: node.name });
+              }
+            } else if (node.children?.length) {
+              walk(node.children);
+            }
+          }
+        };
+        walk(nodes || []);
+        this.projectSpecDocs.set(docs);
+      },
+      error: () => {},
+    });
+  }
+
+  getTurnDocumentCitations(turn: ChatTurn, turnIndex?: number): string[] {
+    if (!turn || turn.role !== 'agent' || turn.intent !== 'project_qa') {
+      return [];
+    }
+
+    const results: string[] = [];
+    const seen = new Set<string>();
+    const addCite = (c?: string | null) => {
+      if (!c) return;
+      const trimmed = c.trim();
+      if (!trimmed) return;
+      const key = trimmed.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        results.push(trimmed);
+      }
+    };
+
+    for (const c of turn.documentCitations ?? []) {
+      addCite(c);
+    }
+
+    for (const row of turn.traceItems ?? []) {
+      if (
+        (row.actionVerb === 'Đọc Spec Hub' || /\.(md|txt|docx|pdf|xlsx)$/i.test(row.target || '')) &&
+        row.target &&
+        row.target !== 'spec_hub_search'
+      ) {
+        addCite(row.target);
+      }
+    }
+
+    const history = this.chatHistory();
+    const idx = typeof turnIndex === 'number' && turnIndex >= 0 ? turnIndex : history.findIndex((h) => h.id === turn.id);
+    const prevUserText = idx > 0 && history[idx - 1]?.role === 'user' ? (history[idx - 1].text || '').toLowerCase() : '';
+    const replyLower = (turn.text || '').toLowerCase();
+    const foldAscii = (s: string) =>
+      s
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd')
+        .toLowerCase();
+    const foldedUser = foldAscii(prevUserText);
+    const mentionsDocsInQuery =
+      foldedUser.includes('tai lieu') ||
+      foldedUser.includes('dac ta') ||
+      foldedUser.includes('spec') ||
+      foldedUser.includes('trich dan') ||
+      foldedUser.includes('van ban');
+
+    for (const doc of this.projectSpecDocs()) {
+      const nameLower = doc.name.toLowerCase();
+      const baseLower = doc.name.replace(/\.[^/.]+$/, '').trim().toLowerCase();
+      const mentionedInReply =
+        replyLower.includes(nameLower) || (baseLower.length >= 4 && replyLower.includes(baseLower));
+      if (mentionedInReply || mentionsDocsInQuery) {
+        addCite(doc.name);
+      }
+    }
+
+    if (mentionsDocsInQuery && this.proposal()?.tasks?.length) {
+      for (const t of this.proposal()!.tasks) {
+        for (const c of t.documentCitations ?? []) {
+          addCite(c);
+        }
+      }
+    }
+
+    return results.slice(0, 10);
+  }
+
+  formatAssistantText(text?: string | null): SafeHtml {
+    if (!text) return this.sanitizer.bypassSecurityTrustHtml('');
+    const escapeHtml = (str: string) =>
+      str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+
+    const applyInline = (line: string) =>
+      line
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/`([^`]+)`/g, '<code class="ai-md-code">$1</code>');
+
+    const lines = text.replace(/\r\n/g, '\n').split('\n');
+    const htmlParts: string[] = [];
+
+    for (const rawLine of lines) {
+      const trimmed = rawLine.trim();
+      if (!trimmed) {
+        htmlParts.push('<div class="ai-md-spacer"></div>');
+        continue;
+      }
+
+      const headingMatch = trimmed.match(/^#{1,4}\s+(.+)$/);
+      if (headingMatch) {
+        htmlParts.push(`<div class="ai-md-heading">${applyInline(escapeHtml(headingMatch[1].replace(/^\*\*|\*\*$/g, '')))}</div>`);
+        continue;
+      }
+
+      const bulletMatch = trimmed.match(/^[\*\-•]\s+(.+)$/);
+      if (bulletMatch) {
+        htmlParts.push(
+          `<div class="ai-md-bullet"><span class="ai-md-dot">•</span><span>${applyInline(escapeHtml(bulletMatch[1]))}</span></div>`
+        );
+        continue;
+      }
+
+      const numMatch = trimmed.match(/^(\d+)[\.\)]\s+(.+)$/);
+      if (numMatch) {
+        htmlParts.push(
+          `<div class="ai-md-bullet"><strong class="ai-md-num">${escapeHtml(numMatch[1])}.</strong><span>${applyInline(escapeHtml(numMatch[2]))}</span></div>`
+        );
+        continue;
+      }
+
+      htmlParts.push(`<div class="ai-md-line">${applyInline(escapeHtml(rawLine))}</div>`);
+    }
+
+    return this.sanitizer.bypassSecurityTrustHtml(htmlParts.join(''));
   }
 
   ngAfterViewInit(): void {
@@ -1342,6 +1499,7 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
       this.cleanStreamedThoughts() ||
       null;
     const referencedMemoryAnchors = lastBackendAssistantTurn?.referencedMemoryAnchors ?? [];
+    const documentCitations = lastBackendAssistantTurn?.documentCitations ?? [];
     const turnExportSpec = lastBackendAssistantTurn?.exportSpec ?? prop.exportSpec ?? null;
 
     const doneTime = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
@@ -1358,6 +1516,7 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
       durationMs,
       thoughts,
       referencedMemoryAnchors,
+      documentCitations,
       hasProposalTable: producesTable,
       exportSpec: action === 'export_excel' ? turnExportSpec : null,
     };
@@ -1598,6 +1757,7 @@ export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestr
         durationMs: h.durationMs ?? null,
         thoughts: h.thoughts ?? null,
         referencedMemoryAnchors: h.referencedMemoryAnchors ?? [],
+        documentCitations: h.documentCitations ?? [],
         exportSpec: h.exportSpec ?? null,
       };
       if (turn.role === 'agent' && !turn.thinkingSummary && ((turn.traceItems?.length ?? 0) > 0 || (turn.durationMs ?? 0) > 0)) {

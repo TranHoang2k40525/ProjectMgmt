@@ -993,4 +993,63 @@ public class AiConversationalAssistantTests
         Assert.Empty(casualTools);
         Assert.Empty(aiClient.CapturedPrompts);
     }
+
+    [Fact]
+    public async Task ExecutePipelineAsync_DocumentListingQuestionWithTypo_ShouldFetchSpecHubAndAttachClickableDocumentCitationsToTurn()
+    {
+        var (planningDb, deliveryDb, identityDb, orgId, projectId, actorId) = await SeedProjectAsync();
+        await using var _p = planningDb;
+        await using var _d = deliveryDb;
+        await using var _i = identityDb;
+
+        planningDb.ProjectDocuments.AddRange(
+            new ProjectDocument
+            {
+                Id = Guid.NewGuid(),
+                ProjectId = projectId,
+                Name = "mcp-server-guide.md",
+                Title = "mcp-server-guide.md",
+                Extension = ".md",
+                Content = "# Hướng dẫn MCP Server",
+                UpdatedAt = DateTime.UtcNow
+            },
+            new ProjectDocument
+            {
+                Id = Guid.NewGuid(),
+                ProjectId = projectId,
+                Name = "Bản đặc tả về quản lý dự án.txt",
+                Title = "Bản đặc tả về quản lý dự án.txt",
+                Extension = ".txt",
+                Content = "Đặc tả quản lý dự án Scrum",
+                UpdatedAt = DateTime.UtcNow.AddMinutes(-1)
+            });
+        await planningDb.SaveChangesAsync();
+
+        var aiClient = new CapturingAiClient(_ =>
+            "Dựa trên Spec Hub của dự án, hiện có 2 tài liệu đặc tả chính:\n- **mcp-server-guide.md**: Hướng dẫn vận hành MCP Server.\n- **Bản đặc tả về quản lý dự án.txt**: Đặc tả nghiệp vụ quản lý dự án.");
+        var service = CreateService(aiClient, planningDb, deliveryDb, identityDb);
+        var scope = new ProjectScopeContext(orgId, projectId, actorId);
+
+        var calledTools = new List<string>();
+        AiSprintProposalDto? result = null;
+        await service.ExecutePipelineAsync(
+            sessionId: "sprint_ai_doc_list_typo",
+            scope: scope,
+            targetSprintId: null,
+            extractedDocumentContent: "# GHI CHÚ / YÊU CẦU BỔ SUNG:\nliệt kê các tài liêuj dód ra đây",
+            userPrompt: "liệt kê các tài liêuj dód ra đây",
+            onStepProgress: (_, _, _, _, _) => Task.CompletedTask,
+            onToolCall: (toolName, _, _, _) => { calledTools.Add(toolName); return Task.CompletedTask; },
+            onThoughtDelta: _ => Task.CompletedTask,
+            onProposalReady: p => { result = p; return Task.CompletedTask; });
+
+        Assert.NotNull(result);
+        Assert.Equal("project_qa", result!.Intent);
+        Assert.Contains("spec_hub_search", calledTools);
+
+        var lastAssistantTurn = result.ConversationHistory.Last(t => t.Role == "assistant");
+        Assert.NotNull(lastAssistantTurn.DocumentCitations);
+        Assert.Contains("mcp-server-guide.md", lastAssistantTurn.DocumentCitations!);
+        Assert.Contains("Bản đặc tả về quản lý dự án.txt", lastAssistantTurn.DocumentCitations!);
+    }
 }
