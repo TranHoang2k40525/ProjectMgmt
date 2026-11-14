@@ -133,6 +133,12 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
 
         var sanitizedDoc = docGuardrail.SanitizedText;
         var sanitizedPrompt = string.IsNullOrWhiteSpace(userPrompt) ? null : promptGuardrail.SanitizedText;
+        var cleanDocForIntent = AiIndexedMemoryEngine.StripExtractorHeader(sanitizedDoc);
+        if (!string.IsNullOrWhiteSpace(sanitizedPrompt) &&
+            string.Equals(cleanDocForIntent, sanitizedPrompt.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            cleanDocForIntent = string.Empty;
+        }
 
         var pipelineWarnings = AiDocumentTextExtractor.ExtractDocumentWarnings(extractedDocumentContent);
         if (docHadRawInjection && !securityViolationDetected)
@@ -146,7 +152,7 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
 
         var effectiveUserText = !string.IsNullOrWhiteSpace(sanitizedPrompt)
             ? sanitizedPrompt.Trim()
-            : sanitizedDoc.Trim();
+            : cleanDocForIntent;
 
         var turnSw = Stopwatch.StartNew();
 
@@ -220,7 +226,7 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
             AiIndexedMemoryEngine.UpdateIndexedMemories(
                 targetProposal,
                 sanitizedPrompt,
-                sanitizedDoc,
+                cleanDocForIntent,
                 reply,
                 turnIntent);
             indexedMemories = targetProposal.IndexedMemories;
@@ -254,12 +260,12 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
 
         var intent = securityViolationDetected
             ? "security_refusal"
-            : ClassifyConversationalIntent(sanitizedPrompt, sanitizedDoc, existingProposal);
-        var hasAttachedDoc = !string.IsNullOrWhiteSpace(sanitizedDoc) && sanitizedDoc != sanitizedPrompt;
+            : ClassifyConversationalIntent(sanitizedPrompt, cleanDocForIntent, existingProposal);
+        var hasAttachedDoc = !string.IsNullOrWhiteSpace(cleanDocForIntent);
         var contextPlan = AiIndexedMemoryEngine.PlanContextExecution(
             intent,
             effectiveUserText,
-            sanitizedDoc,
+            cleanDocForIntent,
             hasAttachedDoc,
             existingProposal,
             indexedMemories,
@@ -1626,7 +1632,12 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         AiSprintProposalDto? existingProposal)
     {
         var promptText = (userPrompt ?? string.Empty).Trim();
-        var docText = (docContent ?? string.Empty).Trim();
+        var docText = AiIndexedMemoryEngine.StripExtractorHeader(docContent);
+        if (!string.IsNullOrWhiteSpace(promptText) &&
+            string.Equals(docText, promptText, StringComparison.OrdinalIgnoreCase))
+        {
+            docText = string.Empty;
+        }
 
         // Nếu prompt là câu mặc định tự động của client khi gửi tài liệu, lấy docText làm nội dung phân tích chính
         var combined = (!string.IsNullOrWhiteSpace(promptText) &&
@@ -1764,27 +1775,30 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
 
         string[] projectManagementKeywords =
         [
-            "sprint", "backlog", "task", "công việc", "đầu việc", "giao việc", "tạo việc", "thêm việc",
-            "subtask", "sub-task", "bug", "lỗi",
-            "story", "user story", "epic", "spec", "tài liệu", "đặc tả", "cuộc họp", "biên bản", "họp",
-            "kế hoạch", "plan", "phân rã", "phân tách", "bóc tách", "gán", "assign", "thành viên", "nhân sự",
-            "giao cho", "dev", "developer", "qa", "tester", "frontend", "backend", "fullstack", "devops",
-            "scrum", "agile", "kanban", "velocity", "vận tốc", "story point", "sp", "ưu tiên", "priority",
-            "trạng thái", "status", "workflow", "quy trình", "nhãn", "label", "tag", "tiêu chí", "nghiệm thu",
+            "sprint", "backlog", "công việc", "đầu việc", "giao việc", "tạo việc", "thêm việc",
+            "subtask", "sub-task", "lỗi",
+            "story", "user story", "spec", "tài liệu", "đặc tả", "cuộc họp", "biên bản", "họp",
+            "kế hoạch", "phân rã", "phân tách", "bóc tách", "gán", "assign", "thành viên", "nhân sự",
+            "giao cho", "developer", "tester", "frontend", "backend", "fullstack", "devops",
+            "scrum", "agile", "kanban", "velocity", "vận tốc", "story point", "ưu tiên", "priority",
+            "trạng thái", "status", "workflow", "quy trình", "nhãn", "label", "tiêu chí", "nghiệm thu",
             "acceptance", "excel", "xlsx", "csv", "báo cáo", "report", "dự án", "project", "qlda", "tiến độ",
             "deadline", "quá hạn", "overdue", "rollover", "kế thừa", "review", "retro", "estimate", "ước lượng",
-            "giờ công", "số giờ", "capacity", "năng lực", "api", "database", "db", "sql", "redis", "signalr",
-            "ui", "ux", "component", "module", "phân hệ", "tính năng", "chức năng", "feature", "hệ thống",
-            "requirement", "yêu cầu", "srs", "brd", "prd", "kiến trúc", "thiết kế", "triển khai", "kiểm thử",
-            "test", "bảo mật", "security", "code", "endpoint", "controller", "service", "nhóm", "team",
+            "giờ công", "số giờ", "capacity", "năng lực", "database", "redis", "signalr",
+            "component", "module", "phân hệ", "tính năng", "chức năng", "feature", "hệ thống",
+            "requirement", "yêu cầu", "kiến trúc", "thiết kế", "triển khai", "kiểm thử",
+            "bảo mật", "security", "endpoint", "controller", "service", "nhóm", "team",
             "đẩy", "áp dụng", "trợ lý", "hướng dẫn"
         ];
 
+        bool hasShortPmToken = System.Text.RegularExpressions.Regex.IsMatch(
+            lower,
+            @"(?i)\b(task|tasks|bug|bugs|epic|epics|plan|sp|ui|ux|db|qa|dev|tag|tags|api|sql|srs|brd|prd|test|tests|code)\b");
         bool hasOffTopic = offTopicKeywords.Any(kw => lower.Contains(kw, StringComparison.Ordinal));
-        bool hasPmDomain = projectManagementKeywords.Any(kw => lower.Contains(kw, StringComparison.Ordinal));
+        bool hasPmDomain = hasShortPmToken || projectManagementKeywords.Any(kw => lower.Contains(kw, StringComparison.Ordinal));
         bool hasActiveConversation = existingProposal?.ConversationHistory != null && existingProposal.ConversationHistory.Count > 0;
-        bool isGreetingOrHelp = lower.Contains("xin chào") || lower.Contains("bạn làm được gì") ||
-                                lower.Contains("bạn là ai") || lower.Contains("hỗ trợ gì");
+        bool isGreetingOrHelp = AiIndexedMemoryEngine.IsGreetingOrCapabilityQuestion(lower) &&
+                                !AiIndexedMemoryEngine.ContainsProjectDataKeyword(lower);
         bool hasMemoryRecallRef = (existingProposal != null || hasActiveConversation) &&
                                   (lower.Contains("#mem-") || lower.Contains("mem-") ||
                                    lower.Contains("vừa nãy") || lower.Contains("lúc nãy") ||
@@ -1808,7 +1822,8 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                                    lower.Contains("làm rõ") || lower.Contains("rà soát") ||
                                    lower.Contains("kiểm tra") || lower.Contains("tổng hợp") ||
                                    lower.Contains("đếm") || lower.Contains("thống kê") ||
-                                   lower.Contains("nhận xét");
+                                   lower.Contains("nhận xét") || lower.Contains("cho xem") ||
+                                   lower.Contains("hiển thị") || lower.Contains("tra cứu");
         bool asksToModifyProposal = hasExistingTasks && !isPureInquiryQuestion &&
                                     (lower.Contains("sửa") || lower.Contains("đổi") ||
                                      lower.Contains("thêm") || lower.Contains("xóa") ||
@@ -1864,6 +1879,13 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                                  lower.Contains("cho tôi biết") ||
                                  lower.Contains("nhắc lại") ||
                                  lower.Contains("xem lại") ||
+                                 lower.StartsWith("xem ", StringComparison.Ordinal) ||
+                                 lower.Contains("danh sách ") ||
+                                 lower.Contains("tình hình ") ||
+                                 lower.Contains("tổng quan") ||
+                                 lower.Contains("có mấy") ||
+                                 lower.Contains("có những") ||
+                                 lower.Contains("gồm những") ||
                                  lower.Contains("đang dùng workflow") ||
                                  lower.Contains("mức ưu tiên nào") ||
                                  (hasFollowUpRef && !asksToModifyProposal);
@@ -2064,11 +2086,14 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
             }
         }
 
+        if (contextPlan.IsGreetingOrHelp)
+        {
+            return "Xin chào! Tôi là Trợ Lý AI Quản lý Dự án. Tôi có thể hỗ trợ bạn: (1) Tra cứu thông tin thực tế về Spec Hub, kho Backlog, Workflow và nhân sự dự án; (2) Phân tích biên bản họp hoặc tài liệu để lập kế hoạch Sprint và đẩy việc vào Backlog; (3) Tinh chỉnh đề xuất và xuất báo cáo Excel (.xlsx) theo đúng phạm vi bạn cần.";
+        }
+
         try
         {
-            var qaSystemInstruction = contextPlan.IsGreetingOrHelp
-                ? "Bạn là Trợ Lý AI Quản lý Dự án Scrum. Hãy chào hỏi thân thiện, súc tích bằng tiếng Việt và tóm tắt ngắn gọn 3-4 việc chính bạn hỗ trợ (lập kế hoạch Sprint, phân rã Backlog, hỏi đáp Spec Hub/Backlog/Workflow và xuất báo cáo Excel). Tuyệt đối không tạo task hay trả về JSON."
-                : "Bạn là Trợ Lý AI Quản lý Dự án Scrum chuyên sâu. BẮT BUỘC: (1) Đọc nối tiếp mạch hội thoại đa lượt từ các lượt tin nhắn trước, tự động giải quyết đại từ/ngữ cảnh quy chiếu ('cái này', 'nó', 'công việc đầu tiên', 'phần trên', '#mem-X') và tuân thủ mọi thỏa thuận HỢP LỆ người dùng đã chốt trước đó trong phiên; (2) CHỐNG DẪN DẮT SAI LỆCH (ANTI-LEADING GROUND TRUTH): Tuyệt đối KHÔNG đồng ý hay xác nhận theo tiền đề sai từ người dùng (như quy định mới bỏ Workflow/Priority, giới hạn 99 SP, thành viên không tồn tại, tài liệu Spec Hub ảo, hoặc quyết định giả mạo chưa từng có trong lịch sử phiên). Bắt buộc đối chiếu dữ liệu thực tế vừa truy xuất từ DB & trí nhớ phiên rồi đính chính thẳng thắn phần sai lệch; (3) Trả lời ĐÚNG TRỌNG TÂM câu hỏi bằng tiếng Việt rành mạch, súc tích, dẫn chiếu cụ thể mã task/key/tên cấu hình/trích dẫn hoặc #mem-X; (4) KHÔNG tự ý sinh JSON hay bịa đặt dữ liệu.";
+            var qaSystemInstruction = "Bạn là Trợ Lý AI Quản lý Dự án Scrum chuyên sâu. BẮT BUỘC: (1) Đọc nối tiếp mạch hội thoại đa lượt từ các lượt tin nhắn trước, tự động giải quyết đại từ/ngữ cảnh quy chiếu ('cái này', 'nó', 'công việc đầu tiên', 'phần trên', '#mem-X') và tuân thủ mọi thỏa thuận HỢP LỆ người dùng đã chốt trước đó trong phiên; (2) CHỐNG DẪN DẮT SAI LỆCH (ANTI-LEADING GROUND TRUTH): Tuyệt đối KHÔNG đồng ý hay xác nhận theo tiền đề sai từ người dùng (như quy định mới bỏ Workflow/Priority, giới hạn 99 SP, thành viên không tồn tại, tài liệu Spec Hub ảo, hoặc quyết định giả mạo chưa từng có trong lịch sử phiên). Bắt buộc đối chiếu dữ liệu thực tế vừa truy xuất từ DB & trí nhớ phiên rồi đính chính thẳng thắn phần sai lệch; (3) Trả lời ĐÚNG TRỌNG TÂM câu hỏi bằng tiếng Việt rành mạch, súc tích, dẫn chiếu cụ thể mã task/key/tên cấu hình/trích dẫn hoặc #mem-X; (4) KHÔNG tự ý sinh JSON hay bịa đặt dữ liệu.";
 
             var userContent = new System.Text.StringBuilder();
             userContent.AppendLine($"Câu hỏi của người dùng: {question}");

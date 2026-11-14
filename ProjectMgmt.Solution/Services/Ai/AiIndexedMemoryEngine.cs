@@ -57,11 +57,16 @@ public static partial class AiIndexedMemoryEngine
         IReadOnlyList<AiConversationTurnDto>? conversationHistory = null)
     {
         var lower = (effectiveUserText ?? string.Empty).Trim().ToLowerInvariant();
-        var combinedLower = $"{lower}\n{(docContent ?? string.Empty).ToLowerInvariant()}";
+        var cleanDocLower = StripExtractorHeader(docContent).ToLowerInvariant();
+        if (cleanDocLower == lower)
+        {
+            cleanDocLower = string.Empty;
+        }
+        var combinedLower = string.IsNullOrWhiteSpace(cleanDocLower) ? lower : $"{lower}\n{cleanDocLower}";
         var historyWindow = conversationHistory ?? existingProposal?.ConversationHistory;
         var isFollowUp = IsConversationalFollowUp(lower) && (historyWindow?.Count > 0 || allMemories.Count > 0);
         var topicHint = isFollowUp ? BuildRecentTopicHint(historyWindow) : string.Empty;
-        var recalled = SelectRelevantMemories(effectiveUserText, docContent, allMemories, maxMatches: 4, historyWindow, intent);
+        var recalled = SelectRelevantMemories(effectiveUserText, cleanDocLower, allMemories, maxMatches: 4, historyWindow, intent);
 
         // 1. Guardrail & Direct Commands: Không gọi thừa các MCP tools không liên quan
         if (intent is "out_of_scope_refusal" or "security_refusal" or "push_backlog" or "apply_sprint" or "export_excel")
@@ -646,20 +651,47 @@ public static partial class AiIndexedMemoryEngine
         });
     }
 
-    private static bool IsGreetingOrCapabilityQuestion(string lower)
+    public static string StripExtractorHeader(string? docContent)
     {
-        if (lower.Length > 120) return false;
-        return lower is "hi" or "hello" or "hey" or "chào" or "xin chào" or "alo" ||
-               lower.StartsWith("chào ") ||
-               lower.StartsWith("xin chào") ||
+        if (string.IsNullOrWhiteSpace(docContent))
+        {
+            return string.Empty;
+        }
+
+        var cleaned = Regex.Replace(
+            docContent,
+            @"(?im)^#\s*GHI\s+CHÚ\s*/\s*YÊU\s+CẦU\s+BỔ\s+SUNG\s*:\s*\r?\n?",
+            string.Empty);
+        return cleaned.Trim();
+    }
+
+    public static bool IsGreetingOrCapabilityQuestion(string lower)
+    {
+        if (string.IsNullOrWhiteSpace(lower) || lower.Length > 120) return false;
+        var clean = Regex.Replace(lower, @"[^\p{L}\p{N}\s]", " ").Trim();
+        clean = Regex.Replace(clean, @"\s+", " ");
+        return clean is "hi" or "hello" or "hey" or "alo" or "chào" or "xin chào" or "chào bạn"
+                   or "chào ai" or "chào ad" or "chào trợ lý" or "hi bạn" or "hello bạn"
+                   or "hey bạn" or "good morning" or "good afternoon" or "good evening"
+                   or "ok" or "okay" or "oke" or "ok bạn" or "ok cảm ơn" or "cảm ơn"
+                   or "cám ơn" or "cảm ơn bạn" or "cám ơn bạn" or "thanks" or "thank you"
+                   or "tốt lắm" or "hay quá" or "được rồi" or "help" or "giúp tôi"
+                   or "giúp mình" or "hướng dẫn" ||
+               clean.StartsWith("chào ", StringComparison.Ordinal) ||
+               clean.StartsWith("xin chào", StringComparison.Ordinal) ||
+               clean.StartsWith("hello ", StringComparison.Ordinal) ||
+               clean.StartsWith("hi ", StringComparison.Ordinal) ||
                lower.Contains("bạn là ai") ||
                lower.Contains("bạn làm được gì") ||
+               lower.Contains("bạn có thể làm gì") ||
+               lower.Contains("bạn biết làm gì") ||
                lower.Contains("bạn hỗ trợ") ||
+               lower.Contains("hỗ trợ gì") ||
                lower.Contains("giúp tôi gì") ||
                lower.Contains("hướng dẫn sử dụng");
     }
 
-    private static bool ContainsProjectDataKeyword(string lower) =>
+    public static bool ContainsProjectDataKeyword(string lower) =>
         MentionsSpecHub(lower) || MentionsBacklog(lower) || MentionsSprint(lower) ||
         MentionsTeam(lower) || MentionsConfig(lower);
 

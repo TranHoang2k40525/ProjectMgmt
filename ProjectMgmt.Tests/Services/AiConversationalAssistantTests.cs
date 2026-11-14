@@ -941,4 +941,56 @@ public class AiConversationalAssistantTests
         Assert.Equal(80, t.Subtasks[0].EstimatedHours);
         Assert.DoesNotContain(t.Subtasks[0].DocumentCitations, c => c.Contains("Tai-Lieu-Bia-Dat.docx", StringComparison.OrdinalIgnoreCase));
     }
+
+    [Fact]
+    public async Task ExecutePipelineAsync_ShortGreetingOrCasualTextWithExtractorHeader_ShouldNotTriggerSprintPlanOrMcp()
+    {
+        var (planningDb, deliveryDb, identityDb, orgId, projectId, actorId) = await SeedProjectAsync();
+        await using var _p = planningDb;
+        await using var _d = deliveryDb;
+        await using var _i = identityDb;
+
+        var aiClient = new CapturingAiClient(_ => "{}");
+        var service = CreateService(aiClient, planningDb, deliveryDb, identityDb);
+        var scope = new ProjectScopeContext(orgId, projectId, actorId);
+
+        // 1) "hello" kèm nhãn trích xuất mặc định "# GHI CHÚ / YÊU CẦU BỔ SUNG:" -> project_qa tức thì, 0 MCP, 0 LLM
+        var helloTools = new List<string>();
+        AiSprintProposalDto? helloResult = null;
+        await service.ExecutePipelineAsync(
+            sessionId: "sprint_ai_short_hello",
+            scope: scope,
+            targetSprintId: null,
+            extractedDocumentContent: "# GHI CHÚ / YÊU CẦU BỔ SUNG:\nhello",
+            userPrompt: "hello",
+            onStepProgress: (_, _, _, _, _) => Task.CompletedTask,
+            onToolCall: (toolName, _, _, _) => { helloTools.Add(toolName); return Task.CompletedTask; },
+            onThoughtDelta: _ => Task.CompletedTask,
+            onProposalReady: p => { helloResult = p; return Task.CompletedTask; });
+
+        Assert.NotNull(helloResult);
+        Assert.Equal("project_qa", helloResult!.Intent);
+        Assert.Empty(helloTools);
+        Assert.Empty(aiClient.CapturedPrompts);
+        Assert.Contains("Xin chào", helloResult.AssistantReply);
+
+        // 2) Câu ngắn ngoài lề chứa chuỗi con "ui" trong chữ "vui" kèm nhãn trích xuất -> out_of_scope_refusal, 0 MCP, 0 LLM
+        var casualTools = new List<string>();
+        AiSprintProposalDto? casualResult = null;
+        await service.ExecutePipelineAsync(
+            sessionId: "sprint_ai_short_casual",
+            scope: scope,
+            targetSprintId: null,
+            extractedDocumentContent: "# GHI CHÚ / YÊU CẦU BỔ SUNG:\nhôm nay vui quá",
+            userPrompt: "hôm nay vui quá",
+            onStepProgress: (_, _, _, _, _) => Task.CompletedTask,
+            onToolCall: (toolName, _, _, _) => { casualTools.Add(toolName); return Task.CompletedTask; },
+            onThoughtDelta: _ => Task.CompletedTask,
+            onProposalReady: p => { casualResult = p; return Task.CompletedTask; });
+
+        Assert.NotNull(casualResult);
+        Assert.Equal("out_of_scope_refusal", casualResult!.Intent);
+        Assert.Empty(casualTools);
+        Assert.Empty(aiClient.CapturedPrompts);
+    }
 }
