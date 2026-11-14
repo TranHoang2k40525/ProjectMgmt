@@ -143,7 +143,7 @@ flowchart TD
     GuardIntent -- "Ngoài phạm vi Quản lý Dự án" --> RefuseOut["RÀO CHẮN NGOÀI LUỒNG\n- Từ chối lịch sự ngoài phạm vi công cụ\n- Bảo toàn nguyên vẹn đề xuất và lịch sử phiên"]
     RefuseOut --> SaveDual
 
-    GuardIntent -- "Xuất tệp Excel Theo Ngữ Cảnh" --> ExportExcel["PHÂN GIẢI PHẠM VI & XUẤT EXCEL CHUẨN HỆ THỐNG\n- Đối chiếu đúng Sprint, Backlog, việc lẻ, chi tiết, bộ lọc hay đề xuất\n- Từ chối trung thực nếu dữ liệu không tồn tại/trống; gắn đặc tả xuất vào lượt chat"]
+    GuardIntent -- "Xuất tệp Excel Theo Ngữ Cảnh" --> ExportExcel["PHÂN GIẢI PHẠM VI & XUẤT EXCEL CHUẨN HỆ THỐNG\n- Đối chiếu đúng Sprint, Backlog, việc lẻ, chi tiết, bộ lọc hay đề xuất\n- Hỗ trợ đặt tên tệp tùy chỉnh & kế thừa phạm vi lượt trước\n- Từ chối trung thực nếu dữ liệu không tồn tại/trống; gắn đặc tả xuất vào lượt chat"]
     ExportExcel --> SaveDual
 
     GuardIntent -- "Đẩy Kho Backlog hoặc Áp dụng Sprint qua Chat" --> AutoTrigger["PHÁT LỆNH THỰC THI TRỰC TIẾP\n- Kiểm tra danh sách công việc đã có trong phiên\n- Gắn cờ kích hoạt thao tác tương ứng"]
@@ -152,11 +152,11 @@ flowchart TD
     GuardIntent -- "Chào hỏi / Hỏi khả năng" --> ZeroMcp["LUỒNG TRỰC TIẾP (0 CÔNG CỤ DỮ LIỆU)\n- Không gọi công cụ dự án thừa\n- Phản hồi súc tích đúng trọng tâm câu hỏi"]
     ZeroMcp --> SaveDual
 
-    GuardIntent -- "Câu hỏi nối tiếp / Đại từ quy chiếu / Nhắc #mem-X" --> RecallOnly["TRUY XUẤT CHỈ MỤC TRÍ NHỚ & ĐỀ XUẤT ĐANG STAGING\n- Chỉ đọc đúng mảnh trí nhớ (#mem-X) + tóm tắt mô tả/tiêu chí việc đang staging\n- Xây dựng chuỗi hội thoại đa lượt thực thụ kèm thỏa thuận phiên trước đó"]
-    RecallOnly --> Step4Focus["Suy luận câu trả lời tập trung, giải mã đúng đại từ theo mạch phiên"]
+    GuardIntent -- "Hỏi về Đề xuất hiện tại / #mem-X / Tiếp nối hội thoại" --> RecallOnly["TRUY XUẤT CHỈ MỤC TRÍ NHỚ ĐÃ XÁC MINH\n- Chỉ dùng trí nhớ thuần túy khi khớp đúng thực thể phiên hoặc thẻ #mem-X\n- Tự động loại bỏ ký ức xung đột số Sprint hoặc mã công việc khác\n- Nếu hỏi Sprint/công việc cụ thể chưa xác minh: chuyển sang đọc dữ liệu thật"]
+    RecallOnly --> Step4Focus["Suy luận câu trả lời tập trung, giải mã đúng đại từ & loại bỏ tiền tố nội bộ"]
     Step4Focus --> SaveDual
 
-    GuardIntent -- "Hỏi đáp Hẹp hoặc Lập kế hoạch Sprint / Backlog" --> Step2["BƯỚC 2: GỌI CÔNG CỤ DỮ LIỆU CÓ CHỌN LỌC\n- Hỏi đáp hẹp: Chỉ gọi 1-2 công cụ mục tiêu\n- Lập kế hoạch: Gọi đặc tả, Backlog, vận tốc, quy chuẩn & năng lực\n- Ghi nhật ký từng bước kèm thời gian thực thi"]
+    GuardIntent -- "Hỏi đáp Dự án / Thực thể Thật hoặc Lập kế hoạch" --> Step2["BƯỚC 2: GỌI CÔNG CỤ DỮ LIỆU CHỌN LỌC ĐẦY ĐỦ\n- Hỏi đáp hẹp: Gọi đúng công cụ mục tiêu (bao gồm mọi Sprint Đã xong/Đang chạy/Tương lai & danh mục việc toàn dự án)\n- Lập kế hoạch: Gọi đặc tả, Backlog, vận tốc, quy chuẩn & năng lực kèm tên thành viên\n- Ghi nhật ký từng bước kèm thời gian thực thi"]
 
     Step2 --> Step4["BƯỚC 3: SUY LUẬN ĐÚNG TRỌNG TÂM TRÊN CHUỖI ĐA LƯỢT\n- Truyền chuỗi hội thoại luân phiên Người dùng - Trợ lý kèm ràng buộc đã chốt\n- Sửa đổi vi phân hoặc bóc tách kế hoạch & bảo toàn liên kết nguồn Backlog"]
 

@@ -274,6 +274,7 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
             List<string>? recalledKeys,
             List<string>? turnDocumentCitations = null)
         {
+            reply = StripLeakedMetaPrefix(reply);
             targetProposal.OrganizationId ??= scope.OrganizationId;
             targetProposal.UserId ??= scope.UserId;
             targetProposal.AssistantReply = reply;
@@ -669,6 +670,20 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
         string? backlogStories = null;
         string? sprintHistory = null;
         string? teamCapacities = null;
+        string? projectWorkItemsDigest = null;
+        IReadOnlyDictionary<Guid, string>? memberNamesById = null;
+
+        if (contextPlan.NeedsSprintHistory || (intent == "project_qa" && contextPlan.NeedsBacklog))
+        {
+            try
+            {
+                memberNamesById = await _teamTools.GetProjectMemberDisplayNamesAsync(scope.ProjectId, scope, cancellationToken);
+            }
+            catch
+            {
+                memberNamesById = null;
+            }
+        }
 
         if (contextPlan.NeedsSpecHub)
         {
@@ -772,6 +787,22 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
                 new { projectId = scope.ProjectId },
                 "Lấy danh sách các hạng mục đang có trong Product Backlog",
                 sw.ElapsedMilliseconds);
+
+            if (intent == "project_qa")
+            {
+                try
+                {
+                    projectWorkItemsDigest = await _backlogTools.GetProjectWorkItemsDigestAsync(
+                        scope.ProjectId,
+                        scope,
+                        memberNamesById,
+                        cancellationToken);
+                }
+                catch
+                {
+                    projectWorkItemsDigest = null;
+                }
+            }
         }
 
         if (contextPlan.NeedsSprintHistory)
@@ -783,7 +814,7 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
                 52,
                 "Đang truy xuất lịch sử Sprint, tiến độ công việc và vận tốc đội Scrum...");
             sw.Restart();
-            sprintHistory = await _sprintTools.GetSprintHistoryAndVelocityAsync(scope, cancellationToken);
+            sprintHistory = await _sprintTools.GetSprintHistoryAndVelocityAsync(scope, memberNamesById, cancellationToken);
             sw.Stop();
             await RecordTraceAsync(
                 "mcp",
@@ -791,8 +822,24 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
                 "sprint_get_history_and_velocity",
                 "sprint_get_history_and_velocity",
                 new { projectId = scope.ProjectId },
-                "Truy xuất vận tốc Scrum và các hạng mục dở dang từ Sprint trước",
+                "Truy xuất vận tốc Scrum và toàn bộ danh sách công việc theo từng Sprint",
                 sw.ElapsedMilliseconds);
+
+            if (intent == "project_qa" && string.IsNullOrWhiteSpace(projectWorkItemsDigest))
+            {
+                try
+                {
+                    projectWorkItemsDigest = await _backlogTools.GetProjectWorkItemsDigestAsync(
+                        scope.ProjectId,
+                        scope,
+                        memberNamesById,
+                        cancellationToken);
+                }
+                catch
+                {
+                    projectWorkItemsDigest = null;
+                }
+            }
         }
 
         // =========================================================================
@@ -899,7 +946,8 @@ public class AiSprintDecompositionService : IAiSprintDecompositionService
                 existingProposal,
                 scope,
                 model,
-                cancellationToken);
+                cancellationToken,
+                projectWorkItemsDigest);
             qaSw.Stop();
 
             await RecordTraceAsync(
@@ -1731,13 +1779,7 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
             string formatted;
             if (!isUser)
             {
-                var meta = !string.IsNullOrWhiteSpace(turn.Intent) ? $"[Intent: {turn.Intent}" : "[Trợ lý";
-                if (turn.TaskCount.HasValue && turn.TaskCount.Value > 0)
-                {
-                    meta += $", {turn.TaskCount.Value} tasks/{turn.TotalStoryPoints ?? 0m} SP";
-                }
-                meta += "] ";
-                formatted = $"{meta}{body}";
+                formatted = StripLeakedMetaPrefix(body);
             }
             else if (!string.IsNullOrWhiteSpace(turn.FileName))
             {
@@ -1866,8 +1908,10 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                                      lower.Contains("ra sao") || lower.Contains("khi nào") ||
                                      lower.Contains("ở đâu") || lower.Contains("ai sẽ") ||
                                      lower.Contains("ai đang") || lower.Contains("ai làm") ||
-                                     lower.Contains("ai phụ trách") || lower.Contains("nội dung của") ||
-                                     lower.Contains("chi tiết của");
+                                     lower.Contains("ai là người") || lower.Contains("ai xử lý") ||
+                                     lower.Contains("ai phụ trách") || lower.Contains("người phụ trách") ||
+                                     lower.Contains("thuộc sprint nào") || lower.Contains("trong sprint nào") ||
+                                     lower.Contains("nội dung của") || lower.Contains("chi tiết của");
 
         // 1. Kiểm tra yêu cầu Xuất file Excel (export_excel) - nhận diện đa dạng phạm vi (Sprint, Backlog, 1 Task, Chi tiết Task, Bảng đề xuất)
         //    và tuyệt đối không nhầm với từ ghép "đề xuất" / "truy xuất", câu hỏi "nội dung ... là gì" hoặc yêu cầu tạo task/tính năng.
@@ -1905,6 +1949,18 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                 exportCandidate.Contains("đổi sang") || exportCandidate.Contains("chuyển sang") ||
                 exportCandidate.Contains("nhận xét") || exportCandidate.Contains("đánh giá");
 
+            var lastAssistantTurn = existingProposal?.ConversationHistory?
+                .LastOrDefault(t => string.Equals(t.Role, "assistant", StringComparison.OrdinalIgnoreCase));
+            bool previousTurnWasExport = lastAssistantTurn != null &&
+                (string.Equals(lastAssistantTurn.Intent, "export_excel", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(lastAssistantTurn.ActionType, "export_excel", StringComparison.OrdinalIgnoreCase));
+            bool mentionsCustomFileNaming =
+                exportCandidate.Contains("đặt tên") || exportCandidate.Contains("tên file") ||
+                exportCandidate.Contains("tên tệp") || exportCandidate.Contains("lưu tên") ||
+                exportCandidate.Contains("lưu thành");
+            bool followUpRenameExport = previousTurnWasExport && (mentionsExportVerb || mentionsCustomFileNaming);
+            bool explicitNamedFileExport = mentionsExportVerb && mentionsCustomFileNaming;
+
             if (!asksToBuildFeatureOrTask && !asksToEditOrCritique)
             {
                 // Khi user yêu cầu xuất sang định dạng chưa hỗ trợ (PDF, Word, PPTX...) mà không kèm Excel,
@@ -1917,7 +1973,9 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                 if (!isHowToOrCapabilityQuestion && !mentionsUnsupportedFormat &&
                     ((mentionsExcelFormat && (mentionsExportVerb || exportCandidate.Length < 45)) ||
                      (mentionsGenericFile && mentionsExportVerb) ||
-                     (mentionsExportVerb && mentionsProjectExportTarget)))
+                     (mentionsExportVerb && mentionsProjectExportTarget) ||
+                     followUpRenameExport ||
+                     explicitNamedFileExport))
                 {
                     return "export_excel";
                 }
@@ -2091,10 +2149,33 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                                     lower.Contains("thêm việc") ||
                                     lower.Contains("chia nhỏ") ||
                                     lower.Contains("làm lại") ||
+                                    lower.Contains("tạo sprint") ||
+                                    lower.Contains("mở sprint") ||
                                     lower.Contains("biên bản họp") ||
                                     lower.Contains("nội dung cuộc họp");
 
-        if ((isQuestionPattern || hasImperativeQaVerb) && !asksForDecomposition && !asksToModifyProposal && lower.Length < 500)
+        bool isTerseProjectEntityLookup = string.IsNullOrWhiteSpace(docText) &&
+                                          lower.Length < 180 &&
+                                          !asksForDecomposition &&
+                                          !asksToModifyProposal &&
+                                          !asksToBuildFeatureOrTask &&
+                                          !lower.Contains("biên bản") &&
+                                          !lower.Contains("cuộc họp") &&
+                                          (lower.Contains("nội dung ") ||
+                                           lower.Contains("chi tiết ") ||
+                                           lower.Contains("thông tin ") ||
+                                           lower.Contains("trạng thái ") ||
+                                           lower.Contains("tiến độ ") ||
+                                           lower.Contains("người làm") ||
+                                           lower.Contains("người phụ trách") ||
+                                           System.Text.RegularExpressions.Regex.IsMatch(
+                                               lower,
+                                               @"(?i)\bsprint\s*[-#:]?\s*\d+\b"));
+
+        if ((isQuestionPattern || hasImperativeQaVerb || isTerseProjectEntityLookup) &&
+            !asksForDecomposition &&
+            !asksToModifyProposal &&
+            lower.Length < 500)
         {
             return "project_qa";
         }
@@ -2233,7 +2314,8 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         AiSprintProposalDto? existingProposal,
         IProjectScopeContext scope,
         string? model,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? projectWorkItemsDigest = null)
     {
         var memoryContext = FormatConversationHistoryForPrompt(
             history,
@@ -2281,9 +2363,14 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
                 retrievedSections.AppendLine($"- Kho Product Backlog hiện tại: {backlogStoriesJson}");
             }
 
+            if (!string.IsNullOrWhiteSpace(projectWorkItemsDigest))
+            {
+                retrievedSections.AppendLine($"- Danh sách toàn bộ công việc thực tế trong dự án (bao gồm tất cả Sprint và kho Backlog, kèm người xử lý & trạng thái): {projectWorkItemsDigest}");
+            }
+
             if (!string.IsNullOrWhiteSpace(sprintHistoryJson))
             {
-                retrievedSections.AppendLine($"- Lịch sử Sprint & Vận tốc: {sprintHistoryJson}");
+                retrievedSections.AppendLine($"- Lịch sử & Danh sách tất cả Sprint (bao gồm Completed, Active và Future Sprint): {sprintHistoryJson}");
             }
 
             if (!string.IsNullOrWhiteSpace(teamCapacitiesJson))
@@ -2299,7 +2386,12 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
 
         try
         {
-            var qaSystemInstruction = "Bạn là Trợ Lý AI Quản lý Dự án Scrum chuyên sâu. BẮT BUỘC: (1) Đọc nối tiếp mạch hội thoại đa lượt từ các lượt tin nhắn trước, tự động giải quyết đại từ/ngữ cảnh quy chiếu ('cái này', 'nó', 'công việc đầu tiên', 'phần trên', '#mem-X') và tuân thủ mọi thỏa thuận HỢP LỆ người dùng đã chốt trước đó trong phiên; (2) CHỐNG DẪN DẮT SAI LỆCH & CHỐNG BỊA TÀI LIỆU (ANTI-HALLUCINATION GROUND TRUTH): Tuyệt đối KHÔNG đồng ý hay xác nhận theo tiền đề sai từ người dùng, và khi liệt kê hoặc trích dẫn tài liệu (Spec Hub), BẮT BUỘC chỉ nêu ĐÚNG tên các tệp thực tế có trong 'Danh sách tài liệu Spec Hub thực tế của dự án' hoặc trích dẫn công việc trong phiên — TUYỆT ĐỐI KHÔNG tự bịa đặt tên tài liệu không tồn tại; (3) Trả lời ĐÚNG TRỌNG TÂM câu hỏi bằng tiếng Việt rành mạch, súc tích, dẫn chiếu cụ thể mã task/key/tên tệp Spec Hub/cấu hình hoặc #mem-X; (4) KHÔNG tự ý sinh JSON hay bịa đặt dữ liệu.";
+            var qaSystemInstruction = "Bạn là Trợ Lý AI Quản lý Dự án Scrum chuyên sâu. BẮT BUỘC: " +
+                "(1) Đọc nối tiếp mạch hội thoại đa lượt từ các lượt tin nhắn trước, tự động giải quyết đại từ/ngữ cảnh quy chiếu ('cái này', 'nó', 'phần trên', '#mem-X') khi đang hỏi về phiên trò chuyện; " +
+                "(2) ĐỘ CHÍNH XÁC TUYỆT ĐỐI THEO DỮ LIỆU THẬT (STRICT GROUND TRUTH): 'Dữ liệu thực tế vừa truy xuất' từ DB/MCP LUÔN là nguồn sự thật cao nhất. TUYỆT ĐỐI KHÔNG lấy nội dung hoặc trí nhớ của Sprint này (ví dụ Sprint 2) để trả lời cho Sprint khác (ví dụ Sprint 3), và TUYỆT ĐỐI KHÔNG lấy danh sách đề xuất AI (AI1, QLDA-AI1) thay cho công việc thật trong DB (ví dụ QLDA-1). Nếu một Sprint có 0 công việc trong DB hoặc công việc không tồn tại trong DB, phải nói trung thực; " +
+                "(3) CHỐNG DẪN DẮT SAI LỆCH & CHỐNG BỊA TÀI LIỆU: Không xác nhận tiền đề sai từ người dùng; khi trích dẫn Spec Hub chỉ nêu đúng tên tệp thực tế có trong dự án; " +
+                "(4) Trả lời ĐÚNG TRỌNG TÂM bằng tiếng Việt rành mạch, súc tích, dẫn chiếu cụ thể mã IssueKey / tên công việc / người xử lý / trạng thái / tên tệp Spec Hub; " +
+                "(5) TUYỆT ĐỐI KHÔNG mở đầu câu trả lời bằng '[Intent: ...]', không tự ý sinh JSON hay bịa đặt dữ liệu.";
 
             var userContent = new System.Text.StringBuilder();
             userContent.AppendLine($"Câu hỏi của người dùng: {question}");
@@ -2327,7 +2419,7 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
             var res = await _aiClient.GenerateAsync(qaPrompt, scope, ct);
             if (res.IsSuccess && !string.IsNullOrWhiteSpace(res.Content) && !res.Content.TrimStart().StartsWith('{'))
             {
-                return res.Content.Trim();
+                return StripLeakedMetaPrefix(res.Content);
             }
         }
         catch (Exception ex)
@@ -3512,5 +3604,19 @@ Hãy phân tích và trả về đúng cấu trúc JSON SprintProposal.";
         var noteText = string.IsNullOrWhiteSpace(safeFeedback) ? "Cập nhật nội dung công việc" : (safeFeedback.Length > 240 ? safeFeedback[..240] : safeFeedback);
         existing.Description = $"{existing.Description}\n[Đã ghi nhận yêu cầu: {noteText}]".Trim();
         return existing;
+    }
+
+    private static string StripLeakedMetaPrefix(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return string.Empty;
+        }
+
+        return System.Text.RegularExpressions.Regex.Replace(
+            text.TrimStart(),
+            @"^(?:\[(?:Intent|Trợ lý)\s*:[^\]]*\]\s*)+",
+            string.Empty,
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
     }
 }

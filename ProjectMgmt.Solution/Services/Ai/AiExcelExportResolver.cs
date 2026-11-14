@@ -46,6 +46,10 @@ public static partial class AiExcelExportResolver
         var lower = prompt.ToLowerInvariant();
         var dateStamp = DateTime.UtcNow.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
         var safeKey = SanitizeFileToken(string.IsNullOrWhiteSpace(metadata.ProjectKey) ? "ProjectMgmt" : metadata.ProjectKey);
+        var customFileName = ExtractCustomFileName(prompt);
+
+        AiExcelExportResolution Finalize(AiExcelExportResolution res) =>
+            ApplyCustomFileName(res, customFileName);
 
         bool wantsDetail =
             lower.Contains("nội dung") || lower.Contains("chi tiết") || lower.Contains("đầy đủ") ||
@@ -59,6 +63,25 @@ public static partial class AiExcelExportResolver
                                  lower.Contains("chỉ việc cha") ||
                                  lower.Contains("bỏ subtask"));
 
+        // 0. Nếu vừa xuất Excel ở lượt trước và user yêu cầu "xuất và đặt tên là ..." mà không đổi phạm vi
+        bool hasExplicitNewTarget =
+            SprintNumberRegex().IsMatch(prompt) ||
+            IssueKeyRegex().IsMatch(prompt) ||
+            lower.Contains("backlog") || lower.Contains("hàng chờ") ||
+            lower.Contains("toàn bộ dự án") || lower.Contains("cả dự án") ||
+            lower.Contains("sprint") || lower.Contains("đề xuất") ||
+            lower.Contains("nội dung trên") || lower.Contains("phần trên");
+        if (!hasExplicitNewTarget && !string.IsNullOrWhiteSpace(customFileName) && history != null)
+        {
+            var prevExport = history.LastOrDefault(t => t.ExportSpec != null)?.ExportSpec;
+            if (prevExport != null)
+            {
+                var cloned = CloneExportSpecWithFileName(prevExport, customFileName);
+                var replyMsg = $"Tôi đã chuẩn bị lại tệp Excel với tên **{customFileName}** (giữ nguyên phạm vi dữ liệu trước đó: {cloned.MatchedItemCount} mục). Bạn có thể tải xuống ngay bên dưới.";
+                return new AiExcelExportResolution(true, cloned, replyMsg, $"Xuất lại theo phạm vi trước với tên {customFileName}");
+            }
+        }
+
         // -------------------------------------------------------------------------
         // 1. Trường hợp yêu cầu xuất Bảng Đề Xuất AI chưa lưu trong phiên hội thoại
         // -------------------------------------------------------------------------
@@ -69,7 +92,7 @@ public static partial class AiExcelExportResolver
 
         if (asksAiProposal)
         {
-            return ResolveProposalExport(prompt, lower, dateStamp, safeKey, metadata, existingProposal, wantsDetail, includeSubtasks);
+            return Finalize(ResolveProposalExport(prompt, lower, dateStamp, safeKey, metadata, existingProposal, wantsDetail, includeSubtasks));
         }
 
         // -------------------------------------------------------------------------
@@ -102,17 +125,62 @@ public static partial class AiExcelExportResolver
 
         var matchedIssues = explicitKeyMatches.Select(k => issueByUpperKey[k]).ToList();
 
-        // Giải quyết quy chiếu đại từ ("task đó", "công việc đó", "nội dung của nó", "#mem-X")
-        if (matchedIssues.Count == 0 && (IsDeicticTaskReference(lower) || (wantsDetail && !lower.Contains("sprint") && !lower.Contains("backlog") && !lower.Contains("dự án"))))
+        // Giải quyết quy chiếu đại từ ("task đó", "công việc đó", "nội dung của nó", "nội dung trên", "#mem-X")
+        bool isBroadContextRef =
+            lower.Contains("nội dung trên") || lower.Contains("phần trên") ||
+            lower.Contains("kết quả trên") || lower.Contains("bảng trên") ||
+            lower.Contains("danh sách trên") || lower.Contains("ở trên");
+        var sprintMatchedFromBroadRef = new List<ExportSprintMetadata>();
+
+        if (matchedIssues.Count == 0 &&
+            (IsDeicticTaskReference(lower) ||
+             (wantsDetail && !lower.Contains("sprint") && !lower.Contains("backlog") && !lower.Contains("dự án"))))
         {
-            var resolvedKey = ResolveIssueKeyFromContext(prompt, issueByUpperKey, history, memories);
-            if (!string.IsNullOrWhiteSpace(resolvedKey) && issueByUpperKey.TryGetValue(resolvedKey, out var contextIssue))
+            if (isBroadContextRef)
             {
-                matchedIssues.Add(contextIssue);
+                var recentAssistantText = history?
+                    .LastOrDefault(t => string.Equals(t.Role, "assistant", StringComparison.OrdinalIgnoreCase))
+                    ?.Content ?? string.Empty;
+
+                // Nếu lượt liền trước đang phân tích 1 Sprint cụ thể -> ưu tiên xuất Sprint đó thay vì nhặt nhầm 1 IssueKey cuối đoạn!
+                var sprintMentionedInRecentTurn = ResolveSprintFromRecentTurn(metadata.Sprints, recentAssistantText);
+                if (sprintMentionedInRecentTurn != null)
+                {
+                    sprintMatchedFromBroadRef.Add(sprintMentionedInRecentTurn);
+                }
+                else
+                {
+                    var distinctRecentKeys = IssueKeyRegex().Matches(recentAssistantText)
+                        .Select(m => m.Groups[1].Value.ToUpperInvariant())
+                        .Where(issueByUpperKey.ContainsKey)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+
+                    if (distinctRecentKeys.Count > 1)
+                    {
+                        matchedIssues.AddRange(distinctRecentKeys.Select(k => issueByUpperKey[k]));
+                    }
+                    else if (distinctRecentKeys.Count == 1 && !recentAssistantText.Contains("đề xuất", StringComparison.OrdinalIgnoreCase))
+                    {
+                        matchedIssues.Add(issueByUpperKey[distinctRecentKeys[0]]);
+                    }
+                    else if (existingProposal?.Tasks is { Count: > 0 })
+                    {
+                        return Finalize(ResolveProposalExport(prompt, lower, dateStamp, safeKey, metadata, existingProposal, wantsDetail, includeSubtasks));
+                    }
+                }
             }
-            else if (existingProposal?.Tasks is { Count: > 0 } && lower.Contains("trong đề xuất"))
+            else
             {
-                return ResolveProposalExport(prompt, lower, dateStamp, safeKey, metadata, existingProposal, wantsDetail, includeSubtasks);
+                var resolvedKey = ResolveIssueKeyFromContext(prompt, issueByUpperKey, history, memories);
+                if (!string.IsNullOrWhiteSpace(resolvedKey) && issueByUpperKey.TryGetValue(resolvedKey, out var contextIssue))
+                {
+                    matchedIssues.Add(contextIssue);
+                }
+                else if (existingProposal?.Tasks is { Count: > 0 } && lower.Contains("trong đề xuất"))
+                {
+                    return Finalize(ResolveProposalExport(prompt, lower, dateStamp, safeKey, metadata, existingProposal, wantsDetail, includeSubtasks));
+                }
             }
         }
 
@@ -161,7 +229,7 @@ public static partial class AiExcelExportResolver
                 ? $"Tôi đã chuẩn bị tệp Excel hồ sơ chi tiết cho công việc **{target.IssueKey} — {target.Title}** (bao gồm bảng thông tin thuộc tính, mô tả đầy đủ, tiêu chí nghiệm thu, {subtasks.Count} việc con, tài liệu căn cứ/trao đổi và bảng chú thích trạng thái). Bạn có thể tải xuống ngay bên dưới."
                 : $"Tôi đã trích xuất riêng công việc **{target.IssueKey} — {target.Title}**{(includeSubtasks && subtasks.Count > 0 ? $" cùng {subtasks.Count} việc con trực thuộc" : string.Empty)} ra bảng Excel chuẩn ProjectMgmt (kèm chú thích trạng thái).";
 
-            return new AiExcelExportResolution(true, spec, singleReply, $"Khớp 1 công việc {target.IssueKey} (chế độ {scopeMode})");
+            return Finalize(new AiExcelExportResolution(true, spec, singleReply, $"Khớp 1 công việc {target.IssueKey} (chế độ {scopeMode})"));
         }
 
         if (matchedIssues.Count > 1)
@@ -185,7 +253,7 @@ public static partial class AiExcelExportResolver
                 SummaryDescription = $"Xuất {matchedIssues.Count} công việc chỉ định ({string.Join(", ", keys)})"
             };
             var multiReply = $"Tôi đã chuẩn bị tệp Excel chỉ gồm **{matchedIssues.Count} công việc** bạn yêu cầu ({string.Join(", ", keys)}){(childCount > 0 ? $" và {childCount} việc con liên quan" : string.Empty)} dưới dạng bảng có màu trạng thái và chú thích.";
-            return new AiExcelExportResolution(true, spec, multiReply, $"Khớp {matchedIssues.Count} mã công việc");
+            return Finalize(new AiExcelExportResolution(true, spec, multiReply, $"Khớp {matchedIssues.Count} mã công việc"));
         }
 
         // -------------------------------------------------------------------------
@@ -198,8 +266,8 @@ public static partial class AiExcelExportResolver
             ((lower.Contains("sprint") && lower.Contains("backlog")) &&
              (lower.Contains("tất cả") || lower.Contains("toàn bộ") || lower.Contains("và") || lower.Contains("cả hai")));
 
-        var matchedSprints = new List<ExportSprintMetadata>();
-        bool askedSprintScope = false;
+        var matchedSprints = sprintMatchedFromBroadRef;
+        bool askedSprintScope = matchedSprints.Count > 0;
 
         if (!explicitlyWantsAllProject)
         {
@@ -457,7 +525,7 @@ public static partial class AiExcelExportResolver
             SummaryDescription = filterParts.Count > 0 ? string.Join(", ", filterParts) : "Toàn bộ dự án"
         };
 
-        return new AiExcelExportResolution(true, exportSpec, reply, $"Phạm vi={scopeName}, Khớp={matchedData.Count} mục");
+        return Finalize(new AiExcelExportResolution(true, exportSpec, reply, $"Phạm vi={scopeName}, Khớp={matchedData.Count} mục"));
     }
 
     private static AiExcelExportResolution ResolveProposalExport(
@@ -1067,5 +1135,77 @@ public static partial class AiExcelExportResolver
         var cleaned = Regex.Replace(ascii, @"[^A-Za-z0-9\-_]+", "_").Trim('_');
         if (cleaned.Length > maxLen) cleaned = cleaned[..maxLen].TrimEnd('_');
         return string.IsNullOrWhiteSpace(cleaned) ? "ProjectMgmt" : cleaned;
+    }
+
+    private static string? ExtractCustomFileName(string prompt)
+    {
+        if (string.IsNullOrWhiteSpace(prompt)) return null;
+        var match = Regex.Match(
+            prompt,
+            @"(?i)(?:đặt\s+tên(?:\s+(?:file|tệp))?|tên\s+(?:file|tệp)|lưu\s+(?:thành|với\s+tên|tên(?:\s+(?:file|tệp))?))\s*(?:là|:|=)?\s*[""'«]?([^""'\r\n,;!?]+?)[""'»]?(?=$|\s+(?:nhé|ạ|đi|ngay|với|giúp|cho\s+tôi)\b|[.,;!?])");
+        if (!match.Success) return null;
+
+        var raw = match.Groups[1].Value.Trim();
+        raw = Regex.Replace(raw, @"(?i)\.xlsx$", string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(raw) || raw.Length > 80) return null;
+
+        var safe = SanitizeFileToken(raw, maxLen: 48);
+        return string.IsNullOrWhiteSpace(safe) ? null : $"{safe}.xlsx";
+    }
+
+    private static AiExcelExportResolution ApplyCustomFileName(AiExcelExportResolution res, string? customFileName)
+    {
+        if (!res.ShouldTriggerExport || res.ExportSpec == null || string.IsNullOrWhiteSpace(customFileName))
+        {
+            return res;
+        }
+
+        res.ExportSpec.SuggestedFileName = customFileName;
+        var reply = res.ReplyMessage.Contains(customFileName, StringComparison.OrdinalIgnoreCase)
+            ? res.ReplyMessage
+            : $"{res.ReplyMessage} (Tên tệp: **{customFileName}**)";
+        return res with { ReplyMessage = reply };
+    }
+
+    private static AiExcelExportSpecDto CloneExportSpecWithFileName(AiExcelExportSpecDto src, string fileName) => new()
+    {
+        Scope = src.Scope,
+        Title = src.Title,
+        Subtitle = src.Subtitle,
+        SuggestedFileName = fileName,
+        SprintIds = src.SprintIds?.ToList(),
+        SprintNames = src.SprintNames?.ToList(),
+        IssueIds = src.IssueIds?.ToList(),
+        IssueKeys = src.IssueKeys?.ToList(),
+        AssigneeNames = src.AssigneeNames?.ToList(),
+        StatusNames = src.StatusNames?.ToList(),
+        Priorities = src.Priorities?.ToList(),
+        IssueTypes = src.IssueTypes?.ToList(),
+        EpicNames = src.EpicNames?.ToList(),
+        IncludeSubtasks = src.IncludeSubtasks,
+        IncludeLegend = src.IncludeLegend,
+        BlockedOnly = src.BlockedOnly,
+        SearchKeyword = src.SearchKeyword,
+        MatchedItemCount = src.MatchedItemCount,
+        SummaryDescription = src.SummaryDescription
+    };
+
+    private static ExportSprintMetadata? ResolveSprintFromRecentTurn(
+        IReadOnlyList<ExportSprintMetadata> sprints,
+        string recentText)
+    {
+        if (string.IsNullOrWhiteSpace(recentText) || sprints.Count == 0) return null;
+        var nums = SprintNumberRegex().Matches(recentText)
+            .Select(m => int.TryParse(m.Groups[1].Value, out var n) ? n : -1)
+            .Where(n => n > 0)
+            .Distinct()
+            .ToList();
+        if (nums.Count == 1)
+        {
+            return MatchSprintByNumber(sprints, nums[0]);
+        }
+
+        var byName = sprints.Where(s => !string.IsNullOrWhiteSpace(s.Name) && recentText.Contains(s.Name, StringComparison.OrdinalIgnoreCase)).ToList();
+        return byName.Count == 1 ? byName[0] : null;
     }
 }

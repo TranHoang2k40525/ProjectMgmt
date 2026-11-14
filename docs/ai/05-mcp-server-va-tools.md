@@ -70,7 +70,7 @@ Hệ thống cung cấp **8 công cụ cốt lõi** phục vụ lập kế hoạ
 | **spec_hub_search** | `projectId` (string), `keyword` (string) | Các phân đoạn văn bản khớp từ khóa, tên file gốc và chỉ số tương đồng | [`SpecHubTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SpecHubTools.cs) |
 | **project_get_active_config** | `projectId` (string, required) | Cấu hình thực tế đang áp dụng của dự án: Quy trình `Workflow` (Board, cột `Statuses`, cờ `IsInitial`/`IsDone`, luồng chuyển tiếp `Transitions`), bộ `Priorities` đang dùng (riêng dự án hoặc mặc định), `IssueTypes` và `Labels` | [`BacklogTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/BacklogTools.cs) |
 | **backlog_get_stories** | `projectId` (string, required) | Toàn bộ hạng mục trong Product Backlog (`SprintId = null`): `Id`, `IssueKey`, `Title`, `IssueType`, `IsUserStory`, `Priority`, `StatusName`, `Labels`, `EpicTitle`, `StoryPoints`, `EstimatedHours`, `ExistingSubtasks` và `AcceptanceCriteria` | [`BacklogTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/BacklogTools.cs) |
-| **sprint_get_history_and_velocity** | `projectId` (string, required) | Vận tốc trung bình (Velocity), các hạng mục dở dang từ Sprint trước (đối chiếu trạng thái `IsDone` thực tế của dự án) và khuyến nghị Rollover | [`SprintTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SprintTools.cs) |
+| **sprint_get_history_and_velocity** | `projectId` (string, required) | Vận tốc trung bình (Velocity), danh sách **toàn bộ Sprint theo mọi trạng thái (`Completed`, `Active`, `Future`)** trong `AllSprints` kèm đầy đủ danh sách công việc (`IssueKey`, `Title`, `Type`, `Status`, `Priority`, `StoryPoints`, `EstimatedHours`, `AssigneeId`, `AssigneeName`), các hạng mục dở dang từ Sprint trước và khuyến nghị Rollover | [`SprintTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/SprintTools.cs) |
 | **team_get_dev_capacities** | `projectId` (string, required) | Danh sách kỹ sư (Developers, QA), chuyên môn (Frontend, Backend, Tester), số giờ khả dụng | [`TeamTools.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/McpServers/TeamTools.cs) |
 | **ai_sprint_plan_propose** | `projectId` (string), `meetingNotes` (string), `targetStoryIds` (array) | Đề xuất Sprint Goal, Epics, Tasks độc lập hoặc kèm Subtasks, liên kết hạng mục Backlog (`sourceBacklogIssueId`) và trích dẫn tài liệu | [`Program.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.McpServer/Program.cs) |
 
@@ -144,17 +144,12 @@ Hệ thống cung cấp **8 công cụ cốt lõi** phục vụ lập kế hoạ
 ```
 
 ### 3.3. Tool: `sprint_get_history_and_velocity`
-- **Mục đích**: Cung cấp vận tốc lịch sử (Velocity), danh sách User Story & Bug dở dang kèm khuyến nghị phân loại hành động kế thừa (Sprint Rollover) dựa trên cấu hình trạng thái hoàn tất (`IsDone`) và mức ưu tiên cao nhất (`Level = 1`) đang áp dụng của dự án.
+- **Mục đích**: Cung cấp vận tốc lịch sử (Velocity), **danh sách đầy đủ tất cả các Sprint ở mọi trạng thái (`Completed`, `Active`, `Future`) kèm từng công việc và tên người phụ trách (`AssigneeName`)**, cùng danh sách User Story & Bug dở dang với khuyến nghị phân loại hành động kế thừa (Sprint Rollover) dựa trên cấu hình trạng thái hoàn tất (`IsDone`) và mức ưu tiên cao nhất (`Level = 1`) đang áp dụng của dự án. Đồng thời `BacklogTools.GetProjectWorkItemsDigestAsync` cung cấp danh mục hợp nhất toàn bộ công việc xuyên suốt mọi Sprint và Product Backlog để phục vụ tra cứu chính xác tên việc/người làm trong luồng `project_qa`.
 - **Lược đồ dữ liệu trả về**:
   - `AverageVelocity`: Vận tốc trung bình qua các Sprint đã hoàn thành.
   - `CompletedSprintsCount`: Số lượng Sprint đã đóng.
-  - `UnfinishedItemsFromSprint`: Danh sách các công việc chưa hoàn thành từ Sprint liền kề:
-    - `Key`, `Title`, `Type` (Bug, Story, Task), `Priority`, `Status`, `DueDate`, `IsOverdue`, `TimeSpentHours`.
-    - `RecommendedAction`:
-      - `Rollover_Hotfix_Highest`: Bug quá hạn hoặc dở dang, bắt buộc kế thừa vào Sprint mới với mức ưu tiên khẩn cấp cao nhất của dự án.
-      - `Rollover_Continue_WIP`: Task dở dang (`IsActiveWork`) có công sức đã bỏ ra (`TimeSpent > 0`), kế thừa vào Sprint mới để bảo vệ tiến độ.
-      - `Backlog_Reevaluate`: Task chưa làm (`IsInitial`) nhưng đã quá hạn, tự động chuyển về Product Backlog (`SprintId = null`) để PO đánh giá lại.
-      - `Candidate_Rollover`: Các hạng mục khác để AI và PO xem xét.
+  - `AllSprints`: Mảng đầy đủ các Sprint (bao gồm cả Sprint tương lai `Future`, Sprint đang chạy `Active` và các Sprint đã đóng `Completed`) kèm danh sách `Tasks` (`IssueKey`, `Title`, `Type`, `Status`, `Priority`, `StoryPoints`, `EstimatedHours`, `AssigneeId`, `AssigneeName`).
+  - `UnfinishedItemsFromSprint`: Danh sách các công việc chưa hoàn thành từ Sprint liền kề (`Key`, `Title`, `Type`, `Priority`, `Status`, `DueDate`, `IsOverdue`, `TimeSpentHours`, `AssigneeName`, `RecommendedAction`).
 - **Request JSON-RPC mẫu**:
 ```json
 {

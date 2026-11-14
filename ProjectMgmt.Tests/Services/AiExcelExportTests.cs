@@ -539,4 +539,57 @@ public class AiExcelExportTests
         Assert.Equal("sprint_plan", srsResult!.Intent);
         Assert.Equal("none", srsResult.TriggerAction);
     }
+
+    [Fact]
+    public async Task ExportExcel_BroadContextContentAndCustomFileNameFollowUp_ShouldPreserveSprintAndApplyCustomFileName()
+    {
+        var ws = await SeedWorkspaceAsync();
+        await using var _p = ws.PlanningDb;
+        await using var _d = ws.DeliveryDb;
+        await using var _i = ws.IdentityDb;
+
+        var aiClient = new CapturingAiClient(_ => "{}");
+        var service = CreateService(aiClient, ws);
+
+        // Lượt 1: AI phân tích toàn bộ Sprint 3 và có nhắc tới QLDA-1, QLDA-4
+        var sessionState = new AiSprintProposalDto
+        {
+            SessionId = "exp_ctx_rename",
+            ProjectId = ws.ProjectId,
+            ConversationHistory =
+            [
+                new AiConversationTurnDto { Id = "u1", Role = "user", Content = "phân tích nội dung sprint 3", Intent = "project_qa" },
+                new AiConversationTurnDto
+                {
+                    Id = "a1",
+                    Role = "assistant",
+                    Content = "Phân tích nội dung **Sprint 3**: bao gồm QLDA-1 (Xây dựng API Xuất Báo Cáo) và QLDA-4 (Lỗi sai lệch tổng điểm Sprint).",
+                    Intent = "project_qa"
+                }
+            ]
+        };
+
+        // Người dùng nói "xuất excel cho tôi nội dung trên" -> phải xuất toàn bộ Sprint 3 chứ không bắt nhầm 1 key QLDA-4 cuối đoạn
+        var exportTop = await RunPromptAsync(service, ws, "exp_ctx_rename", "xuất excel cho tôi nội dung trên", sessionState);
+        Assert.Equal("export_excel", exportTop.Intent);
+        Assert.Equal("export_excel", exportTop.TriggerAction);
+        Assert.NotNull(exportTop.ExportSpec);
+        Assert.Equal("single_sprint", exportTop.ExportSpec!.Scope);
+        Assert.Contains("Sprint 3", exportTop.ExportSpec.SprintNames);
+
+        // Lượt tiếp theo: "xuất và đặt tên là tài liệu" -> phải nhận diện là export_excel, giữ nguyên phạm vi Sprint 3 và đổi tên thành tai_lieu.xlsx
+        var classifiedFollowUp = AiSprintDecompositionService.ClassifyConversationalIntent(
+            "xuất và đặt tên là tài liệu",
+            "# GHI CHÚ / YÊU CẦU BỔ SUNG:\nxuất và đặt tên là tài liệu",
+            exportTop);
+        Assert.Equal("export_excel", classifiedFollowUp);
+
+        var renameRes = await RunPromptAsync(service, ws, "exp_ctx_rename", "xuất và đặt tên là tài liệu", exportTop);
+        Assert.Equal("export_excel", renameRes.Intent);
+        Assert.Equal("export_excel", renameRes.TriggerAction);
+        Assert.NotNull(renameRes.ExportSpec);
+        Assert.Equal("tai_lieu.xlsx", renameRes.ExportSpec!.SuggestedFileName);
+        Assert.Equal("single_sprint", renameRes.ExportSpec.Scope);
+        Assert.Contains("Sprint 3", renameRes.ExportSpec.SprintNames);
+    }
 }

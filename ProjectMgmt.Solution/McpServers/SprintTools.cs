@@ -56,7 +56,14 @@ public class SprintTools
         };
     }
 
-    public async Task<string> GetHistoryAndVelocityAsync(Guid projectId, IProjectScopeContext scope, CancellationToken ct = default)
+    public Task<string> GetHistoryAndVelocityAsync(Guid projectId, IProjectScopeContext scope, CancellationToken ct = default)
+        => GetHistoryAndVelocityAsync(projectId, scope, memberNamesById: null, ct);
+
+    public async Task<string> GetHistoryAndVelocityAsync(
+        Guid projectId,
+        IProjectScopeContext scope,
+        IReadOnlyDictionary<Guid, string>? memberNamesById,
+        CancellationToken ct = default)
     {
         if (projectId == Guid.Empty)
         {
@@ -73,21 +80,23 @@ public class SprintTools
 
         ProjectScopeGuard.Validate(scope, project.OrgId, projectId);
 
-        var pastSprints = await _planning.Sprints.AsNoTracking()
-            .Where(s => s.ProjectId == projectId && (s.Status == "Completed" || s.Status == "completed"))
+        var allSprints = await _planning.Sprints.AsNoTracking()
+            .Where(s => s.ProjectId == projectId)
+            .OrderBy(s => s.OrderIndex)
+            .ThenBy(s => s.StartDate)
+            .ToListAsync(ct);
+
+        var pastSprints = allSprints
+            .Where(s => string.Equals(s.Status, "Completed", StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(s => s.EndDate ?? s.StartDate)
             .ThenByDescending(s => s.OrderIndex)
             .Take(5)
-            .ToListAsync(ct);
+            .ToList();
 
-        var activeSprint = await _planning.Sprints.AsNoTracking()
-            .FirstOrDefaultAsync(s => s.ProjectId == projectId && (s.Status == "Active" || s.Status == "active"), ct);
+        var activeSprint = allSprints
+            .FirstOrDefault(s => string.Equals(s.Status, "Active", StringComparison.OrdinalIgnoreCase));
 
-        var sprintIds = pastSprints.Select(s => s.Id).ToList();
-        if (activeSprint != null)
-        {
-            sprintIds.Add(activeSprint.Id);
-        }
+        var sprintIds = allSprints.Select(s => s.Id).Distinct().ToList();
 
         ProjectActiveConfig? activeConfig = null;
         var doneStatusIds = new HashSet<Guid>();
@@ -192,6 +201,42 @@ public class SprintTools
                     .ToDictionaryAsync(p => p.Id, p => p.Name, ct);
         }
 
+        string ResolveMemberName(Guid? assigneeId) =>
+            assigneeId.HasValue && memberNamesById != null && memberNamesById.TryGetValue(assigneeId.Value, out var name) && !string.IsNullOrWhiteSpace(name)
+                ? name.Trim()
+                : (assigneeId.HasValue ? assigneeId.Value.ToString() : "Chưa gán");
+
+        var allSprintsDetailed = allSprints.Select(s =>
+        {
+            var sIssues = sprintIssues.Where(i => i.SprintId == s.Id).ToList();
+            return new
+            {
+                s.Id,
+                s.Name,
+                s.Goal,
+                Status = string.IsNullOrWhiteSpace(s.Status) ? "future" : s.Status,
+                s.OrderIndex,
+                s.StartDate,
+                s.EndDate,
+                TaskCount = sIssues.Count,
+                TotalStoryPoints = sIssues.Sum(i => i.StoryPoints ?? 0m),
+                Tasks = sIssues.Select(i => new
+                {
+                    IssueKey = $"{projectKey}-{i.IssueNumber}",
+                    i.Title,
+                    Type = issueTypeById.TryGetValue(i.IssueTypeId, out var tName) ? tName : "Story",
+                    Status = statusById.TryGetValue(i.StatusId, out var sName) ? sName : (activeConfig?.InitialStatusName ?? "To Do"),
+                    Priority = i.PriorityId.HasValue && priorityById.TryGetValue(i.PriorityId.Value, out var pName)
+                        ? pName
+                        : (activeConfig?.GetDefaultPriorityName() ?? "Medium"),
+                    StoryPoints = i.StoryPoints ?? 0m,
+                    EstimatedHours = i.EstimatedHours ?? 0m,
+                    i.AssigneeId,
+                    AssigneeName = ResolveMemberName(i.AssigneeId)
+                }).ToList()
+            };
+        }).ToList();
+
         var recentSprintDetails = pastSprints.Select(s =>
         {
             var sIssues = sprintIssues.Where(i => i.SprintId == s.Id).ToList();
@@ -215,7 +260,8 @@ public class SprintTools
                     i.Title,
                     StoryPoints = i.StoryPoints ?? 0m,
                     EstimatedHours = i.EstimatedHours ?? 0m,
-                    i.AssigneeId
+                    i.AssigneeId,
+                    AssigneeName = ResolveMemberName(i.AssigneeId)
                 }).ToList()
             };
         }).ToList();
@@ -310,6 +356,7 @@ public class SprintTools
                     CommittedPoints = sprintIssues.Where(i => i.SprintId == activeSprint.Id).Sum(i => i.StoryPoints ?? 0m)
                 }
                 : null,
+            AllSprints = allSprintsDetailed,
             RecentSprints = recentSprintDetails,
             UnfinishedItemsFromSprint = unfinishedFromPreviousSprint,
             OpenBugsAndTechnicalDebt = unfinishedBugs
@@ -318,8 +365,12 @@ public class SprintTools
         return SerializeJson(result, indented: true);
     }
 
-    public async Task<string> GetSprintHistoryAndVelocityAsync(IProjectScopeContext scope, CancellationToken ct = default)
-    {
-        return await GetHistoryAndVelocityAsync(scope.ProjectId, scope, ct);
-    }
+    public Task<string> GetSprintHistoryAndVelocityAsync(IProjectScopeContext scope, CancellationToken ct = default)
+        => GetHistoryAndVelocityAsync(scope.ProjectId, scope, memberNamesById: null, ct);
+
+    public Task<string> GetSprintHistoryAndVelocityAsync(
+        IProjectScopeContext scope,
+        IReadOnlyDictionary<Guid, string>? memberNamesById,
+        CancellationToken ct = default)
+        => GetHistoryAndVelocityAsync(scope.ProjectId, scope, memberNamesById, ct);
 }

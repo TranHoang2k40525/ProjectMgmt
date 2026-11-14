@@ -1,5 +1,7 @@
 using System.Text.Json;
+using DeliveryIntelligence.Domain.Entities;
 using DeliveryIntelligence.Infrastructure;
+using IdentityExperience.Domain.Entities;
 using IdentityExperience.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -1164,5 +1166,228 @@ public class AiConversationalAssistantTests
         var sentPromptText = string.Join("\n", aiClient.CapturedPrompts.Single().Messages.Select(m => m.Content));
         Assert.Contains("Tối ưu hóa giao diện Drawer chi tiết công việc", sentPromptText);
         Assert.Contains("Chuẩn hóa bố cục Drawer chi tiết", sentPromptText);
+    }
+
+    [Fact]
+    public async Task ExecutePipelineAsync_Sprint3WithSprint2MemoryPresent_ShouldFetchLiveFutureSprintAndStripIntentPrefix()
+    {
+        var (planningDb, deliveryDb, identityDb, orgId, projectId, actorId) = await SeedProjectAsync();
+        await using var _p = planningDb;
+        await using var _d = deliveryDb;
+        await using var _i = identityDb;
+
+        var sprint2Id = Guid.NewGuid();
+        var sprint3FutureId = Guid.NewGuid();
+        planningDb.Sprints.AddRange(
+            new Sprint { Id = sprint2Id, ProjectId = projectId, Name = "Sprint 2", Status = "Active", OrderIndex = 2, Goal = "Realtime Kanban" },
+            new Sprint { Id = sprint3FutureId, ProjectId = projectId, Name = "Sprint 3", Status = "Future", OrderIndex = 3, Goal = "Redis Cache & Performance" }
+        );
+
+        var storyType = await planningDb.IssueTypes.FirstAsync(t => t.ProjectId == projectId && t.Name == "Story");
+        var todoStatus = await planningDb.WorkflowStatuses.FirstAsync(s => s.ProjectId == projectId && s.Name == "To Do");
+        var mediumPrio = await planningDb.Priorities.FirstAsync(p => p.ProjectId == projectId && p.Name == "Medium");
+
+        var memberId = Guid.NewGuid();
+        var roleId = Guid.NewGuid();
+        identityDb.Roles.Add(new Role { Id = roleId, Name = "Developer", Scope = "Project" });
+        identityDb.Users.Add(new User { Id = memberId, Email = "dev@example.com", NormalizedEmail = "DEV@EXAMPLE.COM", PasswordHash = "H", SecurityStamp = Guid.NewGuid(), IsActive = true, IsEmailVerified = true });
+        identityDb.UserProfiles.Add(new UserProfile { Id = Guid.NewGuid(), UserId = memberId, DisplayName = "Phạm Đức Anh", JobTitle = "Backend Dev" });
+        identityDb.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = memberId, RoleId = roleId, ScopeType = "Project", ScopeId = projectId });
+
+        deliveryDb.Issues.AddRange(
+            new Issue
+            {
+                Id = Guid.NewGuid(),
+                ProjectId = projectId,
+                IssueNumber = 18,
+                SprintId = sprint2Id,
+                StatusId = todoStatus.Id,
+                IssueTypeId = storyType.Id,
+                PriorityId = mediumPrio.Id,
+                AssigneeId = memberId,
+                Title = "Hoàn thiện bộ công cụ MCP Server Sprint 2",
+                StoryPoints = 5,
+                RankOrder = 10
+            },
+            new Issue
+            {
+                Id = Guid.NewGuid(),
+                ProjectId = projectId,
+                IssueNumber = 30,
+                SprintId = sprint3FutureId,
+                StatusId = todoStatus.Id,
+                IssueTypeId = storyType.Id,
+                PriorityId = mediumPrio.Id,
+                AssigneeId = memberId,
+                Title = "Triển khai Cache Redis phân tán Sprint 3",
+                StoryPoints = 8,
+                RankOrder = 20
+            });
+        await planningDb.SaveChangesAsync();
+        await identityDb.SaveChangesAsync();
+        await deliveryDb.SaveChangesAsync();
+
+        var existingProposal = new AiSprintProposalDto
+        {
+            SessionId = "sprint3_vs_mem2",
+            ProjectId = projectId,
+            IndexedMemories =
+            [
+                new AiMemoryAnchorDto
+                {
+                    AnchorKey = "#mem-5",
+                    TurnIndex = 1,
+                    Category = "qa_fact",
+                    Title = "Hỏi đáp Sprint 2: nội dung sprint 2",
+                    Keywords = "Sprint 2, QLDA-18",
+                    Summary = "Sprint 2 gồm QLDA-18 Hoàn thiện MCP Server",
+                    DetailContent = "Sprint 2 có công việc QLDA-18 Hoàn thiện bộ công cụ MCP Server Sprint 2"
+                }
+            ],
+            ConversationHistory =
+            [
+                new AiConversationTurnDto { Id = "u1", Role = "user", Content = "nội dung sprint 2", Intent = "project_qa" },
+                new AiConversationTurnDto { Id = "a1", Role = "assistant", Content = "Sprint 2 có QLDA-18.", Intent = "project_qa", TaskCount = 6, TotalStoryPoints = 27 }
+            ]
+        };
+
+        var aiClient = new CapturingAiClient(_ => "[Intent: project_qa, 6 tasks/27 SP] Sprint 3 (Future) gồm công việc QLDA-30: Triển khai Cache Redis phân tán Sprint 3 (8 SP, Phạm Đức Anh).");
+        var service = CreateService(aiClient, planningDb, deliveryDb, identityDb);
+        var scope = new ProjectScopeContext(orgId, projectId, actorId);
+
+        var calledTools = new List<string>();
+        AiSprintProposalDto? result = null;
+        await service.ExecutePipelineAsync(
+            sessionId: "sprint3_vs_mem2",
+            scope: scope,
+            targetSprintId: null,
+            extractedDocumentContent: "# GHI CHÚ / YÊU CẦU BỔ SUNG:\nnội dung sprint 3",
+            userPrompt: "nội dung sprint 3",
+            onStepProgress: (_, _, _, _, _) => Task.CompletedTask,
+            onToolCall: (toolName, _, _, _) => { calledTools.Add(toolName); return Task.CompletedTask; },
+            onThoughtDelta: _ => Task.CompletedTask,
+            onProposalReady: p => { result = p; return Task.CompletedTask; },
+            existingProposal: existingProposal);
+
+        Assert.NotNull(result);
+        Assert.Equal("project_qa", result!.Intent);
+        Assert.Contains("sprint_get_history_and_velocity", calledTools);
+
+        var prompt = aiClient.CapturedPrompts.Single();
+        var allMessagesText = string.Join("\n", prompt.Messages.Select(m => m.Content));
+        Assert.Contains("QLDA-30", allMessagesText);
+        Assert.Contains("Triển khai Cache Redis phân tán Sprint 3", allMessagesText);
+        Assert.Contains("Phạm Đức Anh", allMessagesText);
+        Assert.DoesNotContain("[Intent:", allMessagesText);
+        Assert.DoesNotContain("CHI TIẾT TRÍ NHỚ ĐƯỢC TRỎ (MEMORY RECALL - DÙNG TRỰC TIẾP ĐỂ GIẢI ĐÁP & SUY LUẬN):\n#### #mem-5", allMessagesText);
+        Assert.DoesNotContain("[Intent:", result.AssistantReply);
+        Assert.StartsWith("Sprint 3", result.AssistantReply);
+    }
+
+    [Fact]
+    public async Task ExecutePipelineAsync_NamedTaskAndAssigneeQuery_ShouldFetchLiveDbWorkItemsInsteadOfMemoryOnly()
+    {
+        var (planningDb, deliveryDb, identityDb, orgId, projectId, actorId) = await SeedProjectAsync();
+        await using var _p = planningDb;
+        await using var _d = deliveryDb;
+        await using var _i = identityDb;
+
+        var sprint1Id = Guid.NewGuid();
+        planningDb.Sprints.Add(new Sprint { Id = sprint1Id, ProjectId = projectId, Name = "Sprint 1", Status = "Active", OrderIndex = 1 });
+
+        var taskType = await planningDb.IssueTypes.FirstAsync(t => t.ProjectId == projectId && t.Name == "Task");
+        var todoStatus = await planningDb.WorkflowStatuses.FirstAsync(s => s.ProjectId == projectId && s.Name == "To Do");
+        var mediumPrio = await planningDb.Priorities.FirstAsync(p => p.ProjectId == projectId && p.Name == "Medium");
+
+        var teamMemberId = Guid.NewGuid();
+        var roleId = Guid.NewGuid();
+        identityDb.Roles.Add(new Role { Id = roleId, Name = "Developer", Scope = "Project" });
+        identityDb.Users.Add(new User { Id = teamMemberId, Email = "team@example.com", NormalizedEmail = "TEAM@EXAMPLE.COM", PasswordHash = "H", SecurityStamp = Guid.NewGuid(), IsActive = true, IsEmailVerified = true });
+        identityDb.UserProfiles.Add(new UserProfile { Id = Guid.NewGuid(), UserId = teamMemberId, DisplayName = "Hoàng Team", JobTitle = "Developer" });
+        identityDb.UserRoles.Add(new UserRole { Id = Guid.NewGuid(), UserId = teamMemberId, RoleId = roleId, ScopeType = "Project", ScopeId = projectId });
+
+        deliveryDb.Issues.Add(new Issue
+        {
+            Id = Guid.NewGuid(),
+            ProjectId = projectId,
+            IssueNumber = 1,
+            SprintId = sprint1Id,
+            StatusId = todoStatus.Id,
+            IssueTypeId = taskType.Id,
+            PriorityId = mediumPrio.Id,
+            AssigneeId = teamMemberId,
+            Title = "task đầu tiên là đây",
+            StoryPoints = 2,
+            RankOrder = 1
+        });
+        await planningDb.SaveChangesAsync();
+        await identityDb.SaveChangesAsync();
+        await deliveryDb.SaveChangesAsync();
+
+        var existingProposal = new AiSprintProposalDto
+        {
+            SessionId = "named_task_qa",
+            ProjectId = projectId,
+            Tasks =
+            [
+                new ProposedTaskDto
+                {
+                    Id = "task_01",
+                    Title = "Hoàn thiện bộ công cụ MCP Server (bản đề xuất AI)",
+                    Type = "Story",
+                    Priority = "Medium",
+                    Status = "To Do",
+                    StoryPoints = 5,
+                    EstimatedHours = 12,
+                    AssigneeName = "Phạm Đức Anh"
+                }
+            ],
+            IndexedMemories =
+            [
+                new AiMemoryAnchorDto
+                {
+                    AnchorKey = "#mem-2",
+                    TurnIndex = 1,
+                    Category = "proposal_snapshot",
+                    Title = "Kế hoạch 1 việc",
+                    Keywords = "MCP Server, QLDA-AI1",
+                    Summary = "task đầu tiên là Hoàn thiện MCP Server",
+                    DetailContent = "task_01: Hoàn thiện MCP Server"
+                }
+            ],
+            ConversationHistory =
+            [
+                new AiConversationTurnDto { Id = "u1", Role = "user", Content = "lập kế hoạch sprint" },
+                new AiConversationTurnDto { Id = "a1", Role = "assistant", Content = "Đã đề xuất task_01." }
+            ]
+        };
+
+        var aiClient = new CapturingAiClient(_ => "Công việc **QLDA-1: task đầu tiên là đây** thuộc Sprint 1, người xử lý là **Hoàng Team**.");
+        var service = CreateService(aiClient, planningDb, deliveryDb, identityDb);
+        var scope = new ProjectScopeContext(orgId, projectId, actorId);
+
+        var calledTools = new List<string>();
+        AiSprintProposalDto? result = null;
+        await service.ExecutePipelineAsync(
+            sessionId: "named_task_qa",
+            scope: scope,
+            targetSprintId: null,
+            extractedDocumentContent: "# GHI CHÚ / YÊU CẦU BỔ SUNG:\nai là người làm task đầu tiên là đây",
+            userPrompt: "ai là người làm task đầu tiên là đây",
+            onStepProgress: (_, _, _, _, _) => Task.CompletedTask,
+            onToolCall: (toolName, _, _, _) => { calledTools.Add(toolName); return Task.CompletedTask; },
+            onThoughtDelta: _ => Task.CompletedTask,
+            onProposalReady: p => { result = p; return Task.CompletedTask; },
+            existingProposal: existingProposal);
+
+        Assert.NotNull(result);
+        Assert.Equal("project_qa", result!.Intent);
+        Assert.Contains("team_get_dev_capacities", calledTools);
+        Assert.True(calledTools.Contains("backlog_get_stories") || calledTools.Contains("sprint_get_history_and_velocity"));
+
+        var sentText = string.Join("\n", aiClient.CapturedPrompts.Single().Messages.Select(m => m.Content));
+        Assert.Contains("QLDA-1", sentText);
+        Assert.Contains("task đầu tiên là đây", sentText);
+        Assert.Contains("Hoàng Team", sentText);
     }
 }

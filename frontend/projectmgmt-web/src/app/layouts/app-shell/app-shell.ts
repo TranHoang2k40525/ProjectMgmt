@@ -134,7 +134,19 @@ export class AppShellComponent {
   });
 
   // Global Interactive UI Signals
+  private wasDesktopViewport = typeof window === 'undefined' ? true : window.innerWidth >= 1280;
   readonly isSidebarCollapsed = signal<boolean>(typeof window !== 'undefined' && window.innerWidth < 1280);
+
+  @HostListener('window:resize')
+  onWindowResize(): void {
+    if (typeof window === 'undefined') return;
+    const isDesktop = window.innerWidth >= 1280;
+    if (isDesktop !== this.wasDesktopViewport) {
+      this.wasDesktopViewport = isDesktop;
+      this.isSidebarCollapsed.set(!isDesktop);
+      this.closeFlyouts();
+    }
+  }
 
   // Computed Expanded State
   readonly isSidebarExpanded = computed(() => !this.isSidebarCollapsed());

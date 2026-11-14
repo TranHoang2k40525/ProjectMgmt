@@ -41,6 +41,9 @@ public static partial class AiIndexedMemoryEngine
     [GeneratedRegex(@"\b[A-Z]{2,10}-\d+\b", RegexOptions.Compiled)]
     private static partial Regex IssueKeyRegex();
 
+    [GeneratedRegex(@"(?<!\p{L})sprint\s*[-#:]?\s*(\d+)(?!\p{L}|\p{N})", RegexOptions.IgnoreCase | RegexOptions.Compiled)]
+    private static partial Regex SprintNumberRegex();
+
     [GeneratedRegex(@"[\p{L}\p{N}_\-]{2,}", RegexOptions.Compiled)]
     private static partial Regex TokenRegex();
 
@@ -105,7 +108,12 @@ public static partial class AiIndexedMemoryEngine
 
         // 3. Hỏi đáp dựa trên mạch hội thoại / đề xuất / trí nhớ đã đánh chỉ mục (#mem-X) mà không đòi hỏi truy vấn DB mới
         bool asksAboutCurrentProposal = AsksAboutCurrentProposalOrSession(lower, existingProposal);
-        bool explicitMemoryRef = MemoryAnchorRegex().IsMatch(lower) ||
+        var querySprintNums = ExtractSprintNumbers(effectiveUserText);
+        bool mentionsSpecificDbKey = HasNonProposalIssueKey(effectiveUserText);
+        bool mentionsNamedWorkItem = !asksAboutCurrentProposal &&
+                                     MentionsSpecificWorkItemLookup(lower, effectiveUserText);
+        bool explicitAnchorTag = MemoryAnchorRegex().IsMatch(lower);
+        bool explicitMemoryRef = explicitAnchorTag ||
                                  asksAboutCurrentProposal ||
                                  lower.Contains("lúc nãy") || lower.Contains("vừa nãy") ||
                                  lower.Contains("hồi nãy") || lower.Contains("vừa rồi") ||
@@ -115,15 +123,16 @@ public static partial class AiIndexedMemoryEngine
                                  lower.Contains("vừa bàn") || lower.Contains("trong phiên");
         bool asksLiveDbData = MentionsSpecHub(combinedLower) || MentionsBacklog(combinedLower) ||
                               MentionsSprint(combinedLower) || MentionsTeam(combinedLower) ||
-                              MentionsConfig(combinedLower) || lower.Contains("dự án này") ||
-                              lower.Contains("hệ thống") || lower.Contains("dữ liệu thật");
+                              MentionsConfig(combinedLower) || mentionsSpecificDbKey ||
+                              mentionsNamedWorkItem || querySprintNums.Count > 0 ||
+                              lower.Contains("dự án này") || lower.Contains("hệ thống") ||
+                              lower.Contains("dữ liệu thật");
         bool asksDeeperDbFetch = asksLiveDbData &&
                                  (lower.Contains("kiểm tra lại") || lower.Contains("đọc lại") ||
                                   lower.Contains("đọc sâu") || lower.Contains("còn ") ||
                                   lower.Contains("dữ liệu thật") || lower.Contains("trong db") ||
-                                  lower.Contains("mới nhất"));
+                                  lower.Contains("mới nhất") || lower.Contains("check lại"));
 
-        bool explicitAnchorTag = MemoryAnchorRegex().IsMatch(lower);
         bool mentionsSpecDocs = MentionsSpecHub(combinedLower);
         if (asksAboutCurrentProposal && allMemories.Count > 0 && !recalled.Any(m => m.Category == "proposal_snapshot"))
         {
@@ -134,35 +143,47 @@ public static partial class AiIndexedMemoryEngine
             }
         }
 
+        // Chỉ cho phép trả lời thuần trí nhớ khi hỏi chính xác về đề xuất đang dựng / phiên chat,
+        // hoặc trỏ #mem-X mà KHÔNG có nhu cầu xác minh thực thể thật (Sprint cụ thể, IssueKey, task theo tên) chưa khớp tuyệt đối.
+        bool exactProposalScopeOnly = asksAboutCurrentProposal &&
+                                      !mentionsSpecificDbKey &&
+                                      querySprintNums.Count == 0 &&
+                                      !lower.Contains("dữ liệu thật");
+        bool verifiedAnchorRecallOnly = explicitAnchorTag &&
+                                        !asksDeeperDbFetch &&
+                                        querySprintNums.Count == 0 &&
+                                        !mentionsSpecificDbKey &&
+                                        !mentionsNamedWorkItem &&
+                                        recalled.Count > 0;
+        bool pureConversationRecall = (explicitMemoryRef ||
+                                       (isFollowUp && !lower.Contains("còn ") && !lower.Contains("khác không") && !lower.Contains("nữa không") && recalled.Count > 0)) &&
+                                      !asksLiveDbData &&
+                                      !asksDeeperDbFetch &&
+                                      !mentionsSpecificDbKey &&
+                                      !mentionsNamedWorkItem &&
+                                      querySprintNums.Count == 0 &&
+                                      (!mentionsSpecDocs || explicitAnchorTag) &&
+                                      (historyWindow?.Count > 1 || allMemories.Count > 0 || existingProposal?.Tasks?.Count > 0);
+
         if (intent == "project_qa" &&
             !asksDeeperDbFetch &&
-            (!mentionsSpecDocs || explicitAnchorTag || asksAboutCurrentProposal) &&
-            (historyWindow?.Count > 1 || allMemories.Count > 0 || existingProposal?.Tasks?.Count > 0) &&
-            (explicitMemoryRef ||
-             asksAboutCurrentProposal ||
-             (isFollowUp && !asksLiveDbData && (recalled.Count > 0 || (historyWindow?.Count ?? 0) > 1)) ||
-             (recalled.Count > 0 && !asksLiveDbData)))
+            (exactProposalScopeOnly || verifiedAnchorRecallOnly || pureConversationRecall))
         {
-            bool hasProposalMatch = existingProposal?.Tasks?.Count > 0 &&
-                                    (asksAboutCurrentProposal || MentionsProposalOrWorkItem(lower) || isFollowUp);
-            if (explicitMemoryRef || asksAboutCurrentProposal || hasProposalMatch || isFollowUp || (recalled.Count > 0 && !asksLiveDbData))
-            {
-                return new AiContextExecutionPlan(
-                    Intent: intent,
-                    IsGreetingOrHelp: false,
-                    UseMemoryOnly: true,
-                    NeedsSpecHub: false,
-                    SpecSearchKeyword: string.Empty,
-                    MaxSpecDocsToRead: 0,
-                    NeedsBacklog: false,
-                    NeedsSprintHistory: false,
-                    NeedsTeamCapacity: false,
-                    NeedsActiveConfig: false,
-                    RecalledMemories: recalled);
-            }
+            return new AiContextExecutionPlan(
+                Intent: intent,
+                IsGreetingOrHelp: false,
+                UseMemoryOnly: true,
+                NeedsSpecHub: false,
+                SpecSearchKeyword: string.Empty,
+                MaxSpecDocsToRead: 0,
+                NeedsBacklog: false,
+                NeedsSprintHistory: false,
+                NeedsTeamCapacity: false,
+                NeedsActiveConfig: false,
+                RecalledMemories: recalled);
         }
 
-        // 4. Hỏi đáp dự án (project_qa): CHỈ chọn đúng các MCP Tools người dùng thực sự hỏi (có kế thừa chủ đề hội thoại gần nhất nếu là câu hỏi nối tiếp)
+        // 4. Hỏi đáp dự án (project_qa): CHỈ chọn đúng các MCP Tools người dùng thực sự hỏi (và luôn fallback về dữ liệu thật nếu trí nhớ không có xác minh tuyệt đối)
         if (intent == "project_qa")
         {
             var topicAwareLower = string.IsNullOrWhiteSpace(topicHint)
@@ -178,9 +199,15 @@ public static partial class AiIndexedMemoryEngine
                                     lower.Contains("đã bỏ");
 
             bool needsSpec = asksOverview || mentionsSpecDocs || (isFollowUp && MentionsSpecHub(topicAwareLower) && !asksLiveDbData);
-            bool needsBacklog = asksOverview || MentionsBacklog(combinedLower) || (isFollowUp && MentionsBacklog(topicAwareLower) && lower.Contains("còn "));
-            bool needsSprint = asksOverview || asksVerification || MentionsSprint(combinedLower) || (isFollowUp && MentionsSprint(topicAwareLower) && lower.Contains("còn "));
-            bool needsTeam = asksOverview || asksVerification || MentionsTeam(combinedLower);
+            bool needsBacklog = asksOverview || mentionsSpecificDbKey || mentionsNamedWorkItem ||
+                                MentionsBacklog(combinedLower) ||
+                                (isFollowUp && MentionsBacklog(topicAwareLower) && lower.Contains("còn "));
+            bool needsSprint = asksOverview || asksVerification || mentionsSpecificDbKey ||
+                               mentionsNamedWorkItem || querySprintNums.Count > 0 ||
+                               MentionsSprint(combinedLower) ||
+                               (isFollowUp && MentionsSprint(topicAwareLower) && lower.Contains("còn "));
+            bool needsTeam = asksOverview || asksVerification || mentionsNamedWorkItem ||
+                             mentionsSpecificDbKey || MentionsTeam(combinedLower);
             bool needsConfig = asksOverview || asksVerification || MentionsConfig(combinedLower);
 
             // Nếu người dùng đã đính kèm tài liệu nhưng câu hỏi không nhắc Spec Hub và chỉ hỏi tài liệu vừa gửi
@@ -189,10 +216,13 @@ public static partial class AiIndexedMemoryEngine
                 needsSpec = false;
             }
 
-            // Nếu câu hỏi dự án ngắn không khớp từ khóa cụ thể nào -> tận dụng trí nhớ & mạch hội thoại hiện tại thay vì gọi thừa 5 MCP tool
+            // Nếu câu hỏi dự án không khớp từ khóa cụ thể nào: chỉ dùng trí nhớ thuần túy nếu đã có xác chiếu phiên;
+            // nếu không chắc chắn tuyệt đối -> BẮT BUỘC truy xuất dữ liệu thật thay vì đoán mò từ trí nhớ cũ.
             if (!needsSpec && !needsBacklog && !needsSprint && !needsTeam && !needsConfig)
             {
-                if (recalled.Count > 0 || (historyWindow?.Count ?? 0) > 1 || (existingProposal?.Tasks?.Count ?? 0) > 0)
+                if (asksAboutCurrentProposal ||
+                    explicitAnchorTag ||
+                    (isFollowUp && !asksLiveDbData && !lower.Contains("còn ") && recalled.Count > 0))
                 {
                     return new AiContextExecutionPlan(
                         Intent: intent,
@@ -209,6 +239,9 @@ public static partial class AiIndexedMemoryEngine
                 }
 
                 needsSpec = true;
+                needsBacklog = true;
+                needsSprint = true;
+                needsTeam = true;
                 needsConfig = true;
             }
 
@@ -442,16 +475,50 @@ public static partial class AiIndexedMemoryEngine
             ? TokenizeNormalized(BuildRecentTopicHint(conversationHistory))
             : [];
 
+        var querySprintNums = ExtractSprintNumbers(query);
+        var queryIssueKeys = ExtractNonProposalIssueKeys(query);
         bool mentionsPlanOrEdit = MentionsProposalOrWorkItem(lowerQuery) || isFollowUp;
         var maxTurn = anchors.Max(a => a.TurnIndex);
 
         var scored = new List<(AiMemoryAnchorDto Anchor, int Score)>();
         foreach (var anchor in anchors)
         {
+            var anchorHeader = $"{anchor.Title} {anchor.Keywords} {anchor.Summary}";
+            var anchorSprintNums = ExtractSprintNumbers(anchorHeader);
+            var anchorIssueKeys = ExtractNonProposalIssueKeys(anchorHeader);
+
+            // Chống nhiễm chéo trí nhớ: nếu người dùng hỏi cụ thể Sprint 3 thì TUYỆT ĐỐI không kéo mảnh trí nhớ của Sprint 2 (trừ khi chỉ đích danh #mem-X)
+            if (querySprintNums.Count > 0 &&
+                anchorSprintNums.Count > 0 &&
+                !anchorSprintNums.Overlaps(querySprintNums) &&
+                !explicitNums.Contains(anchor.AnchorKey))
+            {
+                continue;
+            }
+
+            if (queryIssueKeys.Count > 0 &&
+                anchorIssueKeys.Count > 0 &&
+                !anchorIssueKeys.Overlaps(queryIssueKeys) &&
+                anchor.Category != "proposal_snapshot" &&
+                !explicitNums.Contains(anchor.AnchorKey))
+            {
+                continue;
+            }
+
             int score = 0;
             if (explicitNums.Contains(anchor.AnchorKey))
             {
                 score += 120;
+            }
+
+            if (querySprintNums.Count > 0 && anchorSprintNums.Overlaps(querySprintNums))
+            {
+                score += 28;
+            }
+
+            if (queryIssueKeys.Count > 0 && anchorIssueKeys.Overlaps(queryIssueKeys))
+            {
+                score += 28;
             }
 
             if (mentionsPlanOrEdit && anchor.Category == "proposal_snapshot")
@@ -472,7 +539,7 @@ public static partial class AiIndexedMemoryEngine
 
             // Nếu là câu hỏi nối tiếp / đại từ ám chỉ ("nó", "phần trên", "chi tiết hơn"):
             // dùng từ khóa chủ đề của lượt thoại liền trước để neo đúng mảnh trí nhớ đang bàn
-            if (score == 0 && contextTopicTokens.Count > 0)
+            if (score == 0 && contextTopicTokens.Count > 0 && querySprintNums.Count == 0 && queryIssueKeys.Count == 0)
             {
                 foreach (var ctxTok in contextTopicTokens.Take(10))
                 {
@@ -493,7 +560,11 @@ public static partial class AiIndexedMemoryEngine
             }
         }
 
-        if (scored.Count == 0 && isFollowUp)
+        if (scored.Count == 0 &&
+            isFollowUp &&
+            querySprintNums.Count == 0 &&
+            queryIssueKeys.Count == 0 &&
+            !MentionsSpecificWorkItemLookup(lowerQuery, query))
         {
             // Fallback ngữ nghĩa (#mem-latest): lấy 1-2 mảnh trí nhớ mới nhất khi lọc từ khóa tĩnh trả về rỗng
             var latestCount = Math.Clamp(maxMatches, 1, 2);
@@ -844,15 +915,85 @@ public static partial class AiIndexedMemoryEngine
         text.Contains("kho việc") || text.Contains("tồn đọng") || text.Contains("chưa vào sprint");
 
     private static bool MentionsSprint(string text) =>
+        SprintNumberRegex().IsMatch(text) ||
         text.Contains("sprint") || text.Contains("vận tốc") || text.Contains("velocity") ||
         text.Contains("rollover") || text.Contains("quá hạn") || text.Contains("tiến độ") ||
         text.Contains("bug tồn") || text.Contains("bug đang");
 
     private static bool MentionsTeam(string text) =>
         text.Contains("thành viên") || text.Contains("nhân sự") || text.Contains("ai làm") ||
+        text.Contains("ai là người làm") || text.Contains("ai đang làm") || text.Contains("người làm") ||
+        text.Contains("ai phụ trách") || text.Contains("người phụ trách") || text.Contains("phụ trách") ||
+        text.Contains("ai xử lý") || text.Contains("người xử lý") || text.Contains("giao cho ai") ||
+        text.Contains("assignee") ||
         text.Contains("đội ngũ") || text.Contains("dev") || text.Contains("qa") ||
         text.Contains("tester") || text.Contains("năng lực") || text.Contains("capacity") ||
         text.Contains("rảnh") || text.Contains("giờ làm");
+
+    public static HashSet<string> ExtractSprintNumbers(string? text)
+    {
+        var nums = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(text)) return nums;
+        foreach (Match m in SprintNumberRegex().Matches(text))
+        {
+            if (m.Groups[1].Success)
+            {
+                nums.Add(m.Groups[1].Value);
+            }
+        }
+        return nums;
+    }
+
+    public static HashSet<string> ExtractNonProposalIssueKeys(string? text)
+    {
+        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(text)) return keys;
+        foreach (Match m in Regex.Matches(text, @"\b[a-z][a-z0-9]{1,9}-\d+\b", RegexOptions.IgnoreCase))
+        {
+            if (!Regex.IsMatch(m.Value, @"^[a-z]{2,10}-ai\d+$", RegexOptions.IgnoreCase))
+            {
+                keys.Add(m.Value.ToUpperInvariant());
+            }
+        }
+        return keys;
+    }
+
+    private static bool HasNonProposalIssueKey(string? text) =>
+        ExtractNonProposalIssueKeys(text).Count > 0;
+
+    private static bool MentionsSpecificWorkItemLookup(string lower, string? rawText)
+    {
+        if (string.IsNullOrWhiteSpace(lower)) return false;
+        if (HasNonProposalIssueKey(rawText)) return true;
+
+        if (Regex.IsMatch(lower, @"\b(?:ai\d+|task_0?\d+)\b", RegexOptions.IgnoreCase))
+        {
+            return false;
+        }
+
+        if (lower.Contains("tên là") || lower.Contains("có tên") || lower.Contains("tiêu đề là") ||
+            lower.Contains("ai là người làm") || lower.Contains("ai đang làm") || lower.Contains("ai làm") ||
+            lower.Contains("ai phụ trách") || lower.Contains("người phụ trách") ||
+            lower.Contains("người xử lý") || lower.Contains("ai xử lý") ||
+            lower.Contains("trạng thái của") || lower.Contains("thuộc sprint nào"))
+        {
+            return true;
+        }
+
+        bool hasWorkItemNoun = lower.Contains("task") || lower.Contains("công việc") ||
+                               lower.Contains("user story") || lower.Contains("story") ||
+                               lower.Contains("bug") || lower.Contains("epic");
+        bool hasLookupVerb = lower.Contains("phân tích") || lower.Contains("kiểm tra") ||
+                             lower.Contains("check") || lower.Contains("tìm") ||
+                             lower.Contains("thông tin") || lower.Contains("chi tiết") ||
+                             lower.Contains("nội dung") || lower.Contains("xem") ||
+                             lower.Contains("liệt kê");
+        bool pureSessionPronoun = lower.Contains("lúc nãy") || lower.Contains("vừa nãy") ||
+                                  lower.Contains("hồi nãy") || lower.Contains("vừa rồi") ||
+                                  lower.Contains("trên bảng") || lower.Contains("đề xuất") ||
+                                  lower.Contains("#mem-");
+        return hasWorkItemNoun && hasLookupVerb && !pureSessionPronoun;
+    }
 
     private static bool MentionsConfig(string text) =>
         text.Contains("workflow") || text.Contains("quy trình") || text.Contains("trạng thái") ||

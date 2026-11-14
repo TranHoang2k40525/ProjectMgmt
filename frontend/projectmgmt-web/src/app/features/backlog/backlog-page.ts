@@ -484,6 +484,8 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     this.activeStatusDropdownTaskId.update(curr => curr === taskId ? null : taskId);
     this.activeEpicDropdownTaskId.set(null);
     this.activeMenuTaskId.set(null);
+    this.isFilterMenuOpen.set(false);
+    this.contextMenuVisible.set(false);
   }
 
   toggleEpicDropdown(taskId: string, event: Event): void {
@@ -492,6 +494,8 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     this.activeEpicDropdownTaskId.update(curr => curr === taskId ? null : taskId);
     this.activeStatusDropdownTaskId.set(null);
     this.activeMenuTaskId.set(null);
+    this.isFilterMenuOpen.set(false);
+    this.contextMenuVisible.set(false);
   }
 
   toggleFilterMenu(event?: Event): void {
@@ -500,6 +504,7 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
     this.activeStatusDropdownTaskId.set(null);
     this.activeEpicDropdownTaskId.set(null);
     this.activeMenuTaskId.set(null);
+    this.contextMenuVisible.set(false);
   }
 
   selectTaskEpic(taskId: string, epicName: string | null, event?: Event): void {
@@ -1251,6 +1256,10 @@ export class BacklogPage implements OnInit, AfterViewInit, OnDestroy {
   toggleRowMenu(taskId: string, event: Event): void {
     event.stopPropagation();
     this.activeMenuTaskId.update(curr => curr === taskId ? null : taskId);
+    this.activeStatusDropdownTaskId.set(null);
+    this.activeEpicDropdownTaskId.set(null);
+    this.isFilterMenuOpen.set(false);
+    this.contextMenuVisible.set(false);
   }
 
   assignToMe(taskId: string, event?: Event): void {

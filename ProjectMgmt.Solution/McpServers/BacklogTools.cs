@@ -386,6 +386,55 @@ public class BacklogTools
             memberList,
             epicTitleById.Values.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToList());
     }
+
+    /// <summary>
+    /// Trích xuất bản đồ toàn bộ công việc thực tế của dự án (bao gồm cả Backlog và tất cả Sprint) kèm người xử lý, trạng thái và Sprint sở hữu
+    /// để phục vụ tra cứu Hỏi đáp chính xác tuyệt đối theo tên công việc hoặc mã IssueKey.
+    /// </summary>
+    public async Task<string> GetProjectWorkItemsDigestAsync(
+        Guid projectId,
+        IProjectScopeContext scope,
+        IReadOnlyDictionary<Guid, string>? memberNamesById = null,
+        CancellationToken ct = default)
+    {
+        var meta = await GetExportMetadataAsync(projectId, scope, memberNamesById, ct);
+        if (meta == null)
+        {
+            return string.Empty;
+        }
+
+        var parentTitleById = meta.Issues
+            .ToDictionary(i => i.Id, i => i.IssueKey);
+
+        var items = meta.Issues
+            .Where(i => !i.IsEpic)
+            .Take(120)
+            .Select(i => new
+            {
+                i.IssueKey,
+                i.Title,
+                Type = i.IssueType,
+                Location = string.IsNullOrWhiteSpace(i.SprintName) ? "Product Backlog" : i.SprintName,
+                ParentIssueKey = i.ParentId.HasValue ? parentTitleById.GetValueOrDefault(i.ParentId.Value) : null,
+                Epic = i.EpicTitle,
+                Status = i.StatusName,
+                i.Priority,
+                i.StoryPoints,
+                Assignee = string.IsNullOrWhiteSpace(i.AssigneeName) ? "Chưa gán" : i.AssigneeName,
+                i.IsBlocked,
+                i.BlockReason
+            })
+            .ToList();
+
+        return SerializeJson(new
+        {
+            meta.ProjectKey,
+            meta.ProjectName,
+            Sprints = meta.Sprints.Select(s => new { s.Name, s.Status, s.Goal, s.ParentItemCount }).ToList(),
+            TotalItems = items.Count,
+            Items = items
+        }, indented: false);
+    }
 }
 
 public sealed record ExportSprintMetadata(
