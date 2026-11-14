@@ -1,17 +1,24 @@
 import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink, ActivatedRoute } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl, SafeHtml } from '@angular/platform-browser';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   ProjectManagementService,
   SpecTreeNode,
-  SpecFileContent
+  XlsxSheet
 } from '../../core/services/project-management.service';
 import { IdentityService } from '../../core/services/identity.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ConfirmDialogService } from '../../core/services/confirm-dialog.service';
+
+export interface SpecPreviewData {
+  fileName?: string;
+  extractedHtml?: string;
+  rawText?: string;
+  sheets: XlsxSheet[];
+}
 
 export interface OpenSpecTab {
   id: string;
@@ -19,7 +26,7 @@ export interface OpenSpecTab {
   extension?: string;
   fileType: 'text' | 'pdf' | 'docx' | 'xlsx' | 'image' | 'markdown';
   content?: string;
-  previewData?: any;
+  previewData?: SpecPreviewData;
   status: 'Draft' | 'Review' | 'Approved';
   version: number;
   isLoading?: boolean;
@@ -561,7 +568,7 @@ export class SpecHubPageComponent implements OnInit {
       }
 
       // 4. Ưu tiên 3: Paragraphs / List items / Table rows
-      const paragraphs = document.querySelectorAll('.prose p, .prose li, .prose tr, table tr');
+      const paragraphs = document.querySelectorAll('.prose p, .prose li, .prose tr, .docx-canvas p, .docx-canvas li, .docx-canvas tr, table tr');
       for (let i = 0; i < paragraphs.length; i++) {
         const p = paragraphs[i] as HTMLElement;
         if (!p.offsetParent) continue;
@@ -581,7 +588,7 @@ export class SpecHubPageComponent implements OnInit {
       if (keywords.length >= 2) {
         let bestEl: HTMLElement | null = null;
         let maxCount = 0;
-        const allCandidates = document.querySelectorAll('.prose p, .prose li, .prose h1, .prose h2, .prose h3');
+        const allCandidates = document.querySelectorAll('.prose p, .prose li, .prose h1, .prose h2, .prose h3, .docx-canvas p, .docx-canvas li, .docx-canvas h1, .docx-canvas h2, .docx-canvas h3');
         for (let i = 0; i < allCandidates.length; i++) {
           const el = allCandidates[i] as HTMLElement;
           if (!el.offsetParent) continue;
@@ -734,7 +741,7 @@ export class SpecHubPageComponent implements OnInit {
     if (!projectId || !name) return;
 
     this.projectService.createFolder(projectId, name, this.folderParentId()).subscribe({
-      next: res => {
+      next: () => {
         this.isCreateFolderModalOpen.set(false);
         this.toastService.success('Thư mục', `Đã tạo thư mục "${name}" thành công.`);
         this.loadTree();
@@ -1092,19 +1099,21 @@ export class SpecHubPageComponent implements OnInit {
     const items = dataTransfer.items;
     const fileEntries: { file: File; relativePath?: string }[] = [];
 
-    const traverseEntry = async (entry: any, path: string): Promise<void> => {
+    const traverseEntry = async (entry: FileSystemEntry, path: string): Promise<void> => {
       if (entry.isFile) {
-        const file: File = await new Promise((resolve, reject) => entry.file(resolve, reject));
+        const fileEntry = entry as FileSystemFileEntry;
+        const file: File = await new Promise((resolve, reject) => fileEntry.file(resolve, reject));
         fileEntries.push({ file, relativePath: path ? `${path}/${file.name}` : file.name });
       } else if (entry.isDirectory) {
-        const dirReader = entry.createReader();
-        const readEntries = async (): Promise<any[]> => {
+        const dirEntry = entry as FileSystemDirectoryEntry;
+        const dirReader = dirEntry.createReader();
+        const readEntries = async (): Promise<FileSystemEntry[]> => {
           return new Promise((resolve, reject) => {
             dirReader.readEntries(resolve, reject);
           });
         };
-        let entries: any[] = [];
-        let batch: any[];
+        let entries: FileSystemEntry[] = [];
+        let batch: FileSystemEntry[];
         do {
           batch = await readEntries();
           entries = entries.concat(batch);
@@ -1159,6 +1168,7 @@ export class SpecHubPageComponent implements OnInit {
     if (!md) return this.sanitizer.bypassSecurityTrustHtml('<p class="italic text-slate-400">Tài liệu markdown trống.</p>');
 
     let html = md
+      .replace(/\r\n/g, '\n')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
@@ -1178,7 +1188,7 @@ export class SpecHubPageComponent implements OnInit {
     html = html.replace(/^# (.*$)/gim, '<h1 class="text-xl font-bold text-slate-900 dark:text-white mt-6 mb-3 pb-2 border-b border-slate-200 dark:border-slate-700">$1</h1>');
 
     // Blockquotes
-    html = html.replace(/^\> (.*$)/gim, '<blockquote class="border-l-4 border-primary pl-4 py-1.5 my-2.5 italic text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-850/60 rounded-r-lg">$1</blockquote>');
+    html = html.replace(/^> (.*$)/gim, '<blockquote class="border-l-4 border-primary pl-4 py-1.5 my-2.5 italic text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-850/60 rounded-r-lg">$1</blockquote>');
 
     // Bold, Italic, Strikethrough
     html = html.replace(/\*\*([^*]+)\*\*/g, '<strong class="font-bold text-slate-900 dark:text-white">$1</strong>');

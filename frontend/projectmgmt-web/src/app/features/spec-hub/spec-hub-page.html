@@ -361,14 +361,14 @@
 
             <!-- Right Actions: Save, Extract Story, Download -->
             <div class="flex items-center gap-1.5 shrink-0">
-              @if (tab.fileType === 'text' && isManager()) {
+              @if ((tab.fileType === 'text' || tab.fileType === 'markdown') && isManager()) {
                 <button
                   type="button"
                   (click)="saveActiveTextFile()"
                   [disabled]="!tab.isDirty || tab.isSaving"
                   [class.opacity-50]="!tab.isDirty || tab.isSaving"
                   class="h-7 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                  title="Lưu tệp văn bản"
+                  title="Lưu tệp văn bản / markdown"
                 >
                   <span class="material-symbols-outlined text-[15px]">save</span>
                   <span>{{ tab.isSaving ? 'Đang lưu...' : 'Lưu' }}</span>
@@ -547,7 +547,7 @@
                     <!-- Sheet Switcher Tabs -->
                     @if (tab.previewData?.sheets?.length) {
                       <div class="h-9 px-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center gap-1 overflow-x-auto shrink-0">
-                        @for (sheet of tab.previewData.sheets; track sheet.name; let i = $index) {
+                        @for (sheet of (tab.previewData?.sheets ?? []); track sheet.name; let i = $index) {
                           <button
                             type="button"
                             (click)="selectExcelSheet(i)"
@@ -564,7 +564,7 @@
 
                       <!-- Grid Content -->
                       <div class="flex-1 overflow-auto p-4">
-                        @if (tab.previewData.sheets[tab.activeSheetIndex ?? 0]; as activeSheet) {
+                        @if (tab.previewData?.sheets?.[tab.activeSheetIndex ?? 0]; as activeSheet) {
                           <div class="inline-block min-w-full align-middle bg-white dark:bg-slate-900 rounded-xl shadow-xs border border-slate-200 dark:border-slate-800 overflow-hidden">
                             <table class="min-w-full divide-y divide-slate-200 dark:divide-slate-800 text-xs text-left">
                               <tbody class="divide-y divide-slate-100 dark:divide-slate-800 font-mono">
