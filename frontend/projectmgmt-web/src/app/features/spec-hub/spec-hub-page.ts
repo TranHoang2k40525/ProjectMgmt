@@ -391,27 +391,84 @@ export class SpecHubPageComponent implements OnInit {
 
   scrollToSection(sectionText: string): void {
     if (!sectionText) return;
+    const foldVi = (s: string) =>
+      (s || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd');
+
+    const stripPrefixes = (raw: string) => {
+      let curr = (raw || '').trim();
+      const re = /^(?:mục|phần|chương|điều|khoản|bước|hạng mục|chuyên đề|trang|epic|section|part|chapter|step)\s*[:.#\-–—]?\s*/i;
+      let guard = 0;
+      while (guard < 4 && re.test(curr)) {
+        curr = curr.replace(re, '').trim();
+        guard++;
+      }
+      return curr;
+    };
+
     const clean = sectionText.trim().toLowerCase();
+    const strippedPrefix = stripPrefixes(clean);
 
-    // Tạo danh sách các biến thể tìm kiếm theo thứ tự ưu tiên
-    const searchTerms: string[] = [clean];
+    // Chuyển đổi mã số mục (1..15 <-> I..XV) để khớp cả "Mục 2", "Phần II", "2.1."
+    const arabicToRoman: Record<string, string> = {
+      '1': 'i', '2': 'ii', '3': 'iii', '4': 'iv', '5': 'v',
+      '6': 'vi', '7': 'vii', '8': 'viii', '9': 'ix', '10': 'x',
+      '11': 'xi', '12': 'xii', '13': 'xiii', '14': 'xiv', '15': 'xv',
+    };
+    const romanToArabic: Record<string, string> = Object.fromEntries(
+      Object.entries(arabicToRoman).map(([k, v]) => [v, k])
+    );
 
-    // Bỏ các tiền tố thường gặp "Mục", "Phần", "Chương", "Điều", "Epic", "Bước"
-    const strippedPrefix = clean.replace(/^(mục|phần|chương|điều|epic|bước|step|section)\s*[:\.]?\s*/i, '').trim();
-    if (strippedPrefix && strippedPrefix.length >= 2 && !searchTerms.includes(strippedPrefix)) {
-      searchTerms.push(strippedPrefix);
-    }
-
-    // Các cụm từ chia theo dấu hai chấm hoặc gạch nối
-    const subParts = clean.split(/[:\-–—]/).map(p => p.trim()).filter(p => p.length >= 3);
-    for (const part of subParts) {
-      if (!searchTerms.includes(part)) {
-        searchTerms.push(part);
+    const sectionNumberTokens: string[] = [];
+    const numLead = strippedPrefix.match(/^(\d+(?:\.\d+)*|[ivxlcdm]{1,6})(?:\s*[:.\-–—)\]]\s*(.*)|\s+(.*))?$/i);
+    const descriptivePart = numLead ? (numLead[2] ?? numLead[3] ?? '').trim() : strippedPrefix;
+    if (numLead) {
+      const rawNum = numLead[1].toLowerCase().replace(/[.:)\]]+$/, '');
+      sectionNumberTokens.push(rawNum);
+      if (arabicToRoman[rawNum]) sectionNumberTokens.push(arabicToRoman[rawNum]);
+      if (romanToArabic[rawNum]) sectionNumberTokens.push(romanToArabic[rawNum]);
+      if (rawNum.includes('.')) {
+        const major = rawNum.split('.')[0];
+        if (major && !sectionNumberTokens.includes(major)) sectionNumberTokens.push(major);
       }
     }
 
+    // Tạo danh sách các biến thể tìm kiếm theo thứ tự ưu tiên
+    const searchTerms: string[] = [];
+    const pushTerm = (t?: string) => {
+      const v = (t || '').trim().toLowerCase();
+      if (v.length >= 3 && !/^(?:mục|phần|chương|điều|bước)\s*(?:\d+|[ivxlcdm]+)$/i.test(v) && !searchTerms.includes(v)) {
+        searchTerms.push(v);
+      }
+    };
+    pushTerm(descriptivePart);
+    pushTerm(clean);
+    pushTerm(strippedPrefix);
+
+    const subParts = clean.split(/[:\-–—·|]/).map(p => stripPrefixes(p)).filter(p => p.length >= 3);
+    for (const part of subParts) {
+      pushTerm(part);
+    }
+
     // Từ khóa quan trọng (độ dài >= 3 hoặc số La Mã)
-    const keywords = clean.split(/[\s:,\-]+/).filter(w => w.length >= 3 || /^[ivxlcdm]+$/i.test(w));
+    const keywords = foldVi(descriptivePart || clean)
+      .split(/[^a-z0-9]+/)
+      .filter(w => w.length >= 3);
+
+    const matchesNumberedHeading = (textLower: string): boolean => {
+      for (const numTok of sectionNumberTokens) {
+        const esc = numTok.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const re = new RegExp(
+          `^(?:#{1,6}\\s*)?(?:\\*\\*\\s*)?(?:(?:mục|phần|chương|điều|khoản|bước|chuyên đề|hạng mục|epic|section|part|chapter)\\s*[:.#\\-–—]?\\s*)*${esc}(?:\\s*[.:)\\-–—]|\\s+|$)`,
+          'i'
+        );
+        if (re.test(textLower.trim())) return true;
+      }
+      return false;
+    };
 
     const performScroll = (): boolean => {
       // 1. Textarea (.txt / .md ở chế độ edit)
@@ -419,15 +476,35 @@ export class SpecHubPageComponent implements OnInit {
       for (let i = 0; i < textareas.length; i++) {
         const ta = textareas[i] as HTMLTextAreaElement;
         if (!ta.offsetParent) continue;
-        const val = (ta.value || '').toLowerCase();
+        const rawVal = ta.value || '';
+        const val = rawVal.toLowerCase();
+        const valFolded = foldVi(rawVal);
+
         for (const term of searchTerms) {
-          const idx = val.indexOf(term);
+          let idx = val.indexOf(term);
+          if (idx < 0) idx = valFolded.indexOf(foldVi(term));
           if (idx >= 0) {
             ta.focus();
-            ta.setSelectionRange(idx, idx + term.length);
-            const lineNum = val.substring(0, idx).split('\n').length;
-            ta.scrollTop = Math.max(0, (lineNum - 3) * 22);
+            ta.setSelectionRange(idx, Math.min(rawVal.length, idx + term.length));
+            const lineNum = rawVal.substring(0, idx).split('\n').length;
+            const totalLines = Math.max(1, rawVal.split('\n').length);
+            ta.scrollTop = Math.max(0, (lineNum / totalLines) * ta.scrollHeight - 80);
             return true;
+          }
+        }
+
+        if (sectionNumberTokens.length > 0) {
+          const lines = rawVal.split('\n');
+          let charOffset = 0;
+          for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+            const line = lines[lineIdx];
+            if (matchesNumberedHeading(line.trim())) {
+              ta.focus();
+              ta.setSelectionRange(charOffset, charOffset + line.length);
+              ta.scrollTop = Math.max(0, ((lineIdx + 1) / Math.max(1, lines.length)) * ta.scrollHeight - 80);
+              return true;
+            }
+            charOffset += line.length + 1;
           }
         }
       }
@@ -438,13 +515,25 @@ export class SpecHubPageComponent implements OnInit {
         const h = headings[i] as HTMLElement;
         if (!h.offsetParent) continue;
         const hText = (h.innerText || '').trim().toLowerCase();
+        const hFolded = foldVi(hText);
         for (const term of searchTerms) {
-          if (hText.includes(term) || (term.length > 5 && term.includes(hText))) {
+          const termFolded = foldVi(term);
+          if (
+            hText.includes(term) ||
+            (termFolded.length >= 3 && hFolded.includes(termFolded)) ||
+            (term.length > 5 && term.includes(hText))
+          ) {
             h.scrollIntoView({ behavior: 'smooth', block: 'center' });
             h.classList.add('spec-highlight-pulse');
             setTimeout(() => h.classList.remove('spec-highlight-pulse'), 4500);
             return true;
           }
+        }
+        if (sectionNumberTokens.length > 0 && matchesNumberedHeading(hText)) {
+          h.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          h.classList.add('spec-highlight-pulse');
+          setTimeout(() => h.classList.remove('spec-highlight-pulse'), 4500);
+          return true;
         }
       }
 
@@ -454,13 +543,20 @@ export class SpecHubPageComponent implements OnInit {
         const s = strongs[i] as HTMLElement;
         if (!s.offsetParent) continue;
         const sText = (s.innerText || '').trim().toLowerCase();
+        const sFolded = foldVi(sText);
         for (const term of searchTerms) {
-          if (sText.includes(term)) {
+          if (sText.includes(term) || sFolded.includes(foldVi(term))) {
             s.scrollIntoView({ behavior: 'smooth', block: 'center' });
             s.classList.add('spec-highlight-pulse');
             setTimeout(() => s.classList.remove('spec-highlight-pulse'), 4500);
             return true;
           }
+        }
+        if (sectionNumberTokens.length > 0 && matchesNumberedHeading(sText)) {
+          s.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          s.classList.add('spec-highlight-pulse');
+          setTimeout(() => s.classList.remove('spec-highlight-pulse'), 4500);
+          return true;
         }
       }
 
@@ -470,8 +566,9 @@ export class SpecHubPageComponent implements OnInit {
         const p = paragraphs[i] as HTMLElement;
         if (!p.offsetParent) continue;
         const pText = (p.innerText || '').toLowerCase();
+        const pFolded = foldVi(pText);
         for (const term of searchTerms) {
-          if (pText.includes(term)) {
+          if (pText.includes(term) || pFolded.includes(foldVi(term))) {
             p.scrollIntoView({ behavior: 'smooth', block: 'center' });
             p.classList.add('spec-highlight-pulse');
             setTimeout(() => p.classList.remove('spec-highlight-pulse'), 4500);
@@ -488,7 +585,7 @@ export class SpecHubPageComponent implements OnInit {
         for (let i = 0; i < allCandidates.length; i++) {
           const el = allCandidates[i] as HTMLElement;
           if (!el.offsetParent) continue;
-          const text = (el.innerText || '').toLowerCase();
+          const text = foldVi(el.innerText || '');
           const count = keywords.filter(k => text.includes(k)).length;
           if (count > maxCount && count >= Math.ceil(keywords.length * 0.6)) {
             maxCount = count;

@@ -287,7 +287,7 @@
                 <div class="drawer-citations-pills">
                   @for (cite of turnDocCites; track cite) {
                   <button type="button" class="drawer-citation-pill" data-testid="btn-chat-open-doc"
-                    (click)="openSpecDoc(cite); $event.stopPropagation()"
+                    (click)="openSpecDoc(cite, null, turn.text); $event.stopPropagation()"
                     title="Nhấn để mở xem nội dung tài liệu này ngay trong cửa sổ Trợ Lý AI">
                     <span class="material-symbols-outlined" aria-hidden="true">description</span>
                     <span class="cite-text">{{ cite }}</span>
@@ -1156,7 +1156,7 @@
           <div class="drawer-citations-pills">
             @for (cite of detailTask.documentCitations; track $index) {
             <button type="button" class="drawer-citation-pill"
-              (click)="openSpecDoc(cite, detailTask.documentId); $event.stopPropagation()"
+              (click)="openSpecDoc(cite, detailTask.documentId, detailTask.title + ' ' + detailTask.description + ' ' + (detailTask.aiRationale || '')); $event.stopPropagation()"
               title="Nhấn để xem trước tài liệu này trong Spec Hub">
               <span class="material-symbols-outlined" aria-hidden="true">description</span>
               <span class="cite-text">{{ cite }}</span>
@@ -1191,7 +1191,7 @@
         <div class="preview-header-right">
           @if (docPreview.docId !== 'meeting_notes') {
           <button type="button" class="btn-open-tab"
-            (click)="openSpecDocInNewTab(docPreview.title, docPreview.docId, docPreview.section)"
+            (click)="openSpecDocInNewTab(docPreview.title, docPreview.docId, docPreview.resolvedSection || docPreview.section)"
             title="Mở toàn bộ tài liệu trong trang Spec Hub ở tab mới">
             <span class="material-symbols-outlined" aria-hidden="true">open_in_new</span>
             <span>Mở trang Spec Hub</span>
@@ -1210,11 +1210,17 @@
           <p>Đang tải tài liệu đặc tả từ Spec Hub...</p>
         </div>
         } @else {
-        @if (docPreview.section) {
-        <div class="preview-section-highlight-banner">
+        @if (docPreview.resolvedSection || docPreview.section) {
+        <button type="button" class="preview-section-highlight-banner" data-testid="btn-jump-to-citation"
+          (click)="scrollPreviewToSection(docPreview.resolvedSection || docPreview.section, true)"
+          title="Nhấn để cuộn ngay tới vị trí trích dẫn trong tài liệu">
           <span class="material-symbols-outlined" aria-hidden="true">my_location</span>
-          <span>Vị trí trích dẫn: <strong>{{ docPreview.section }}</strong></span>
-        </div>
+          <span class="banner-section-text">Vị trí trích dẫn: <strong>{{ docPreview.resolvedSection || docPreview.section }}</strong></span>
+          <span class="banner-jump-pill">
+            <span>Nhảy tới vị trí</span>
+            <span class="material-symbols-outlined" aria-hidden="true">south</span>
+          </span>
+        </button>
         }
         <div class="preview-content-box">
           @if (docPreview.highlightedHtml) {

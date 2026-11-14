@@ -45,7 +45,7 @@ BỘ QUY TẮC BẮT BUỘC (SCRUM MASTER AGENT RULES):
    - Đọc kỹ danh sách thành viên, kỹ năng (Frontend, Backend, QA, Lead) và `RemainingAvailableHours` để phân công đều, KHÔNG dồn hết cho một người. `assigneeName` phải khớp chính xác tên thành viên trong danh sách.
 
 6. [QUY TẮC TRÍCH DẪN TÀI LIỆU THẬT & VĂN PHONG CHUYÊN NGHIỆP]:
-   - Mỗi Task và Subtask phải có `documentCitations` trích dẫn đích danh tệp Spec Hub có trong dự án kèm mục cụ thể, hoặc nguồn biên bản cuộc họp / backlog thực tế. Tuyệt đối KHÔNG bịa tên tài liệu.
+   - Mỗi Task và Subtask phải có `documentCitations` trích dẫn đích danh tệp Spec Hub có trong dự án kèm **số mục và tiêu đề thực tế trong tài liệu** (ví dụ: `"TênTàiLiệu.md - Mục 2: Bản đồ Cấu trúc Tài liệu"`), hoặc nguồn biên bản cuộc họp / backlog thực tế. Tuyệt đối KHÔNG bịa tên tài liệu và tránh chỉ ghi chung chung `"Mục X"` mà không có tiêu đề mục.
    - `title`: Câu hành động kỹ thuật chuẩn xác, KHÔNG copy nguyên văn ghi chú thô hay câu văn sáo rỗng kiểu AI.
    - `description`, `acceptanceCriteria` (2-3 tiêu chí kiểm thử được), `aiRationale` rõ ràng, súc tích.
 
@@ -90,7 +90,7 @@ BỘ QUY TẮC BẮT BUỘC (SCRUM MASTER AGENT RULES):
         "Tiêu chí kiểm thử nghiệm thu 1",
         "Tiêu chí kiểm thử nghiệm thu 2"
       ],
-      "documentCitations": ["TênTàiLiệu.md - Mục X"],
+      "documentCitations": ["TênTàiLiệu.md - Mục 2: Tiêu đề mục thực tế trong tài liệu"],
       "aiRationale": "Căn cứ phân rã, lý do chọn IssueType/Priority và gán cho thành viên.",
       "subtasks": [
         {
@@ -107,7 +107,7 @@ BỘ QUY TẮC BẮT BUỘC (SCRUM MASTER AGENT RULES):
             "Tiêu chí hoàn thành việc con 1",
             "Tiêu chí hoàn thành việc con 2"
           ],
-          "documentCitations": ["TênTàiLiệu.md - Mục X"]
+          "documentCitations": ["TênTàiLiệu.md - Mục 2.1: Tiêu đề phân đoạn thực tế"]
         }
       ]
     }
