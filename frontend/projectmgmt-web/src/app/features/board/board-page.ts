@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, OnInit, AfterViewInit, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { DragDropModule, CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
 import { gsap } from 'gsap';
 import { Flip } from 'gsap/Flip';
@@ -19,7 +20,7 @@ import { CardTiltDirective } from '../../shared/motion/card-tilt.directive';
 @Component({
   selector: 'app-board-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, DragDropModule, ContextMenuComponent, NoProjectStateComponent, CardTiltDirective],
+  imports: [CommonModule, FormsModule, RouterLink, DragDropModule, ContextMenuComponent, NoProjectStateComponent, CardTiltDirective],
   templateUrl: './board-page.html',
   styleUrl: './board-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -98,17 +99,55 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
     const title = this.boardTitle().toLowerCase();
     const wName = ((p as any)?.workflowName || '').toLowerCase();
     const tId = ((p as any)?.workflowTemplateId || '').toLowerCase();
-    return (p as any)?.managementType === 'Kanban' || p?.type === 'Kanban' || title.includes('kanban') || wName.includes('kanban') || tId.includes('kanban');
+    return (p as any)?.boardType === 'Kanban' || (p as any)?.managementType === 'Kanban' || p?.type === 'Kanban' || title.includes('kanban') || wName.includes('kanban') || tId.includes('kanban');
   });
 
   readonly currentWorkflowName = computed(() => this.boardTitle().replace(/^Bảng\s+/i, '').trim());
 
-  readonly filteredItems = computed(() => {
-    let list = this.items();
+  private isBoardCardEligible(item: WorkItem): boolean {
+    const typeLower = (item.issueType || '').trim().toLowerCase();
+    return !item.parentId && typeLower !== 'epic' && typeLower !== 'sub-task' && typeLower !== 'subtask';
+  }
+
+  /**
+   * Phạm vi thẻ hiển thị trên Bảng:
+   * - Kanban: toàn bộ đầu việc thực thi (loại trừ Epic, Sub-task con và các việc thuộc Sprint đã đóng).
+   * - Scrum: chỉ hiển thị đầu việc thuộc Sprint đang chạy; nếu chưa có Sprint đang chạy thì trả về rỗng.
+   */
+  readonly boardScopeItems = computed(() => {
+    const eligible = this.items().filter(i => this.isBoardCardEligible(i));
+    if (this.isKanbanBoard()) {
+      const completedSprintIds = new Set(
+        this.projectService.sprints()
+          .filter(s => s.status === 'completed')
+          .map(s => s.id)
+      );
+      return completedSprintIds.size > 0
+        ? eligible.filter(i => !i.sprintId || !completedSprintIds.has(i.sprintId))
+        : eligible;
+    }
+
+    const active = this.activeSprint();
+    if (!active) {
+      return [];
+    }
+    return eligible.filter(i => i.sprintId === active.id);
+  });
+
+  readonly hasActiveFilters = computed(() => {
+    return !!(
+      this.searchQuery().trim() ||
+      this.selectedAssigneeFilter() ||
+      this.selectedTypeFilter() ||
+      this.selectedStatusTab()
+    );
+  });
+
+  readonly searchAndFacetFilteredItems = computed(() => {
+    let list = this.boardScopeItems();
     const query = this.searchQuery().trim().toLowerCase();
     const assignee = this.selectedAssigneeFilter();
     const type = this.selectedTypeFilter();
-    const statusTab = this.selectedStatusTab();
 
     if (query) {
       list = list.filter(i =>
@@ -126,11 +165,17 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
       list = list.filter(i => i.issueType === type);
     }
 
-    if (statusTab) {
-      list = list.filter(i => i.statusName === statusTab);
-    }
-
     return list;
+  });
+
+  readonly filteredItems = computed(() => {
+    const list = this.searchAndFacetFilteredItems();
+    const statusTab = this.selectedStatusTab();
+    if (!statusTab) {
+      return list;
+    }
+    const normalizedTab = statusTab.trim().toLowerCase();
+    return list.filter(i => (i.statusName || '').trim().toLowerCase() === normalizedTab);
   });
 
   readonly workflowStatuses = this.projectService.orderedStatuses;
@@ -148,6 +193,11 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
     return statuses;
   });
 
+  getTabCount(statusName: string): number {
+    const normalized = statusName.trim().toLowerCase();
+    return this.searchAndFacetFilteredItems().filter(i => (i.statusName || '').trim().toLowerCase() === normalized).length;
+  }
+
   getColumnItems(statusName: string): WorkItem[] {
     const all = this.filteredItems().filter(i => (i.statusName || '').trim().toLowerCase() === statusName.trim().toLowerCase());
     return [...all].sort((a, b) => {
@@ -157,9 +207,18 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
     });
   }
 
+  clearFilters(): void {
+    this.searchQuery.set('');
+    this.selectedAssigneeFilter.set(null);
+    this.selectedTypeFilter.set(null);
+    this.selectedStatusTab.set(null);
+  }
+
   readonly issueTypes = computed(() => {
-    const custom = this.projectService.customIssueTypes().map(t => t.name);
-    return custom.length > 0 ? custom : ['Story', 'Task', 'Bug', 'Epic', 'Sub-task'];
+    const custom = this.projectService.customIssueTypes()
+      .filter(t => !t.isSubtask && !['epic', 'sub-task', 'subtask'].includes(t.name.trim().toLowerCase()))
+      .map(t => t.name);
+    return custom.length > 0 ? custom : ['Story', 'Task', 'Bug'];
   });
 
   getIssueTypeIcon(type: string): string {
@@ -388,7 +447,8 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
     if (event) event.stopPropagation();
     if (!this.canTransitionIssue()) return;
     const statuses = this.boardColumns().map(s => s.name);
-    const idx = statuses.indexOf(task.statusName);
+    const normalized = (task.statusName || '').trim().toLowerCase();
+    const idx = statuses.findIndex(s => s.trim().toLowerCase() === normalized);
     if (direction === 'next' && idx < statuses.length - 1) {
       const nextStatus = statuses[idx + 1];
       this.animateBoardChange(() => this.projectService.updateWorkItemStatus(task.id, nextStatus));
