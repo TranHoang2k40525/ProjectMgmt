@@ -35,7 +35,7 @@ def request(method, path, body=None, token=None, expected=200, raw=None, content
 
 
 def login(prefix="WORKSPACE_TEST"):
-    return request("POST", "/api/v1/auth/login", {
+    return request("POST", "/api/auth/login", {
         "email": os.environ[prefix + "_EMAIL"], "password": os.environ[prefix + "_PASSWORD"]
     })
 
@@ -44,32 +44,32 @@ def login(prefix="WORKSPACE_TEST"):
 owner, other = login(), login("WORKSPACE_OTHER")
 token, outsider = owner["accessToken"], other["accessToken"]
 tag = uuid.uuid4().hex[:7]
-users = request("GET", "/api/v1/admin/users", token=token)
+users = request("GET", "/api/admin/users", token=token)
 assert any(u["email"] == os.environ["WORKSPACE_OTHER_EMAIL"] for u in users)
 assert all("passwordHash" not in u and "securityStamp" not in u for u in users)
 assert any(u["roles"] for u in users)
-request("GET", "/api/v1/admin/users", token=outsider, expected=403)
-permissions = request("GET", "/api/v1/permissions", token=token)["items"]
+request("GET", "/api/admin/users", token=outsider, expected=403)
+permissions = request("GET", "/api/permissions", token=token)["items"]
 read_id = next(p["permissionId"] for p in permissions if p["code"] == "project.read")
 update_id = next(p["permissionId"] for p in permissions if p["code"] == "issue.update")
-role = request("POST", "/api/v1/roles", {"name": "Audit"+tag, "scope": "Project", "permissionIds": [read_id]}, token, 201)
+role = request("POST", "/api/roles", {"name": "Audit"+tag, "scope": "Project", "permissionIds": [read_id]}, token, 201)
 rid = role["roleId"]
 def saved_role():
-    return next(r for r in request("GET", "/api/v1/roles", token=token)["items"] if r["roleId"] == rid)
+    return next(r for r in request("GET", "/api/roles", token=token)["items"] if r["roleId"] == rid)
 assert saved_role()["permissionIds"] == [read_id]
-request("PUT", f"/api/v1/roles/{rid}/permissions", {"permissionIds": [read_id, update_id]}, outsider, 403)
-request("PUT", f"/api/v1/roles/{rid}/permissions", {"permissionIds": [read_id, update_id]}, token)
+request("PUT", f"/api/roles/{rid}/permissions", {"permissionIds": [read_id, update_id]}, outsider, 403)
+request("PUT", f"/api/roles/{rid}/permissions", {"permissionIds": [read_id, update_id]}, token)
 assert set(saved_role()["permissionIds"]) == {read_id, update_id}
-request("PUT", f"/api/v1/roles/{rid}/permissions", {"permissionIds": ["project.read"]}, token, 400)
+request("PUT", f"/api/roles/{rid}/permissions", {"permissionIds": ["project.read"]}, token, 400)
 assert set(saved_role()["permissionIds"]) == {read_id, update_id}
-request("PUT", f"/api/v1/roles/{rid}/permissions", {"permissionIds": [str(uuid.uuid4())]}, token, 400)
+request("PUT", f"/api/roles/{rid}/permissions", {"permissionIds": [str(uuid.uuid4())]}, token, 400)
 assert set(saved_role()["permissionIds"]) == {read_id, update_id}
-request("PUT", f"/api/v1/roles/{rid}/permissions", {"permissionIds": []}, token)
+request("PUT", f"/api/roles/{rid}/permissions", {"permissionIds": []}, token)
 assert saved_role()["permissionIds"] == []
-org = request("POST", "/api/v1/organizations", {"name": "Customization "+tag, "slug": "custom-"+tag}, token, 201)
-project = request("POST", "/api/v1/projects", {"orgId": org["id"], "name": "Customization", "projectKey": "C"+tag.upper()}, token, 201)
+org = request("POST", "/api/organizations", {"name": "Customization "+tag, "slug": "custom-"+tag}, token, 201)
+project = request("POST", "/api/projects", {"orgId": org["id"], "name": "Customization", "projectKey": "C"+tag.upper()}, token, 201)
 pid = project["id"]
-url = "/api/v1/projects/"+pid
+url = "/api/projects/"+pid
 type_body = {"name": "Risk "+tag, "icon": "warning", "color": "#6366F1"}
 request("POST", url+"/issue-types", type_body, outsider, 403)
 custom = request("POST", url+"/issue-types", type_body, token, 201)
@@ -81,7 +81,7 @@ request("POST", url+"/issue-types", {**type_body, "name": "   "}, token, 400)
 workspace = request("GET", url+"/workspace", token=token)
 initial = next(s for s in workspace["statuses"] if s["isInitial"])
 issue = request("POST", url+"/issues", {"title": "Custom risk", "issueType": type_body["name"], "statusName": initial["name"]}, token)
-assert request("GET", "/api/v1/issues/"+issue["id"], token=token)["issueType"] == type_body["name"]
+assert request("GET", "/api/issues/"+issue["id"], token=token)["issueType"] == type_body["name"]
 original = {s["id"] for s in workspace["statuses"]}
 transitions_before = request("GET", url+"/workflow/transitions", token=token)
 request("POST", url+"/workflow/template", {"templateId": "agile-qa"}, outsider, 403)
@@ -102,7 +102,7 @@ for board in boards:
 again = request("POST", url+"/workflow/template", {"templateId": "agile-qa"}, token)
 assert {s["id"] for s in again} == {s["id"] for s in statuses}
 assert len(request("GET", url+"/workflow/transitions", token=token)) == len(transitions)
-assert request("GET", "/api/v1/issues/"+issue["id"], token=token)["statusId"] == initial["id"]
+assert request("GET", "/api/issues/"+issue["id"], token=token)["statusId"] == initial["id"]
 # Exercise all published templates, including idempotence and custom-status preservation.
 for template in ["scrum-std", "kanban-simple", "enterprise"]:
     request("POST", url+"/workflow/template", {"templateId": template}, token)

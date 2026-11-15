@@ -6,6 +6,9 @@ public class RoleDto : Result
     public string? Name { get; set; }
     public string? Scope { get; set; }
     public bool? IsSystem { get; set; }
+    public bool? IsPreset { get; set; }
+    public bool? IsActive { get; set; }
+    public Guid? OrgId { get; set; }
     public string? Description { get; set; }
     public Guid? PermissionId { get; set; }
     public string? Code { get; set; }

@@ -11,7 +11,7 @@ import { Project, ProjectManagementService } from '../../../core/services/projec
     <div class="no-project-wrapper flex items-center justify-center p-6 sm:p-12 min-h-[60vh]">
       <div class="max-w-xl w-full bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-3xl p-8 sm:p-10 shadow-xl text-center flex flex-col items-center gap-5">
         
-        <!-- Jira-grade Status Monogram -->
+        <!-- ProjectMgmt Status Monogram -->
         <div class="w-16 h-16 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200/80 dark:border-emerald-800 text-[#1b4332] dark:text-emerald-300 flex items-center justify-center shadow-inner">
           <span class="material-symbols-outlined text-[32px]">folder_off</span>
         </div>

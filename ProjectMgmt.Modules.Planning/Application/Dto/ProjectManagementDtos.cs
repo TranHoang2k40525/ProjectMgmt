@@ -89,6 +89,11 @@ public class ProjectDto
     public bool IsDeleted { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public string? BoardName { get; set; }
+    public string? BoardType { get; set; }
+    public string? WorkflowName { get; set; }
+    public string? ManagementType { get; set; }
+    public string? WorkflowTemplateId { get; set; }
 }
 
 public class CreateProjectRequestDto

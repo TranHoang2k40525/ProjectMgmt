@@ -11,6 +11,8 @@ public class NotificationPage
 public static class NotificationTypes
 {
     public const string ProjectInvitation = "ProjectInvitation";
+    public const string ProjectInvitationAccepted = "ProjectInvitationAccepted";
+    public const string ProjectInvitationDeclined = "ProjectInvitationDeclined";
     public const string ProjectRoleChanged = "ProjectRoleChanged";
     public const string ProjectRoleRevoked = "ProjectRoleRevoked";
     public const string PasswordChanged = "PasswordChanged";

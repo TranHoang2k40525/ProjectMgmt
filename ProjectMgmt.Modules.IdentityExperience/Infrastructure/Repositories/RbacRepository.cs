@@ -18,7 +18,7 @@ public class RbacRepository : IRbacRepository
 
     public Task<List<Role>> GetRolesAsync(string? scope)
     {
-        var query = _context.Roles.AsNoTracking().AsQueryable();
+        var query = _context.Roles.AsNoTracking().Where(r => r.IsActive).AsQueryable();
         if (!string.IsNullOrWhiteSpace(scope))
         {
             var normalizedScope = scope.Trim();
@@ -561,6 +561,53 @@ public class RbacRepository : IRbacRepository
             item.UserId == userId
             && item.ScopeType == "Project"
             && item.ScopeId == projectId);
+    }
+
+    public async Task<bool> IsOrganizationMemberAsync(Guid userId, Guid orgId)
+    {
+        var hasUserRole = await _context.UserRoles.AsNoTracking().AnyAsync(item =>
+            item.UserId == userId
+            && item.ScopeType == "Organization"
+            && item.ScopeId == orgId);
+        if (hasUserRole) return true;
+
+        var conn = _context.Database.GetDbConnection();
+        if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT 1 FROM organization WHERE Id = @orgId AND OwnerId = @userId
+            UNION
+            SELECT 1 FROM organizationmember WHERE OrgId = @orgId AND UserId = @userId
+            LIMIT 1;";
+        var p1 = cmd.CreateParameter(); p1.ParameterName = "@orgId"; p1.Value = orgId.ToString(); cmd.Parameters.Add(p1);
+        var p2 = cmd.CreateParameter(); p2.ParameterName = "@userId"; p2.Value = userId.ToString(); cmd.Parameters.Add(p2);
+        var res = await cmd.ExecuteScalarAsync();
+        return res != null;
+    }
+
+    public async Task<bool> CanUserJoinProjectAsync(Guid userId, Guid projectId)
+    {
+        var conn = _context.Database.GetDbConnection();
+        if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT OrgId FROM project WHERE Id = @projectId LIMIT 1;";
+        var pProj = cmd.CreateParameter(); pProj.ParameterName = "@projectId"; pProj.Value = projectId.ToString(); cmd.Parameters.Add(pProj);
+        var orgIdObj = await cmd.ExecuteScalarAsync();
+        if (orgIdObj == null || !Guid.TryParse(orgIdObj.ToString(), out var orgId)) return false;
+
+        if (await IsOrganizationMemberAsync(userId, orgId)) return true;
+
+        // Tự động đồng bộ vào OrganizationMember của tổ chức khi được mời trực tiếp vào dự án
+        await using var syncCmd = conn.CreateCommand();
+        syncCmd.CommandText = @"
+            INSERT INTO organizationmember (Id, OrgId, UserId, Role, JoinedAt)
+            VALUES (@id, @orgId, @userId, 'Member', UTC_TIMESTAMP(6))
+            ON DUPLICATE KEY UPDATE Role = Role;";
+        var pId = syncCmd.CreateParameter(); pId.ParameterName = "@id"; pId.Value = Guid.NewGuid().ToString(); syncCmd.Parameters.Add(pId);
+        var pOrg = syncCmd.CreateParameter(); pOrg.ParameterName = "@orgId"; pOrg.Value = orgId.ToString(); syncCmd.Parameters.Add(pOrg);
+        var pUser = syncCmd.CreateParameter(); pUser.ParameterName = "@userId"; pUser.Value = userId.ToString(); syncCmd.Parameters.Add(pUser);
+        await syncCmd.ExecuteNonQueryAsync();
+        return true;
     }
 
     private Task<List<UserRole>> LockProjectAssignmentsAsync(Guid projectId)

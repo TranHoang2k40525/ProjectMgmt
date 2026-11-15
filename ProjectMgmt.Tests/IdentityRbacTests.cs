@@ -306,4 +306,14 @@ public class FakeRbacRepository : IRbacRepository
     {
         return Task.FromResult(true);
     }
+
+    public Task<bool> IsOrganizationMemberAsync(Guid userId, Guid orgId)
+    {
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> CanUserJoinProjectAsync(Guid userId, Guid projectId)
+    {
+        return Task.FromResult(true);
+    }
 }

@@ -9,15 +9,19 @@ public interface IIssueHierarchyService
     Task<Result<IssueDetailDto>> ChangeParentAsync(
         Guid issueId,
         ChangeIssueParentDto request,
-        Guid actorUserId,
-        CancellationToken cancellationToken = default);
+        Guid actorUserId);
 
     Task<Result<IssueRankDto>> RankAsync(
         Guid issueId,
         RankIssueDto request,
-        Guid actorUserId,
-        CancellationToken cancellationToken = default);
+        Guid actorUserId);
 
     /// <summary>Đánh lại RankOrder 1..n theo thứ tự hiện tại khi các rank quá sát nhau.</summary>
-    Task<Result<int>> RebalanceAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<Result<int>> RebalanceAsync(Guid projectId);
+
+    Task<Result<IReadOnlyList<IssueListItemDto>>> GetSubtasksAsync(
+        Guid parentIssueId);
+
+    Task<Result<IReadOnlyList<IssueListItemDto>>> GetEpicChildrenAsync(
+        Guid epicId);
 }

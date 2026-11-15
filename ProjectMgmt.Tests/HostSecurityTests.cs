@@ -27,9 +27,9 @@ public class HostSecurityTests : IClassFixture<ProjectMgmtWebFactory>
     }
 
     [Theory]
-    [InlineData("/api/v1/notifications")]
-    [InlineData("/api/v1/ai/breakdown/00000000-0000-0000-0000-000000000001")]
-    [InlineData("/api/v1/ai/prompt-templates")]
+    [InlineData("/api/notifications")]
+    [InlineData("/api/ai/breakdown/00000000-0000-0000-0000-0000-000000000001")]
+    [InlineData("/api/ai/prompt-templates")]
     [InlineData("/hubs/notifications")]
     public async Task ModuleOneOperationalEndpointsRejectAnonymousAccess(string path)
     {

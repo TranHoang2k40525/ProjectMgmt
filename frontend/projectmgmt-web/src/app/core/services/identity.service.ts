@@ -1,6 +1,6 @@
 import { Injectable, inject, signal, computed } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, forkJoin, map, of, switchMap, throwError } from 'rxjs';
+import { Observable, catchError, forkJoin, map, of, switchMap, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AccountApi } from '../api/account.api';
 import { LoginResult } from '../api/account-api.models';
@@ -65,6 +65,7 @@ export class IdentityService {
   constructor() {
     if (this.authState().isAuthenticated) {
       this.initRealtimeNotifications();
+      this.getMyProfile().subscribe({ error: () => undefined });
     }
   }
 
@@ -80,6 +81,7 @@ export class IdentityService {
         this.tokenStore.setSession(session);
         this.authState.set({ currentUser: user, isAuthenticated: true, token: session.accessToken });
         this.initRealtimeNotifications();
+        this.getMyProfile().subscribe({ error: () => undefined });
         return { user, token: session.accessToken };
       })
     );
@@ -177,6 +179,7 @@ export class IdentityService {
       userId: result.userId,
       email: result.email,
       fullName: result.fullName ?? result.email,
+      avatarUrl: result.avatarUrl ?? null,
       roles: result.roles ?? []
     };
   }
@@ -187,7 +190,7 @@ export class IdentityService {
       id: session.userId,
       email: session.email,
       displayName: session.fullName,
-      avatarUrl: null,
+      avatarUrl: this.resolveAssetUrl(session.avatarUrl),
       jobTitle: '',
       roleId: '',
       roleName: session.roles[0] ?? 'Thành viên',
@@ -232,11 +235,30 @@ export class IdentityService {
   uploadAvatar(file: File): Observable<string> {
     return this.identityApi.uploadAvatar(file).pipe(map(result => {
       const avatarUrl = this.resolveAssetUrl(result.avatarUrl);
+      const session = this.tokenStore.getSession();
+      if (session) {
+        this.tokenStore.setSession({ ...session, avatarUrl });
+      }
       this.authState.update(state => state.currentUser
         ? { ...state, currentUser: { ...state.currentUser, avatarUrl } }
         : state);
       return avatarUrl ?? '';
     }));
+  }
+
+  deleteAvatar(): Observable<void> {
+    return this.identityApi.deleteAvatar().pipe(
+      catchError(() => this.identityApi.updateMyProfile({ avatarUrl: null })),
+      map(() => {
+        const session = this.tokenStore.getSession();
+        if (session) {
+          this.tokenStore.setSession({ ...session, avatarUrl: null });
+        }
+        this.authState.update(state => state.currentUser
+          ? { ...state, currentUser: { ...state.currentUser, avatarUrl: null } }
+          : state);
+      })
+    );
   }
 
   // ==========================================
@@ -340,7 +362,8 @@ export class IdentityService {
       this.tokenStore.setSession({
         ...session,
         email: user.email,
-        fullName: user.displayName
+        fullName: user.displayName,
+        avatarUrl: user.avatarUrl
       });
     }
     this.authState.update(state => ({ ...state, currentUser: user }));
@@ -382,8 +405,10 @@ export class IdentityService {
 
   getUsers(): Observable<UserProfileModel[]> {
     return this.http.get<UserProfileModel[]>(`${environment.apiBaseUrl}/admin/users`).pipe(
-      map(users => users.map(u => ({ ...u, roleId: u.roles?.[0]?.roleId ?? '',
-        roleName: u.roles?.map(r => r.roleName).join(', ') ?? '', twoFactorEnabled: false })))
+      map(users => users.map(u => ({
+        ...u, roleId: u.roles?.[0]?.roleId ?? '',
+        roleName: u.roles?.map(r => r.roleName).join(', ') ?? '', twoFactorEnabled: false
+      })))
     );
   }
 
@@ -441,8 +466,10 @@ export class IdentityService {
   createRole(name: string, description: string, permissionCodes: string[], scope: string = 'Project'): Observable<RoleModel> {
     return this.permissionIds(permissionCodes).pipe(
       switchMap(permissionIds => this.rbacApi.createRole({ name, scope, description, permissionIds })),
-      map(res => ({ id: res.roleId ?? '', name: res.name ?? name, code: res.name ?? name,
-        scope: res.scope ?? scope, description, isSystem: false, permissionCodes }))
+      map(res => ({
+        id: res.roleId ?? '', name: res.name ?? name, code: res.name ?? name,
+        scope: res.scope ?? scope, description, isSystem: false, permissionCodes
+      }))
     );
   }
   assignUserRole(userId: string, roleId: string, scopeType: string = 'System', scopeId?: string): Observable<RoleDto> {
@@ -513,6 +540,8 @@ export class IdentityService {
     );
   }
 
+  private realtimeListenerBound = false;
+
   initRealtimeNotifications(): void {
     const glob = globalThis as unknown as {
       __vitest__?: unknown;
@@ -529,11 +558,13 @@ export class IdentityService {
     }
     const token = this.tokenStore.getAccessToken();
     if (!token || !this.realtime) return;
-    this.realtime.connect('notifications', token).then(() => {
-      this.realtime?.on<NotificationDto>('notificationReceived', dto => {
+    if (!this.realtimeListenerBound) {
+      this.realtimeListenerBound = true;
+      this.realtime.on<NotificationDto>('notificationReceived', dto => {
         this.pushRealtimeNotification(dto);
       });
-    }).catch(() => undefined);
+    }
+    void this.realtime.connect('notifications', token);
   }
 
   pushRealtimeNotification(dto: NotificationDto): void {
@@ -541,8 +572,32 @@ export class IdentityService {
     this.notifications.update(list => [model, ...list.filter(n => n.id !== model.id)]);
     if (!model.isRead) {
       this.unreadCount.update(c => c + 1);
-      this.toast?.info(model.title, model.message, model.actionUrl);
+      // Không hiển thị toast popup nổi trên màn hình cho thông báo bình luận (issue_comment),
+      // thông báo vẫn được lưu vào chuông thông báo (bell) để xem khi cần mà không làm phiền trải nghiệm.
+      const isCommentNotification = (dto.type ?? '').toLowerCase().includes('comment') || (model.type ?? '').toLowerCase().includes('comment');
+      if (!isCommentNotification) {
+        this.toast?.info(model.title, model.message, model.actionUrl);
+      }
     }
+  }
+
+  respondProjectInvitation(projectId: string, notificationId: string, accept: boolean): Observable<RoleDto> {
+    return this.rbacApi.respondInvitation(projectId, notificationId, accept).pipe(
+      map(res => {
+        this.notifications.update(list => list.map(item => {
+          if (item.id === notificationId) {
+            return {
+              ...item,
+              isRead: true,
+              responseStatus: accept ? 'ACCEPTED' : 'DECLINED'
+            };
+          }
+          return item;
+        }));
+        this.unreadCount.update(count => Math.max(0, count - 1));
+        return res;
+      })
+    );
   }
 
   private toNotificationModel(dto: NotificationDto): NotificationModel {
@@ -550,7 +605,19 @@ export class IdentityService {
     let type: NotificationModel['type'] = 'SYSTEM';
     let category: NotificationModel['category'] = 'System';
 
-    if (rawType.includes('SECURITY') || rawType.includes('PASSWORD') || rawType.includes('AUTH')) {
+    if (rawType === 'ORGANIZATIONINVITATION' || rawType === 'ORGANIZATION_INVITATION' || dto.entityType === 'OrganizationInvitation') {
+      type = 'ORGANIZATION_INVITATION';
+      category = 'Assignment';
+    } else if (rawType === 'PROJECTINVITATION' || rawType === 'PROJECT_INVITATION') {
+      type = 'PROJECT_INVITATION';
+      category = 'Assignment';
+    } else if (rawType === 'PROJECTINVITATIONACCEPTED' || rawType === 'PROJECT_INVITATION_ACCEPTED') {
+      type = 'PROJECT_INVITATION_ACCEPTED';
+      category = 'Assignment';
+    } else if (rawType === 'PROJECTINVITATIONDECLINED' || rawType === 'PROJECT_INVITATION_DECLINED') {
+      type = 'PROJECT_INVITATION_DECLINED';
+      category = 'Assignment';
+    } else if (rawType.includes('SECURITY') || rawType.includes('PASSWORD') || rawType.includes('AUTH')) {
       type = 'SECURITY';
       category = 'Security';
     } else if (rawType.includes('AI') || rawType.includes('SUGGESTION')) {
@@ -559,6 +626,17 @@ export class IdentityService {
     } else if (rawType.includes('CHAT') || rawType.includes('SPRINT') || rawType.includes('ASSIGN') || rawType.includes('TASK') || rawType.includes('PROJECT') || rawType.includes('MEMBER')) {
       type = 'TASK';
       category = 'Assignment';
+    }
+
+    let actionUrl: string | undefined;
+    if (dto.entityType === 'Issue' && dto.entityId) {
+      actionUrl = `/issues/${dto.entityId}`;
+    } else if (dto.entityType === 'Organization' && dto.entityId) {
+      actionUrl = `/orgs/${dto.entityId}/overview`;
+    } else if (dto.entityType === 'OrganizationInvitation') {
+      actionUrl = `/notifications`;
+    } else if (dto.projectId) {
+      actionUrl = `/projects/${dto.projectId}/summary`;
     }
 
     return {
@@ -573,7 +651,10 @@ export class IdentityService {
       entityType: dto.entityType ?? null,
       entityId: dto.entityId ?? null,
       projectId: dto.projectId ?? null,
-      actionUrl: dto.entityType === 'Issue' && dto.entityId ? `/issues/${dto.entityId}` : dto.projectId ? '/project/summary' : undefined
+      actorId: dto.actorId ?? null,
+      rawType: dto.type,
+      responseStatus: null,
+      actionUrl
     };
   }
 

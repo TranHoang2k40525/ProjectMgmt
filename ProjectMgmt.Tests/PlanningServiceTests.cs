@@ -232,6 +232,7 @@ public class PlanningServiceTests
                 "GetOrganizationsAsync" => Task.FromResult<IReadOnlyList<Organization>>([]),
                 "GetOrganizationByIdAsync" => Task.FromResult<Organization?>(Organization),
                 "GetByKeyAsync" => Task.FromResult(ExistingKey),
+                "GetBoardsByProjectAsync" => Task.FromResult<IReadOnlyList<Board>>(BoardExists ? [Board] : []),
                 "GetBoardByIdAsync" => Task.FromResult(BoardExists ? Board : null),
                 "GetBoardColumnsAsync" => Task.FromResult<IReadOnlyList<BoardColumn>>(Columns),
                 "GetBoardColumnByIdAsync" => Task.FromResult(Columns.SingleOrDefault(c => c.Id == (Guid)args[0]!)),

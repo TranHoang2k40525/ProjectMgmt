@@ -9,6 +9,10 @@ public interface IIdentityRepository
         string normalizedEmail,
         bool tracking = false);
 
+    Task<User> GetOrCreateUserByEmailAsync(
+        string email,
+        string displayName);
+
     Task<User?> GetUserByIdAsync(
         Guid userId,
         bool tracking = false);

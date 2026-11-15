@@ -1,0 +1,3010 @@
+import {
+  AfterViewInit,
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  EventEmitter,
+  HostListener,
+  Input,
+  Output,
+  ViewChild,
+  inject,
+  signal,
+  computed,
+  OnInit,
+  OnDestroy,
+} from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import {
+  AiAgentService,
+  AiConversationTurnDto,
+  AiExcelExportSpecDto,
+  AiSprintProposalDto,
+  AiStepProgressEvent,
+  AiTaskRemovalPlanDto,
+  AiToolCallEvent,
+  AiTurnTraceItemDto,
+  ProposedTaskDto,
+  ProposedSubTaskDto,
+} from '../../../../core/services/ai-agent.service';
+import {
+  ProjectManagementService,
+  ProjectMember,
+  SpecTreeNode,
+  Sprint,
+} from '../../../../core/services/project-management.service';
+import { ToastService } from '../../../../core/services/toast.service';
+import { ExcelDataService } from '../../../../core/services/excel-data.service';
+import { firstValueFrom } from 'rxjs';
+
+export interface EpicOption {
+  id: string;
+  key?: string;
+  name: string;
+}
+
+export interface ExecutiveSummaryMetrics {
+  sprintGoal: string;
+  totalStoryPoints: number;
+  totalEstimatedHours: number;
+  taskCount: number;
+  subtaskCount: number;
+  roleBreakdown: Record<string, number>;
+  specGrounding: string;
+}
+
+export interface ChatTurn {
+  id: string;
+  role: 'user' | 'agent';
+  text: string;
+  fullContent?: string;
+  isContentExpanded?: boolean;
+  fileName?: string;
+  fileSizeLabel?: string;
+  timestamp: string;
+  executiveSummary?: ExecutiveSummaryMetrics;
+  /** Ý định hội thoại do Trợ Lý AI phân loại ở backend (sprint_plan, project_qa, export_excel...) */
+  intent?: string | null;
+  /** Hành động được kích hoạt trong lượt trả lời (export_excel, push_backlog, apply_sprint) */
+  actionType?: string | null;
+  /** Danh sách công cụ dữ liệu thật đã gọi trong lượt trả lời này */
+  toolCalls?: AiToolCallEvent[];
+  /** Chuỗi hành động chuẩn hóa theo phong cách Thinking Log */
+  traceItems?: AiTurnTraceItemDto[];
+  /** Tóm tắt một dòng trên thanh Thinking khi thu gọn */
+  thinkingSummary?: string | null;
+  /** Tổng thời gian suy luận / xử lý lượt này (ms) */
+  durationMs?: number | null;
+  /** Tóm tắt suy luận sạch nếu có */
+  thoughts?: string | null;
+  /** Các thẻ trí nhớ (#mem-X) mà Agent đã trỏ tới */
+  referencedMemoryAnchors?: string[];
+  /** Danh sách tài liệu Spec Hub / trích dẫn đặc tả gắn với lượt trả lời tra cứu */
+  documentCitations?: string[];
+  /** Lượt trả lời này sinh ra / cập nhật bảng đề xuất công việc */
+  hasProposalTable?: boolean;
+  /** Đặc tả phạm vi & bộ lọc xuất tệp Excel (.xlsx) gắn riêng cho lượt này */
+  exportSpec?: AiExcelExportSpecDto | null;
+  /** Kế hoạch xác nhận gỡ khỏi Sprint hoặc xóa công việc gắn riêng cho lượt này */
+  removalPlan?: AiTaskRemovalPlanDto | null;
+}
+
+export interface SpecDocPreview {
+  docId?: string | null;
+  title: string;
+  section?: string | null;
+  resolvedSection?: string | null;
+  content?: string;
+  highlightedHtml?: SafeHtml;
+  isLoading: boolean;
+}
+
+@Component({
+  selector: 'app-ai-decompose-modal',
+  standalone: true,
+  imports: [CommonModule, FormsModule],
+  templateUrl: './ai-decompose-modal.html',
+  styleUrl: './ai-decompose-modal.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class AiDecomposeModalComponent implements OnInit, AfterViewInit, OnDestroy {
+  private static readonly MESSAGE_PAGE_SIZE = 12;
+  private static readonly MAX_DOM_TURNS = 24;
+
+  private readonly aiService = inject(AiAgentService);
+  private readonly toastService = inject(ToastService);
+  private readonly router = inject(Router);
+  private readonly projectManagementService = inject(ProjectManagementService);
+  private readonly sanitizer = inject(DomSanitizer);
+  private readonly excelDataService = inject(ExcelDataService);
+  private loadingOlderGuard = false;
+
+  @ViewChild('promptTextarea') promptTextarea?: ElementRef<HTMLTextAreaElement>;
+  @ViewChild('chatScrollBody') chatScrollBody?: ElementRef<HTMLElement>;
+
+  @Input({ required: true }) projectId = '';
+  @Input() projectName = 'Dự án';
+  @Input() projectKey = 'PRJ';
+  @Input() members: ProjectMember[] = [];
+  @Input() epics: EpicOption[] = [];
+  @Input() sprints: Sprint[] = [];
+  @Input() canCommitSprint = true;
+
+  @Output() closed = new EventEmitter<void>();
+  @Output() applied = new EventEmitter<{ sprintId: string; sprintName: string; createdCount: number }>();
+  /** Phát ra khi dữ liệu dự án thay đổi nhưng vẫn giữ nguyên đoạn hội thoại (ví dụ: đẩy vào kho Backlog) */
+  @Output() dataChanged = new EventEmitter<void>();
+
+  // Chat & Input state
+  readonly promptInput = signal<string>('');
+  readonly pastedDocumentText = signal<string>('');
+  readonly attachedFile = signal<File | null>(null);
+  readonly isDragOver = signal<boolean>(false);
+  readonly canSubmitPrompt = computed(
+    () =>
+      !this.isStreaming() &&
+      (this.promptInput().trim().length > 0 ||
+        this.pastedDocumentText().trim().length > 0 ||
+        this.attachedFile() !== null)
+  );
+  readonly chatHistory = signal<ChatTurn[]>([]);
+  readonly hasOlderMessages = signal<boolean>(false);
+  readonly oldestLoadedIndex = signal<number | null>(null);
+  readonly totalMessagesCount = signal<number>(0);
+  readonly isLoadingOlderMessages = signal<boolean>(false);
+  readonly showScrollToBottom = signal<boolean>(false);
+  readonly remainingOlderCount = computed(() => Math.max(0, this.oldestLoadedIndex() ?? 0));
+  readonly expandedTurnTraces = signal<Record<string, boolean>>({});
+  readonly isPushingBacklog = signal<boolean>(false);
+
+  /** Lượt trả lời gần nhất của Trợ Lý AI có sinh/cập nhật bảng đề xuất, nơi bảng công việc được gắn liền mạch vào hội thoại */
+  readonly proposalAnchorTurnId = computed<string | null>(() => {
+    const list = this.chatHistory();
+    for (let i = list.length - 1; i >= 0; i--) {
+      const t = list[i];
+      if (t.role === 'agent' && (t.hasProposalTable || t.executiveSummary)) return t.id;
+    }
+    return null;
+  });
+
+  // Inline Spec Document Preview state
+  readonly activeSpecDocPreview = signal<SpecDocPreview | null>(null);
+
+  // Pasted Document / Meeting Notes Review modal state
+  readonly isReviewingPastedDoc = signal<boolean>(false);
+  readonly editablePastedText = signal<string>('');
+
+  // Streaming & Agent progress state
+  readonly isStreaming = signal<boolean>(false);
+  readonly activeSessionId = signal<string>('');
+  readonly currentStepIndex = signal<number>(0);
+  readonly currentPercent = signal<number>(0);
+  readonly currentStepLabel = signal<string>('');
+  readonly currentStepDetail = signal<string>('');
+  readonly liveActionVerb = signal<string>('Phân tích');
+  readonly liveActionTarget = signal<string>('Định tuyến Ý định');
+  readonly liveActionSummary = signal<string>('');
+  readonly stepsLog = signal<AiStepProgressEvent[]>([]);
+  readonly toolCallsLog = signal<AiToolCallEvent[]>([]);
+  readonly liveExecutedChips = computed<Array<{ verb: string; target: string; icon: string }>>(() => {
+    const tools = this.toolCallsLog();
+    const seen = new Set<string>();
+    const chips: Array<{ verb: string; target: string; icon: string }> = [];
+    for (const t of tools) {
+      const verb = t.actionVerb || this.inferActionVerb(t.toolName);
+      const target = t.targetLabel || this.inferTargetLabel(t.toolName);
+      const key = `${verb}:${target}`.toLowerCase();
+      if (!target || seen.has(key)) continue;
+      seen.add(key);
+      chips.push({ verb, target, icon: this.getActionRowIcon(verb) });
+    }
+    return chips.slice(-3);
+  });
+  readonly expandedToolIndices = signal<Record<number, boolean>>({});
+  readonly streamedThoughts = signal<string>('');
+  readonly errorMessage = signal<string | null>(null);
+  readonly selectedModel = signal<string>('Gemini 3.6 Flash');
+
+  // Modern Thinking Accordion State (ALWAYS collapsed by default)
+  readonly isThinkingExpanded = signal<boolean>(false);
+  readonly thinkingElapsedSeconds = signal<number>(0);
+  readonly expandedTraceRows = signal<Record<string, boolean>>({});
+  readonly isThinkingVisible = computed(
+    () => this.isStreaming() || this.toolCallsLog().length > 0 || !!this.cleanStreamedThoughts() || !!this.proposal()
+  );
+  readonly cleanStreamedThoughts = computed(() => {
+    const raw = this.streamedThoughts()?.trim();
+    if (!raw) return '';
+    // Nếu nội dung chứa cấu trúc JSON kỹ thuật thô, ẩn đi để giữ giao diện chuẩn enterprise
+    if (
+      raw.startsWith('{') ||
+      raw.startsWith('[') ||
+      raw.includes('"tasks"') ||
+      raw.includes('"storyPoints"') ||
+      raw.includes('"assigneeName"') ||
+      raw.includes('"acceptanceCriteria"')
+    ) {
+      return '';
+    }
+    return raw;
+  });
+  readonly totalToolDurationMs = computed(() => this.toolCallsLog().reduce((acc, t) => acc + (t.durationMs || 0), 0));
+
+  // Proposal & Selection state
+  readonly proposal = signal<AiSprintProposalDto | null>(null);
+  readonly selectedTaskIds = signal<Record<string, boolean>>({});
+  readonly expandedSubtasks = signal<Record<string, boolean>>({});
+  readonly removalSelections = signal<Record<string, Record<string, boolean>>>({});
+  readonly confirmingRemovalPlanId = signal<string | null>(null);
+  readonly inlineEditingTitleId = signal<string | null>(null);
+  readonly inlineEditingSpId = signal<string | null>(null);
+  readonly isSprintGoalInfoExpanded = signal<boolean>(false);
+  readonly isFullscreen = signal<boolean>(false);
+
+  toggleFullscreen(): void {
+    this.isFullscreen.update((v) => !v);
+  }
+
+  // Applied project workflow & priority options (sourced from DB / active config)
+  readonly availableWorkflowStatuses = computed<string[]>(() => {
+    const svc = this.projectManagementService.projectStatuses().map((s) => s.name);
+    if (svc.length > 0) return svc;
+    const applied = this.proposal()?.appliedWorkflowStatuses ?? [];
+    if (applied.length > 0) return applied;
+    return ['To Do', 'In Progress', 'Code Review', 'Done'];
+  });
+
+  readonly defaultInitialStatus = computed<string>(() => {
+    const svcInitial = this.projectManagementService.projectStatuses().find((s) => s.isInitial)?.name;
+    return svcInitial || this.proposal()?.initialStatus || this.availableWorkflowStatuses()[0] || 'To Do';
+  });
+
+  readonly availablePriorities = computed<string[]>(() => {
+    const svc = this.projectManagementService.projectPriorities().map((p) => p.name);
+    if (svc.length > 0) return svc;
+    const applied = this.proposal()?.appliedPriorities ?? [];
+    if (applied.length > 0) return applied;
+    return ['Urgent', 'High', 'Medium', 'Low'];
+  });
+
+  readonly defaultPriorityName = computed<string>(() => {
+    const list = this.availablePriorities();
+    return (
+      list.find((p) => ['medium', 'normal', 'major'].includes(p.toLowerCase())) ??
+      list[Math.floor(list.length / 2)] ??
+      'Medium'
+    );
+  });
+
+  // Session History State (Image & Summary requirement)
+  readonly isSessionHistoryOpen = signal<boolean>(false);
+  readonly projectSessions = signal<any[]>([]);
+  readonly sessionsLoading = signal<boolean>(false);
+
+  // Detail Drawer state (Reference Image 5 & Subtask Details)
+  readonly activeDrawerTaskId = signal<string | null>(null);
+  readonly activeDrawerSubtask = signal<{ parentTask: ProposedTaskDto; subtask: ProposedSubTaskDto } | null>(null);
+  readonly drawerRegenerateFeedback = signal<string>('');
+  readonly isRegeneratingSingle = signal<boolean>(false);
+  readonly isRegeneratingBatch = signal<boolean>(false);
+  readonly isApplying = signal<boolean>(false);
+  readonly regenerateAllFeedback = signal<string>('');
+  readonly showRegenerateAllBar = signal<boolean>(false);
+
+  private abortController: AbortController | null = null;
+  private thinkingStartTimeMs = 0;
+  private thinkingTimerId: ReturnType<typeof setInterval> | null = null;
+
+  readonly pipelineStepDefinitions = [
+    { index: 1, code: 'INGEST_DOCUMENTS', label: 'Tiếp nhận & Guardrail tài liệu', icon: 'shield_lock' },
+    { index: 2, code: 'QUERY_CONTEXT', label: 'Truy vấn MCP Spec Hub & Lịch sử Sprint', icon: 'manage_search' },
+    { index: 3, code: 'EVALUATE_CAPACITY', label: 'Đánh giá Năng lực & Tải công việc Đội ngũ', icon: 'groups' },
+    { index: 4, code: 'DECOMPOSE_SPRINT', label: 'Phân rã Sprint Goal, Epics, Tasks & Subtasks', icon: 'account_tree' },
+    { index: 5, code: 'FINALIZE_PROPOSAL', label: 'Tự kiểm tra (Self-Check) & Lưu Staging', icon: 'fact_check' },
+  ];
+
+  readonly plannedSprints = computed(() =>
+    (this.sprints || []).filter((s) => s.status === 'future' || s.status === 'active')
+  );
+
+  readonly selectedTasksCount = computed(() => {
+    const map = this.selectedTaskIds();
+    return Object.values(map).filter(Boolean).length;
+  });
+
+  readonly activeDrawerTask = computed<ProposedTaskDto | null>(() => {
+    const prop = this.proposal();
+    const id = this.activeDrawerTaskId();
+    if (!prop || !id) return null;
+    return prop.tasks.find((t) => t.id === id) ?? null;
+  });
+
+  readonly totalCalculatedSp = computed(() => {
+    const prop = this.proposal();
+    if (!prop) return 0;
+    return prop.tasks.reduce((sum, t) => sum + (Number(t.storyPoints) || 0), 0);
+  });
+
+  readonly totalCalculatedHours = computed(() => {
+    const prop = this.proposal();
+    if (!prop) return 0;
+    return prop.tasks.reduce((sum, t) => sum + (Number(t.estimatedHours) || 0), 0);
+  });
+
+  readonly proposalTags = computed<string[]>(() => {
+    const prop = this.proposal();
+    if (!prop) return [];
+    if (prop.tags && prop.tags.length > 0) return prop.tags;
+    const tagSet = new Set<string>();
+    for (const t of prop.tasks) {
+      if (t.tags && t.tags.length > 0) {
+        for (const tg of t.tags) tagSet.add(tg.startsWith('#') ? tg : `#${tg}`);
+      } else {
+        tagSet.add(`#${t.type}`);
+      }
+    }
+    return Array.from(tagSet).slice(0, 8);
+  });
+
+  readonly allUniqueCitations = computed<string[]>(() => {
+    const prop = this.proposal();
+    if (!prop) return [];
+    const citeSet = new Set<string>();
+    for (const t of prop.tasks) {
+      if (t.documentCitations) {
+        for (const c of t.documentCitations) {
+          if (c && c.trim()) citeSet.add(c.trim());
+        }
+      }
+    }
+    if (citeSet.size === 0) {
+      return [];
+    }
+    return Array.from(citeSet);
+  });
+
+  readonly projectSpecDocs = signal<{ id: string; name: string }[]>([]);
+
+  ngOnInit(): void {
+    this.restoreSession();
+    this.loadProjectSpecDocs();
+  }
+
+  private loadProjectSpecDocs(): void {
+    const projId =
+      this.projectId ||
+      this.projectManagementService.currentProject()?.id ||
+      (typeof localStorage !== 'undefined' ? localStorage.getItem('pm_active_project_id') : null);
+    if (!projId) return;
+    this.projectManagementService.getSpecTree(projId).subscribe({
+      next: (nodes) => {
+        const docs: { id: string; name: string }[] = [];
+        const walk = (list: SpecTreeNode[]) => {
+          for (const node of list) {
+            if (!node.isDirectory && node.name) {
+              const ext = (node.name.split('.').pop() || '').toLowerCase();
+              if (!['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) {
+                docs.push({ id: node.id, name: node.name });
+              }
+            } else if (node.children?.length) {
+              walk(node.children);
+            }
+          }
+        };
+        walk(nodes || []);
+        this.projectSpecDocs.set(docs);
+      },
+      error: () => {},
+    });
+  }
+
+  getTurnDocumentCitations(turn: ChatTurn, turnIndex?: number): string[] {
+    if (!turn || turn.role !== 'agent' || turn.intent !== 'project_qa') {
+      return [];
+    }
+
+    const results: string[] = [];
+    const seen = new Set<string>();
+    const addCite = (c?: string | null) => {
+      if (!c) return;
+      const trimmed = c.trim();
+      if (!trimmed) return;
+      const key = trimmed.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        results.push(trimmed);
+      }
+    };
+
+    for (const c of turn.documentCitations ?? []) {
+      addCite(c);
+    }
+
+    for (const row of turn.traceItems ?? []) {
+      if (
+        (row.actionVerb === 'Đọc Spec Hub' || /\.(md|txt|docx|pdf|xlsx)$/i.test(row.target || '')) &&
+        row.target &&
+        row.target !== 'spec_hub_search'
+      ) {
+        addCite(row.target);
+      }
+    }
+
+    const history = this.chatHistory();
+    const idx = typeof turnIndex === 'number' && turnIndex >= 0 ? turnIndex : history.findIndex((h) => h.id === turn.id);
+    const prevUserText = idx > 0 && history[idx - 1]?.role === 'user' ? (history[idx - 1].text || '').toLowerCase() : '';
+    const replyLower = (turn.text || '').toLowerCase();
+    const foldAscii = (s: string) =>
+      s
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd')
+        .toLowerCase();
+    const foldedUser = foldAscii(prevUserText);
+    const mentionsDocsInQuery =
+      foldedUser.includes('tai lieu') ||
+      foldedUser.includes('dac ta') ||
+      foldedUser.includes('spec') ||
+      foldedUser.includes('trich dan') ||
+      foldedUser.includes('van ban');
+
+    for (const doc of this.projectSpecDocs()) {
+      const nameLower = doc.name.toLowerCase();
+      const baseLower = doc.name.replace(/\.[^/.]+$/, '').trim().toLowerCase();
+      const mentionedInReply =
+        replyLower.includes(nameLower) || (baseLower.length >= 4 && replyLower.includes(baseLower));
+      if (mentionedInReply || mentionsDocsInQuery) {
+        addCite(doc.name);
+      }
+    }
+
+    if (mentionsDocsInQuery && this.proposal()?.tasks?.length) {
+      for (const t of this.proposal()!.tasks) {
+        for (const c of t.documentCitations ?? []) {
+          addCite(c);
+        }
+      }
+    }
+
+    return results.slice(0, 10);
+  }
+
+  formatAssistantText(text?: string | null): SafeHtml {
+    if (!text) return this.sanitizer.bypassSecurityTrustHtml('');
+    const escapeHtml = (str: string) =>
+      str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+
+    const applyInline = (line: string) =>
+      line
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/`([^`]+)`/g, '<code class="ai-md-code">$1</code>');
+
+    const lines = text.replace(/\r\n/g, '\n').split('\n');
+    const htmlParts: string[] = [];
+
+    for (const rawLine of lines) {
+      const trimmed = rawLine.trim();
+      if (!trimmed) {
+        htmlParts.push('<div class="ai-md-spacer"></div>');
+        continue;
+      }
+
+      const headingMatch = trimmed.match(/^#{1,4}\s+(.+)$/);
+      if (headingMatch) {
+        htmlParts.push(`<div class="ai-md-heading">${applyInline(escapeHtml(headingMatch[1].replace(/^\*\*|\*\*$/g, '')))}</div>`);
+        continue;
+      }
+
+      const bulletMatch = trimmed.match(/^[\*\-•]\s+(.+)$/);
+      if (bulletMatch) {
+        htmlParts.push(
+          `<div class="ai-md-bullet"><span class="ai-md-dot">•</span><span>${applyInline(escapeHtml(bulletMatch[1]))}</span></div>`
+        );
+        continue;
+      }
+
+      const numMatch = trimmed.match(/^(\d+)[\.\)]\s+(.+)$/);
+      if (numMatch) {
+        htmlParts.push(
+          `<div class="ai-md-bullet"><strong class="ai-md-num">${escapeHtml(numMatch[1])}.</strong><span>${applyInline(escapeHtml(numMatch[2]))}</span></div>`
+        );
+        continue;
+      }
+
+      htmlParts.push(`<div class="ai-md-line">${applyInline(escapeHtml(rawLine))}</div>`);
+    }
+
+    return this.sanitizer.bypassSecurityTrustHtml(htmlParts.join(''));
+  }
+
+  ngAfterViewInit(): void {
+    if (this.chatHistory().length > 0 || this.proposal()) {
+      this.scrollChatToBottom(false);
+    }
+  }
+
+  toggleToolLog(idx: number): void {
+    this.expandedToolIndices.update((prev) => ({ ...prev, [idx]: !prev[idx] }));
+  }
+
+  toggleThinkingAccordion(): void {
+    this.isThinkingExpanded.update((v) => !v);
+  }
+
+  onModelChange(modelName: string): void {
+    this.selectedModel.set(modelName);
+    this.saveSession();
+  }
+
+  openSpecDoc(citationText?: string, documentId?: string | null, contextHint?: string | null): void {
+    const rawText = citationText || 'Tài liệu Đặc tả Spec Hub';
+    const section = this.extractSection(rawText);
+    const docTitle = this.extractDocTitle(rawText);
+    const effectiveContextHint = this.resolveCitationContextHint(rawText, docTitle, contextHint);
+
+    // Mở Drawer xem tài liệu ngay bên trong modal - KHÔNG làm mất đoạn chat và phiên làm việc
+    this.activeSpecDocPreview.set({
+      docId: documentId,
+      title: docTitle,
+      section,
+      resolvedSection: section,
+      content: '',
+      isLoading: true,
+    });
+
+    const applyResolvedContent = (
+      resolvedDocId: string | null | undefined,
+      resolvedTitle: string,
+      rawContent: string
+    ) => {
+      const highlightRes = this.buildHighlightHtmlWithSection(rawContent, section, effectiveContextHint, resolvedTitle);
+      const effectiveSection = highlightRes.resolvedLabel || section || null;
+      this.activeSpecDocPreview.update((prev) =>
+        prev
+          ? {
+              ...prev,
+              docId: resolvedDocId ?? prev.docId,
+              title: resolvedTitle,
+              section: section || highlightRes.resolvedLabel || null,
+              resolvedSection: effectiveSection,
+              content: rawContent,
+              highlightedHtml: highlightRes.html,
+              isLoading: false,
+            }
+          : null
+      );
+      this.scrollPreviewToSection(effectiveSection);
+    };
+
+    const isMeetingNoteCite = /cuộc họp|ghi chú|biên bản|meeting|notes|yêu cầu/i.test(docTitle);
+    const pastedText = this.pastedDocumentText() || this.promptInput();
+
+    // 1. Nếu có documentId hợp lệ (từ backend hoặc Spec Hub)
+    if (documentId && documentId !== 'meeting_notes') {
+      this.projectManagementService.getFileContent(documentId).subscribe({
+        next: (res) => {
+          const rawContent = res.content || 'Tài liệu không có nội dung văn bản hoặc ở định dạng nhị phân.';
+          applyResolvedContent(documentId, docTitle, rawContent);
+        },
+        error: () => {
+          this.activeSpecDocPreview.update((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  content: 'Không thể nạp nội dung tài liệu này từ máy chủ.',
+                  isLoading: false,
+                }
+              : null
+          );
+        },
+      });
+      return;
+    }
+
+    // 2. Nếu là ghi chú cuộc họp / biên bản người dùng dán vào
+    if (isMeetingNoteCite && pastedText) {
+      applyResolvedContent('meeting_notes', 'Ghi chú & Biên bản cuộc họp đã nạp', pastedText);
+      return;
+    }
+
+    // 3. Tra cứu trong cây thư mục Spec Hub của dự án
+    const projId = this.projectId || this.projectManagementService.currentProject()?.id || (typeof localStorage !== 'undefined' ? localStorage.getItem('pm_active_project_id') : null);
+    if (projId) {
+      this.projectManagementService.getSpecTree(projId).subscribe({
+        next: (nodes) => {
+          const found = this.searchNodeInTree(nodes, docTitle);
+          if (found && !found.isDirectory) {
+            this.projectManagementService.getFileContent(found.id).subscribe({
+              next: (res) => {
+                const rawContent = res.content || 'Tài liệu không có nội dung văn bản.';
+                applyResolvedContent(found.id, found.name, rawContent);
+              },
+              error: () => {
+                this.activeSpecDocPreview.update((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        docId: found.id,
+                        title: found.name,
+                        isLoading: false,
+                        content: `Tài liệu: ${found.name}\n(Trích dẫn từ Spec Hub trong quá trình lập kế hoạch Sprint)`,
+                      }
+                    : null
+                );
+              },
+            });
+          } else {
+            // Nếu không tìm thấy tệp trong Spec Hub
+            if (pastedText && (isMeetingNoteCite || /biên bản|cuộc họp/i.test(docTitle))) {
+              applyResolvedContent('meeting_notes', 'Ghi chú & Biên bản cuộc họp đã nạp', pastedText);
+            } else if (docTitle === 'GEMINI.md') {
+              const geminiText = `# Tiêu chuẩn Quy tắc Dự án (GEMINI.md)\n\n1. BẢO MẬT TUYỆT ĐỐI & CHỐNG RÒ RỈ SECRET/KEY/URL/IP\n- Nghiêm cấm đưa bất kỳ thông tin nhạy cảm nào vào source code.\n- Secret lưu tại appsettings.Local.json hoặc .env.\n\n2. TỐI ƯU TỐC ĐỘ PHẢN HỒI & HIỆU SUẤT AGENT\n- Đi thẳng vào trọng tâm, giải phóng file lock IIS với app_offline.htm.\n\n3. QUY TẮC BẮT BUỘC VỀ ICON & EMOJI\n- Tuyệt đối không dùng emoji từ bàn phím.\n- Bắt buộc sử dụng icon Google Material Symbols Outlined.\n\n4. QUY TRÌNH PHÂN QUYỀN SCRUM TỪ TRÊN XUỐNG\n- Org Owner > Lead/Creator > Scrum Master > Dev/QA > Viewer.\n\n5. TIÊU CHUẨN GIAO DIỆN & TRẢI NGHIỆM NGƯỜI DÙNG\n- Responsive đa màn hình, không tràn lề.`;
+              applyResolvedContent(null, 'GEMINI.md (Quy chuẩn dự án)', geminiText);
+            } else {
+              const fallbackMsg = `Tài liệu: ${docTitle}\nPhân đoạn trích dẫn: ${section || 'Toàn văn'}\n\nTrích dẫn trực tiếp từ phiên làm việc và ngữ cảnh dự án.`;
+              applyResolvedContent(null, docTitle, fallbackMsg);
+            }
+          }
+        },
+        error: () => {
+          this.activeSpecDocPreview.update((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  isLoading: false,
+                  content: `Tài liệu: ${docTitle}`,
+                }
+              : null
+          );
+        },
+      });
+    }
+  }
+
+  private resolveCitationContextHint(
+    citationText: string,
+    docTitle: string,
+    explicitHint?: string | null
+  ): string {
+    const parts: string[] = [];
+    if (explicitHint && explicitHint.trim()) {
+      parts.push(explicitHint.trim());
+    }
+
+    const activeSub = this.activeDrawerSubtask();
+    if (activeSub) {
+      parts.push(
+        activeSub.subtask.title || '',
+        activeSub.subtask.description || '',
+        ...(activeSub.subtask.acceptanceCriteria || []),
+        activeSub.parentTask.title || '',
+        activeSub.parentTask.description || ''
+      );
+    }
+
+    const activeTask = this.activeDrawerTask();
+    if (activeTask) {
+      parts.push(
+        activeTask.title || '',
+        activeTask.description || '',
+        activeTask.aiRationale || '',
+        ...(activeTask.acceptanceCriteria || [])
+      );
+    }
+
+    const prop = this.proposal();
+    if (prop?.tasks?.length) {
+      const lowerCite = citationText.toLowerCase();
+      const lowerTitle = docTitle.toLowerCase();
+      for (const t of prop.tasks) {
+        const cites = t.documentCitations || [];
+        if (
+          cites.some(
+            (c) =>
+              c.toLowerCase() === lowerCite ||
+              c.toLowerCase().includes(lowerTitle)
+          )
+        ) {
+          parts.push(t.title || '', t.description || '', t.aiRationale || '');
+        }
+      }
+    }
+
+    return parts.filter(Boolean).join(' ').trim();
+  }
+
+  closeSpecDocPreview(): void {
+    this.activeSpecDocPreview.set(null);
+  }
+
+  openSpecDocInNewTab(citationText?: string, documentId?: string | null, sectionParam?: string | null): void {
+    const preview = this.activeSpecDocPreview();
+    const docId = documentId || preview?.docId || null;
+    const title = citationText || preview?.title || '';
+    const cleanName = this.extractDocTitle(title);
+    const section = sectionParam || preview?.resolvedSection || preview?.section || this.extractSection(citationText);
+
+    if (docId === 'meeting_notes' || /cuộc họp|ghi chú|biên bản/i.test(cleanName)) {
+      this.toastService.info('Spec Hub', 'Đây là ghi chú phiên làm việc của bạn, không thuộc tệp Spec Hub.');
+      return;
+    }
+
+    const queryParams: Record<string, string> = {};
+    if (docId) queryParams['docId'] = docId;
+    if (cleanName) queryParams['docName'] = cleanName;
+    if (section) queryParams['section'] = section;
+
+    const projId = this.projectId || this.projectManagementService.currentProject()?.id || (typeof localStorage !== 'undefined' ? localStorage.getItem('pm_active_project_id') : null);
+
+    const urlTree = this.router.createUrlTree(['/projects', projId, 'documents'], { queryParams });
+    const url = this.router.serializeUrl(urlTree);
+    window.open(url, '_blank');
+  }
+
+  private extractDocTitle(citation?: string): string {
+    if (!citation) return 'Tài liệu đặc tả';
+    let clean = citation.trim().replace(/^[\s\[\]()"'«»]+|[\s\[\]()"'«»]+$/g, '');
+
+    // 1. Nếu có phần mở rộng tệp (.md, .txt, .docx, .xlsx, .pdf, .doc, .json, .yml, .yaml, .csv)
+    const fileMatch = clean.match(/([\p{L}\w\.\-_ ]+\.(?:md|txt|docx|xlsx|pdf|doc|json|yml|yaml|csv))/iu);
+    if (fileMatch) {
+      return fileMatch[1].trim();
+    }
+
+    // 2. Bỏ các tiền tố thường gặp ở đầu
+    clean = clean.replace(/^(tài liệu đặc tả|tài liệu spec hub|tài liệu|spec hub|ghi chú cuộc họp|ghi chú|biên bản|yêu cầu|nguồn|file)[\s:]+/i, '');
+
+    // 3. Tách theo dấu phân cách có khoảng trắng bao quanh (\s+[-–—:]\s+)
+    const sepMatch = clean.match(/^(.+?)\s+[-–—:]\s+/);
+    if (sepMatch) {
+      return sepMatch[1].trim();
+    }
+
+    // 4. Nếu có dấu hai chấm
+    const colonIdx = clean.indexOf(':');
+    if (colonIdx > 0 && colonIdx < clean.length - 1) {
+      return clean.substring(0, colonIdx).trim();
+    }
+
+    return clean;
+  }
+
+  private extractSection(citation?: string): string | null {
+    if (!citation) return null;
+    const clean = citation.trim();
+    const cleanEdge = (val: string) =>
+      val.replace(/^[\s\-–—:,;|()\[\]"'«»]+|[\s\-–—:,;|()\[\]"'«»]+$/g, '').trim();
+
+    // 1. Nếu có tên file với đuôi, section là phần nằm sau tên file đó
+    const fileMatch = clean.match(/[\p{L}\w\.\-_ ]+\.(?:md|txt|docx|xlsx|pdf|doc|json|yml|yaml|csv)/iu);
+    if (fileMatch && fileMatch.index !== undefined) {
+      const afterFile = clean.substring(fileMatch.index + fileMatch[0].length).trim();
+      const stripped = cleanEdge(afterFile);
+      if (stripped) return stripped;
+    }
+
+    // 2. Tách theo dấu phân cách có khoảng trắng: " - ", " – ", " — ", " : "
+    const parts = clean.split(/\s+[-–—:]\s+/);
+    if (parts.length > 1) {
+      const joined = cleanEdge(parts.slice(1).join(' - '));
+      if (joined) return joined;
+    }
+
+    // 3. Tách theo dấu ":" nếu có
+    const colonIdx = clean.indexOf(':');
+    if (colonIdx > 0 && colonIdx < clean.length - 1) {
+      const prefix = clean.substring(0, colonIdx).toLowerCase();
+      if (!/^(tài liệu|spec hub|ghi chú|biên bản)/.test(prefix)) {
+        const afterColon = cleanEdge(clean.substring(colonIdx + 1));
+        if (afterColon) return afterColon;
+      }
+    }
+
+    return null;
+  }
+
+  private searchNodeInTree(nodes: SpecTreeNode[], searchStr: string): SpecTreeNode | null {
+    if (!searchStr) return null;
+    const lower = searchStr.toLowerCase().trim();
+    const stripExt = (name: string) => name.replace(/\.[^/.]+$/, '').trim().toLowerCase();
+    const targetBase = stripExt(lower);
+
+    // BƯỚC 1: Tìm kiếm khớp chính xác (Exact Match) tên tệp hoặc tên gốc bỏ đuôi trên toàn bộ cây
+    const findExact = (list: SpecTreeNode[]): SpecTreeNode | null => {
+      for (const node of list) {
+        if (!node.isDirectory) {
+          const nodeLower = node.name.toLowerCase();
+          const nodeBase = stripExt(nodeLower);
+          if (nodeLower === lower || nodeBase === targetBase) {
+            return node;
+          }
+        } else if (node.children?.length) {
+          const childFound = findExact(node.children);
+          if (childFound) return childFound;
+        }
+      }
+      return null;
+    };
+
+    const exactMatch = findExact(nodes);
+    if (exactMatch) return exactMatch;
+
+    // BƯỚC 2: Chỉ khi không có bất kỳ tệp nào khớp chính xác, mới tìm kiếm chuỗi con (Partial Match)
+    if (lower.length > 3) {
+      const findPartial = (list: SpecTreeNode[]): SpecTreeNode | null => {
+        for (const node of list) {
+          if (!node.isDirectory) {
+            const nodeLower = node.name.toLowerCase();
+            const nodeBase = stripExt(nodeLower);
+            if (nodeLower.includes(lower) || lower.includes(nodeLower) || nodeBase.includes(targetBase) || targetBase.includes(nodeBase)) {
+              return node;
+            }
+          } else if (node.children?.length) {
+            const childFound = findPartial(node.children);
+            if (childFound) return childFound;
+          }
+        }
+        return null;
+      };
+      return findPartial(nodes);
+    }
+    return null;
+  }
+
+  private foldViText(input: string): string {
+    if (!input) return '';
+    return input
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd');
+  }
+
+  private stripSectionPrefixes(raw: string): string {
+    let curr = (raw || '').trim();
+    const prefixRe = /^(?:mục|phần|chương|điều|khoản|bước|hạng mục|chuyên đề|trang|epic|section|part|chapter|step)\s*[:.#\-–—]?\s*/i;
+    let guard = 0;
+    while (guard < 4 && prefixRe.test(curr)) {
+      curr = curr.replace(prefixRe, '').trim();
+      guard++;
+    }
+    return curr;
+  }
+
+  private expandSectionNumberTokens(numToken: string): string[] {
+    const clean = (numToken || '').trim().replace(/[.:)\]]+$/, '');
+    if (!clean) return [];
+    const arabicToRoman: Record<string, string> = {
+      '1': 'I', '2': 'II', '3': 'III', '4': 'IV', '5': 'V',
+      '6': 'VI', '7': 'VII', '8': 'VIII', '9': 'IX', '10': 'X',
+      '11': 'XI', '12': 'XII', '13': 'XIII', '14': 'XIV', '15': 'XV',
+    };
+    const romanToArabic: Record<string, string> = Object.fromEntries(
+      Object.entries(arabicToRoman).map(([k, v]) => [v.toLowerCase(), k])
+    );
+
+    const out: string[] = [clean];
+    const upper = clean.toUpperCase();
+    const lower = clean.toLowerCase();
+    if (arabicToRoman[clean] && !out.includes(arabicToRoman[clean])) {
+      out.push(arabicToRoman[clean]);
+    }
+    if (romanToArabic[lower] && !out.includes(romanToArabic[lower])) {
+      out.push(romanToArabic[lower]);
+    }
+    if (clean.includes('.')) {
+      const major = clean.split('.')[0];
+      if (major && !out.includes(major)) {
+        out.push(major);
+        if (arabicToRoman[major] && !out.includes(arabicToRoman[major])) {
+          out.push(arabicToRoman[major]);
+        }
+      }
+    }
+    return out;
+  }
+
+  private cleanHeadingDisplayLabel(rawLine: string, originalSection?: string | null): string {
+    const cleaned = (rawLine || '')
+      .replace(/^\s*#{1,6}\s*/, '')
+      .replace(/\*\*/g, '')
+      .replace(/`/g, '')
+      .trim();
+    if (!cleaned) return originalSection || '';
+    const truncated = cleaned.length > 88 ? `${cleaned.slice(0, 88).trim()}...` : cleaned;
+    if (
+      originalSection &&
+      originalSection.trim().length > 0 &&
+      !truncated.toLowerCase().includes(originalSection.trim().toLowerCase())
+    ) {
+      return `${originalSection.trim()} · ${truncated}`;
+    }
+    return truncated;
+  }
+
+  private locateBestSectionInContent(
+    content: string,
+    section?: string | null,
+    contextHint?: string | null,
+    docTitle?: string | null
+  ): { start: number; length: number; resolvedLabel: string | null } | null {
+    if (!content) return null;
+
+    interface DocLineSpan {
+      index: number;
+      start: number;
+      end: number;
+      raw: string;
+      trimmed: string;
+      lower: string;
+      folded: string;
+      isMarkdownHeading: boolean;
+      isSectionOrBoldHeading: boolean;
+    }
+
+    const lines: DocLineSpan[] = [];
+    let pos = 0;
+    let lineIdx = 0;
+    while (pos <= content.length) {
+      const nextNl = content.indexOf('\n', pos);
+      const rawEnd = nextNl >= 0 ? nextNl : content.length;
+      const cleanEnd = rawEnd > pos && content[rawEnd - 1] === '\r' ? rawEnd - 1 : rawEnd;
+      const rawLine = content.substring(pos, cleanEnd);
+      const trimmed = rawLine.trim();
+      const isMdHeading = /^#{1,6}\s+\S/.test(trimmed);
+      const isSecOrBold =
+        isMdHeading ||
+        /^\*\*[^*]{3,120}\*\*/.test(trimmed) ||
+        /^(?:mục|phần|chương|điều|chuyên đề|bước|section|part|chapter)\s+(?:\d+|[ivxlcdm]+)\b/i.test(trimmed) ||
+        /^(?:\d+(?:\.\d+){0,2}|[IVXLCDM]{1,6})\s*[.:)\-–—]\s+\S/.test(trimmed);
+
+      lines.push({
+        index: lineIdx++,
+        start: pos,
+        end: cleanEnd,
+        raw: rawLine,
+        trimmed,
+        lower: trimmed.toLowerCase(),
+        folded: this.foldViText(trimmed),
+        isMarkdownHeading: isMdHeading,
+        isSectionOrBoldHeading: isSecOrBold,
+      });
+
+      if (nextNl < 0) break;
+      pos = nextNl + 1;
+    }
+
+    const cleanSection = (section || '').trim();
+    const strippedSection = this.stripSectionPrefixes(cleanSection);
+
+    // Tách mã số mục (VD: "2", "2.1", "II" từ "Mục 2", "Phần II", "Mục 2.1: Phạm vi") và tiêu đề mô tả đi kèm
+    let sectionNumTokens: string[] = [];
+    let descriptivePart = strippedSection;
+    const numLeadMatch = strippedSection.match(
+      /^(\d+(?:\.\d+)*|[ivxlcdm]{1,6})(?:\s*[:.\-–—)\]]\s*(.*)|\s+(.*))?$/i
+    );
+    if (numLeadMatch) {
+      sectionNumTokens = this.expandSectionNumberTokens(numLeadMatch[1]);
+      descriptivePart = (numLeadMatch[2] ?? numLeadMatch[3] ?? '').trim();
+    }
+
+    const subPhrases: string[] = [];
+    const addCandidatePhrase = (p?: string | null) => {
+      const t = (p || '').trim();
+      if (t.length >= 3 && !/^(?:mục|phần|chương|điều|bước|trang)\s*(?:\d+(?:\.\d+)*|[ivxlcdm]+)$/i.test(t)) {
+        if (!subPhrases.includes(t)) subPhrases.push(t);
+      }
+    };
+    addCandidatePhrase(descriptivePart);
+    addCandidatePhrase(cleanSection);
+    addCandidatePhrase(strippedSection);
+    for (const part of cleanSection.split(/[:\-–—|]/)) {
+      addCandidatePhrase(this.stripSectionPrefixes(part));
+      addCandidatePhrase(part);
+    }
+
+    const stopWords = new Set([
+      'cua', 'va', 'cac', 'cho', 'trong', 'voi', 'duoc', 'theo', 'tren', 'duoi',
+      'nay', 'khi', 'nhu', 'mot', 'nhung', '점', 'muc', 'phan', 'chuong', 'dieu',
+      'tai', 'lieu', 'dac', 'ta', 'spec', 'hub', 'file', 'tep', 'ban', 'quy'
+    ]);
+    if (docTitle) {
+      for (const w of this.foldViText(docTitle).split(/[^a-z0-9]+/)) {
+        if (w.length >= 2) stopWords.add(w);
+      }
+    }
+
+    const extractKeywords = (text?: string | null): string[] => {
+      if (!text) return [];
+      return Array.from(
+        new Set(
+          this.foldViText(text)
+            .split(/[^a-z0-9]+/)
+            .filter((w) => w.length >= 3 && !stopWords.has(w))
+        )
+      );
+    };
+
+    const sectionKeywords = extractKeywords(descriptivePart || cleanSection);
+    const contextKeywords = extractKeywords(contextHint);
+
+    const scoreLineContext = (line: DocLineSpan): number => {
+      const nextLine = lines[line.index + 1];
+      const windowFolded = `${line.folded} ${nextLine?.folded || ''}`;
+      let score = 0;
+      for (const kw of sectionKeywords) {
+        if (windowFolded.includes(kw)) score += 3.0;
+      }
+      for (const kw of contextKeywords) {
+        if (windowFolded.includes(kw)) score += 1.25;
+      }
+      if (line.isMarkdownHeading) score += 2.5;
+      else if (line.isSectionOrBoldHeading) score += 1.2;
+      return score;
+    };
+
+    // ƯU TIÊN 1: Khớp cụm tiêu đề mô tả (Descriptive Title / Phrase) ngay trên dòng tiêu đề (Heading)
+    for (const phrase of subPhrases) {
+      const phraseLower = phrase.toLowerCase();
+      const phraseFolded = this.foldViText(phrase);
+      if (phraseFolded.length < 3) continue;
+
+      const headingHits = lines.filter(
+        (l) =>
+          l.trimmed.length > 0 &&
+          l.isSectionOrBoldHeading &&
+          (l.lower.includes(phraseLower) || l.folded.includes(phraseFolded))
+      );
+      if (headingHits.length > 0) {
+        headingHits.sort((a, b) => scoreLineContext(b) - scoreLineContext(a));
+        const best = headingHits[0];
+        return {
+          start: best.start,
+          length: Math.max(1, best.end - best.start),
+          resolvedLabel: this.cleanHeadingDisplayLabel(best.trimmed, cleanSection),
+        };
+      }
+    }
+
+    // ƯU TIÊN 2: Khớp theo Mã số Mục / Phần / Số La Mã (VD: "Mục 2" -> "## 2. Bản đồ Cấu trúc Tài liệu", "Phần II", "2.1.")
+    if (sectionNumTokens.length > 0) {
+      for (const numToken of sectionNumTokens) {
+        const escapedNum = numToken.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // Tier 2A: Dòng tiêu đề Markdown (#, ##, ###) có số mục tương ứng
+        const mdHeadingRegex = new RegExp(
+          `^#{1,6}\\s*(?:\\*\\*\\s*)?(?:(?:mục|phần|chương|điều|khoản|bước|chuyên đề|hạng mục|epic|section|part|chapter)\\s*[:.#\\-–—]?\\s*)*${escapedNum}(?:\\s*[.:)\\-–—]|\\s+|$)`,
+          'i'
+        );
+        const mdMatches = lines.filter((l) => l.isMarkdownHeading && mdHeadingRegex.test(l.trimmed));
+        if (mdMatches.length > 0) {
+          mdMatches.sort((a, b) => scoreLineContext(b) - scoreLineContext(a));
+          const best = mdMatches[0];
+          return {
+            start: best.start,
+            length: Math.max(1, best.end - best.start),
+            resolvedLabel: this.cleanHeadingDisplayLabel(best.trimmed, cleanSection),
+          };
+        }
+
+        // Tier 2B: Dòng tiêu đề có từ khóa Mục/Phần/Chương hoặc in đậm (**2. ...**)
+        const labeledHeadingRegex = new RegExp(
+          `^(?:\\*\\*\\s*)?(?:(?:mục|phần|chương|điều|khoản|bước|chuyên đề|hạng mục|epic|section|part|chapter)\\s*[:.#\\-–—]?\\s*)+${escapedNum}(?:\\s*[.:)\\-–—]|\\s+|$)`,
+          'i'
+        );
+        const boldNumberedRegex = new RegExp(
+          `^\\*\\*\\s*${escapedNum}\\s*[.:)\\-–—]\\s+\\S+`,
+          'i'
+        );
+        const labeledMatches = lines.filter(
+          (l) => l.trimmed.length > 0 && (labeledHeadingRegex.test(l.trimmed) || boldNumberedRegex.test(l.trimmed))
+        );
+        if (labeledMatches.length > 0) {
+          labeledMatches.sort((a, b) => scoreLineContext(b) - scoreLineContext(a));
+          const best = labeledMatches[0];
+          return {
+            start: best.start,
+            length: Math.max(1, best.end - best.start),
+            resolvedLabel: this.cleanHeadingDisplayLabel(best.trimmed, cleanSection),
+          };
+        }
+
+        // Tier 2C: Dòng đánh số đầu mục văn bản thuần ("2. Tiêu đề...", "2.1. Tiêu đề...", "II. Tiêu đề...")
+        const plainNumberedRegex = new RegExp(
+          `^${escapedNum}\\s*[.:)\\-–—]\\s+\\S+`,
+          'i'
+        );
+        const plainMatches = lines.filter((l) => l.trimmed.length > 0 && plainNumberedRegex.test(l.trimmed));
+        if (plainMatches.length > 0) {
+          plainMatches.sort((a, b) => scoreLineContext(b) - scoreLineContext(a));
+          const best = plainMatches[0];
+          return {
+            start: best.start,
+            length: Math.max(1, best.end - best.start),
+            resolvedLabel: this.cleanHeadingDisplayLabel(best.trimmed, cleanSection),
+          };
+        }
+      }
+    }
+
+    // ƯU TIÊN 3: Khớp chính xác hoặc không dấu cụm từ trong thân văn bản
+    for (const phrase of subPhrases) {
+      const phraseLower = phrase.toLowerCase();
+      const phraseFolded = this.foldViText(phrase);
+      if (phraseFolded.length < 3) continue;
+
+      const bodyHits = lines.filter(
+        (l) => l.trimmed.length > 0 && (l.lower.includes(phraseLower) || l.folded.includes(phraseFolded))
+      );
+      if (bodyHits.length > 0) {
+        bodyHits.sort((a, b) => scoreLineContext(b) - scoreLineContext(a));
+        const best = bodyHits[0];
+        return {
+          start: best.start,
+          length: Math.max(1, best.end - best.start),
+          resolvedLabel: this.cleanHeadingDisplayLabel(best.trimmed, cleanSection),
+        };
+      }
+    }
+
+    // ƯU TIÊN 4: Chấm điểm ngữ nghĩa theo từ khóa của vị trí trích dẫn + ngữ cảnh Task/Subtask/Câu hỏi
+    if (sectionKeywords.length > 0 || contextKeywords.length > 0) {
+      let bestLine: DocLineSpan | null = null;
+      let bestScore = 0;
+
+      for (const line of lines) {
+        if (line.trimmed.length < 4 || /^[-=*_`]{3,}$/.test(line.trimmed)) continue;
+        const nextLine = lines[line.index + 1];
+        const windowFolded = `${line.folded} ${nextLine?.folded || ''}`;
+
+        let matchedSectionKw = 0;
+        for (const kw of sectionKeywords) {
+          if (windowFolded.includes(kw)) matchedSectionKw++;
+        }
+
+        let matchedContextKw = 0;
+        for (const kw of contextKeywords) {
+          if (windowFolded.includes(kw)) matchedContextKw++;
+        }
+
+        if (matchedSectionKw === 0 && matchedContextKw < 2) continue;
+
+        let score = matchedSectionKw * 3.2 + matchedContextKw * 1.4;
+        if (line.isMarkdownHeading) score *= 1.45;
+        else if (line.isSectionOrBoldHeading) score *= 1.25;
+
+        // Tránh chọn dòng tiêu đề tài liệu đầu tiên (# ở dòng 0-2) nếu bên dưới có mục chi tiết khớp hơn
+        if (line.index <= 2 && /^#\s+/.test(line.trimmed)) {
+          score *= 0.45;
+        }
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestLine = line;
+        }
+      }
+
+      if (bestLine && bestScore >= 2.2) {
+        return {
+          start: bestLine.start,
+          length: Math.max(1, bestLine.end - bestLine.start),
+          resolvedLabel: this.cleanHeadingDisplayLabel(bestLine.trimmed, cleanSection || null),
+        };
+      }
+    }
+
+    return null;
+  }
+
+  private buildHighlightHtmlWithSection(
+    content: string,
+    section?: string | null,
+    contextHint?: string | null,
+    docTitle?: string | null
+  ): { html?: SafeHtml; resolvedLabel: string | null } {
+    if (!content) return { html: undefined, resolvedLabel: section || null };
+    const escapeHtml = (str: string) =>
+      str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+
+    const match = this.locateBestSectionInContent(content, section, contextHint, docTitle);
+    if (match && match.start >= 0 && match.length > 0) {
+      const before = escapeHtml(content.substring(0, match.start));
+      const matched = escapeHtml(content.substring(match.start, match.start + match.length));
+      const after = escapeHtml(content.substring(match.start + match.length));
+      const html = `${before}<mark id="spec-target-highlight" class="spec-highlight-mark">${matched}</mark>${after}`;
+      return {
+        html: this.sanitizer.bypassSecurityTrustHtml(html),
+        resolvedLabel: match.resolvedLabel || section || null,
+      };
+    }
+
+    return {
+      html: this.sanitizer.bypassSecurityTrustHtml(escapeHtml(content)),
+      resolvedLabel: section || null,
+    };
+  }
+
+  scrollPreviewToSection(section?: string | null, smooth = true): void {
+    const scrollToMark = (useSmooth: boolean): boolean => {
+      const container = document.querySelector('.doc-preview-body') as HTMLElement | null;
+      if (!container) return false;
+
+      const highlightEl = container.querySelector('#spec-target-highlight') as HTMLElement | null;
+      if (highlightEl) {
+        const containerRect = container.getBoundingClientRect();
+        const markRect = highlightEl.getBoundingClientRect();
+        const offsetInContainer = markRect.top - containerRect.top + container.scrollTop;
+        const topPadding = Math.max(84, Math.min(150, Math.floor(container.clientHeight * 0.22)));
+        const targetScrollTop = Math.max(0, offsetInContainer - topPadding);
+
+        container.scrollTo({
+          top: targetScrollTop,
+          behavior: useSmooth ? 'smooth' : 'auto',
+        });
+        highlightEl.classList.add('spec-highlight-pulse');
+        setTimeout(() => highlightEl?.classList.remove('spec-highlight-pulse'), 3800);
+        return true;
+      }
+
+      if (section) {
+        const preEl = container.querySelector('.preview-content-text') as HTMLElement | null;
+        if (!preEl) return false;
+        const text = this.foldViText(preEl.innerText || '');
+        const clean = this.foldViText(this.stripSectionPrefixes(section));
+        let targetIdx = clean.length >= 2 ? text.indexOf(clean) : -1;
+        if (targetIdx < 0) {
+          const kw = clean.split(/[^a-z0-9]+/).find((w) => w.length >= 3);
+          if (kw) targetIdx = text.indexOf(kw);
+        }
+        if (targetIdx >= 0) {
+          const lineNum = text.substring(0, targetIdx).split('\n').length;
+          const totalLines = Math.max(1, text.split('\n').length);
+          const targetScrollTop = (lineNum / totalLines) * preEl.scrollHeight;
+          container.scrollTo({ top: Math.max(0, targetScrollTop - 96), behavior: useSmooth ? 'smooth' : 'auto' });
+          preEl.classList.add('spec-highlight-pulse');
+          setTimeout(() => preEl?.classList.remove('spec-highlight-pulse'), 3500);
+          return true;
+        }
+      }
+      return false;
+    };
+
+    // Cuộn ngay lập tức khi DOM vừa render và căn chỉnh lại sau khi hiệu ứng trượt ngăn kéo (250ms) hoàn tất
+    setTimeout(() => scrollToMark(false), 40);
+    setTimeout(() => scrollToMark(smooth), 180);
+    setTimeout(() => scrollToMark(smooth), 340);
+  }
+
+  openReviewPastedDoc(): void {
+    this.editablePastedText.set(this.pastedDocumentText() || this.promptInput());
+    this.isReviewingPastedDoc.set(true);
+  }
+
+  saveReviewedPastedDoc(): void {
+    const text = this.editablePastedText().trim();
+    this.pastedDocumentText.set(text);
+    this.isReviewingPastedDoc.set(false);
+    this.saveSession();
+    this.toastService.success('Tài liệu', 'Đã lưu nội dung văn bản cuộc họp.');
+  }
+
+  closeReviewPastedDoc(): void {
+    this.isReviewingPastedDoc.set(false);
+  }
+
+  onPromptChange(val: string): void {
+    this.promptInput.set(val);
+    this.adjustTextareaHeight();
+  }
+
+  onPromptKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      this.submitDecompose();
+    }
+  }
+
+  adjustTextareaHeight(): void {
+    setTimeout(() => {
+      const el = this.promptTextarea?.nativeElement;
+      if (!el) return;
+      el.style.height = 'auto';
+      const nextHeight = Math.min(Math.max(el.scrollHeight, 44), 180);
+      el.style.height = `${nextHeight}px`;
+    });
+  }
+
+  private getStorageKey(): string {
+    return `projectmgmt.ai-agent-session.${this.projectId || 'default'}`;
+  }
+
+  saveSession(): void {
+    if (typeof localStorage === 'undefined' || !this.projectId) return;
+    try {
+      const fullList = this.chatHistory();
+      const tailChat = fullList.slice(-AiDecomposeModalComponent.MESSAGE_PAGE_SIZE);
+      const effectiveTotal = Math.max(this.totalMessagesCount(), fullList.length);
+      const sessionId = this.activeSessionId();
+      const savedOldest =
+        effectiveTotal > tailChat.length
+          ? effectiveTotal - tailChat.length
+          : tailChat.length > 0
+            ? 0
+            : null;
+      const savedHasOlder = Boolean(sessionId && savedOldest !== null && savedOldest > 0);
+
+      const data = {
+        chatHistory: tailChat,
+        proposal: this.proposal(),
+        toolCallsLog: this.toolCallsLog(),
+        streamedThoughts: this.streamedThoughts(),
+        activeSessionId: sessionId,
+        selectedModel: this.selectedModel(),
+        totalMessagesCount: effectiveTotal,
+        oldestLoadedIndex: savedOldest,
+        hasOlderMessages: savedHasOlder,
+      };
+      localStorage.setItem(this.getStorageKey(), JSON.stringify(data));
+    } catch {
+      // Ignore storage quota limits
+    }
+  }
+
+  private restoreSession(): void {
+    if (typeof localStorage === 'undefined' || !this.projectId) return;
+    try {
+      const serialized = localStorage.getItem(this.getStorageKey());
+      if (!serialized) return;
+      const data = JSON.parse(serialized);
+      if (data) {
+        if (Array.isArray(data.chatHistory) && data.chatHistory.length > 0) {
+          const rawList = data.chatHistory as ChatTurn[];
+          rawList.forEach((turn: ChatTurn) => {
+            if (turn.role === 'user' && !turn.fullContent && turn.text) {
+              turn.fullContent = turn.text;
+            }
+          });
+          const tail = rawList.slice(-AiDecomposeModalComponent.MESSAGE_PAGE_SIZE);
+          const effectiveTotal =
+            typeof data.totalMessagesCount === 'number'
+              ? Math.max(data.totalMessagesCount, rawList.length)
+              : rawList.length;
+          const computedOldest = Math.max(0, effectiveTotal - tail.length);
+          const restoredOldest =
+            typeof data.oldestLoadedIndex === 'number'
+              ? Math.max(data.oldestLoadedIndex, computedOldest)
+              : computedOldest;
+
+          this.chatHistory.set(tail);
+          this.totalMessagesCount.set(effectiveTotal);
+          this.oldestLoadedIndex.set(restoredOldest);
+          this.hasOlderMessages.set(
+            typeof data.hasOlderMessages === 'boolean'
+              ? data.hasOlderMessages || (Boolean(data.activeSessionId) && restoredOldest > 0)
+              : Boolean(data.activeSessionId && restoredOldest > 0)
+          );
+        }
+        if (data.proposal) {
+          this.proposal.set(data.proposal);
+        }
+        if (Array.isArray(data.toolCallsLog) && data.toolCallsLog.length > 0) {
+          this.toolCallsLog.set(data.toolCallsLog);
+        }
+        if (data.streamedThoughts) {
+          this.streamedThoughts.set(data.streamedThoughts);
+        }
+        if (data.activeSessionId) {
+          this.activeSessionId.set(data.activeSessionId);
+        }
+        if (data.selectedModel) {
+          this.selectedModel.set(data.selectedModel);
+        }
+        // Đồng bộ chỉ số phân trang nếu dữ liệu cache cũ chưa lưu tổng số lượt
+        if (data.activeSessionId && typeof data.totalMessagesCount !== 'number') {
+          this.aiService
+            .getSessionMessages(data.activeSessionId, this.projectId, undefined, AiDecomposeModalComponent.MESSAGE_PAGE_SIZE)
+            .subscribe({
+              next: (page) => {
+                if (this.activeSessionId() !== data.activeSessionId) return;
+                this.totalMessagesCount.set(page.totalCount);
+                this.oldestLoadedIndex.set(page.oldestLoadedIndex ?? 0);
+                this.hasOlderMessages.set(page.hasOlderMessages);
+                if (page.messages.length > 0) {
+                  const currentHasTable = this.proposal()?.tasks?.length ? true : false;
+                  this.chatHistory.set(this.mapDtoTurnsToChatTurns(page.messages, currentHasTable));
+                  this.scrollChatToBottom(false);
+                }
+              },
+            });
+        }
+        if (this.chatHistory().length > 0 || this.proposal()) {
+          this.scrollChatToBottom(false);
+        }
+      }
+    } catch {
+      // Ignore malformed storage
+    }
+  }
+
+  private resetDraftUiState(): void {
+    this.cancelStream();
+    this.chatHistory.set([]);
+    this.hasOlderMessages.set(false);
+    this.oldestLoadedIndex.set(null);
+    this.totalMessagesCount.set(0);
+    this.isLoadingOlderMessages.set(false);
+    this.showScrollToBottom.set(false);
+    this.loadingOlderGuard = false;
+    this.proposal.set(null);
+    this.toolCallsLog.set([]);
+    this.streamedThoughts.set('');
+    this.activeSessionId.set('');
+    this.expandedTurnTraces.set({});
+    this.expandedTraceRows.set({});
+    this.thinkingElapsedSeconds.set(0);
+    this.errorMessage.set(null);
+    this.promptInput.set('');
+    this.pastedDocumentText.set('');
+    this.attachedFile.set(null);
+    this.selectedTaskIds.set({});
+    this.expandedSubtasks.set({});
+    this.isThinkingExpanded.set(false);
+    if (typeof localStorage !== 'undefined' && this.projectId) {
+      localStorage.removeItem(this.getStorageKey());
+    }
+  }
+
+  /**
+   * Tạo mới một cuộc hội thoại trống trên giao diện mà KHÔNG xóa các phiên làm việc đã lưu trong lịch sử.
+   */
+  startNewSession(): void {
+    this.resetDraftUiState();
+    this.toastService?.success('Đã tạo cuộc hội thoại mới.');
+  }
+
+  private startThinkingTimer(): void {
+    this.stopThinkingTimer();
+    this.thinkingStartTimeMs = Date.now();
+    this.thinkingElapsedSeconds.set(0);
+    this.thinkingTimerId = setInterval(() => {
+      if (this.thinkingStartTimeMs > 0) {
+        this.thinkingElapsedSeconds.set((Date.now() - this.thinkingStartTimeMs) / 1000);
+      }
+    }, 100);
+  }
+
+  private stopThinkingTimer(): void {
+    if (this.thinkingTimerId !== null) {
+      clearInterval(this.thinkingTimerId);
+      this.thinkingTimerId = null;
+    }
+    if (this.thinkingStartTimeMs > 0) {
+      this.thinkingElapsedSeconds.set((Date.now() - this.thinkingStartTimeMs) / 1000);
+    }
+  }
+
+  ngOnDestroy(): void {
+    this.cancelStream();
+  }
+
+  closeModal(): void {
+    this.saveSession();
+    this.cancelStream();
+    this.closed.emit();
+  }
+
+  cancelStream(): void {
+    this.stopThinkingTimer();
+    if (this.abortController) {
+      this.abortController.abort();
+      this.abortController = null;
+    }
+    this.isStreaming.set(false);
+  }
+
+  onFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (file) {
+      this.validateAndAttachFile(file);
+    }
+    input.value = '';
+  }
+
+  removeAttachedFile(): void {
+    this.attachedFile.set(null);
+  }
+
+  onDragOver(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.isDragOver.set(true);
+  }
+
+  onDragLeave(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.isDragOver.set(false);
+  }
+
+  onDrop(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.isDragOver.set(false);
+    const file = event.dataTransfer?.files?.[0];
+    if (file) {
+      this.validateAndAttachFile(file);
+    }
+  }
+
+  onClipboardPaste(event: ClipboardEvent): void {
+    const files = event.clipboardData?.files;
+    if (files && files.length > 0) {
+      event.preventDefault();
+      this.validateAndAttachFile(files[0]);
+      return;
+    }
+
+    const pastedText = event.clipboardData?.getData('text/plain');
+    if (pastedText && pastedText.length > 80 && !this.pastedDocumentText()) {
+      event.preventDefault();
+      this.pastedDocumentText.set(pastedText.trim());
+      this.toastService.info('Dán nội dung', 'Đã tiếp nhận văn bản từ clipboard. Bạn có thể bấm "Xem & Sửa" để kiểm tra.');
+    }
+  }
+
+  private validateAndAttachFile(file: File): void {
+    const allowedExts = ['.docx', '.pdf', '.txt', '.md', '.xlsx', '.json', '.csv'];
+    const lowerName = (file.name || '').toLowerCase();
+    const hasAllowedExt = allowedExts.some((ext) => lowerName.endsWith(ext));
+    if (!hasAllowedExt) {
+      const msg = `Định dạng tệp "${file.name}" không được hỗ trợ. Chỉ chấp nhận: ${allowedExts.join(', ')}.`;
+      this.errorMessage.set(msg);
+      this.toastService.error('Tệp không hợp lệ', msg);
+      return;
+    }
+
+    if (file.size <= 0) {
+      const msg = `Tệp "${file.name}" bị rỗng (0 byte). Vui lòng chọn tệp có nội dung.`;
+      this.errorMessage.set(msg);
+      this.toastService.error('Tệp rỗng', msg);
+      return;
+    }
+
+    const maxBytes = 30 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      const msg = `Tệp "${file.name}" vượt quá giới hạn dung lượng 30 MB.`;
+      this.errorMessage.set(msg);
+      this.toastService.error('Tệp quá lớn', msg);
+      return;
+    }
+
+    this.attachedFile.set(file);
+    this.errorMessage.set(null);
+  }
+
+  clearPastedDocument(): void {
+    this.pastedDocumentText.set('');
+  }
+
+  useProjectSpecContext(): void {
+    this.promptInput.set(
+      'Phân tích tài liệu đặc tả trong Spec Hub của dự án Quản lý dự án, lập kế hoạch Sprint tiếp theo kèm Sprint Goal, phân rã Epics, Tasks, Subtasks kỹ thuật và phân bổ cho thành viên theo đúng năng lực.'
+    );
+    this.submitDecompose();
+  }
+
+  formatFileSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  }
+
+  async submitDecompose(): Promise<void> {
+    if (this.isStreaming()) return;
+
+    const promptText = this.promptInput().trim();
+    const docText = this.pastedDocumentText().trim();
+    const file = this.attachedFile();
+
+    const currentProposal = this.proposal();
+    const checkedIds = Object.entries(this.selectedTaskIds())
+      .filter(([, checked]) => checked)
+      .map(([id]) => id);
+
+    // If a proposal already exists and user typed follow-up instructions in chat:
+    // - If specific tasks are checked, regenerate only those selected tasks!
+    // - Otherwise, if no file is attached and proposal exists, regenerate full proposal or run new stream!
+    if (currentProposal && !file && !docText && promptText && checkedIds.length > 0) {
+      await this.regenerateSelectedTasksWithFeedback(promptText);
+      return;
+    }
+
+    const combinedText = [docText, promptText].filter(Boolean).join('\n\n');
+    if (!file && !combinedText) {
+      this.errorMessage.set('Vui lòng nhập yêu cầu, dán nội dung cuộc họp hoặc đính kèm tệp tài liệu (.docx, .pdf, .txt, .md).');
+      return;
+    }
+
+    this.errorMessage.set(null);
+    const nowTime = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+
+    this.chatHistory.update((list) => [
+      ...list,
+      {
+        id: `user_${Date.now()}`,
+        role: 'user',
+        text: promptText
+          ? (promptText.length > 1500 ? `${promptText.slice(0, 280).trim()}...` : promptText)
+          : (docText ? `Đã dán nội dung tài liệu (${docText.length} ký tự)` : `Phân tích tệp đính kèm: ${file?.name}`),
+        fullContent: combinedText && combinedText !== promptText ? combinedText : (promptText.length > 1500 ? promptText : undefined),
+        isContentExpanded: false,
+        fileName: file?.name,
+        fileSizeLabel: file ? this.formatFileSize(file.size) : undefined,
+        timestamp: nowTime,
+      },
+    ]);
+
+    this.promptInput.set('');
+    this.pastedDocumentText.set('');
+    this.attachedFile.set(null);
+
+    const rawPreview = (promptText || docText || file?.name || '').replace(/\s+/g, ' ').trim();
+    const shortPreview = rawPreview.length > 48 ? `${rawPreview.slice(0, 48).trim()}...` : rawPreview;
+    const initTarget = file ? file.name : 'Định tuyến Ý định';
+    const initSummary = file
+      ? `Đọc tệp đính kèm "${file.name}"`
+      : (shortPreview ? `Đọc yêu cầu "${shortPreview}"` : 'Đọc nội dung tài liệu đã dán');
+
+    this.isStreaming.set(true);
+    this.currentStepIndex.set(1);
+    this.currentPercent.set(10);
+    this.liveActionVerb.set('Phân tích');
+    this.liveActionTarget.set(initTarget);
+    this.liveActionSummary.set(initSummary);
+    this.currentStepLabel.set(`Phân tích · ${initTarget} — ${initSummary}`);
+    this.currentStepDetail.set(initSummary);
+    this.stepsLog.set([]);
+    this.toolCallsLog.set([]);
+    this.streamedThoughts.set('');
+    // Mặc định Thinking luôn đóng gọn để không che nội dung trao đổi
+    this.isThinkingExpanded.set(false);
+    this.startThinkingTimer();
+
+    this.abortController = new AbortController();
+    this.scrollChatToBottom();
+
+    // Nội dung gõ rất dài (biên bản họp dán thẳng vào ô chat) được coi là tài liệu, câu ngắn được coi là câu lệnh hội thoại
+    const promptIsDocument = promptText.length > 1500;
+    const effectiveDoc = [docText, promptIsDocument ? promptText : ''].filter(Boolean).join('\n\n');
+    const effectivePrompt = promptIsDocument ? '' : promptText;
+
+    try {
+      await this.aiService.streamDecomposeSprint(
+        {
+          projectId: this.projectId,
+          // Chỉ gửi nội dung tài liệu thật người dùng dán vào; không chèn câu mặc định để bộ phân loại ý định đọc đúng câu hỏi
+          text: effectiveDoc || undefined,
+          prompt: effectivePrompt || (effectiveDoc || file ? 'Phân tích tài liệu dự án và lập kế hoạch Sprint tiếp theo.' : undefined),
+          file,
+          model: this.selectedModel(),
+          // Hội thoại có trạng thái: tiếp tục cùng một phiên Redis để Trợ Lý AI nhớ toàn bộ ngữ cảnh trước đó
+          sessionId: this.activeSessionId() || undefined,
+        },
+        {
+          onSessionInit: (init) => {
+            this.activeSessionId.set(init.sessionId);
+          },
+          onStepProgress: (step) => {
+            this.currentStepIndex.set(step.stepIndex);
+            this.currentPercent.set(step.percent);
+            this.currentStepLabel.set(step.labelVi);
+            this.currentStepDetail.set(step.detail ?? '');
+            this.updateLiveActionFromStep(step, shortPreview);
+            this.stepsLog.update((prev) => {
+              const filtered = prev.filter((s) => s.stepIndex !== step.stepIndex);
+              return [...filtered, step].sort((a, b) => a.stepIndex - b.stepIndex);
+            });
+          },
+          onToolCall: (tool) => {
+            this.toolCallsLog.update((prev) => [...prev, tool]);
+            this.updateLiveActionFromTool(tool);
+          },
+          onThoughtDelta: (delta) => {
+            if (!delta) return;
+            // Loại bỏ hoàn toàn các chuỗi JSON payload kỹ thuật khỏi hiển thị luồng suy luận
+            const lower = delta.toLowerCase();
+            if (
+              lower.includes('"storypoints"') ||
+              lower.includes('"tasks"') ||
+              lower.includes('"epictitle"') ||
+              lower.includes('"assigneename"') ||
+              lower.includes('"estimatedhours"') ||
+              lower.includes('"acceptancecriteria"') ||
+              lower.includes('"subtasks"') ||
+              lower.includes('"documentcitations"') ||
+              (delta.includes('{') && delta.includes('}'))
+            ) {
+              return;
+            }
+            this.streamedThoughts.update((prev) => (prev + delta).slice(-2500));
+            const cleanThought = this.cleanStreamedThoughts();
+            if (cleanThought) {
+              const lines = cleanThought
+                .split(/\r?\n/)
+                .map((l) => l.trim())
+                .filter((l) => l.length > 6);
+              if (lines.length > 0) {
+                const lastLine = lines[lines.length - 1];
+                this.liveActionSummary.set(lastLine.length > 96 ? `${lastLine.slice(0, 96).trim()}...` : lastLine);
+              }
+            }
+          },
+          onProposalReady: (prop) => {
+            this.handleAssistantTurn(prop);
+          },
+          onCompleted: (done) => {
+            this.stopThinkingTimer();
+            this.isStreaming.set(false);
+            this.isThinkingExpanded.set(false);
+            if (done?.totalDurationMs && done.totalDurationMs > 0) {
+              this.chatHistory.update((list) => {
+                if (list.length === 0) return list;
+                const copy = [...list];
+                for (let i = copy.length - 1; i >= 0; i--) {
+                  if (copy[i].role === 'agent') {
+                    const updated = { ...copy[i] };
+                    if (!updated.durationMs || updated.durationMs <= 0) {
+                      updated.durationMs = done.totalDurationMs;
+                    }
+                    if (!updated.thinkingSummary) {
+                      updated.thinkingSummary = this.buildFallbackThinkingSummary(updated);
+                    }
+                    copy[i] = updated;
+                    break;
+                  }
+                }
+                return copy;
+              });
+            }
+            this.saveSession();
+            this.loadProjectSessions();
+          },
+          onError: (err) => {
+            this.stopThinkingTimer();
+            this.isThinkingExpanded.set(false);
+            this.errorMessage.set(err.message || 'Đã xảy ra lỗi khi phân tách công việc.');
+            this.isStreaming.set(false);
+          },
+        },
+        this.abortController.signal
+      );
+    } catch (err: any) {
+      this.stopThinkingTimer();
+      this.isThinkingExpanded.set(false);
+      if (err?.name !== 'AbortError') {
+        this.errorMessage.set('Kết nối luồng SSE bị gián đoạn. Vui lòng thử lại.');
+      }
+      this.isStreaming.set(false);
+    }
+  }
+
+  /**
+   * Xử lý một lượt trả lời của Trợ Lý AI trong hội thoại có trạng thái.
+   * - Các ý định sinh/cập nhật kế hoạch sẽ làm mới bảng đề xuất và gắn bảng vào lượt trả lời này.
+   * - Các ý định hỏi đáp, xuất Excel, từ chối ngoài phạm vi giữ nguyên bảng đề xuất đang có.
+   * - Các ý định hành động (đẩy Backlog / áp dụng Sprint) tự động thực thi trên đề xuất hiện có.
+   */
+  private handleAssistantTurn(prop: AiSprintProposalDto): void {
+    this.normalizeProposal(prop);
+    const intent = (prop.intent || 'sprint_plan').toString();
+    const action = (prop.triggerAction || 'none').toString();
+    const producesTable = ['sprint_plan', 'backlog_plan', 'refine_proposal'].includes(intent) && prop.tasks.length > 0;
+
+    // Backend luôn bảo toàn danh sách đề xuất của phiên (kể cả lượt hỏi đáp / xuất Excel) nên có thể gán trực tiếp
+    this.proposal.set(prop);
+    if (prop.sessionId) this.activeSessionId.set(prop.sessionId);
+
+    if (producesTable) {
+      const autoExpand: Record<string, boolean> = {};
+      for (const t of prop.tasks) {
+        if (t.subtasks && t.subtasks.length > 0) autoExpand[t.id] = true;
+      }
+      this.expandedSubtasks.set(autoExpand);
+      this.selectedTaskIds.set({});
+    }
+
+    const subCount = prop.tasks.reduce((sum, t) => sum + (t.subtasks?.length || 0), 0);
+    const fallbackReply = producesTable
+      ? `Tôi đã lập ${prop.tasks.length} hạng mục công việc chính và ${subCount} việc con (${prop.totalStoryPoints} SP) dựa trên dữ liệu thực của dự án. Bạn có thể chỉnh sửa trực tiếp trong bảng bên dưới, yêu cầu tôi điều chỉnh tiếp, đẩy vào kho Backlog hoặc áp dụng vào Sprint tiếp theo.`
+      : 'Tôi đã xử lý xong yêu cầu của bạn.';
+
+    const historyArr = prop.conversationHistory ?? [];
+    const lastBackendAssistantTurn = [...historyArr]
+      .reverse()
+      .find((h) => h.role === 'assistant');
+
+    const traceItems =
+      lastBackendAssistantTurn?.traceItems && lastBackendAssistantTurn.traceItems.length > 0
+        ? lastBackendAssistantTurn.traceItems
+        : this.buildTraceItemsFromLog(this.toolCallsLog());
+    const durationMs =
+      lastBackendAssistantTurn?.durationMs ??
+      Math.max(100, Math.round(this.thinkingElapsedSeconds() * 1000));
+    const thoughts =
+      (lastBackendAssistantTurn?.thoughts || '').trim() ||
+      this.cleanStreamedThoughts() ||
+      null;
+    const referencedMemoryAnchors = lastBackendAssistantTurn?.referencedMemoryAnchors ?? [];
+    const documentCitations = lastBackendAssistantTurn?.documentCitations ?? [];
+    const turnExportSpec = lastBackendAssistantTurn?.exportSpec ?? prop.exportSpec ?? null;
+    const rawRemovalPlan =
+      lastBackendAssistantTurn?.removalPlan ??
+      (prop.pendingRemovalPlan?.status === 'pending' ? prop.pendingRemovalPlan : null);
+    const turnRemovalPlan =
+      rawRemovalPlan && !(rawRemovalPlan.canDelete === false && rawRemovalPlan.canDetachToBacklog === false)
+        ? rawRemovalPlan
+        : null;
+    if (turnRemovalPlan) {
+      this.initRemovalSelectionForPlan(turnRemovalPlan);
+    }
+
+    const doneTime = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    const turnId = lastBackendAssistantTurn?.id || `agent_${Date.now()}`;
+    const newTurn: ChatTurn = {
+      id: turnId,
+      role: 'agent',
+      text: (prop.assistantReply || '').trim() || fallbackReply,
+      timestamp: doneTime,
+      intent,
+      actionType: action,
+      toolCalls: [...this.toolCallsLog()],
+      traceItems,
+      durationMs,
+      thoughts,
+      referencedMemoryAnchors,
+      documentCitations,
+      hasProposalTable: producesTable,
+      exportSpec: action === 'export_excel' ? turnExportSpec : null,
+      removalPlan: action === 'confirm_remove_tasks' || !!turnRemovalPlan ? turnRemovalPlan : null,
+    };
+    newTurn.thinkingSummary =
+      (lastBackendAssistantTurn?.thinkingSummary || '').trim() ||
+      this.buildFallbackThinkingSummary(newTurn);
+
+    this.chatHistory.update((list) => {
+      const appended = [...list, newTurn];
+      if (appended.length > AiDecomposeModalComponent.MAX_DOM_TURNS && this.activeSessionId()) {
+        return appended.slice(-AiDecomposeModalComponent.MAX_DOM_TURNS);
+      }
+      return appended;
+    });
+    const serverTotal = prop.totalConversationTurns ?? prop.conversationHistory?.length ?? 0;
+    const loadedLen = this.chatHistory().length;
+    const nextTotal =
+      serverTotal > 0
+        ? Math.max(serverTotal, loadedLen)
+        : Math.max(this.totalMessagesCount() + 2, loadedLen);
+    this.totalMessagesCount.set(nextTotal);
+    if (this.activeSessionId() && nextTotal > loadedLen) {
+      const newOldest = nextTotal - loadedLen;
+      if (this.oldestLoadedIndex() === null || this.oldestLoadedIndex()! < newOldest) {
+        this.oldestLoadedIndex.set(newOldest);
+        this.hasOlderMessages.set(newOldest > 0);
+      }
+    }
+    this.saveSession();
+    this.scrollChatToBottom(true);
+
+    // Thực thi hành động hội thoại trên dữ liệu thật
+    if (action === 'export_excel') {
+      void this.exportProjectExcelFromChat(turnExportSpec);
+    } else if (action === 'push_backlog') {
+      void this.commitToBacklogProposal();
+    } else if (action === 'apply_sprint') {
+      if (!this.canCommitSprint) {
+        this.appendAssistantNote('Bạn chưa có quyền quản trị Sprint để áp dụng trực tiếp vào Sprint. Hãy dùng nút "Đẩy vào Kho Backlog" hoặc nhờ Quản lý dự án/Scrum Master áp dụng.');
+        return;
+      }
+      void this.commitSprintProposal();
+    }
+  }
+
+  toggleTurnTrace(turnId: string): void {
+    this.expandedTurnTraces.update((prev) => ({ ...prev, [turnId]: !prev[turnId] }));
+  }
+
+  toggleTraceRow(rowKey: string, event?: Event): void {
+    event?.stopPropagation();
+    this.expandedTraceRows.update((prev) => ({ ...prev, [rowKey]: !prev[rowKey] }));
+  }
+
+  buildTraceItemsFromLog(tools?: AiToolCallEvent[]): AiTurnTraceItemDto[] {
+    if (!tools || tools.length === 0) return [];
+    return tools.map((t) => ({
+      kind: 'mcp',
+      actionVerb: t.actionVerb || this.inferActionVerb(t.toolName),
+      target: t.targetLabel || this.inferTargetLabel(t.toolName),
+      summary: t.summaryVi || t.toolName,
+      detail: t.detailPreview ?? null,
+      durationMs: t.durationMs ?? null,
+      status: 'done',
+    }));
+  }
+
+  buildFallbackThinkingSummary(turn: ChatTurn): string {
+    const items =
+      turn.traceItems && turn.traceItems.length > 0
+        ? turn.traceItems
+        : this.buildTraceItemsFromLog(turn.toolCalls);
+    const secNum = Math.max(0.1, (turn.durationMs ?? 0) / 1000);
+    const secLabel = turn.durationMs && turn.durationMs > 0 ? `${secNum.toFixed(1)}s` : '';
+    const opCount = items.length;
+    const head =
+      secLabel && opCount > 0
+        ? `Đã suy nghĩ xong trong ${secLabel} · ${opCount} thao tác`
+        : opCount > 0
+          ? `Đã suy nghĩ xong · ${opCount} thao tác`
+          : secLabel
+            ? `Đã suy nghĩ xong trong ${secLabel}`
+            : 'Đã suy nghĩ xong';
+
+    const highlights = items
+      .filter((t) => (t.target || '').toLowerCase() !== 'định tuyến ý định')
+      .map((t) => (t.target ? `${t.actionVerb}: ${t.target}` : t.actionVerb))
+      .filter(Boolean)
+      .slice(0, 3);
+
+    return highlights.length > 0 ? `${head} — ${highlights.join(' → ')}` : head;
+  }
+
+  getTurnCompactChips(turn: ChatTurn): Array<{ verb: string; target: string; icon: string }> {
+    const items =
+      turn.traceItems && turn.traceItems.length > 0
+        ? turn.traceItems
+        : this.buildTraceItemsFromLog(turn.toolCalls);
+    const seen = new Set<string>();
+    const chips: Array<{ verb: string; target: string; icon: string }> = [];
+    for (const item of items) {
+      const verb = (item.actionVerb || '').trim();
+      const target = (item.target || '').trim();
+      if (!target || target.toLowerCase() === 'định tuyến ý định') continue;
+      const key = `${verb}:${target}`.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      chips.push({ verb, target, icon: this.getActionRowIcon(verb) });
+    }
+    return chips.slice(0, 4);
+  }
+
+  private updateLiveActionFromStep(step: AiStepProgressEvent, queryPreview: string): void {
+    const rawLabel = (step.labelVi || '').trim();
+    const dotIdx = rawLabel.indexOf('·');
+    const dashMatch = rawLabel.match(/\s+[—–-]\s+/);
+
+    if (dotIdx > 0 && dashMatch && dashMatch.index !== undefined && dashMatch.index > dotIdx) {
+      const verb = rawLabel.slice(0, dotIdx).trim();
+      const target = rawLabel.slice(dotIdx + 1, dashMatch.index).trim();
+      const summary = rawLabel.slice(dashMatch.index + dashMatch[0].length).trim();
+      this.liveActionVerb.set(verb || 'Thực thi');
+      this.liveActionTarget.set(target || this.selectedModel());
+      this.liveActionSummary.set(summary || step.detail || '');
+      return;
+    }
+
+    const activeTargets = this.liveExecutedChips().map((c) => c.target);
+    const activeSourcesText = activeTargets.length > 0 ? activeTargets.join(' · ') : 'ngữ cảnh phiên';
+    const stepKey = (step.stepName || '').toUpperCase();
+
+    if (stepKey === 'PROJECT_CONSULTATION' || stepKey === 'DECOMPOSE_SPRINT') {
+      this.liveActionVerb.set('Suy luận AI');
+      this.liveActionTarget.set(this.selectedModel());
+      this.liveActionSummary.set(
+        queryPreview
+          ? `Phân tích "${queryPreview}" (${activeSourcesText})`
+          : (step.detail || rawLabel)
+      );
+      return;
+    }
+
+    if (stepKey === 'RECALL_MEMORY') {
+      this.liveActionVerb.set('Trỏ trí nhớ');
+      this.liveActionTarget.set(activeTargets[0] || '#mem');
+      this.liveActionSummary.set(step.detail || rawLabel);
+      return;
+    }
+
+    if (stepKey === 'QUERY_CONTEXT' || stepKey === 'EVALUATE_CAPACITY') {
+      const lastTool = this.toolCallsLog().slice(-1)[0];
+      this.liveActionVerb.set(lastTool?.actionVerb || 'Truy vấn MCP');
+      this.liveActionTarget.set(lastTool?.targetLabel || lastTool?.toolName || 'Dữ liệu dự án');
+      this.liveActionSummary.set(lastTool?.summaryVi || step.detail || rawLabel);
+      return;
+    }
+
+    if (stepKey === 'FINALIZE_PROPOSAL') {
+      this.liveActionVerb.set('Kiểm chuẩn');
+      this.liveActionTarget.set(this.proposal()?.workflowName || 'Quy chuẩn dự án');
+      this.liveActionSummary.set(step.detail || rawLabel);
+      return;
+    }
+
+    this.liveActionVerb.set('Phân tích');
+    this.liveActionTarget.set('Định tuyến Ý định');
+    this.liveActionSummary.set(
+      queryPreview ? `Đọc yêu cầu "${queryPreview}"` : (step.detail || rawLabel)
+    );
+  }
+
+  private updateLiveActionFromTool(tool: AiToolCallEvent): void {
+    const verb = tool.actionVerb || this.inferActionVerb(tool.toolName);
+    const target = tool.targetLabel || this.inferTargetLabel(tool.toolName);
+    const summary = tool.summaryVi || tool.toolName;
+    this.liveActionVerb.set(verb);
+    this.liveActionTarget.set(target);
+    this.liveActionSummary.set(summary);
+    this.currentStepLabel.set(`${verb} · ${target} — ${summary}`);
+  }
+
+  getActionRowIcon(verb?: string | null): string {
+    const v = (verb || '').toLowerCase();
+    if (v.includes('phân tích') || v.includes('đọc')) return 'manage_search';
+    if (v.includes('trí nhớ') || v.includes('trỏ') || v.includes('ngữ cảnh')) return 'bookmarks';
+    if (v.includes('mcp') || v.includes('truy vấn')) return 'database';
+    if (v.includes('suy luận') || v.includes('tổng hợp')) return 'psychology';
+    if (v.includes('kiểm') || v.includes('ngăn chặn')) return 'verified_user';
+    return 'bolt';
+  }
+
+  private inferActionVerb(toolName?: string): string {
+    const k = (toolName || '').toLowerCase();
+    if (k.includes('intent')) return 'Phân tích';
+    if (k.includes('memory')) return 'Trỏ trí nhớ';
+    if (k.includes('read_document')) return 'Đọc Spec Hub';
+    if (k.includes('gemini') || k.includes('reason') || k.includes('synthesis') || k.includes('focused_answer')) return 'Suy luận AI';
+    if (k.includes('guardrail') || k.includes('audit') || k.includes('critique') || k.includes('resolver')) return 'Kiểm chuẩn';
+    if (k.includes('project') || k.includes('backlog') || k.includes('spec') || k.includes('sprint') || k.includes('team')) {
+      return 'Truy vấn MCP';
+    }
+    return 'Thực thi';
+  }
+
+  private inferTargetLabel(toolName?: string): string {
+    const k = (toolName || '').toLowerCase();
+    if (k.includes('intent')) return 'Định tuyến Ý định';
+    if (k.includes('memory')) return 'Chỉ mục ghi nhớ phiên (#mem-X)';
+    if (k === 'spec_hub_search') return 'spec_hub_search';
+    if (k === 'spec_hub_read_document') return 'spec_hub_read_document';
+    if (k === 'backlog_get_stories') return 'backlog_get_stories';
+    if (k === 'sprint_get_history_and_velocity') return 'sprint_get_history_and_velocity';
+    if (k === 'team_get_dev_capacities') return 'team_get_dev_capacities';
+    if (k === 'project_get_active_config') return 'project_get_active_config';
+    if (k === 'project_export_metadata') return 'project_export_metadata';
+    if (k.includes('active_config')) return 'project_get_active_config';
+    if (k.includes('backlog')) return 'backlog_get_stories';
+    if (k.includes('spechub')) return 'spec_hub_search';
+    if (k.includes('sprint')) return 'sprint_get_history_and_velocity';
+    if (k.includes('team')) return 'team_get_dev_capacities';
+    if (k.includes('gemini') || k.includes('reason') || k.includes('synthesis')) return this.selectedModel();
+    if (k.includes('guardrail') || k.includes('critique')) return 'Bộ kiểm chuẩn & Ngữ cảnh dự án';
+    return toolName || 'Công cụ hệ thống';
+  }
+
+  getIntentLabel(intent?: string | null): string {
+    switch (intent) {
+      case 'sprint_plan':
+        return 'Lập kế hoạch Sprint';
+      case 'backlog_plan':
+        return 'Lập danh sách cho kho Backlog';
+      case 'refine_proposal':
+        return 'Điều chỉnh đề xuất';
+      case 'project_qa':
+        return 'Tra cứu dự án';
+      case 'export_excel':
+        return 'Xuất Excel';
+      case 'remove_tasks':
+        return 'Gỡ / Xóa công việc';
+      case 'push_backlog':
+        return 'Đẩy vào kho Backlog';
+      case 'apply_sprint':
+        return 'Áp dụng vào Sprint';
+      case 'out_of_scope_refusal':
+        return 'Ngoài phạm vi';
+      default:
+        return '';
+    }
+  }
+
+  scrollToLatestMessage(smooth = true): void {
+    this.scrollChatToBottom(smooth);
+  }
+
+  onChatScroll(event: Event): void {
+    const el = event.target as HTMLElement | null;
+    if (!el) return;
+
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    this.showScrollToBottom.set(distanceFromBottom > 180 && this.chatHistory().length > 0);
+
+    if (
+      el.scrollTop <= 64 &&
+      this.hasOlderMessages() &&
+      !this.isLoadingOlderMessages() &&
+      !this.isStreaming() &&
+      !this.loadingOlderGuard
+    ) {
+      this.loadOlderMessages();
+    }
+  }
+
+  loadOlderMessages(): void {
+    const sessionId = this.activeSessionId();
+    const beforeIdx = this.oldestLoadedIndex();
+    if (!sessionId || !this.projectId || !this.hasOlderMessages() || this.isLoadingOlderMessages()) {
+      return;
+    }
+    if (beforeIdx === null || beforeIdx <= 0) {
+      this.hasOlderMessages.set(false);
+      return;
+    }
+
+    this.isLoadingOlderMessages.set(true);
+    this.loadingOlderGuard = true;
+
+    const scrollEl = this.chatScrollBody?.nativeElement;
+    const prevScrollHeight = scrollEl?.scrollHeight ?? 0;
+    const prevScrollTop = scrollEl?.scrollTop ?? 0;
+
+    this.aiService
+      .getSessionMessages(sessionId, this.projectId, beforeIdx, AiDecomposeModalComponent.MESSAGE_PAGE_SIZE)
+      .subscribe({
+        next: (page) => {
+          const olderTurns = this.mapDtoTurnsToChatTurns(page.messages ?? [], false);
+          if (olderTurns.length > 0) {
+            this.chatHistory.update((curr) => {
+              const existingIds = new Set(curr.map((t) => t.id));
+              const uniqueOlder = olderTurns.filter((t) => !existingIds.has(t.id));
+              return uniqueOlder.length > 0 ? [...uniqueOlder, ...curr] : curr;
+            });
+          }
+          this.totalMessagesCount.set(page.totalCount);
+          this.oldestLoadedIndex.set(page.oldestLoadedIndex ?? 0);
+          this.hasOlderMessages.set(page.hasOlderMessages);
+
+          // Giữ nguyên vị trí đang đọc sau khi chèn thêm tin nhắn cũ ở đỉnh danh sách
+          requestAnimationFrame(() => {
+            const el = this.chatScrollBody?.nativeElement;
+            if (el) {
+              const heightDelta = el.scrollHeight - prevScrollHeight;
+              el.scrollTop = Math.max(0, prevScrollTop + heightDelta);
+            }
+            this.isLoadingOlderMessages.set(false);
+            setTimeout(() => {
+              this.loadingOlderGuard = false;
+            }, 180);
+          });
+        },
+        error: () => {
+          this.isLoadingOlderMessages.set(false);
+          setTimeout(() => {
+            this.loadingOlderGuard = false;
+          }, 300);
+          this.toastService.error('Tải tin nhắn cũ', 'Không thể tải thêm lịch sử hội thoại cũ hơn.');
+        },
+      });
+  }
+
+  private mapDtoTurnsToChatTurns(dtos: AiConversationTurnDto[], markLatestProposalTable: boolean): ChatTurn[] {
+    const mapped: ChatTurn[] = dtos.map((h, idx) => {
+      const turn: ChatTurn = {
+        id: h.id || `restored_${idx}_${Date.now()}`,
+        role: h.role === 'user' ? 'user' : 'agent',
+        text: h.content || '',
+        fullContent: h.role === 'user' && h.fullContent && h.fullContent !== h.content ? h.fullContent : undefined,
+        fileName: h.fileName || undefined,
+        timestamp: h.timestampUtc
+          ? new Date(h.timestampUtc).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+          : '',
+        intent: h.intent ?? undefined,
+        actionType: h.actionType ?? undefined,
+        traceItems: h.traceItems ?? [],
+        thinkingSummary: h.thinkingSummary ?? null,
+        durationMs: h.durationMs ?? null,
+        thoughts: h.thoughts ?? null,
+        referencedMemoryAnchors: h.referencedMemoryAnchors ?? [],
+        documentCitations: h.documentCitations ?? [],
+        exportSpec: h.exportSpec ?? null,
+        removalPlan: h.removalPlan ?? null,
+      };
+      if (h.removalPlan && h.removalPlan.status === 'pending') {
+        this.initRemovalSelectionForPlan(h.removalPlan);
+      }
+      if (turn.role === 'agent' && !turn.thinkingSummary && ((turn.traceItems?.length ?? 0) > 0 || (turn.durationMs ?? 0) > 0)) {
+        turn.thinkingSummary = this.buildFallbackThinkingSummary(turn);
+      }
+      return turn;
+    });
+
+    if (markLatestProposalTable) {
+      for (let i = mapped.length - 1; i >= 0; i--) {
+        if (mapped[i].role === 'agent' && ['sprint_plan', 'backlog_plan', 'refine_proposal'].includes(mapped[i].intent || '')) {
+          mapped[i].hasProposalTable = true;
+          break;
+        }
+      }
+    }
+    return mapped;
+  }
+
+  private scrollChatToBottom(smooth = true): void {
+    const performScroll = () => {
+      const el = this.chatScrollBody?.nativeElement;
+      if (!el) return;
+      el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+      this.showScrollToBottom.set(false);
+    };
+
+    requestAnimationFrame(() => {
+      performScroll();
+      if (!smooth) {
+        setTimeout(performScroll, 60);
+        setTimeout(performScroll, 180);
+      } else {
+        setTimeout(performScroll, 120);
+      }
+    });
+  }
+
+  private appendAssistantNote(text: string, actionType: string = 'none'): void {
+    const doneTime = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    this.chatHistory.update((list) => [
+      ...list,
+      { id: `agent_note_${Date.now()}`, role: 'agent', text, timestamp: doneTime, actionType },
+    ]);
+    this.saveSession();
+    this.scrollChatToBottom();
+  }
+
+  /** Xuất tệp Excel theo đúng phạm vi, bộ lọc hoặc chế độ chi tiết mà Trợ Lý AI đã phân tích cho lượt hội thoại này */
+  async exportProjectExcelFromChat(spec?: AiExcelExportSpecDto | null): Promise<void> {
+    try {
+      let items = [...this.projectManagementService.workItems()];
+      const allSprints = this.sprints?.length ? this.sprints : this.projectManagementService.sprints();
+      const targetDetailId = spec?.scope === 'task_detail' && spec.searchKeyword !== 'ai_proposal'
+        ? spec.issueIds?.[0]
+        : undefined;
+
+      if (targetDetailId) {
+        try {
+          const freshItem = await firstValueFrom(this.projectManagementService.getIssue(targetDetailId));
+          if (freshItem?.id) {
+            const exists = items.some((i) => i.id?.toLowerCase() === freshItem.id.toLowerCase());
+            items = exists
+              ? items.map((i) => (i.id?.toLowerCase() === freshItem.id.toLowerCase() ? freshItem : i))
+              : [...items, freshItem];
+          }
+        } catch {
+          // Bỏ qua lỗi mạng nếu dữ liệu đã có sẵn trong tín hiệu cục bộ
+        }
+      }
+
+      const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const safeKey = (this.projectKey || 'ProjectMgmt').replace(/[^\w\-]/g, '');
+      const effectiveSpec: AiExcelExportSpecDto = spec ?? {
+        scope: 'project_all',
+        title: `BÁO CÁO TỔNG HỢP DỰ ÁN - ${(this.projectName || safeKey).toUpperCase()}`,
+        suggestedFileName: `${safeKey}_Bao_Cao_Du_An_${today}.xlsx`,
+        includeSubtasks: true,
+        includeLegend: true,
+      };
+
+      const res = this.excelDataService.exportFromAiSpec(items, allSprints, effectiveSpec, {
+        projectName: this.projectName || safeKey,
+        projectKey: safeKey,
+        projectStatuses: this.projectManagementService.projectStatuses(),
+        proposal: this.proposal(),
+      });
+      this.toastService.success('Xuất Excel thành công', `Đã tạo tệp ${res.filename} (${res.itemCount} mục).`);
+    } catch {
+      this.errorMessage.set('Không thể tạo tệp Excel từ dữ liệu dự án. Vui lòng thử lại.');
+    }
+  }
+
+  /** Đẩy toàn bộ đề xuất hiện có vào kho Product Backlog (SprintId = null), chuyển hẳn các mục lấy từ Backlog cũ thay vì nhân bản */
+  async commitToBacklogProposal(): Promise<void> {
+    const prop = this.proposal();
+    if (!prop || prop.tasks.length === 0 || this.isPushingBacklog() || this.isApplying()) return;
+
+    this.isPushingBacklog.set(true);
+    this.errorMessage.set(null);
+    try {
+      const res = await firstValueFrom(
+        this.aiService.applyProposal({
+          sessionId: this.activeSessionId() || prop.sessionId,
+          projectId: this.projectId,
+          targetSprintId: null,
+          sprintGoal: prop.sprintGoal || '',
+          tasks: prop.tasks,
+          pushToBacklog: true,
+        })
+      );
+      const committedCount = prop.tasks.length;
+      this.appendAssistantNote(
+        res.message ||
+          `Đã lưu ${res.createdTaskCount} công việc và ${res.createdSubtaskCount} việc con vào kho Product Backlog của dự án.`,
+        'push_backlog_done'
+      );
+      // Các mục đã lưu thật vào dự án: dọn khỏi bảng đề xuất để không lưu trùng ở lượt sau
+      this.proposal.set({ ...prop, tasks: [], totalStoryPoints: 0, totalEstimatedHours: 0 });
+      this.persistProposalEdits();
+      this.saveSession();
+      this.dataChanged.emit();
+      this.toastService.show(`Đã đẩy ${committedCount} hạng mục vào kho Backlog.`, 'success');
+    } catch (err: any) {
+      const msg = err?.error?.message || 'Không thể đẩy đề xuất vào kho Backlog.';
+      this.errorMessage.set(msg);
+      this.appendAssistantNote(`Chưa thể lưu vào kho Backlog: ${msg}`);
+    } finally {
+      this.isPushingBacklog.set(false);
+    }
+  }
+
+  private initRemovalSelectionForPlan(plan?: AiTaskRemovalPlanDto | null): void {
+    if (!plan?.planId || this.removalSelections()[plan.planId]) return;
+    const map: Record<string, boolean> = {};
+    for (const item of plan.candidates || []) {
+      map[item.issueId] = item.selectedByDefault ?? true;
+    }
+    this.removalSelections.update((prev) => ({ ...prev, [plan.planId]: map }));
+  }
+
+  isRemovalCandidateSelected(plan: AiTaskRemovalPlanDto, issueId: string): boolean {
+    const map = this.removalSelections()[plan.planId];
+    return map ? !!map[issueId] : true;
+  }
+
+  areAllRemovalCandidatesSelected(plan: AiTaskRemovalPlanDto): boolean {
+    const candidates = plan.candidates || [];
+    return candidates.length > 0 && candidates.every((c) => this.isRemovalCandidateSelected(plan, c.issueId));
+  }
+
+  toggleAllRemovalCandidates(plan: AiTaskRemovalPlanDto): void {
+    if (plan.status !== 'pending') return;
+    const selectAll = !this.areAllRemovalCandidatesSelected(plan);
+    const nextMap: Record<string, boolean> = {};
+    for (const c of plan.candidates || []) {
+      nextMap[c.issueId] = selectAll;
+    }
+    this.removalSelections.update((prev) => ({ ...prev, [plan.planId]: nextMap }));
+  }
+
+  toggleRemovalCandidate(plan: AiTaskRemovalPlanDto, issueId: string): void {
+    if (plan.status !== 'pending') return;
+    const current = this.isRemovalCandidateSelected(plan, issueId);
+    const existing = this.removalSelections()[plan.planId] || {};
+    this.removalSelections.update((prev) => ({
+      ...prev,
+      [plan.planId]: { ...existing, [issueId]: !current },
+    }));
+  }
+
+  getSelectedRemovalCount(plan: AiTaskRemovalPlanDto): number {
+    return (plan.candidates || []).filter((c) => this.isRemovalCandidateSelected(plan, c.issueId)).length;
+  }
+
+  hasSelectedSprintCandidate(plan: AiTaskRemovalPlanDto): boolean {
+    return (plan.candidates || []).some((c) => this.isRemovalCandidateSelected(plan, c.issueId) && !!c.sprintId);
+  }
+
+  async executeRemovalPlan(
+    turn: ChatTurn,
+    plan: AiTaskRemovalPlanDto,
+    mode: 'detach_to_backlog' | 'soft_delete' | 'cancel'
+  ): Promise<void> {
+    if (!plan || plan.status !== 'pending' || this.confirmingRemovalPlanId()) return;
+
+    const selectedIds =
+      mode === 'cancel'
+        ? []
+        : (plan.candidates || [])
+            .filter((c) => this.isRemovalCandidateSelected(plan, c.issueId))
+            .map((c) => c.issueId);
+
+    if (mode !== 'cancel' && selectedIds.length === 0) {
+      this.toastService.show('Vui lòng chọn ít nhất một công việc để thực hiện.', 'info');
+      return;
+    }
+
+    const sessionId = this.activeSessionId() || this.proposal()?.sessionId || '';
+    if (!sessionId) {
+      this.errorMessage.set('Không tìm thấy mã phiên làm việc AI để xác nhận thao tác.');
+      return;
+    }
+
+    this.confirmingRemovalPlanId.set(plan.planId);
+    this.errorMessage.set(null);
+
+    try {
+      const res = await firstValueFrom(
+        this.aiService.confirmTaskRemoval({
+          sessionId,
+          projectId: this.projectId,
+          planId: plan.planId,
+          mode,
+          issueIds: selectedIds,
+        })
+      );
+
+      const updatedPlan: AiTaskRemovalPlanDto = {
+        ...plan,
+        status: mode === 'cancel' ? 'cancelled' : 'executed',
+        executedMode: mode,
+        completedMessage: res.message,
+      };
+
+      this.chatHistory.update((list) =>
+        list.map((t) =>
+          t.id === turn.id || t.removalPlan?.planId === plan.planId
+            ? { ...t, removalPlan: updatedPlan }
+            : t
+        )
+      );
+
+      const curProp = this.proposal();
+      if (curProp && curProp.pendingRemovalPlan?.planId === plan.planId) {
+        this.proposal.set({ ...curProp, pendingRemovalPlan: null, triggerAction: 'none' });
+      }
+
+      this.appendAssistantNote(
+        res.message || 'Đã xử lý yêu cầu gỡ / xóa công việc.',
+        mode === 'cancel' ? 'remove_tasks_cancelled' : 'remove_tasks_done'
+      );
+
+      if (mode !== 'cancel') {
+        this.dataChanged.emit();
+        this.toastService.show(res.message || 'Đã cập nhật công việc theo xác nhận.', 'success');
+      } else {
+        this.toastService.show('Đã hủy bỏ thao tác gỡ / xóa công việc.', 'info');
+      }
+    } catch (err: any) {
+      const msg = err?.error?.message || 'Không thể thực hiện xác nhận gỡ / xóa công việc.';
+      this.errorMessage.set(msg);
+      this.toastService.show(msg, 'error');
+    } finally {
+      this.confirmingRemovalPlanId.set(null);
+    }
+  }
+
+  private normalizeProposal(prop: AiSprintProposalDto): void {
+    if (!prop.tasks) prop.tasks = [];
+    const fallbackStatus = prop.initialStatus || this.defaultInitialStatus();
+    const fallbackPriority = this.defaultPriorityName();
+    prop.tasks.forEach((t, idx) => {
+      if (!t.id) t.id = `task_${idx + 1}`;
+      if (!t.status) t.status = fallbackStatus;
+      if (!t.priority) t.priority = fallbackPriority;
+      if (t.isReady === undefined) t.isReady = true;
+      if (!t.remainingHours || t.remainingHours <= 0) t.remainingHours = t.estimatedHours || 8;
+      if (!t.acceptanceCriteria) t.acceptanceCriteria = [];
+      if (!t.documentCitations) t.documentCitations = [];
+      if (!t.subtasks) t.subtasks = [];
+
+      // Normalize each subtask as a full task entity
+      t.subtasks.forEach((sub, sIdx) => {
+        if (!sub.id) sub.id = `${t.id}_sub_${sIdx + 1}`;
+        if (!sub.priority) sub.priority = t.priority || fallbackPriority;
+        if (!sub.status) sub.status = t.status || fallbackStatus;
+        if (!sub.storyPoints || sub.storyPoints <= 0) sub.storyPoints = 1;
+        if (!sub.estimatedHours || sub.estimatedHours <= 0) sub.estimatedHours = 4;
+        if (!sub.role) sub.role = 'Kỹ thuật';
+        if (!sub.assigneeName) sub.assigneeName = t.assigneeName;
+        if (!sub.assigneeUserId) sub.assigneeUserId = t.assigneeUserId;
+        // Không tự bịa mô tả / tiêu chí nghiệm thu / trích dẫn cho việc con: chỉ hiển thị đúng dữ liệu AI sinh ra từ nguồn thật
+        if (!sub.acceptanceCriteria) sub.acceptanceCriteria = [];
+        if (!sub.documentCitations || sub.documentCitations.length === 0) {
+          sub.documentCitations = t.documentCitations && t.documentCitations.length > 0 ? [...t.documentCitations] : [];
+        }
+      });
+    });
+  }
+
+  getTaskDisplayCode(index: number): string {
+    return `${this.projectKey || 'PRJ'}-AI${index + 1}`;
+  }
+
+  getStepStatus(stepIndex: number): 'done' | 'active' | 'pending' {
+    if (!this.isStreaming() && this.proposal()) return 'done';
+    const curr = this.currentStepIndex();
+    if (stepIndex < curr) return 'done';
+    if (stepIndex === curr) return 'active';
+    return 'pending';
+  }
+
+  toggleTaskCheckbox(taskId: string, event: Event): void {
+    event.stopPropagation();
+    const checked = (event.target as HTMLInputElement).checked;
+    this.selectedTaskIds.update((prev) => ({ ...prev, [taskId]: checked }));
+  }
+
+  toggleSelectAllTasks(event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    const prop = this.proposal();
+    if (!prop) return;
+    const next: Record<string, boolean> = {};
+    if (checked) {
+      for (const t of prop.tasks) next[t.id] = true;
+    }
+    this.selectedTaskIds.set(next);
+  }
+
+  toggleSubtaskExpand(taskId: string, event: Event): void {
+    event.stopPropagation();
+    this.expandedSubtasks.update((prev) => ({ ...prev, [taskId]: !prev[taskId] }));
+  }
+
+  openTaskDrawer(task: ProposedTaskDto, event?: Event): void {
+    event?.stopPropagation();
+    this.activeDrawerSubtask.set(null);
+    this.activeDrawerTaskId.set(task.id);
+    this.drawerRegenerateFeedback.set('');
+  }
+
+  closeTaskDrawer(): void {
+    this.activeDrawerTaskId.set(null);
+    this.persistProposalEdits();
+  }
+
+  openSubtaskDrawer(parentTask: ProposedTaskDto, subtask: ProposedSubTaskDto, event?: Event): void {
+    event?.stopPropagation();
+    this.activeDrawerTaskId.set(null);
+    if (!subtask.acceptanceCriteria) subtask.acceptanceCriteria = [];
+    if (!subtask.documentCitations || subtask.documentCitations.length === 0) {
+      subtask.documentCitations = parentTask.documentCitations && parentTask.documentCitations.length > 0
+        ? [...parentTask.documentCitations]
+        : [];
+    }
+    this.activeDrawerSubtask.set({ parentTask, subtask });
+  }
+
+  closeSubtaskDrawer(): void {
+    this.activeDrawerSubtask.set(null);
+    this.onTaskFieldChanged();
+    this.persistProposalEdits();
+  }
+
+  onSubtaskAssigneeChange(subtask: ProposedSubTaskDto, memberDisplayName: string): void {
+    const matched = this.members.find((m) => m.displayName === memberDisplayName);
+    subtask.assigneeName = matched ? matched.displayName : memberDisplayName || null;
+    subtask.assigneeUserId = matched?.userId ?? null;
+    this.onTaskFieldChanged();
+    this.persistProposalEdits();
+  }
+
+  cycleSubtaskPriority(subtask: ProposedSubTaskDto, event: Event): void {
+    event.stopPropagation();
+    const scale = this.availablePriorities();
+    const curIdx = scale.findIndex((p) => p.toLowerCase() === (subtask.priority || '').toLowerCase());
+    subtask.priority = scale[(curIdx + 1) % scale.length];
+    this.onTaskFieldChanged();
+    this.persistProposalEdits();
+  }
+
+  deleteProposedSubtask(parentTask: ProposedTaskDto, subtaskId: string, event?: Event): void {
+    event?.stopPropagation();
+    parentTask.subtasks = (parentTask.subtasks || []).filter((s) => s.id !== subtaskId);
+    if (this.activeDrawerSubtask()?.subtask?.id === subtaskId) {
+      this.activeDrawerSubtask.set(null);
+    }
+    this.onTaskFieldChanged();
+    this.persistProposalEdits();
+  }
+
+  addSubtaskAc(subtask: ProposedSubTaskDto): void {
+    if (!subtask.acceptanceCriteria) subtask.acceptanceCriteria = [];
+    subtask.acceptanceCriteria.push('Hoàn tất và vượt qua kiểm thử tính năng');
+    this.onTaskFieldChanged();
+    this.persistProposalEdits();
+  }
+
+  deleteSubtaskAc(subtask: ProposedSubTaskDto, index: number): void {
+    if (!subtask.acceptanceCriteria) return;
+    subtask.acceptanceCriteria.splice(index, 1);
+    this.onTaskFieldChanged();
+    this.persistProposalEdits();
+  }
+
+  toggleSessionHistoryDropdown(event: MouseEvent): void {
+    event.stopPropagation();
+    this.isSessionHistoryOpen.update((v) => !v);
+    if (this.isSessionHistoryOpen() && this.projectId) {
+      this.loadProjectSessions();
+    }
+  }
+
+  onShellClick(event: MouseEvent): void {
+    event.stopPropagation();
+    if (!this.isSessionHistoryOpen()) return;
+    const target = event.target as HTMLElement | null;
+    if (!target?.closest('.session-history-container')) {
+      this.isSessionHistoryOpen.set(false);
+    }
+  }
+
+  onBackdropClick(): void {
+    if (this.isSessionHistoryOpen()) {
+      this.isSessionHistoryOpen.set(false);
+    }
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent): void {
+    if (!this.isSessionHistoryOpen()) return;
+    const target = event.target as HTMLElement | null;
+    if (!target?.closest('.session-history-container')) {
+      this.isSessionHistoryOpen.set(false);
+    }
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscapeKey(): void {
+    if (this.isSessionHistoryOpen()) {
+      this.isSessionHistoryOpen.set(false);
+    }
+  }
+
+  loadProjectSessions(): void {
+    if (!this.projectId) return;
+    this.sessionsLoading.set(true);
+    this.aiService.getProjectSessions(this.projectId).subscribe({
+      next: (sessions) => {
+        this.projectSessions.set(sessions);
+        this.sessionsLoading.set(false);
+      },
+      error: () => {
+        this.sessionsLoading.set(false);
+      },
+    });
+  }
+
+  restoreSessionFromHistory(session: any): void {
+    this.isSessionHistoryOpen.set(false);
+    const titleLabel = session.title || session.sprintGoal || 'Phiên làm việc';
+    this.toastService.info('Phiên làm việc', `Đang khôi phục phiên "${titleLabel}"...`);
+    this.aiService.getStagedProposal(session.sessionId, AiDecomposeModalComponent.MESSAGE_PAGE_SIZE).subscribe({
+      next: (prop: AiSprintProposalDto) => {
+        this.normalizeProposal(prop);
+        this.proposal.set(prop);
+        this.activeSessionId.set(prop.sessionId);
+        // Mặc định Thinking luôn đóng gọn kể cả khi mở lại phiên cũ
+        this.isThinkingExpanded.set(false);
+        this.expandedTurnTraces.set({});
+        this.expandedTraceRows.set({});
+        this.toolCallsLog.set([]);
+        this.streamedThoughts.set('');
+        this.isLoadingOlderMessages.set(false);
+        this.showScrollToBottom.set(false);
+        this.loadingOlderGuard = false;
+
+        const dtoHistory = prop.conversationHistory ?? [];
+        const totalTurns = prop.totalConversationTurns ?? dtoHistory.length;
+        this.totalMessagesCount.set(totalTurns);
+        this.hasOlderMessages.set(Boolean(prop.hasOlderMessages));
+        this.oldestLoadedIndex.set(
+          prop.oldestLoadedTurnIndex ?? (dtoHistory.length > 0 ? Math.max(0, totalTurns - dtoHistory.length) : null)
+        );
+
+        // Khôi phục trang tin nhắn mới nhất theo kiểu Messenger cùng Thinking Log & #mem-X
+        if (dtoHistory.length > 0) {
+          const restored = this.mapDtoTurnsToChatTurns(dtoHistory, prop.tasks.length > 0);
+          if (prop.tasks.length > 0 && !restored.some((t) => t.hasProposalTable)) {
+            for (let i = restored.length - 1; i >= 0; i--) {
+              if (restored[i].role === 'agent') {
+                restored[i].hasProposalTable = true;
+                break;
+              }
+            }
+          }
+          this.chatHistory.set(restored);
+        } else {
+          this.chatHistory.set([]);
+        }
+        const autoExpand: Record<string, boolean> = {};
+        for (const t of prop.tasks) {
+          if (t.subtasks && t.subtasks.length > 0) autoExpand[t.id] = true;
+        }
+        this.expandedSubtasks.set(autoExpand);
+        this.saveSession();
+        // Luôn tự cuộn ngay xuống đoạn hội thoại mới nhất trong phiên vừa mở
+        this.scrollChatToBottom(false);
+        this.toastService.success('Khôi phục phiên', 'Đã nạp các tin nhắn mới nhất và tự động cuộn xuống cuối phiên.');
+      },
+      error: () => {
+        this.toastService.error('Khôi phục', 'Không thể mở phiên này (không tồn tại hoặc không thuộc quyền sở hữu của bạn).');
+      },
+    });
+  }
+
+  deleteSessionFromHistory(session: any, event: Event): void {
+    event.stopPropagation();
+    if (!this.projectId || !session?.sessionId) return;
+    this.aiService.deleteSession(session.sessionId, this.projectId).subscribe({
+      next: () => {
+        this.projectSessions.update((list) => list.filter((s) => s.sessionId !== session.sessionId));
+        if (this.activeSessionId() === session.sessionId) {
+          this.resetDraftUiState();
+        }
+        this.toastService.success('Xóa phiên', 'Đã xóa phiên hội thoại cũ khỏi dự án.');
+      },
+      error: () => {
+        this.toastService.error('Xóa phiên', 'Không thể xóa phiên làm việc này.');
+      },
+    });
+  }
+
+  onTaskFieldChanged(): void {
+    const prop = this.proposal();
+    if (!prop) return;
+    prop.totalStoryPoints = prop.tasks.reduce((sum, t) => sum + (Number(t.storyPoints) || 0), 0);
+    prop.totalEstimatedHours = prop.tasks.reduce((sum, t) => sum + (Number(t.estimatedHours) || 0), 0);
+    this.proposal.set({ ...prop, tasks: [...prop.tasks] });
+  }
+
+  onAssigneeChange(task: ProposedTaskDto, memberDisplayName: string): void {
+    const matched = this.members.find((m) => m.displayName === memberDisplayName);
+    task.assigneeName = matched ? matched.displayName : memberDisplayName || null;
+    task.assigneeUserId = matched?.userId ?? null;
+    this.onTaskFieldChanged();
+    this.persistProposalEdits();
+  }
+
+  onEpicChange(task: ProposedTaskDto, epicValue: string): void {
+    const matched = this.epics.find((e) => e.name === epicValue || e.id === epicValue);
+    if (matched) {
+      task.epicId = matched.id;
+      task.epicTitle = matched.name;
+    } else {
+      task.epicId = null;
+      task.epicTitle = epicValue || null;
+    }
+    this.onTaskFieldChanged();
+    this.persistProposalEdits();
+  }
+
+  cyclePriority(task: ProposedTaskDto, event: Event): void {
+    event.stopPropagation();
+    const order = this.availablePriorities();
+    const idx = order.findIndex((p) => p.toLowerCase() === (task.priority || '').toLowerCase());
+    task.priority = order[(idx + 1) % order.length];
+    this.onTaskFieldChanged();
+    this.persistProposalEdits();
+  }
+
+  addSubtask(task: ProposedTaskDto): void {
+    const nextIdx = (task.subtasks?.length || 0) + 1;
+    task.subtasks = [
+      ...(task.subtasks || []),
+      {
+        id: `${task.id}_sub_${nextIdx}_${Date.now()}`,
+        title: 'Công việc kỹ thuật mới',
+        role: 'Backend',
+        estimatedHours: 4,
+        storyPoints: 1,
+        priority: this.defaultPriorityName(),
+        status: this.defaultInitialStatus(),
+        description: '',
+        acceptanceCriteria: [],
+        documentCitations: task.documentCitations && task.documentCitations.length > 0
+          ? [...task.documentCitations]
+          : [],
+        assigneeUserId: task.assigneeUserId,
+        assigneeName: task.assigneeName,
+      },
+    ];
+    this.onTaskFieldChanged();
+  }
+
+  removeSubtask(task: ProposedTaskDto, subIndex: number): void {
+    task.subtasks.splice(subIndex, 1);
+    this.onTaskFieldChanged();
+  }
+
+  addAcceptanceCriterion(task: ProposedTaskDto): void {
+    task.acceptanceCriteria = [...(task.acceptanceCriteria || []), 'Tiêu chí nghiệm thu mới'];
+    this.onTaskFieldChanged();
+  }
+
+  removeAcceptanceCriterion(task: ProposedTaskDto, index: number): void {
+    task.acceptanceCriteria.splice(index, 1);
+    this.onTaskFieldChanged();
+  }
+
+  trackByIndex(index: number): number {
+    return index;
+  }
+
+  deleteProposedTask(taskId: string, event?: Event): void {
+    event?.stopPropagation();
+    const prop = this.proposal();
+    if (!prop) return;
+    prop.tasks = prop.tasks.filter((t) => t.id !== taskId);
+    if (this.activeDrawerTaskId() === taskId) {
+      this.activeDrawerTaskId.set(null);
+    }
+    this.onTaskFieldChanged();
+    this.persistProposalEdits();
+  }
+
+  async regenerateSingleTaskInDrawer(): Promise<void> {
+    const task = this.activeDrawerTask();
+    const sessionId = this.activeSessionId();
+    const feedback = this.drawerRegenerateFeedback().trim();
+    if (!task || !sessionId || !feedback || this.isRegeneratingSingle()) return;
+
+    this.isRegeneratingSingle.set(true);
+    try {
+      const res = await firstValueFrom(this.aiService.regenerateSingleTask(sessionId, task.id, feedback));
+      const prop = this.proposal();
+      if (prop && res.updatedTask) {
+        const idx = prop.tasks.findIndex((t) => t.id === task.id);
+        if (idx >= 0) {
+          res.updatedTask.id = task.id;
+          if (!res.updatedTask.remainingHours) res.updatedTask.remainingHours = res.updatedTask.estimatedHours || 8;
+          prop.tasks[idx] = res.updatedTask;
+          this.onTaskFieldChanged();
+        }
+      }
+      this.drawerRegenerateFeedback.set('');
+      this.toastService.show(`Đã làm lại công việc "${res.updatedTask?.title || task.title}" thành công.`, 'success');
+    } catch {
+      this.toastService.show('Không thể làm lại công việc này. Vui lòng thử lại.', 'error');
+    } finally {
+      this.isRegeneratingSingle.set(false);
+    }
+  }
+
+  async regenerateSelectedTasksWithFeedback(feedbackText?: string): Promise<void> {
+    const prop = this.proposal();
+    const sessionId = this.activeSessionId();
+    const feedback = (feedbackText ?? this.regenerateAllFeedback()).trim() || 'Chia nhỏ chi tiết hơn và tối ưu lại Story Points';
+    const checkedIds = Object.entries(this.selectedTaskIds())
+      .filter(([, checked]) => checked)
+      .map(([id]) => id);
+
+    if (!prop || !sessionId || checkedIds.length === 0 || this.isRegeneratingBatch()) return;
+
+    this.isRegeneratingBatch.set(true);
+    try {
+      for (const taskId of checkedIds) {
+        const res = await firstValueFrom(this.aiService.regenerateSingleTask(sessionId, taskId, feedback));
+        if (res.updatedTask) {
+          const idx = prop.tasks.findIndex((t) => t.id === taskId);
+          if (idx >= 0) {
+            res.updatedTask.id = taskId;
+            if (!res.updatedTask.remainingHours) res.updatedTask.remainingHours = res.updatedTask.estimatedHours || 8;
+            prop.tasks[idx] = res.updatedTask;
+          }
+        }
+      }
+      this.onTaskFieldChanged();
+      this.selectedTaskIds.set({});
+      this.promptInput.set('');
+      this.regenerateAllFeedback.set('');
+      this.toastService.show(`Đã làm lại ${checkedIds.length} công việc đã chọn mà không ảnh hưởng các việc khác.`, 'success');
+    } catch {
+      this.toastService.show('Không thể làm lại các công việc đã chọn.', 'error');
+    } finally {
+      this.isRegeneratingBatch.set(false);
+    }
+  }
+
+  async submitRegenerateAll(): Promise<void> {
+    const prop = this.proposal();
+    const sessionId = this.activeSessionId();
+    const feedback = this.regenerateAllFeedback().trim() || 'Tái cấu trúc lại toàn bộ danh sách công việc và Sprint Goal chi tiết hơn';
+    if (!prop || !sessionId || this.isRegeneratingBatch()) return;
+
+    this.isRegeneratingBatch.set(true);
+    try {
+      const updated = await firstValueFrom(this.aiService.regenerateFullProposal(sessionId, feedback));
+      this.normalizeProposal(updated);
+      this.proposal.set(updated);
+      this.showRegenerateAllBar.set(false);
+      this.regenerateAllFeedback.set('');
+      this.toastService.show('Đã làm lại toàn bộ đề xuất Sprint thành công.', 'success');
+    } catch {
+      this.toastService.show('Không thể làm lại toàn bộ đề xuất.', 'error');
+    } finally {
+      this.isRegeneratingBatch.set(false);
+    }
+  }
+
+  persistProposalEdits(): void {
+    const prop = this.proposal();
+    const sessionId = this.activeSessionId();
+    if (!prop || !sessionId) return;
+    this.aiService.updateStagedProposal(sessionId, prop).subscribe({ error: () => {} });
+  }
+
+  async commitSprintProposal(): Promise<void> {
+    const prop = this.proposal();
+    if (!prop || this.isApplying()) return;
+
+    if (!this.canCommitSprint) {
+      this.errorMessage.set('Bạn không có quyền áp dụng kế hoạch vào Sprint (Chỉ Giám đốc dự án, Chủ tổ chức hoặc Scrum Master mới có quyền).');
+      return;
+    }
+
+    this.isApplying.set(true);
+    this.errorMessage.set(null);
+
+    try {
+      const res = await firstValueFrom(
+        this.aiService.applyProposal({
+          sessionId: this.activeSessionId() || prop.sessionId,
+          projectId: this.projectId,
+          targetSprintId: prop.targetSprintId,
+          sprintGoal: prop.sprintGoal,
+          tasks: prop.tasks,
+        })
+      );
+
+      this.toastService.show(
+        res.message || `Đã đưa ${res.createdTaskCount} việc vào ${res.sprintName}.`,
+        'success'
+      );
+      this.appendAssistantNote(
+        res.message || `Đã áp dụng ${res.createdTaskCount} công việc vào ${res.sprintName}.`,
+        'apply_sprint_done'
+      );
+      // Đề xuất đã được lưu thật vào Sprint: dọn khỏi bảng để mở lại phiên không bị lưu trùng
+      this.proposal.set({ ...prop, tasks: [], totalStoryPoints: 0, totalEstimatedHours: 0 });
+      this.persistProposalEdits();
+      this.saveSession();
+      this.applied.emit({
+        sprintId: res.sprintId,
+        sprintName: res.sprintName,
+        createdCount: res.createdIssueCount,
+      });
+    } catch (err: any) {
+      const msg = err?.error?.message || 'Không thể áp dụng đề xuất vào Sprint tiếp theo.';
+      this.errorMessage.set(msg);
+    } finally {
+      this.isApplying.set(false);
+    }
+  }
+
+  getMemberAvatar(assigneeName?: string | null): string | null {
+    if (!assigneeName) return null;
+    const found = this.members.find((m) => m.displayName === assigneeName);
+    return found?.avatarUrl || null;
+  }
+
+  getMemberInitials(assigneeName?: string | null): string {
+    if (!assigneeName) return 'U';
+    const parts = assigneeName.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return assigneeName.slice(0, 2).toUpperCase();
+  }
+
+  copyToClipboard(text?: string): void {
+    if (!text) return;
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      this.toastService?.success('Đã sao chép nội dung vào bộ nhớ tạm.');
+    }
+  }
+}

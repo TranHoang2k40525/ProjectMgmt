@@ -5,50 +5,50 @@ namespace DeliveryIntelligence.Domain.IRepositories;
 /// <summary>Dataset → Version → Sample, rule làm sạch và quality flag (DataOps, module C).</summary>
 public interface IDataOpsRepository
 {
-    Task<IReadOnlyList<AiDataset>> GetDatasetsAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AiDataset>> GetDatasetsAsync();
 
-    Task<AiDataset?> GetDatasetAsync(Guid datasetId, CancellationToken cancellationToken = default);
+    Task<AiDataset?> GetDatasetAsync(Guid datasetId);
 
-    Task<bool> DatasetCodeExistsAsync(string code, CancellationToken cancellationToken = default);
+    Task<bool> DatasetCodeExistsAsync(string code);
 
-    Task AddDatasetAsync(AiDataset dataset, CancellationToken cancellationToken = default);
+    Task AddDatasetAsync(AiDataset dataset);
 
-    Task<IReadOnlyList<AiDatasetVersion>> GetVersionsAsync(Guid datasetId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AiDatasetVersion>> GetVersionsAsync(Guid datasetId);
 
-    Task<AiDatasetVersion?> GetVersionAsync(Guid versionId, CancellationToken cancellationToken = default);
+    Task<AiDatasetVersion?> GetVersionAsync(Guid versionId);
 
-    Task<bool> VersionTagExistsAsync(Guid datasetId, string versionTag, CancellationToken cancellationToken = default);
+    Task<bool> VersionTagExistsAsync(Guid datasetId, string versionTag);
 
-    Task AddVersionAsync(AiDatasetVersion version, CancellationToken cancellationToken = default);
+    Task AddVersionAsync(AiDatasetVersion version);
 
-    Task<SamplePage> ListSamplesAsync(SampleFilter filter, CancellationToken cancellationToken = default);
+    Task<SamplePage> ListSamplesAsync(SampleFilter filter);
 
     /// <summary>Toàn bộ sample của version (có tracking) — dùng cho chạy rule và freeze.</summary>
-    Task<IReadOnlyList<AiDatasetSample>> GetVersionSamplesAsync(Guid versionId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AiDatasetSample>> GetVersionSamplesAsync(Guid versionId);
 
-    Task<AiDatasetSample?> GetSampleAsync(Guid sampleId, CancellationToken cancellationToken = default);
+    Task<AiDatasetSample?> GetSampleAsync(Guid sampleId);
 
-    Task<bool> SampleHashExistsAsync(Guid versionId, string contentHash, Guid? exceptSampleId, CancellationToken cancellationToken = default);
+    Task<bool> SampleHashExistsAsync(Guid versionId, string contentHash, Guid? exceptSampleId);
 
-    Task AddSampleAsync(AiDatasetSample sample, CancellationToken cancellationToken = default);
+    Task AddSampleAsync(AiDatasetSample sample);
 
-    Task<IReadOnlyList<AiDataCleaningRule>> GetRulesAsync(bool activeOnly, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AiDataCleaningRule>> GetRulesAsync(bool activeOnly);
 
-    Task<AiDataCleaningRule?> GetRuleAsync(Guid ruleId, CancellationToken cancellationToken = default);
+    Task<AiDataCleaningRule?> GetRuleAsync(Guid ruleId);
 
-    Task<bool> RuleCodeExistsAsync(string code, CancellationToken cancellationToken = default);
+    Task<bool> RuleCodeExistsAsync(string code);
 
-    Task AddRuleAsync(AiDataCleaningRule rule, CancellationToken cancellationToken = default);
+    Task AddRuleAsync(AiDataCleaningRule rule);
 
-    Task<IReadOnlyList<AiDataQualityFlag>> GetFlagsAsync(IEnumerable<Guid> sampleIds, bool unresolvedOnly, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AiDataQualityFlag>> GetFlagsAsync(IEnumerable<Guid> sampleIds, bool unresolvedOnly);
 
-    Task<AiDataQualityFlag?> GetFlagAsync(Guid flagId, CancellationToken cancellationToken = default);
+    Task<AiDataQualityFlag?> GetFlagAsync(Guid flagId);
 
-    Task AddFlagAsync(AiDataQualityFlag flag, CancellationToken cancellationToken = default);
+    Task AddFlagAsync(AiDataQualityFlag flag);
 
     void RemoveFlags(IEnumerable<AiDataQualityFlag> flags);
 
-    Task SaveChangesAsync(CancellationToken cancellationToken = default);
+    Task SaveChangesAsync();
 }
 
 public class SampleFilter

@@ -1,0 +1,248 @@
+<app-modal-shell heading="Tạo dự án" size="lg" description="Thiết lập thông tin, loại hình quản lý và thành viên cho dự án mới."
+                 (closeRequested)="requestClose()">
+  <p class="sr-only" aria-live="polite">{{ stepAnnouncement() }}</p>
+  @if (step() !== 'done') {
+    <ol class="mb-5 grid grid-cols-[auto_auto_auto] sm:grid-cols-3 gap-2" aria-label="Các bước tạo dự án">
+      @for (item of steps; track item.id) {
+        <li [attr.aria-current]="stepState(item.id) === 'current' ? 'step' : null"
+            class="flex items-center gap-2 rounded-lg border px-2.5 py-2 text-xs sm:text-sm dark:border-slate-700"
+            [class.border-primary-container]="stepState(item.id) === 'current'"
+            [class.bg-primary-fixed]="stepState(item.id) === 'current'"
+            [class.border-slate-200]="stepState(item.id) !== 'current'">
+          <span class="flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-bold tabular-nums"
+                [class.bg-primary-container]="stepState(item.id) !== 'todo'" [class.text-white]="stepState(item.id) !== 'todo'"
+                [class.bg-slate-200]="stepState(item.id) === 'todo'" [class.text-slate-600]="stepState(item.id) === 'todo'">
+            @if (stepState(item.id) === 'done') {
+              <span class="material-symbols-outlined text-[16px]" aria-hidden="true">check</span>
+              <span class="sr-only">Xong:</span>
+            } @else {
+              {{ item.id }}
+            }
+          </span>
+          <span class="min-w-0 truncate font-semibold text-slate-800 dark:text-slate-100" [class]="stepState(item.id) === 'current' ? 'inline' : 'hidden sm:inline'">{{ item.label }}</span>
+        </li>
+      }
+    </ol>
+  }
+
+  @if (loading()) {
+    <div class="space-y-3" aria-busy="true">
+      <span class="sr-only">Đang tải thành viên và mẫu workflow…</span>
+      @for (row of [1, 2, 3]; track row) {
+        <div class="h-12 rounded-lg bg-slate-100 dark:bg-slate-800 motion-safe:animate-pulse"></div>
+      }
+    </div>
+  } @else if (loadError()) {
+    <div role="alert" class="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 sm:flex-row sm:items-center dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+      <span class="flex-1">{{ loadError() }}</span>
+      <button type="button" [class]="ui.secondaryButton" (click)="load()">Thử lại</button>
+    </div>
+  } @else {
+    @switch (step()) {
+      @case (1) {
+        <div class="space-y-4">
+          <div>
+            <label for="wizard-name" [class]="ui.label">Tên dự án</label>
+            <input id="wizard-name" cdkFocusInitial [class]="ui.input" [ngModel]="name()" (ngModelChange)="onNameChange($event)" maxlength="100" required
+                   placeholder="Ví dụ: Hệ thống quản lý thư viện"
+                   [attr.aria-invalid]="!!nameError()" [attr.aria-describedby]="nameError() ? 'wizard-name-error' : null" />
+            @if (nameError()) { <p id="wizard-name-error" [class]="ui.fieldError">{{ nameError() }}</p> }
+          </div>
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label for="wizard-key" [class]="ui.label">Mã dự án</label>
+              <input id="wizard-key" [class]="ui.input" class="font-mono uppercase" [ngModel]="projectKey()" (ngModelChange)="onKeyChange($event)"
+                     maxlength="10" spellcheck="false" autocapitalize="characters"
+                     [attr.aria-invalid]="!!keyError()" [attr.aria-describedby]="keyError() ? 'wizard-key-error' : 'wizard-key-hint'" />
+              @if (keyError()) {
+                <p id="wizard-key-error" [class]="ui.fieldError">{{ keyError() }}</p>
+              } @else {
+                <p id="wizard-key-hint" [class]="ui.hint">Tự tạo theo tên, sửa được. Dùng làm tiền tố mã công việc, ví dụ {{ projectKey() || 'MA' }}-1.</p>
+              }
+            </div>
+            <div>
+              <label for="wizard-lead" [class]="ui.label">Người phụ trách</label>
+              <select id="wizard-lead" [class]="ui.select" [ngModel]="leadUserId()" (ngModelChange)="onLeadChange($event)"
+                      [attr.aria-invalid]="!!leadError()" [attr.aria-describedby]="leadError() ? 'wizard-lead-error' : 'wizard-lead-hint'">
+                @for (member of members(); track member.userId) {
+                  <option [value]="member.userId">{{ member.displayName }}{{ member.userId === currentUserId() ? ' (bạn)' : '' }}</option>
+                }
+              </select>
+              @if (leadError()) {
+                <p id="wizard-lead-error" [class]="ui.fieldError">{{ leadError() }}</p>
+              } @else {
+                <p id="wizard-lead-hint" [class]="ui.hint">Mặc định là bạn; chọn thành viên khác trong tổ chức nếu cần.</p>
+              }
+            </div>
+          </div>
+          <div>
+            <label for="wizard-description" [class]="ui.label">Mô tả <span class="font-normal text-slate-500">(không bắt buộc)</span></label>
+            <textarea id="wizard-description" rows="3" [class]="ui.textarea" [ngModel]="description()" (ngModelChange)="description.set($event)"
+                      maxlength="1000" placeholder="Mục tiêu, phạm vi hoặc ghi chú cho thành viên"></textarea>
+            <p [class]="ui.hint" class="text-right tabular-nums">{{ description().length }}/1000</p>
+          </div>
+        </div>
+      }
+
+      @case (2) {
+        <div class="space-y-6">
+          <fieldset>
+            <legend [class]="ui.label">Loại hình quản lý (mẫu workflow của tổ chức)</legend>
+            <p [class]="ui.hint" class="mb-3">Trạng thái của mẫu sẽ là các giai đoạn công việc trong dự án.</p>
+            <div class="grid gap-3 sm:grid-cols-2">
+              @for (template of templates(); track template.id) {
+                <label class="flex cursor-pointer gap-3 rounded-xl border p-3 hover:border-primary-container has-[:checked]:border-primary-container has-[:checked]:bg-primary-fixed/60 dark:border-slate-700"
+                       [class.border-slate-200]="templateId() !== template.id">
+                  <input type="radio" name="wizard-template" class="mt-1 accent-[#2d6a4f]" [value]="template.id"
+                         [attr.aria-labelledby]="'wizard-template-name-' + template.id" [attr.aria-describedby]="'wizard-template-chain-' + template.id"
+                         [ngModel]="templateId()" (ngModelChange)="templateId.set($event); step2Error.set('')" />
+                  <span class="min-w-0">
+                    <span class="flex flex-wrap items-center gap-2">
+                      <span [id]="'wizard-template-name-' + template.id" class="font-semibold text-slate-900 dark:text-white">{{ template.name }}</span>
+                      <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{{ template.managementType }}</span>
+                      @if (template.isDefault) {
+                        <span class="rounded-full bg-primary-container px-2 py-0.5 text-[11px] font-semibold text-white">Mặc định</span>
+                      }
+                      @if (!template.isPreset) {
+                        <span class="text-[11px] text-slate-500">Mẫu của tổ chức</span>
+                      }
+                    </span>
+                    <span [id]="'wizard-template-chain-' + template.id" class="mt-1 block text-xs text-slate-600 dark:text-slate-300 text-pretty">
+                      {{ template.managementType }}{{ template.isDefault ? ', mặc định' : '' }}: {{ statusChain(template) }}
+                    </span>
+                  </span>
+                </label>
+              }
+            </div>
+          </fieldset>
+
+          <div role="group" aria-labelledby="wizard-types-title">
+            <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <h3 id="wizard-types-title" [class]="ui.label" class="!mb-0">Tên các kiểu công việc</h3>
+              <button type="button" [class]="ui.ghostButton" (click)="resetIssueTypes()" [disabled]="!issueTypesCustomized()">
+                Khôi phục tên mặc định
+              </button>
+            </div>
+            <p [class]="ui.hint" class="mb-3">Đổi tên cho phù hợp với nhóm (ví dụ Story → Use case). Cấp cha – con của từng kiểu giữ nguyên.</p>
+            <ul class="divide-y divide-slate-100 rounded-xl border border-slate-200 dark:divide-slate-800 dark:border-slate-700">
+              @for (type of issueTypes(); track type.code; let index = $index) {
+                <li class="grid gap-2 px-3 py-2.5 sm:grid-cols-[10rem_1fr] sm:items-start">
+                  <label [for]="'wizard-type-' + type.code" class="text-sm">
+                    <span class="block font-semibold text-slate-800 dark:text-slate-100">{{ type.code }}</span>
+                    <span class="block text-xs text-slate-500">{{ issueTypeHints[type.code] }}</span>
+                  </label>
+                  <div>
+                    <input [id]="'wizard-type-' + type.code" [class]="ui.input" [ngModel]="type.name" (ngModelChange)="renameIssueType(type.code, $event)"
+                           maxlength="60" [attr.aria-invalid]="!!issueTypeErrors()[index]"
+                           [attr.aria-describedby]="issueTypeErrors()[index] ? 'wizard-type-error-' + type.code : null" />
+                    @if (issueTypeErrors()[index]) {
+                      <p [id]="'wizard-type-error-' + type.code" [class]="ui.fieldError">{{ issueTypeErrors()[index] }}</p>
+                    }
+                  </div>
+                </li>
+              }
+            </ul>
+          </div>
+          @if (step2Error()) {
+            <p role="alert" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/40 dark:text-red-300">{{ step2Error() }}</p>
+          }
+        </div>
+      }
+
+      @case (3) {
+        <div class="space-y-4">
+          <p class="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:bg-slate-800/60 dark:text-slate-300 text-pretty">
+            Bạn và người phụ trách <strong>{{ leadName() }}</strong> luôn là thành viên của dự án. Chọn thêm người trong tổ chức:
+          </p>
+          <div>
+            <label for="wizard-member-search" class="sr-only">Tìm thành viên tổ chức</label>
+            <input id="wizard-member-search" type="search" [class]="ui.input" placeholder="Tìm theo tên hoặc email…"
+                   [ngModel]="memberQuery()" (ngModelChange)="memberQuery.set($event)" autocomplete="off" />
+          </div>
+          @if (candidates().length > 0) {
+            <ul class="divide-y divide-slate-100 rounded-xl border border-slate-200 dark:divide-slate-800 dark:border-slate-700">
+              @for (member of candidates(); track member.userId) {
+                <li class="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center">
+                  <label class="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
+                    <input type="checkbox" class="size-4 accent-[#2d6a4f]" [checked]="isSelected(member.userId)"
+                           (change)="toggleMember(member.userId, $any($event.target).checked)" />
+                    <span class="min-w-0">
+                      <span class="block truncate text-sm font-medium text-slate-900 dark:text-slate-100">{{ member.displayName }}</span>
+                      <span class="block truncate text-xs text-slate-500">{{ member.email }}</span>
+                    </span>
+                  </label>
+                  <label class="sr-only" [for]="'wizard-role-' + member.userId">Vai trò của {{ member.displayName }} trong dự án</label>
+                  <select [id]="'wizard-role-' + member.userId" [class]="ui.select" class="sm:w-48" [disabled]="!isSelected(member.userId)"
+                          [ngModel]="roleOf(member.userId)" (ngModelChange)="setMemberRole(member.userId, $event)">
+                    @for (role of roleOptions; track role.code) {
+                      <option [value]="role.code">{{ role.name }}</option>
+                    }
+                  </select>
+                </li>
+              }
+            </ul>
+          } @else {
+            <p class="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700">
+              {{ memberQuery() ? 'Không có thành viên nào khớp tìm kiếm.' : 'Tổ chức chưa có thành viên khác. Bạn có thể thêm người sau trong cài đặt dự án.' }}
+            </p>
+          }
+          <p class="text-sm text-slate-600 dark:text-slate-300" aria-live="polite">
+            Đã chọn <span class="font-semibold tabular-nums">{{ selected().size }}</span> người.
+          </p>
+        </div>
+      }
+
+      @case ('done') {
+        @if (createdProject(); as project) {
+          <div class="flex flex-col items-center gap-3 py-6 text-center" role="status">
+            <span class="flex size-12 items-center justify-center rounded-full bg-primary-fixed text-primary">
+              <span class="material-symbols-outlined" aria-hidden="true">check_circle</span>
+            </span>
+            <p class="text-lg font-bold text-slate-900 dark:text-white text-balance">Đã tạo dự án {{ project.projectKey }}</p>
+            <p class="max-w-md text-sm text-slate-600 dark:text-slate-300 text-pretty">
+              {{ project.name }} dùng mẫu “{{ project.workflowTemplateName }}” và có {{ project.memberCount }} thành viên.
+            </p>
+            @if (project.setupWarnings?.length) {
+              <div role="alert" class="w-full max-w-md rounded-lg bg-amber-50 px-3 py-2 text-left text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                <p class="font-semibold">Một số thiết lập chưa áp dụng được:</p>
+                <ul class="mt-1 list-disc pl-5">
+                  @for (warning of project.setupWarnings; track warning) { <li>{{ warning }}</li> }
+                </ul>
+                <p class="mt-1 text-pretty">Bạn có thể chỉnh lại trong Cài đặt dự án (Workflow, Kiểu công việc, Thành viên).</p>
+              </div>
+            }
+          </div>
+        }
+      }
+    }
+
+    @if (stepError()) {
+      <p role="alert" class="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/40 dark:text-red-300">{{ stepError() }}</p>
+    }
+  }
+
+  <ng-container modal-footer>
+    @if (confirmingClose()) {
+      <p class="mr-auto text-sm font-medium text-amber-800 dark:text-amber-300" role="alert">Bỏ tạo dự án? Thông tin đã nhập sẽ không được lưu.</p>
+      <button type="button" [class]="ui.secondaryButton" (click)="confirmingClose.set(false)">Tiếp tục nhập</button>
+      <button type="button" [class]="ui.primaryButton" class="!bg-red-700 hover:!bg-red-800" (click)="dismissed.emit()">Bỏ thay đổi</button>
+    } @else if (step() === 'done') {
+      <button type="button" [class]="ui.secondaryButton" (click)="dismissed.emit()">Về danh sách dự án</button>
+      <button type="button" [class]="ui.primaryButton" (click)="openProject.emit(createdProject()!)">Mở dự án</button>
+    } @else {
+      @if (step() !== 1) {
+        <button type="button" [class]="ui.secondaryButton" class="mr-auto" (click)="back()" [disabled]="busy()">Quay lại</button>
+      }
+      <button type="button" [class]="ui.secondaryButton" (click)="requestClose()">Hủy</button>
+      @if (step() === 3) {
+        <button type="button" [class]="ui.primaryButton" (click)="submit()" [disabled]="busy() || loading() || !!loadError()">
+          {{ busy() ? 'Đang tạo…' : 'Tạo dự án' }}
+        </button>
+      } @else {
+        <button type="button" [class]="ui.primaryButton" (click)="next()" [disabled]="busy() || loading() || !!loadError()">
+          {{ busy() ? 'Đang kiểm tra…' : 'Tiếp tục' }}
+        </button>
+      }
+    }
+  </ng-container>
+</app-modal-shell>

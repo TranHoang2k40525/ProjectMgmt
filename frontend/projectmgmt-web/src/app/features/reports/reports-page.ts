@@ -13,21 +13,21 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
     @if (!projectService.hasActiveProject()) {
       <app-no-project-state featureName="Báo Cáo Tiến Độ"></app-no-project-state>
     } @else {
-    <div class="reports-page flex flex-col gap-6 animate-fade-in font-body text-slate-900 dark:text-slate-100">
+    <div class="reports-page flex flex-col gap-4 animate-fade-in font-body text-slate-900 dark:text-slate-100">
       
       <!-- Top Header -->
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200 dark:border-slate-800">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200 dark:border-slate-800">
         <div class="flex flex-col">
-          <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <span class="material-symbols-outlined text-[24px] text-primary">analytics</span>
+          <h1 class="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <span class="material-symbols-outlined text-[22px] text-primary">analytics</span>
             Báo Cáo Tiến Độ Dự Án
           </h1>
-          <p class="text-sm text-slate-500">Biểu đồ Burndown Chart và Sprint Velocity phân tích tiến độ thực tế</p>
+          <p class="text-xs text-slate-500">Biểu đồ Burndown Chart và Sprint Velocity phân tích tiến độ thực tế</p>
         </div>
         @if (sprints().length > 0) {
           <div class="flex items-center gap-2">
             <span class="text-xs font-bold uppercase text-slate-400">Chọn Sprint:</span>
-            <select [ngModel]="selectedSprintId()" (ngModelChange)="selectedSprintId.set($event)" data-testid="report-sprint-select" class="h-9 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold">
+            <select [ngModel]="selectedSprintId()" (ngModelChange)="selectedSprintId.set($event)" data-testid="report-sprint-select" class="h-8 px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold">
               <option value="">Mặc định (Active Sprint)</option>
               @for (sp of sprints(); track sp.id) {
                 <option [value]="sp.id">{{ sp.name }}</option>
@@ -38,16 +38,16 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
       </div>
 
       <!-- Charts Grid Container -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
         @if (sprints().length === 0) {
-          <div class="report-card p-12 col-span-full rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-center text-slate-400">
-            <span class="material-symbols-outlined text-[48px] block mb-2 opacity-60">insights</span>
+          <div class="report-card p-8 col-span-full rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-center text-slate-400">
+            <span class="material-symbols-outlined text-[40px] block mb-2 opacity-60">insights</span>
             <h3 class="text-base font-bold text-slate-700 dark:text-slate-200">Chưa có báo cáo tiến độ</h3>
             <p class="text-xs text-slate-400 mt-1">Dự án hiện chưa có chu kỳ Sprint nào để tạo biểu đồ Burndown và Velocity.</p>
           </div>
         } @else {
           <!-- Burndown Chart Tile -->
-          <div class="report-card p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col gap-4">
+          <div class="report-card p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col gap-3">
             <div class="flex items-center justify-between">
               <div class="flex flex-col">
                 <h3 class="text-lg font-bold text-slate-900 dark:text-white">Burndown Chart ({{ activeSprint()?.name || 'Sprint' }})</h3>
@@ -100,7 +100,7 @@ import { NoProjectStateComponent } from '../../shared/components/no-project-stat
           </div>
 
           <!-- Velocity Chart Tile -->
-          <div class="report-card p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col gap-4">
+          <div class="report-card p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col gap-3">
             <div class="flex items-center justify-between">
               <div class="flex flex-col">
                 <h3 class="text-lg font-bold text-slate-900 dark:text-white">Năng suất Sprint (Sprint Velocity)</h3>

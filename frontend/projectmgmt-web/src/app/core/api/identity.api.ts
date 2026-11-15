@@ -24,6 +24,10 @@ export class IdentityApi {
     return this.http.post<AvatarResult>(`${this.baseUrl}/users/me/avatar`, form);
   }
 
+  deleteAvatar(): Observable<AvatarResult> {
+    return this.http.delete<AvatarResult>(`${this.baseUrl}/users/me/avatar`);
+  }
+
   changePassword(request: AccountDto): Observable<ApiResult> {
     return this.http.put<ApiResult>(`${this.baseUrl}/users/me/password`, request);
   }

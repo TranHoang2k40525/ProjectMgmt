@@ -13,10 +13,10 @@ const os = require('node:os');
     assert(r.ok, method+' '+url+': '+r.status);
     return r.json();
   }
-  const session = await api('POST', '/api/v1/auth/login', { email: process.env.WORKSPACE_TEST_EMAIL, password: process.env.WORKSPACE_TEST_PASSWORD });
+  const session = await api('POST', '/api/auth/login', { email: process.env.WORKSPACE_TEST_EMAIL, password: process.env.WORKSPACE_TEST_PASSWORD });
   const tag = Date.now().toString(36);
-  const org = await api('POST', '/api/v1/organizations', { name: 'Browser customization '+tag, slug: 'bc-'+tag }, session.accessToken);
-  const project = await api('POST', '/api/v1/projects', { orgId: org.id, name: 'Browser customization', projectKey: 'B'+tag.slice(-7).toUpperCase() }, session.accessToken);
+  const org = await api('POST', '/api/organizations', { name: 'Browser customization '+tag, slug: 'bc-'+tag }, session.accessToken);
+  const project = await api('POST', '/api/projects', { orgId: org.id, name: 'Browser customization', projectKey: 'B'+tag.slice(-7).toUpperCase() }, session.accessToken);
   const roleName = 'Browser'+tag;
   const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
   try {
@@ -57,7 +57,7 @@ const os = require('node:os');
     await page.click('.btn-submit');
     await page.waitForFunction(() => !document.querySelector('.modal-backdrop'));
     await page.reload({waitUntil:'networkidle2'}); await adminReady();
-    const role = (await api('GET','/api/v1/roles',undefined,session.accessToken)).items.find(r => r.name===roleName);
+    const role = (await api('GET','/api/roles',undefined,session.accessToken)).items.find(r => r.name===roleName);
     assert(role.permissionIds.length===1);
     const label = 'Permission project.read for role '+roleName;
     assert(await page.$eval('input[aria-label="'+label+'"]', e=>e.checked));

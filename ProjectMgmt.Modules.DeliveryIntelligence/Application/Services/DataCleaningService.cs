@@ -21,10 +21,10 @@ public class DataCleaningService : IDataCleaningService
         _clock = clock;
     }
 
-    public async Task<IReadOnlyList<CleaningRuleDto>> ListRulesAsync(CancellationToken cancellationToken = default) =>
-        (await _data.GetRulesAsync(activeOnly: false, cancellationToken)).Select(ToDto).ToList();
+    public async Task<IReadOnlyList<CleaningRuleDto>> ListRulesAsync() =>
+        (await _data.GetRulesAsync(activeOnly: false)).Select(ToDto).ToList();
 
-    public async Task<Result<CleaningRuleDto>> CreateRuleAsync(CreateCleaningRuleDto request, CancellationToken cancellationToken = default)
+    public async Task<Result<CleaningRuleDto>> CreateRuleAsync(CreateCleaningRuleDto request)
     {
         ArgumentNullException.ThrowIfNull(request);
         var code = request.Code.Trim().ToLowerInvariant();
@@ -44,7 +44,7 @@ public class DataCleaningService : IDataCleaningService
             return Result<CleaningRuleDto>.Failure(invalid);
         }
 
-        if (await _data.RuleCodeExistsAsync(code, cancellationToken))
+        if (await _data.RuleCodeExistsAsync(code))
         {
             return Result<CleaningRuleDto>.Failure(Error.Conflict("CLEANING_RULE_DUPLICATE", "Mã rule đã tồn tại."));
         }
@@ -61,12 +61,12 @@ public class DataCleaningService : IDataCleaningService
             IsActive = true,
             CreatedAt = _clock.GetUtcNow().UtcDateTime
         };
-        await _data.AddRuleAsync(rule, cancellationToken);
-        await _data.SaveChangesAsync(cancellationToken);
+        await _data.AddRuleAsync(rule);
+        await _data.SaveChangesAsync();
         return Result.Success(ToDto(rule));
     }
 
-    public async Task<Result<CleaningRuleDto>> UpdateRuleAsync(Guid ruleId, UpdateCleaningRuleDto request, CancellationToken cancellationToken = default)
+    public async Task<Result<CleaningRuleDto>> UpdateRuleAsync(Guid ruleId, UpdateCleaningRuleDto request)
     {
         ArgumentNullException.ThrowIfNull(request);
         var invalid = ValidateCommon(request.Name, request.Severity, request.Config, request.AppliesTo);
@@ -75,7 +75,7 @@ public class DataCleaningService : IDataCleaningService
             return Result<CleaningRuleDto>.Failure(invalid);
         }
 
-        var rule = await _data.GetRuleAsync(ruleId, cancellationToken);
+        var rule = await _data.GetRuleAsync(ruleId);
         if (rule is null)
         {
             return Result<CleaningRuleDto>.Failure(CleaningErrors.RuleNotFound);
@@ -86,13 +86,13 @@ public class DataCleaningService : IDataCleaningService
         rule.Config = NormalizeConfig(request.Config);
         rule.AppliesTo = request.AppliesTo;
         rule.IsActive = request.IsActive;
-        await _data.SaveChangesAsync(cancellationToken);
+        await _data.SaveChangesAsync();
         return Result.Success(ToDto(rule));
     }
 
-    public async Task<Result<CleaningRunSummaryDto>> RunAsync(Guid versionId, CancellationToken cancellationToken = default)
+    public async Task<Result<CleaningRunSummaryDto>> RunAsync(Guid versionId)
     {
-        var version = await _data.GetVersionAsync(versionId, cancellationToken);
+        var version = await _data.GetVersionAsync(versionId);
         if (version is null)
         {
             return Result<CleaningRunSummaryDto>.Failure(DataOpsErrors.VersionNotFound);
@@ -103,12 +103,12 @@ public class DataCleaningService : IDataCleaningService
             return Result<CleaningRunSummaryDto>.Failure(DataOpsErrors.VersionFrozen);
         }
 
-        var dataset = await _data.GetDatasetAsync(version.DatasetId, cancellationToken);
-        var rules = (await _data.GetRulesAsync(activeOnly: true, cancellationToken))
+        var dataset = await _data.GetDatasetAsync(version.DatasetId);
+        var rules = (await _data.GetRulesAsync(activeOnly: true))
             .Where(rule => CleaningRuleEvaluator.SupportedTypes.Contains(rule.RuleType)
                 && (rule.AppliesTo == "All" || rule.AppliesTo == dataset?.TaskType))
             .ToList();
-        var samples = await _data.GetVersionSamplesAsync(versionId, cancellationToken);
+        var samples = await _data.GetVersionSamplesAsync(versionId);
         var instructionCounts = samples
             .GroupBy(sample => CleaningRuleEvaluator.NormalizeInstruction(sample.Instruction))
             .ToDictionary(group => group.Key, group => group.Count());
@@ -116,7 +116,7 @@ public class DataCleaningService : IDataCleaningService
         // Chỉ thay flag chưa xử lý; flag đã xử lý được giữ lại. Phát hiện Warning/Info trùng flag đã xử lý không bị tạo lại
         // (người duyệt đã chấp nhận); rule Error là cổng cứng nên vẫn gắn lại — phải sửa nội dung mẫu.
         // Sửa nội dung mẫu xóa hết flag nên quyết định cũ không áp sai cho nội dung mới.
-        var existing = await _data.GetFlagsAsync(samples.Select(s => s.Id), unresolvedOnly: false, cancellationToken);
+        var existing = await _data.GetFlagsAsync(samples.Select(s => s.Id), unresolvedOnly: false);
         _data.RemoveFlags(existing.Where(flag => !flag.IsResolved));
         var resolved = existing.Where(flag => flag.IsResolved)
             .Select(flag => (flag.SampleId, flag.RuleId, flag.FieldPath, flag.Message))
@@ -148,7 +148,7 @@ public class DataCleaningService : IDataCleaningService
                         Message = message,
                         FieldPath = fieldPath,
                         DetectedAt = now
-                    }, cancellationToken);
+                    });
                     summary.FlagsCreated++;
                     summary.FlagsBySeverity[rule.Severity] = summary.FlagsBySeverity.GetValueOrDefault(rule.Severity) + 1;
                     hasError |= rule.Severity == ErrorSeverity;
@@ -158,34 +158,34 @@ public class DataCleaningService : IDataCleaningService
             ApplyOutcome(sample, hasError, now, summary);
         }
 
-        await _data.SaveChangesAsync(cancellationToken);
+        await _data.SaveChangesAsync();
         return Result.Success(summary);
     }
 
-    public async Task<Result<IReadOnlyList<QualityFlagDto>>> GetSampleFlagsAsync(Guid sampleId, CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyList<QualityFlagDto>>> GetSampleFlagsAsync(Guid sampleId)
     {
-        if (await _data.GetSampleAsync(sampleId, cancellationToken) is null)
+        if (await _data.GetSampleAsync(sampleId) is null)
         {
             return Result<IReadOnlyList<QualityFlagDto>>.Failure(DataOpsErrors.SampleNotFound);
         }
 
-        var rules = (await _data.GetRulesAsync(activeOnly: false, cancellationToken)).ToDictionary(r => r.Id);
-        IReadOnlyList<QualityFlagDto> result = (await _data.GetFlagsAsync([sampleId], unresolvedOnly: false, cancellationToken))
+        var rules = (await _data.GetRulesAsync(activeOnly: false)).ToDictionary(r => r.Id);
+        IReadOnlyList<QualityFlagDto> result = (await _data.GetFlagsAsync([sampleId], unresolvedOnly: false))
             .Select(flag => ToDto(flag, rules.GetValueOrDefault(flag.RuleId)))
             .ToList();
         return Result.Success(result);
     }
 
-    public async Task<Result<QualityFlagDto>> ResolveFlagAsync(Guid flagId, Guid actorUserId, CancellationToken cancellationToken = default)
+    public async Task<Result<QualityFlagDto>> ResolveFlagAsync(Guid flagId, Guid actorUserId)
     {
-        var flag = await _data.GetFlagAsync(flagId, cancellationToken);
+        var flag = await _data.GetFlagAsync(flagId);
         if (flag is null)
         {
             return Result<QualityFlagDto>.Failure(CleaningErrors.FlagNotFound);
         }
 
-        var sample = await _data.GetSampleAsync(flag.SampleId, cancellationToken);
-        var version = sample is null ? null : await _data.GetVersionAsync(sample.DatasetVersionId, cancellationToken);
+        var sample = await _data.GetSampleAsync(flag.SampleId);
+        var version = sample is null ? null : await _data.GetVersionAsync(sample.DatasetVersionId);
         if (version is null || version.IsFrozen)
         {
             return Result<QualityFlagDto>.Failure(DataOpsErrors.VersionFrozen);
@@ -196,10 +196,10 @@ public class DataCleaningService : IDataCleaningService
             flag.IsResolved = true;
             flag.ResolvedBy = actorUserId;
             flag.ResolvedAt = _clock.GetUtcNow().UtcDateTime;
-            await _data.SaveChangesAsync(cancellationToken);
+            await _data.SaveChangesAsync();
         }
 
-        return Result.Success(ToDto(flag, await _data.GetRuleAsync(flag.RuleId, cancellationToken)));
+        return Result.Success(ToDto(flag, await _data.GetRuleAsync(flag.RuleId)));
     }
 
     /// <summary>Lỗi Error ⇒ Rejected (mẫu đã duyệt chuyển NeedsFix). Không lỗi: Raw/Rejected-do-rule ⇒ Cleaned; Approved giữ nguyên; mẫu bị người duyệt từ chối giữ Rejected.</summary>

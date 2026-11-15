@@ -11,19 +11,19 @@ public class InMemoryLabelLinkRepository : ILabelLinkRepository
     public List<IssueLink> Links { get; } = [];
     public int SaveCount { get; private set; }
 
-    public Task<IReadOnlyList<Label>> GetProjectLabelsAsync(Guid projectId, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<Label>> GetProjectLabelsAsync(Guid projectId)
     {
         IReadOnlyList<Label> result = Labels.Where(l => l.ProjectId == projectId).OrderBy(l => l.Name).ToList();
         return Task.FromResult(result);
     }
 
-    public Task<Label?> GetLabelAsync(Guid labelId, CancellationToken cancellationToken = default) =>
+    public Task<Label?> GetLabelAsync(Guid labelId) =>
         Task.FromResult(Labels.SingleOrDefault(l => l.Id == labelId));
 
-    public Task<bool> LabelNameExistsAsync(Guid projectId, string name, Guid? exceptLabelId, CancellationToken cancellationToken = default) =>
+    public Task<bool> LabelNameExistsAsync(Guid projectId, string name, Guid? exceptLabelId) =>
         Task.FromResult(Labels.Any(l => l.ProjectId == projectId && string.Equals(l.Name, name, StringComparison.OrdinalIgnoreCase) && l.Id != exceptLabelId));
 
-    public Task AddLabelAsync(Label label, CancellationToken cancellationToken = default)
+    public Task AddLabelAsync(Label label)
     {
         Labels.Add(label);
         return Task.CompletedTask;
@@ -35,7 +35,7 @@ public class InMemoryLabelLinkRepository : ILabelLinkRepository
         IssueLabels.RemoveAll(link => link.LabelId == label.Id);
     }
 
-    public Task<IReadOnlyList<Label>> GetIssueLabelsAsync(Guid issueId, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<Label>> GetIssueLabelsAsync(Guid issueId)
     {
         IReadOnlyList<Label> result = IssueLabels.Where(link => link.IssueId == issueId)
             .Join(Labels, link => link.LabelId, label => label.Id, (_, label) => label)
@@ -44,10 +44,10 @@ public class InMemoryLabelLinkRepository : ILabelLinkRepository
         return Task.FromResult(result);
     }
 
-    public Task<IssueLabel?> GetIssueLabelAsync(Guid issueId, Guid labelId, CancellationToken cancellationToken = default) =>
+    public Task<IssueLabel?> GetIssueLabelAsync(Guid issueId, Guid labelId) =>
         Task.FromResult(IssueLabels.SingleOrDefault(link => link.IssueId == issueId && link.LabelId == labelId));
 
-    public Task AddIssueLabelAsync(IssueLabel issueLabel, CancellationToken cancellationToken = default)
+    public Task AddIssueLabelAsync(IssueLabel issueLabel)
     {
         IssueLabels.Add(issueLabel);
         return Task.CompletedTask;
@@ -55,19 +55,19 @@ public class InMemoryLabelLinkRepository : ILabelLinkRepository
 
     public void RemoveIssueLabel(IssueLabel issueLabel) => IssueLabels.Remove(issueLabel);
 
-    public Task<IReadOnlyList<IssueLink>> GetOutgoingLinksAsync(Guid issueId, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<IssueLink>> GetOutgoingLinksAsync(Guid issueId)
     {
         IReadOnlyList<IssueLink> result = Links.Where(link => link.SourceIssueId == issueId).OrderBy(link => link.CreatedAt).ToList();
         return Task.FromResult(result);
     }
 
-    public Task<IssueLink?> GetLinkAsync(Guid linkId, CancellationToken cancellationToken = default) =>
+    public Task<IssueLink?> GetLinkAsync(Guid linkId) =>
         Task.FromResult(Links.SingleOrDefault(link => link.Id == linkId));
 
-    public Task<IssueLink?> FindLinkAsync(Guid sourceIssueId, Guid targetIssueId, string linkType, CancellationToken cancellationToken = default) =>
+    public Task<IssueLink?> FindLinkAsync(Guid sourceIssueId, Guid targetIssueId, string linkType) =>
         Task.FromResult(Links.SingleOrDefault(link => link.SourceIssueId == sourceIssueId && link.TargetIssueId == targetIssueId && link.LinkType == linkType));
 
-    public Task AddLinkAsync(IssueLink link, CancellationToken cancellationToken = default)
+    public Task AddLinkAsync(IssueLink link)
     {
         Links.Add(link);
         return Task.CompletedTask;
@@ -75,7 +75,7 @@ public class InMemoryLabelLinkRepository : ILabelLinkRepository
 
     public void RemoveLink(IssueLink link) => Links.Remove(link);
 
-    public Task SaveChangesAsync(CancellationToken cancellationToken = default)
+    public Task SaveChangesAsync()
     {
         SaveCount++;
         return Task.CompletedTask;

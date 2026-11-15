@@ -14,7 +14,7 @@ public class SkillCatalogAdapter : ISkillCatalogReader
         _skills = skills;
     }
 
-    public async Task<IReadOnlyList<SkillCatalogItem>> GetSkillsAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<SkillCatalogItem>> GetSkillsAsync()
     {
         if (_cache is not null)
         {

@@ -18,26 +18,26 @@ public class IssueContractService : IIssueReadService, IIssueSprintService
         _clock = clock;
     }
 
-    public async Task<IssueSummaryDto?> GetByIdAsync(Guid issueId, CancellationToken cancellationToken = default)
+    public async Task<IssueSummaryDto?> GetByIdAsync(Guid issueId)
     {
-        var issue = await _issues.GetByIdAsync(issueId, cancellationToken: cancellationToken);
+        var issue = await _issues.GetByIdAsync(issueId);
         return issue is null ? null : ToSummary(issue);
     }
 
-    public async Task<IReadOnlyList<IssueSummaryDto>> GetBySprintAsync(Guid sprintId, CancellationToken cancellationToken = default) =>
-        (await _issues.GetBySprintAsync(sprintId, cancellationToken)).Select(ToSummary).ToList();
+    public async Task<IReadOnlyList<IssueSummaryDto>> GetBySprintAsync(Guid sprintId) =>
+        (await _issues.GetBySprintAsync(sprintId)).Select(ToSummary).ToList();
 
-    public async Task<IReadOnlyList<IssueSummaryDto>> GetOpenByAssigneeAsync(Guid userId, CancellationToken cancellationToken = default) =>
-        (await _issues.GetOpenByAssigneeAsync(userId, cancellationToken)).Select(ToSummary).ToList();
+    public async Task<IReadOnlyList<IssueSummaryDto>> GetOpenByAssigneeAsync(Guid userId) =>
+        (await _issues.GetOpenByAssigneeAsync(userId)).Select(ToSummary).ToList();
 
-    public async Task<IReadOnlyList<IssueStatusChangeDto>> GetStatusHistoryAsync(Guid issueId, CancellationToken cancellationToken = default) =>
-        (await _issues.GetStatusHistoryAsync(issueId, cancellationToken))
+    public async Task<IReadOnlyList<IssueStatusChangeDto>> GetStatusHistoryAsync(Guid issueId) =>
+        (await _issues.GetStatusHistoryAsync(issueId))
             .Select(h => new IssueStatusChangeDto(h.IssueId, h.FromStatusId, h.ToStatusId, h.FromCategory, h.ToCategory,
                 h.ChangedBy, h.DurationSeconds, h.ChangedAt))
             .ToList();
 
-    public async Task<IReadOnlyList<IssueAssignmentChangeDto>> GetAssignmentHistoryAsync(Guid issueId, CancellationToken cancellationToken = default) =>
-        (await _issues.GetAssignmentHistoryAsync(issueId, cancellationToken))
+    public async Task<IReadOnlyList<IssueAssignmentChangeDto>> GetAssignmentHistoryAsync(Guid issueId) =>
+        (await _issues.GetAssignmentHistoryAsync(issueId))
             .Select(h => new IssueAssignmentChangeDto(h.IssueId, h.FromAssigneeId, h.ToAssigneeId, h.AssignedBy,
                 h.AssignmentSource, h.AiCandidateId, h.StoryPointsAtTime, h.AssignedAt))
             .ToList();
@@ -46,25 +46,22 @@ public class IssueContractService : IIssueReadService, IIssueSprintService
         Guid projectId,
         IReadOnlyCollection<Guid> issueIds,
         Guid sprintId,
-        Guid actorUserId,
-        CancellationToken cancellationToken = default) =>
+        Guid actorUserId) =>
         sprintId == Guid.Empty
             ? Task.FromResult(Result<int>.Failure(Error.Validation("ISSUE_SPRINT_INVALID", "Sprint không hợp lệ.")))
-            : SetSprintAsync(projectId, issueIds, sprintId, actorUserId, cancellationToken);
+            : SetSprintAsync(projectId, issueIds, sprintId, actorUserId);
 
     public Task<Result<int>> ReturnToBacklogAsync(
         Guid projectId,
         IReadOnlyCollection<Guid> issueIds,
-        Guid actorUserId,
-        CancellationToken cancellationToken = default) =>
-        SetSprintAsync(projectId, issueIds, null, actorUserId, cancellationToken);
+        Guid actorUserId) =>
+        SetSprintAsync(projectId, issueIds, null, actorUserId);
 
     private async Task<Result<int>> SetSprintAsync(
         Guid projectId,
         IReadOnlyCollection<Guid> issueIds,
         Guid? sprintId,
-        Guid actorUserId,
-        CancellationToken cancellationToken)
+        Guid actorUserId)
     {
         ArgumentNullException.ThrowIfNull(issueIds);
         if (issueIds.Count is 0 or > MaxBatchSize)
@@ -72,7 +69,7 @@ public class IssueContractService : IIssueReadService, IIssueSprintService
             return Result<int>.Failure(Error.Validation("ISSUE_BATCH_SIZE_INVALID", $"Cần từ 1 đến {MaxBatchSize} Issue."));
         }
 
-        var requested = await _issues.GetByIdsAsync(issueIds, cancellationToken);
+        var requested = await _issues.GetByIdsAsync(issueIds);
         if (requested.Count != issueIds.Distinct().Count() || requested.Any(issue => issue.ProjectId != projectId))
         {
             return Result<int>.Failure(Error.Validation("ISSUE_NOT_IN_PROJECT", "Có Issue không tồn tại hoặc không thuộc Project."));
@@ -82,7 +79,7 @@ public class IssueContractService : IIssueReadService, IIssueSprintService
         var affected = requested.ToDictionary(issue => issue.Id);
         foreach (var parent in requested)
         {
-            foreach (var child in await _issues.GetChildrenAsync(parent.Id, cancellationToken))
+            foreach (var child in await _issues.GetChildrenAsync(parent.Id))
             {
                 affected.TryAdd(child.Id, child);
             }
@@ -94,8 +91,7 @@ public class IssueContractService : IIssueReadService, IIssueSprintService
         {
             await _issues.AddActivityAsync(
                 IssueActivities.Create(issue.Id, actorUserId, IssueActivities.SprintChanged, now,
-                    nameof(Issue.SprintId), issue.SprintId, sprintId),
-                cancellationToken);
+                    nameof(Issue.SprintId), issue.SprintId, sprintId));
             issue.SprintId = sprintId;
             issue.UpdatedAt = now;
             changed++;
@@ -103,7 +99,7 @@ public class IssueContractService : IIssueReadService, IIssueSprintService
 
         if (changed > 0)
         {
-            await _issues.SaveChangesAsync(cancellationToken);
+            await _issues.SaveChangesAsync();
         }
 
         return Result.Success(changed);
