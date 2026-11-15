@@ -71,249 +71,139 @@ flowchart TD
 
 ---
 
-## 3. Cấu trúc Khóa, Định dạng Lưu trữ & Thời gian Sống (TTL)
+## 3. Bản Thiết Kế Chi Tiết Bộ Nhớ Đệm Phân Tán Redis (Từ Ý Tưởng Đến Triển Khai)
 
-### 3.1. Cấu trúc Khóa Redis (Keyspace Convention)
-Khóa được định danh theo tiền tố cấu hình (`InstanceName = "ProjectMgmt:Ai:"`) kết hợp định danh phiên ngẫu nhiên (Session Guid):
+### 3.1. Redis là gì?
+**Redis (Remote Dictionary Server)** là hệ quản trị cơ sở dữ liệu lưu trữ dữ liệu trực tiếp trên **bộ nhớ chính (RAM)** theo mô hình **Khóa – Giá trị (Key–Value)** với độ trễ đọc/ghi ở mức dưới một mili-giây (`< 1 ms`). Khác với cơ sở dữ liệu quan hệ trên đĩa cứng dùng để lưu trữ giao dịch vĩnh viễn và truy vấn bảng liên kết phức tạp, Redis sinh ra để xử lý dữ liệu nóng tức thời và hỗ trợ sẵn cơ chế **Tự Hủy Theo Thời Gian Sống (TTL – Time To Live)**.
 
-```text
-ProjectMgmt:Ai:staging:{stagingGuid}
-```
-*Ví dụ thực tế:*
-`ProjectMgmt:Ai:staging:e7c4f1a2-8b3d-4e9a-9c12-3456789abcde`
+### 3.2. Công dụng Tổng quát & Tính Ứng dụng Thực tế Trong Dự án
+Trong thiết kế hệ thống doanh nghiệp tích hợp AI, Redis giải quyết triệt để **4 bài toán sống còn** mà cơ sở dữ liệu chính đơn thuần không thể đáp ứng tối ưu:
 
-### 3.2. Cấu trúc Payload JSON Lưu trữ
-Toàn bộ đề xuất phân rã kèm trạng thái đoạn hội thoại đa lượt được tuần tự hóa (serialize) thành chuỗi JSON tối ưu:
+| Công dụng Tổng quát của Redis | Ứng dụng Cụ thể Trong Dự án ProjectMgmt | Giá trị Thực tế Mang Lại |
+| :--- | :--- | :--- |
+| **1. Vùng Đệm Nháp (Staging Area)** | Lưu toàn bộ **Bản Đề xuất Kế hoạch Sprint/Backlog**, **Kế hoạch Gỡ/Xóa Công việc** và kết quả **Tác vụ Nhanh Không Qua Chat (AI 1 Phân rã việc con & AI 2 Đề xuất phân công)** ở trạng thái chờ duyệt. | Ngăn AI ghi thẳng dữ liệu chưa kiểm chứng vào bảng công việc chính. Nếu người dùng hủy bỏ hoặc đóng trình duyệt, CSDL chính hoàn toàn sạch sẽ, không phát sinh dữ liệu rác. |
+| **2. Chỉnh Sửa Tức Thời (Low-Latency Mutation)** | Cho phép người điều phối sửa trực tiếp tiêu đề, điểm Story Points, mức ưu tiên, người phụ trách, hoặc yêu cầu AI tinh chỉnh lại 1 công việc / toàn bảng trực tiếp trên vùng đệm nóng. | Phản hồi thao tác chỉnh sửa dưới vài mili-giây, không khóa hàng hay gây tải ghi lặp đi lặp lại lên CSDL quan hệ chính. |
+| **3. Bộ Nhớ Đệm Phiên Đọc Nhanh (Hot Read-Through Cache)** | Lưu nóng trạng thái phiên hội thoại đa lượt, lịch sử bước suy nghĩ, từ khóa chỉ mục `#mem-X` và đặc tả xuất Excel đang hoạt động. | Rút ngắn thời gian nạp ngữ cảnh giữa các lượt trao đổi liên tiếp, giảm truy vấn lặp xuống CSDL chính. |
+| **4. Khóa Trạng Thái & Vòng Đời Tự Dọn (TTL & Idempotency)** | Áp đặt **Thời gian sống (TTL) tiêu chuẩn 2 giờ (7,200 giây)** cho mỗi khóa nháp và cập nhật cờ trạng thái (`chờ duyệt -> đã thực thi / đã hủy`). | Tự động giải phóng bộ nhớ đối với các bản nháp bị bỏ dở, đồng thời chống lỗi bấm đúp hoặc áp dụng trùng lặp nhiều lần trên Tác vụ Nhanh. |
 
-```json
-{
-  "stagingId": "sprint_ai_e7c4f1a28b3d4e9a9c123456789abcde",
-  "projectId": 12,
-  "sprintId": 5,
-  "intent": "sprint_plan",
-  "assistantReply": "Tôi đã phân tích tài liệu đặc tả cùng kho Backlog và đề xuất kế hoạch gồm 2 công việc chính (8 SP).",
-  "recommendedTarget": "sprint",
-  "triggerAction": null,
-  "sprintGoal": "Xây dựng lõi xác thực đa yếu tố và đồng bộ dữ liệu thời gian thực cho hệ thống",
-  "suggestedSprintName": "Sprint 5 - Bảo mật & Realtime Engine",
-  "targetVelocity": 32,
-  "totalStoryPoints": 28,
-  "conversationHistory": [
-    {
-      "id": "turn-1-u",
-      "role": "user",
-      "content": "Phân rã tính năng xác thực RBAC và realtime SSE",
-      "attachmentName": "Kien-truc-realtime.docx",
-      "intent": "sprint_plan",
-      "toolSteps": [],
-      "timestamp": "2026-11-14T08:15:20Z"
-    },
-    {
-      "id": "turn-1-a",
-      "role": "assistant",
-      "content": "Tôi đã phân tích tài liệu đặc tả cùng kho Backlog và đề xuất kế hoạch gồm 2 công việc chính.",
-      "intent": "sprint_plan",
-      "toolSteps": ["spec_hub_search: 7ms", "backlog_get_stories: 13ms"],
-      "timestamp": "2026-11-14T08:15:30Z"
-    }
-  ],
-  "epics": [
-    {
-      "id": "epic-1",
-      "title": "Hệ thống Xác thực Nâng cao & Phân quyền RBAC",
-      "description": "Bao gồm đăng nhập, cấp JWT và phân quyền theo cấp bậc Scrum",
-      "color": "#3B82F6"
-    }
-  ],
-  "tasks": [
-    {
-      "id": "task-1",
-      "epicId": "epic-1",
-      "title": "Thiết kế Middleware kiểm tra quyền theo cấp bậc Scrum",
-      "description": "Ngăn chặn vượt cấp từ Developer/QA lên cấp quản lý",
-      "storyPoints": 3,
-      "estimatedHours": 8,
-      "assignedUserId": "u-dev-01",
-      "assignedUserName": "Lê Văn A (Backend)",
-      "status": "Ready",
-      "tags": ["Security", "Middleware", "RBAC"],
-      "citations": [
-        "Tài liệu Spec Hub: Cam-nang-ky-thuat.md - Mục 4.1",
-        "Ghi chú cuộc họp: Biên bản họp Sprint Planning - Đoạn 2"
-      ],
-      "subtasks": []
-    },
-    {
-      "id": "task-2",
-      "epicId": "epic-1",
-      "title": "Tích hợp giao thức Server-Sent Events cho luồng AI Stream",
-      "description": "Xử lý kết nối streaming một chiều, reconnect và tự động refresh token khi nhận 401",
-      "storyPoints": 5,
-      "estimatedHours": 16,
-      "assignedUserId": "u-dev-02",
-      "assignedUserName": "Nguyễn Thị B (Frontend)",
-      "status": "Ready",
-      "tags": ["SSE", "Realtime", "Auth"],
-      "citations": [
-        "Tài liệu Spec Hub: Kien-truc-realtime.docx - Trang 12"
-      ],
-      "subtasks": [
-        {
-          "id": "subtask-2-1",
-          "title": "Cấu hình Controller phát event-stream trong .NET 10",
-          "role": "Backend",
-          "estimatedHours": 6,
-          "storyPoints": 2,
-          "priority": "High",
-          "status": "To Do",
-          "acceptanceCriteria": [
-            "Controller trả về text/event-stream chuẩn SSE",
-            "Đóng kết nối an toàn khi Client disconnect"
-          ],
-          "documentCitations": [
-            "Tài liệu Spec Hub: Kien-truc-realtime.docx - Trang 12"
-          ]
-        },
-        {
-          "id": "subtask-2-2",
-          "title": "Xây dựng Angular Service bắt lỗi 401 và gọi Refresh Token",
-          "role": "Frontend",
-          "estimatedHours": 6,
-          "storyPoints": 2,
-          "priority": "High",
-          "status": "To Do",
-          "acceptanceCriteria": [
-            "Interceptor bắt lỗi 401 và gọi Refresh Token tự động",
-            "Kết nối stream được mở lại không làm mất phiên"
-          ],
-          "documentCitations": [
-            "Tài liệu Spec Hub: Kien-truc-realtime.docx - Trang 12"
-          ]
-        },
-        {
-          "id": "subtask-2-3",
-          "title": "Viết kiểm thử tự động giả lập mất mạng đột ngột",
-          "role": "QA",
-          "estimatedHours": 4,
-          "storyPoints": 1,
-          "priority": "Medium",
-          "status": "To Do",
-          "acceptanceCriteria": [
-            "Kịch bản kiểm thử giả lập ngắt mạng và tự kết nối lại",
-            "Không phát sinh ngoại lệ chưa được xử lý"
-          ],
-          "documentCitations": [
-            "Tài liệu Spec Hub: Kien-truc-realtime.docx - Trang 12"
-          ]
-        }
-      ]
-    }
-  ],
-  "warnings": [
-    "Tổng Story Points (28 SP) nằm trong ngưỡng an toàn so với vận tốc trung bình (32 SP)."
-  ],
-  "createdAt": "2026-11-11T00:15:30Z",
-  "expiresAt": "2026-11-12T00:15:30Z"
-}
+### 3.3. Sơ Đồ Thiết Kế Vùng Đệm & Lưu Trữ Kép Redis Trong Dự Án
+
+```mermaid
+flowchart TD
+    UI(["Thao tác Người dùng trên Giao diện\n(Hội thoại Sprint / Sửa ô / Tác vụ Nhanh AI 1 & AI 2)"]) --> Gate{"Cổng Xác thực Phạm vi 3 Chiều\n(Tổ chức - Dự án - Người dùng)"}
+
+    Gate -->|"Lấy Ngữ cảnh Phiên"| Router{"Bộ Điều Phối Đệm Đàn Hồi\n(Kiểm tra Trạng thái Bộ Ngắt Mạch)"}
+
+    Router -->|"Mạch Đóng & Cache Nóng Trúng"| Redis[("Bộ Nhớ Đệm Phân Tán Redis\nKhóa Phiên & Tác vụ Nhanh · TTL 2 Giờ")]
+    Router -->|"Mạch Đang Mở hoặc Lỗi Mạng > 2 giây"| Ram[("Bộ Nhớ Dự Phòng RAM Nội Bộ\nĐảm bảo Không Gián đoạn Dịch vụ")]
+
+    Redis -->|"Hết Hạn TTL 2 Giờ (Cache Miss)"| MySQL[("Kho Phiên Bền Vững Trên CSDL Chính\nLưu Dài Hạn Hội thoại & Mảnh #mem-X")]
+    MySQL -->|"Kiểm tra Chủ Sở hữu & Tái Nạp Nóng"| Redis
+
+    Redis -->|"Người dùng Chỉnh Sửa / Tinh Chỉnh"| DualWrite["Cập Nhật Nóng Lên Redis (Gia Hạn TTL 2h)\n+ Lưu Đồng Bộ Kho Phiên Bền Vững"]
+
+    UI -->|"Bấm Áp Dụng Sprint / Đẩy Backlog / Xác Nhận AI 1 & AI 2"| Hitl["Hậu Kiểm Cuối & Ghi Nguyên Tử Vào Bảng Công Việc Chính"]
+    Hitl -->|"Ghi Chính Thức Thành Công"| Clean["Dọn Sạch Danh Sách Nháp / Đánh Dấu Đã Thực Thi Trong Redis\n(Giữ Nguyên Mạch Hội Thoại Tiếp Tục)"]
 ```
 
-### 3.3. Thời gian Sống (TTL), Lưu trữ Bền vững MySQL & Chính sách Vòng đời Phiên
-- **Lưu trữ Kép (Redis Hot Cache + MySQL Durable Persistence)**:
-  - **Redis Hot Cache**: Giữ nóng bản đề xuất và hội thoại hiện hành để phục vụ phản hồi, tinh chỉnh và chỉnh sửa từng ô tức thì (cùng cơ chế Circuit Breaker fallback sang RAM).
-  - **MySQL Persistent Tables (`AiConversationSessions` & `AiConversationMemoryEntries`)**: Mọi phiên hội thoại hoàn chỉnh (gồm `ProposalJson`, `ConversationHistoryJson` chứa cả `TraceItems`, `ThinkingSummary`, `DurationMs`, `Thoughts`, `ReferencedMemoryAnchors`, cùng danh sách các mảnh trí nhớ `#mem-1..#mem-n`) đều được lưu bền vững vào MySQL bởi [`AiConversationSessionStore.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiConversationSessionStore.cs).
-- **Khóa chặt Phạm vi Đa chiều (`OrganizationId`, `ProjectId`, `UserId`)**: Toàn bộ API liệt kê lịch sử, khôi phục phiên, tiếp tục chat, chỉnh sửa staging, commit Backlog/Sprint và xóa phiên đều đối chiếu nghiêm ngặt bộ ba `(OrganizationId, ProjectId, UserId)`. Người dùng dự án/tổ chức khác hoặc thành viên khác tuyệt đối không thể đọc hoặc ghi đè phiên của nhau.
-- **Khôi phục khi Redis lạnh (Cold-Redis Fallback & Re-hydration)**: Nếu phiên cũ đã trôi khỏi Redis (hết TTL hoặc máy chủ khởi động lại), khi người dùng mở lại hoặc nhắn tiếp trong phiên đó, hệ thống tự động nạp phiên từ MySQL (kèm kiểm tra khóa 3 chiều) và tái nạp ngay lên Redis.
-- **Bảo toàn Hội thoại Sau Khi Commit (`ApplyProposal` / `PushToBacklog`)**: Khi người dùng bấm **"Áp dụng vào Sprint"** hoặc **"Đẩy vào Kho Backlog"**, hệ thống ghi nhận công việc vào MySQL, xóa danh sách `Tasks` đã commit (tránh áp dụng trùng lặp nhiều lần), đồng thời **bổ sung tin nhắn xác nhận của Trợ Lý AI vào `ConversationHistory` và cập nhật đồng bộ cả Redis lẫn MySQL** để đoạn hội thoại được giữ nguyên mạch tiếp tục.
-- **Nút "Tạo mới" Không Phá Hủy vs Xóa Phiên Cũ Chủ Động**:
-  - Nút **"Tạo mới"** trên UI chỉ mở cuộc hội thoại trống mới (reset trạng thái local) và **tuyệt đối không gọi `clear-cache` hay xóa các phiên cũ trong cơ sở dữ liệu**.
-  - Việc xóa phiên cũ được thực hiện chủ động từ danh sách **Lịch sử phiên** thông qua `DELETE /api/ai/agent/sessions/{sessionId}?projectId=...`.
+### 3.4. Sơ Đồ Luồng Phê Duyệt Con Người Qua Vùng Đệm Redis (Sprint & Tác Vụ Nhanh)
+
+```mermaid
+sequenceDiagram
+    actor User as Người dùng Dự án
+    participant UI as Giao diện Điều phối
+    participant Gate as Cổng Bảo mật & Điều phối
+    participant Cache as Bộ Đệm Redis (Kèm Dự phòng RAM)
+    participant DB as Cơ sở Dữ liệu Chính
+
+    Note over User,DB: Luồng A: Lập Kế Hoạch Sprint / Hội Thoại Đa Lượt
+    User->>UI: Gửi yêu cầu phân tách kế hoạch hoặc chỉnh sửa từng ô
+    UI->>Gate: Truyền yêu cầu kèm Mã Phiên (nếu đang tiếp tục)
+    Gate->>Cache: Tìm bản nháp theo khóa phiên (kiểm tra khớp Bộ ba Phạm vi)
+    alt Hụt Cache (Hết TTL 2 giờ)
+        Gate->>DB: Tra cứu Kho Phiên Bền Vững theo đúng Chủ sở hữu
+        DB-->>Gate: Trả về lịch sử & đề xuất gần nhất
+        Gate->>Cache: Tái nạp nóng vào Redis với TTL mới 2 giờ
+    end
+    Gate->>Cache: Ghi nóng bản đề xuất đã tinh chỉnh (TTL = 2 giờ)
+    Gate->>DB: Lưu kép bền vững lịch sử hội thoại & chỉ mục #mem-X
+    User->>UI: Rà soát, sửa điểm, sau đó bấm Áp dụng hoặc Đẩy Backlog
+    Gate->>Cache: Đọc bản nháp hoàn chỉnh và hậu kiểm quy chuẩn thực tế
+    Gate->>DB: Ghi nguyên tử Sprint / Backlog / Công việc con
+    Gate->>Cache: Xóa danh sách việc nháp để chống áp dụng trùng, giữ nguyên mạch chat
+
+    Note over User,DB: Luồng B: Tác Vụ Nhanh Không Qua Khung Chat (AI 1 & AI 2)
+    User->>UI: Chọn Phân rã việc con (AI 1) hoặc Gợi ý người làm (AI 2)
+    Gate->>Cache: Chỉ lưu tạm kết quả đề xuất ở trạng thái Chờ Xác Nhận (TTL = 2 giờ)
+    Note right of Cache: Tuyệt đối CHƯA tạo việc con hay đổi người làm trong CSDL
+    User->>UI: Tích chọn/sửa việc con hoặc chọn 1 ứng viên từ Top 5 -> Bấm Xác nhận
+    Gate->>Cache: Đọc gói Tác vụ Nhanh & xác minh trạng thái chưa xử lý
+    Gate->>DB: Thực thi tạo việc con hoặc gán nhân sự chính thức
+    Gate->>Cache: Đổi trạng thái khóa thành Đã Thực Thi hoặc Đã Hủy
+```
+
+### 3.5. Quy Trình Thiết Kế & Triển Khai Redis Chi Tiết Qua 6 Bước (Từ Ý Tưởng Đến Vận Hành)
+
+Đây là lộ trình thiết kế chuẩn theo kiến trúc từ bài toán gốc đến hệ thống hoàn chỉnh, giúp dễ dàng xây dựng, mở rộng và kiểm soát rủi ro:
+
+1. **Bước 1 — Hình Thành Ý Tưởng & Phân Định Ranh Giới Lưu Trữ (Bài toán Nháp vs. Thật)**:
+   - *Vấn đề xuất phát*: AI có thể tạo ra 10–30 công việc hoặc thay đổi danh sách phân công chỉ sau một câu lệnh. Nếu ghi thẳng xuống bảng công việc chính khi chưa duyệt, bảng Backlog/Sprint sẽ bị làm bẩn bởi dữ liệu nháp; còn nếu chỉ giữ trong biến cục bộ trên trình duyệt hay RAM một máy chủ đơn lẻ, mọi thay đổi sẽ mất sạch khi tải lại trang hoặc chạy nhiều tiến trình.
+   - *Quyết định thiết kế*: Đặt **Redis** làm lớp **Đệm Trung Gian Phê Duyệt (Human-in-the-Loop Buffer)** nằm giữa Bộ Suy luận AI và Cơ sở Dữ liệu Chính. Toàn bộ dữ liệu nháp sống trên Redis; **chỉ khi con người xác nhận** mới đi qua Cổng Điều phối Ghi để chạm vào CSDL chính.
+
+2. **Bước 2 — Thiết Kế Cấu Trúc Không Gian Khóa (Keyspace & Naming Convention)**:
+   - *Nguyên tắc*: Mọi khóa Redis của phân hệ AI đều bắt buộc dùng **Tiền tố Cách ly Hệ thống** (`ProjectMgmt:Ai:`) ở đầu để không bao giờ đụng độ với các phân hệ khác khi dùng chung cụm Redis.
+   - *Phân chia 2 nhánh khóa tách biệt theo mục đích*:
+
+| Nhánh Luồng Nghiệp Vụ | Quy Ước Tên Khóa Trong Redis | Dữ Liệu Được Lưu Giữ | Vòng Đời & Ý Nghĩa |
+| :--- | :--- | :--- | :--- |
+| **Phiên Hội thoại & Kế hoạch Sprint/Backlog** | `ProjectMgmt:Ai:sprint_ai_{MãĐịnhDanhNgẫuNhiên}` | Bản đề xuất Epics/Tasks/Subtasks, Mục tiêu Sprint, Kế hoạch Gỡ việc chờ xác nhận, Chuỗi hội thoại đa lượt, Nhật ký thao tác, Chỉ mục `#mem-X`, Dấu vết Phạm vi 3 Chiều | **TTL = 2 giờ** (tự làm mới mỗi lượt chat, mỗi lần sửa ô hoặc mỗi lần mở lại phiên cũ từ lịch sử). |
+| **Tác vụ Nhanh Công Việc (AI 1 & AI 2)** | `ProjectMgmt:Ai:ai_quick_{MãĐịnhDanhNgẫuNhiên}` | Danh sách việc con đề xuất kèm vai trò/kỹ năng/giờ ước lượng (AI 1), hoặc Bảng xếp hạng Top 5 ứng viên kèm điểm Kỹ năng/Tải/Giờ rảnh/Lịch sử (AI 2), Cờ trạng thái (`pending`, `executed`, `cancelled`) | **TTL = 2 giờ**. Hoàn toàn không chạm vào CSDL chính cho tới khi người dùng bấm Xác nhận hoặc Hủy trên Khay Tác vụ Nhanh. |
+
+3. **Bước 3 — Thiết Kế Cấu Trúc Gói Dữ Liệu (Payload Schema) & Bảo Mật Phạm Vi**:
+   - Toàn bộ gói trạng thái được đóng gói dạng chuỗi JSON gọn nhẹ (không format thừa khoảng trắng để tiết kiệm RAM trên Redis).
+   - **Quy tắc Chống Lộ Lọt Chéo (Zero-Trust Payload)**: Mỗi gói dữ liệu đặt trên Redis đều nhúng chặt bộ ba định danh sở hữu: **Mã Tổ chức**, **Mã Dự án**, và **Mã Người dùng**. Trước khi cho phép đọc, chỉnh sửa hay xác nhận bất kỳ khóa nào, cổng điều phối luôn đối chiếu bộ ba này với phiên đăng nhập hiện tại để chặn đứng nguy cơ truy cập chéo bằng mã phiên đoán mò.
+   - **Quản lý Vòng đời Sạch sẽ**:
+     - Sau khi áp dụng kế hoạch Sprint hoặc đẩy Backlog thành công, hệ thống **dọn rỗng danh sách công việc đề xuất** trong khóa Redis để tránh áp dụng trùng lặp nhiều lần, nhưng **bảo toàn lịch sử hội thoại** kèm tin nhắn xác nhận để người dùng tiếp tục trò chuyện liền mạch.
+     - Đối với Tác vụ Nhanh, hệ thống chuyển trạng thái sang *Đã Thực Thi* hoặc *Đã Hủy* nhằm từ chối tự động mọi thao tác bấm lại trùng lặp.
+     - Khi người dùng bấm **Xóa phiên** trong mục Lịch sử, hệ thống kiểm tra quyền sở hữu rồi **xóa đồng thời** cả bản ghi CSDL lẫn khóa nóng trên Redis.
+
+4. **Bước 4 — Thiết Kế Cơ Chế Đọc Ưu Tiên & Tái Nạp Cache Lạnh (Read-Through & Cold-Cache Re-hydration)**:
+   - *Tại sao cần lưu kép?* Redis giữ dữ liệu với TTL 2 giờ để tiết kiệm RAM; nếu lưu thuần túy trên Redis, người dùng quay lại vào hôm sau sẽ mất trắng cuộc trò chuyện hôm trước.
+   - *Cách vận dụng kết hợp*:
+     - **Ghi Kép (Dual-Save)**: Kết thúc mỗi lượt hội thoại hoặc chỉnh sửa kế hoạch lớn, hệ thống ghi nóng lên Redis (để lượt tiếp theo phản hồi tức thì) đồng thời ghi bền vững vào hai bảng phiên và mảnh trí nhớ trong CSDL chính.
+     - **Đọc Ưu Tiên Redis (Redis-First Read-Through)**: Khi nhận yêu cầu khôi phục phiên, tinh chỉnh hoặc tiếp tục chat, hệ thống luôn thử đọc từ Redis trước. Nếu trúng (*Cache Hit*) và khớp khóa 3 chiều -> phục vụ ngay lập tức.
+     - **Tự Động Nạp Lại Cache Lạnh (Cold-Cache Re-hydration)**: Nếu Redis không còn khóa đó do đã hết TTL 2 giờ hoặc khởi động lại dịch vụ (*Cache Miss*), hệ thống tự động tra cứu từ Kho Phiên CSDL theo đúng bộ ba sở hữu, dựng lại đầy đủ trạng thái đề xuất lẫn các mảnh trí nhớ `#mem-X`, rồi **nạp nóng ngược trở lại vào Redis với TTL 2 giờ mới** cho những lượt tương tác tiếp theo.
+
+5. **Bước 5 — Thiết Kế Lớp Phòng Thủ Chống Sập (Circuit Breaker & Fallback RAM)**:
+   - *Nguyên tắc thiết kế cốt lõi*: Redis là bộ nhớ đệm tăng tốc — **nếu dịch vụ Redis gặp sự cố mạng hoặc tạm ngưng, hệ thống Trợ Lý AI tuyệt đối không được chết theo hoặc treo 30 giây chờ timeout**.
+   - Áp dụng **Mẫu Thiết kế Bọc Đàn Hồi kết hợp Bộ Ngắt Mạch 3 Trạng Thái (Circuit Breaker)**:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Closed: Khoi tao he thong binh thuong
+    Closed --> Closed: Doc / Ghi Redis thanh cong (Reset dem loi ve 0)
+    Closed --> Open: Loi ket noi hoac Qua thoi gian cho 3 lan lien tiep (Mo mach 60 giay)
+    Open --> Open: Chuyen thang sang RAM noi bo (Khong goi Redis gay do tre)
+    Open --> HalfOpen: Het 60 giay ngat mach (Cho phep 1 luot tham do)
+    HalfOpen --> Closed: Luot tham do Redis thanh cong (Phuc hoi hoan toan)
+    HalfOpen --> Open: Luot tham do tiep tuc loi (Khoa them 60 giay)
+```
+
+   - **Thông số vận hành thực tế**:
+     - Ngưỡng thời gian chờ tối đa mỗi thao tác đọc/ghi đệm: **2,000 – 3,000 mili-giây** (kết nối tối đa 5,000 ms).
+     - Ngưỡng kích hoạt ngắt mạch: **3 lỗi liên tiếp**.
+     - Thời gian cách ly bảo vệ (`Open`): **60 giây** — trong suốt 60 giây này, toàn bộ thao tác lưu nháp, chỉnh sửa và Tác vụ Nhanh tự động chuyển mượt sang **Bộ Nhớ Đệm Dự Phòng Trên RAM Nội Bộ** của ứng dụng, giúp trải nghiệm người dùng hoàn toàn liền mạch không giật lag.
+     - Tự động hồi phục (`Half-Open`): sau 60 giây, hệ thống tự thử 1 yêu cầu sang Redis; nếu thành công sẽ đóng mạch trở lại chế độ phân tán ngay lập tức.
+
+6. **Bước 6 — Quản Trị Kết Nối Đa Luồng, Bảo Mật Cấu Hình & Kiểm Chứng Vận Hành**:
+   - **Kết nối Đa kênh Tập trung (Connection Multiplexing)**: Khởi tạo một bộ ghép kênh kết nối dùng chung xuyên suốt vòng đời ứng dụng (kết hợp khóa đồng bộ an toàn đa luồng khi tạo kết nối lần đầu và tự phục hồi khi rớt mạng), tránh lỗi tạo tràn cổng kết nối TCP khi hàng trăm yêu cầu SSE chạy đồng thời.
+   - **An toàn Bí mật Cấu hình (Zero-Secret-Leakage)**: Toàn bộ thông số máy chủ, cổng, mật khẩu truy cập Redis, chỉ số Database và cờ mã hóa SSL được tách khỏi tệp cấu hình công khai (chỉ để placeholder an toàn trên Git) và nạp từ tệp cấu hình bí mật cục bộ được bảo vệ.
+   - **Kịch bản Kiểm chứng Thiết kế Thực tế (Không Cần Đụng Mã Nguồn)**:
+     1. *Kiểm chứng Cô lập Chưa Commit*: Gửi yêu cầu AI lập kế hoạch Sprint hoặc kích hoạt Phân rã Sub-task (AI 1) -> kiểm tra kho đệm xuất hiện khóa mang tiền tố phiên / tác vụ nhanh với thời gian đếm ngược khoảng `7,200 giây`, trong khi bảng công việc chính hoàn toàn chưa có dòng dữ liệu mới nào.
+     2. *Kiểm chứng Chỉnh Sửa Nóng & Xác Nhận*: Sửa tiêu đề hoặc chọn ứng viên -> quan sát thay đổi tức thì; bấm **Áp dụng** hoặc **Xác nhận** -> kiểm tra bảng công việc chính xuất hiện bản ghi thật, còn khóa đệm đã dọn danh sách nháp hoặc chuyển sang trạng thái đã thực thi.
+     3. *Kiểm chứng Chịu Lỗi (Fault Tolerance)*: Tạm dừng dịch vụ Redis -> thao tác Trợ Lý AI và Tác vụ Nhanh vẫn tạo, sửa, xác nhận thành công nhờ cơ chế Ngắt mạch tự chuyển dự phòng sang RAM trong vòng 60 giây, không sập giao diện.
 
 ---
-
-## 4. Kiến trúc Chống Sập & Khả năng Phục hồi Cao (Resilience & Circuit Breaker)
-
-Dự án áp dụng mẫu thiết kế **Composite Provider kết hợp Circuit Breaker** trong [`ResilientStateStagingService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Core/Staging/ResilientStateStagingService.cs):
-
-```csharp
-// ProjectMgmt.Core/Staging/ResilientStateStagingService.cs
-public async Task SaveProposalAsync<T>(string sessionId, T proposal, TimeSpan ttl, CancellationToken ct = default)
-{
-    if (!_redisEnabled || _primaryProvider == null)
-    {
-        await _memoryFallback.SaveProposalAsync(sessionId, proposal, ttl, ct).ConfigureAwait(false);
-        return;
-    }
-
-    var json = JsonSerializer.Serialize(proposal, _jsonOptions);
-
-    await _circuitBreaker.ExecuteWithFallbackAsync(
-        primaryAction: async token =>
-        {
-            await _primaryProvider.SetAsync(sessionId, json, ttl, token).ConfigureAwait(false);
-        },
-        fallbackAction: async token =>
-        {
-            await _memoryFallback.SaveProposalAsync(sessionId, proposal, ttl, token).ConfigureAwait(false);
-        },
-        ct: ct,
-        onFallback: (reason, ex) =>
-        {
-            _logger.LogWarning(ex, "[ResilientStaging] {Reason} SessionId={SessionId}", reason, sessionId);
-        }).ConfigureAwait(false);
-}
-```
-
-### Các trạng thái của Circuit Breaker:
-1. **Closed (Bình thường)**: Mọi yêu cầu ghi/đọc đều đi vào Redis.
-2. **Open (Ngắt mạch)**: Nếu Redis gặp lỗi 3 lần liên tiếp (do mạng chậm quá 2000ms hoặc server Redis tắt), mạch tự động mở trong **60 giây**. Trong thời gian này, mọi thao tác chuyển hướng trực tiếp sang RAM (`MemoryStateStagingService`) mà **không hề gửi request đến Redis**, loại bỏ hoàn toàn độ trễ chờ đợi cho người dùng.
-3. **Half-Open (Thử nghiệm hồi phục)**: Sau 60 giây, hệ thống cho phép 1 request đi thử vào Redis. Nếu thành công, mạch đóng lại bình thường; nếu thất bại, mạch tiếp tục mở thêm 60 giây.
-
----
-
-## 5. Hướng dẫn Kiểm tra & Chứng minh Trí nhớ Redis (Verification Guide)
-
-### 5.1. Kiểm tra Dịch vụ Redis Đang Chạy
-Mở PowerShell trên máy tính chủ và thực hiện kiểm tra port kết nối:
-
-```powershell
-# Kiểm tra port 6379 đang lắng nghe
-Test-NetConnection -ComputerName 127.0.0.1 -Port 6379
-# Kết quả: TcpTestSucceeded : True
-
-# Kiểm tra tiến trình redis-server trên Windows Task Manager
-Get-Process -Name *redis*
-```
-
-### 5.2. Kiểm tra Dữ liệu Staging trong Redis CLI
-Khi AI vừa phân rã xong một Sprint trên giao diện, mở terminal Redis CLI để tra cứu dữ liệu thực tế:
-
-```bash
-# 1. Kết nối vào Redis CLI cục bộ
-redis-cli -h 127.0.0.1 -p 6379
-
-# 2. Kiểm tra kết nối
-127.0.0.1:6379> PING
-PONG
-
-# 3. Liệt kê các khóa Staging đang được AI lưu giữ
-127.0.0.1:6379> KEYS ProjectMgmt:Ai:staging:*
-1) "ProjectMgmt:Ai:staging:e7c4f1a2-8b3d-4e9a-9c12-3456789abcde"
-
-# 4. Kiểm tra thời gian tồn tại còn lại (TTL - tính bằng giây)
-127.0.0.1:6379> TTL ProjectMgmt:Ai:staging:e7c4f1a2-8b3d-4e9a-9c12-3456789abcde
-(integer) 86340
-
-# 5. Đọc nội dung JSON đề xuất đang được giữ trong trí nhớ
-127.0.0.1:6379> GET ProjectMgmt:Ai:staging:e7c4f1a2-8b3d-4e9a-9c12-3456789abcde
-"{\"stagingId\":\"e7c4f1a2...\",\"sprintGoal\":\"Xây dựng lõi xác thực...\"}"
-```
-
-### 5.3. Chứng minh Tính Độc lập với Cơ sở Dữ liệu & Hội thoại Liên tục
-1. **Trước khi bấm "Đẩy vào Kho Backlog" hoặc "Áp dụng vào Sprint"**: Kiểm tra trong MySQL: bảng `Issues` chưa có bất kỳ bản ghi nào mới từ AI. Dữ liệu kế hoạch và `conversationHistory` chỉ tồn tại duy nhất trên Redis (`ProjectMgmt:Ai:staging:*`).
-2. **Sau khi bấm "Đẩy vào Kho Backlog" hoặc "Áp dụng vào Sprint"**:
-   - Nếu chọn **Đẩy vào Kho Backlog** (`PushToBacklog = true`): MySQL ghi nhận các Issue mới với `SprintId = null` (nằm trực tiếp trong kho Product Backlog) mà không tạo Sprint mới.
-   - Nếu chọn **Áp dụng vào Sprint**: MySQL ghi nhận Sprint mới cùng các Issue tương ứng và di chuyển các Story từ kho Backlog (nếu có) không trùng lặp.
-   - Kiểm tra lại Redis CLI: Trường `tasks` trong bản Staging đã được dọn sạch (`[]`) nhưng `conversationHistory` vẫn được cập nhật thêm tin nhắn xác nhận để tiếp tục cuộc hội thoại; khi bấm **"Làm mới & Phiên mới"**, khóa `ProjectMgmt:Ai:staging:...` được xóa hoàn toàn (`nil`).
 
 ---
 

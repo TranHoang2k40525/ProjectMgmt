@@ -40,66 +40,138 @@ Module AI được nâng cấp từ công cụ phân rã đơn lượt thành **
 
 ---
 
-## 2. Vị trí Kiến trúc & Cấu trúc Phân tầng
+## 2. Bản Thiết Kế Chi Tiết Kiến Trúc Các Tầng Hệ Thống AI Tác Tử (7-Layer Agentic AI Architecture)
 
-Hệ thống tuân thủ nghiêm ngặt mô hình **Modular Monolith kết hợp Clean Architecture**. Module AI được bố trí để đảm bảo tính độc lập, dễ bảo trì và không phá vỡ ranh giới module:
+Để xây dựng một **Hệ thống AI Tác tử (Agentic AI)** vận hành ổn định trong môi trường doanh nghiệp — vừa đủ linh hoạt để suy luận đa lượt, truy xuất dữ liệu thật, lại vừa đủ chặt chẽ để không ảo giác, không lộ dữ liệu chéo dự án và không ghi rác vào cơ sở dữ liệu chính — hệ thống được thiết kế theo **Kiến trúc Phân tầng Tác tử 7 Lớp (7-Layer Stateful Agentic Architecture)** tuân thủ nguyên tắc **Modular Monolith & Clean Architecture**.
+
+### 2.1. Sơ Đồ Kiến Trúc 7 Tầng Hệ Thống AI Tác Tử
 
 ```mermaid
 flowchart TD
-    subgraph UI["Tầng Giao Diện Người Dùng"]
-        Modal["Giao diện Hội thoại Trợ Lý AI 2 Phía\n(Lập kế hoạch, Hỏi đáp, Xuất Excel & Khôi phục Lịch sử)"]
-        Profile["Bảng Điều khiển Giám sát Tài nguyên\n(Chỉ số Tiêu thụ, Tỷ lệ Thành công & Lịch sử)"]
-        Service["Dịch vụ Kết nối Thời gian thực Phía Client\n(Kết nối Luồng Dữ liệu, Duy trì Phiên Hội thoại)"]
+    subgraph L1["TẦNG 1: TIẾP NHẬN ĐA KÊNH & TƯƠNG TÁC NGƯỜI-MÁY (PRESENTATION & STREAMING)"]
+        L1A["Khung Hội thoại 2 Phía Đa lượt\n(Tin nhắn người dùng, luồng phản hồi trực tiếp & nhật ký suy nghĩ mặc định đóng)"]
+        L1B["Bảng Đề xuất Sửa Nóng & Thẻ Xác nhận\n(Sửa tiêu đề, Story Points, nhân sự; thẻ xác nhận gỡ/xóa việc & xuất Excel)"]
+        L1C["Điểm Kích hoạt Tác vụ Nhanh Không Qua Chat\n(Nút phân rã việc con & đề xuất phân công ngay trên menu thẻ việc)"]
     end
 
-    subgraph API["Tầng Điều Phối Ứng Dụng"]
-        Ctrl["Cổng Tiếp nhận & Điều phối API AI\n(Xác thực Phiên, Quản lý Luồng & Đẩy Kho Backlog)"]
-        DecompSvc["Động cơ Trợ Lý AI Đa lượt Có Trạng thái\n(Phân loại Ý định, Rào chắn Phạm vi & Phân rã 5 Bước)"]
-        TokenTracker["Bộ Giám sát Tài nguyên & Lịch sử Phiên\n(Đo lường Tài nguyên, Thống kê Lịch sử Dự án)"]
+    subgraph L2["TẦNG 2: CỔNG ĐIỀU PHỐI, PHÂN QUYỀN & BẢO VỆ PHẠM VI (GATEWAY & SCOPE GUARD)"]
+        L2A["Xác thực Danh tính & Kiểm soát Vai trò Scrum\n(Phân biệt quyền Lãnh đạo, Scrum Master, Dev/QA và Người xem)"]
+        L2B["Rào chắn Cách ly 3 Chiều Tuyệt đối\n(Khóa cứng Tổ chức - Dự án - Người dùng trên mọi luồng dữ liệu)"]
+        L2C["Khống chế Tần suất, Hạn mức Token & Nhật ký Đo lường\n(Ngăn lạm dụng tài nguyên, thống kê độ trễ và chi phí mô hình)"]
     end
 
-    subgraph CORE["Tầng Lõi Nghiệp Vụ & An Toàn"]
-        ModelClient["Cổng Chuyển tiếp Đa Mô hình AI\n(Điều phối Giao tiếp với các Mô hình Ngôn ngữ)"]
-        Staging["Dịch vụ Quản lý Trạng thái Bộ nhớ đệm\n(Lưu trữ Tạm thời Đàn hồi & Phục hồi Lỗi)"]
-        ScopeGuard["Rào chắn Bảo mật & Cách ly Dự án\n(Kiểm soát Phạm vi Truy cập, Chống Tiêm nhiễm)"]
+    subgraph L3["TẦNG 3: VỆ SINH ĐẦU VÀO & TƯỜNG LỬA ĐỊNH TUYẾN Ý ĐỊNH (GUARDRAIL & INTENT FIREWALL)"]
+        L3A["Bộ Bóc tách Tài liệu Đa định dạng & Chống Tiêm nhiễm\n(Đọc tài liệu văn phòng/PDF, lọc mã độc, che giấu bí mật & vô hiệu chỉ thị ẩn)"]
+        L3B["Bộ Khử nhiễu Ngôn ngữ & Tách Tín hiệu Chính\n(Phân biệt từ ghép tiếng Việt và loại bỏ phần đính kèm khi chào hỏi)"]
+        L3C["Tường lửa Nghiệp vụ 10 Nhánh Ý định (Default-Deny)\n(Chặt đứt yêu cầu ngoài phạm vi Quản lý Dự án; giữ nguyên đề xuất hiện có)"]
     end
 
-    subgraph TOOLS["Tầng Công Cụ Tích Hợp"]
-        McpInternal["Bộ Công cụ Truy vấn Dữ liệu Dự án Nội bộ\n(Kho Đặc tả, Danh mục Backlog, Năng lực Đội ngũ)"]
-        McpServer["Giao thức Mở rộng Máy chủ Công cụ Ngoại vi\n(Cung cấp Ngữ cảnh Dự án cho Công cụ Bên ngoài)"]
+    subgraph L4["TẦNG 4: HOẠCH ĐỊNH CHỌN LỌC & TRÍ NHỚ ĐÁNH CHỈ MỤC (SELECTIVE PLANNER & INDEXED MEMORY)"]
+        L4A["Bộ Lập kế hoạch Thực thi 3 Chế độ Chọn lọc\n(0 công cụ với chào hỏi -> Chỉ đọc Trí nhớ phiên -> Gọi Công cụ Mục tiêu)"]
+        L4B["Động cơ Đánh Chỉ mục Trí nhớ Theo Mảnh\n(Nén từng lượt thành mảnh #mem-1..#mem-n kèm từ khóa và tóm tắt)"]
+        L4C["Bộ Chống Nhiễm Chéo Ngữ cảnh & Nối tiếp Đại từ\n(Loại trừ mảnh thuộc Sprint/mã việc khác; kế thừa chủ đề khi hỏi rút gọn)"]
     end
 
-    subgraph INFRA["Tầng Hạ Tầng & Dữ Liệu"]
-        Redis[("Bộ nhớ đệm Phân tán\n(Lưu trữ Ngữ cảnh Phiên Tạm thời)")]
-        MySQL[("Cơ sở Dữ liệu Quan hệ Chính\n(Dự án, Chu kỳ Sprint, Danh mục Công việc, Quy chuẩn)")]
-        LLM[("Dịch vụ Trí tuệ Nhân tạo\n(Mô hình Suy luận Ngôn ngữ Lớn)")]
+    subgraph L5["TẦNG 5: ĐIỀU PHỐI TRI THỨC DỰ ÁN, RAG & CÔNG CỤ MỞ RỘNG (GROUNDING & TOOLS)"]
+        L5A["Kho Công cụ Dự án Chuẩn Giao thức Mở rộng\n(Truy xuất Kho Đặc tả, Kho Backlog, Lịch sử Sprint/Velocity, Năng lực Đội ngũ)"]
+        L5B["Bộ Phân giải Cấu hình Thực tế Đang Áp dụng\n(Đọc quy trình Workflow, Mức ưu tiên, Loại việc và Nhãn thật của dự án)"]
+        L5C["Tìm kiếm Ngữ nghĩa Vector & Xử lý Tác vụ Nhanh 1-Lượt\n(Neo bằng chứng đặc tả + Chấm điểm xếp hạng Top 5 ứng viên/phân rã việc con)"]
     end
 
-    Modal --> Service
-    Profile --> Service
-    Service -->|Luồng Sự kiện Thời gian thực| Ctrl
-    Ctrl --> DecompSvc
-    Ctrl --> TokenTracker
-    DecompSvc --> ScopeGuard
-    DecompSvc --> ModelClient
-    DecompSvc --> Staging
-    DecompSvc --> McpInternal
-    ModelClient --> LLM
-    Staging --> Redis
-    McpInternal --> MySQL
+    subgraph L6["TẦNG 6: SUY LUẬN ĐA MÔ HÌNH, HẬU KIỂM & TỰ PHẢN BIỆN (REASONING & CRITIQUE)"]
+        L6A["Cổng Chuyển tiếp Đa Nhà Cung Cấp AI\n(Kết nối linh hoạt nhiều mô hình đám mây & nội bộ, không lệ thuộc hãng)"]
+        L6B["Truyền Hội thoại Đa lượt Kèm Kho Thỏa thuận Phiên\n(Gửi chuỗi lượt hỏi-đáp thực thụ kết hợp ràng buộc xuyên phiên)"]
+        L6C["Tự Phản biện, Sửa Dữ liệu Cắt ngọn & Chuẩn hóa Nghiệp vụ\n(Ép thang Fibonacci, khử thực thể ảo, gán Rollover & ngữ nghĩa chuyển Backlog)"]
+    end
+
+    subgraph L7["TẦNG 7: LƯU TRỮ TẠM ĐÀN HỒI REDIS, BỀN VỮNG & GHI NHẬN NGUYÊN TỬ (STAGING & PERSISTENCE)"]
+        L7A["Bộ Đệm Nóng Phân tán Redis Kèm Ngắt Mạch Bảo Vệ\n(Lưu nháp kế hoạch & tác vụ nhanh TTL 2 giờ; tự chuyển RAM nếu Redis sự cố)"]
+        L7B["Kho Phiên Hội thoại Bền vững Quan hệ\n(Lưu kép lịch sử dài hạn, tái nạp cache lạnh khi hết TTL & phân trang ngược)"]
+        L7C["Bộ Điều phối Ghi Nhận Nguyên tử Có Xác nhận Con người\n(Hậu kiểm lại toàn bộ quy chuẩn thực tế ngay trước khi ghi vào CSDL chính)"]
+    end
+
+    L1 -->|"Luồng Sự kiện Thời gian thực & REST"| L2
+    L2 -->|"Ngữ cảnh Đã Khóa Phạm Vi 3 Chiều"| L3
+    L3 -->|"Yêu cầu Sạch & Nhánh Ý Định Xác Định"| L4
+    L4 -->|"Kế hoạch Truy xuất & Mảnh Trí nhớ Đã Lọc"| L5
+    L5 -->|"Bằng chứng Thật + Quy chuẩn Dự án"| L6
+    L6 -->|"Bản Đề xuất Đã Kiểm chứng & Tinh sạch"| L7
+    L7 -.->|"Phát sự kiện hoàn tất & trạng thái Staging lên Giao diện"| L1
 ```
 
-### Các tệp mã nguồn tương ứng:
-- Controller tiếp nhận: [`AiAgentController.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Controllers/AiAgentController.cs)
-- Dịch vụ phân rã & hội thoại đa lượt: [`AiSprintDecompositionService.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintDecompositionService.cs)
-- Động cơ lập kế hoạch MCP chọn lọc & chỉ mục trí nhớ `#mem-X`: [`AiIndexedMemoryEngine.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiIndexedMemoryEngine.cs)
-- Kho lưu trữ phiên hội thoại MySQL & khóa phạm vi 3 chiều: [`AiConversationSessionStore.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiConversationSessionStore.cs)
-- Bộ phân giải cấu hình thực tế đang áp dụng của dự án: [`ProjectActiveConfigResolver.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/ProjectActiveConfigResolver.cs)
-- Bộ điều phối ghi nhận Sprint, di chuyển Backlog & Rollover: [`AiSprintCommitCoordinator.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiSprintCommitCoordinator.cs)
-- Bộ theo dõi Token & Lịch sử phiên: [`AiTokenUsageTracker.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiTokenUsageTracker.cs)
-- Router đa mô hình AI: [`MultiProviderAiModelClient.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/MultiProviderAiModelClient.cs#L30-L130)
-- Trích xuất tài liệu đa định dạng: [`AiDocumentTextExtractor.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Solution/Services/Ai/AiDocumentTextExtractor.cs#L20-L80)
-- Rào chắn bảo mật dự án: [`ProjectScopeGuard.cs`](file:///c:/Users/hoang/Downloads/ProjectMgmt/ProjectMgmt.Core/Security/ProjectScopeGuard.cs#L10-L60)
+### 2.2. Luồng Vận Hành Khép Kín Qua 7 Tầng Agentic (End-to-End Orchestration)
+
+```mermaid
+flowchart LR
+    U(["Người dùng gửi câu hỏi / Dán biên bản / Bấm Tác vụ nhanh"]) --> G1{"Kiểm tra Quyền & Phạm vi 3 Chiều"}
+    G1 -- "Sai phạm vi / Hết hạn mức" --> Err["Từ chối an toàn & Báo mã lỗi rõ ràng"]
+    G1 -- "Hợp lệ" --> G2["Lọc Tiêm nhiễm & Tường lửa Ý định"]
+    G2 -- "Ngoài phạm vi Quản lý Dự án" --> Ref["Từ chối lịch sự (0 công cụ) & Giữ nguyên Bảng nháp"]
+    G2 -- "Thuộc nghiệp vụ Dự án" --> G3{"Hoạch định Chế độ Ngữ cảnh"}
+    G3 -- "Chào hỏi / Xem lại bảng nháp" --> Fast["Trả lời từ Trí nhớ Phiên & Tóm tắt Staging"]
+    G3 -- "Cần dữ liệu thật / Lập kế hoạch" --> Tools["Gọi Chọn lọc Công cụ MCP + RAG + Cấu hình Động"]
+    Tools --> LLM["Suy luận Đa lượt qua Cổng Đa Mô hình"]
+    Fast --> LLM
+    LLM --> Check["Tự Phản biện, Khử Thực thể Ảo & Chuẩn hóa Thang điểm"]
+    Check --> Stage["Ghi Nóng Redis (TTL 2 giờ) + Lưu Kép Kho Phiên Bền vững"]
+    Stage --> Hitl{"Con người Phê duyệt / Chỉnh sửa Nóng?"}
+    Hitl -- "Sửa ô / Tinh chỉnh tiếp" --> Stage
+    Hitl -- "Xác nhận Áp dụng / Đẩy Backlog / Gỡ Việc" --> Commit["Hậu kiểm Cuối & Ghi Nguyên tử vào CSDL Chính"]
+```
+
+### 2.3. Thiết Kế Chi Tiết Từng Tầng Trong Kiến Trúc Agentic AI
+
+Khi tự thiết kế và xây dựng một hệ thống Agentic AI tương tự từ con số 0, mỗi tầng đảm nhận một trách nhiệm duy nhất, tách biệt hoàn toàn để dễ kiểm thử và thay thế:
+
+1. **Tầng 1 — Tiếp nhận Đa kênh & Tương tác Người-Máy (Presentation & Streaming Layer)**:
+   - **Mục tiêu thiết kế**: Biến AI từ hộp thoại sinh văn bản thụ động thành không gian cộng tác trực quan, minh bạch tiến trình nhưng không gây rối mắt.
+   - **Thành phần cốt lõi**:
+     - *Kênh truyền sự kiện một chiều thời gian thực*: liên tục đẩy về client các trạng thái khởi tạo phiên, bước đang chạy, thao tác công cụ đang thực hiện kèm động từ mô tả rõ ràng, dòng suy nghĩ tóm tắt (mặc định thu gọn) và gói đề xuất hoàn chỉnh.
+     - *Bảng đề xuất cho phép sửa nóng (Inline Editable Staging Grid)*: người dùng có thể sửa trực tiếp tiêu đề, điểm ước lượng, mức ưu tiên, người phụ trách mà không cần chờ AI chạy lại cả bài toán.
+     - *Hai điểm vào song hành*: (a) **Luồng Hội thoại Đa lượt** để thảo luận, hỏi đáp, xuất Excel, lập kế hoạch Sprint/Backlog hoặc nhờ gỡ việc qua thẻ xác nhận; và (b) **Luồng Tác vụ Nhanh Không Qua Chat** đặt trực tiếp ngay trên menu ngữ cảnh từng công việc (phân rã việc con và xếp hạng gợi ý người làm).
+
+2. **Tầng 2 — Cổng Điều phối, Bảo mật Phạm vi & Khống chế Tài nguyên (Gateway, Scope Guard & Quota Control Layer)**:
+   - **Mục tiêu thiết kế**: Không bao giờ tin tưởng dữ liệu định danh gửi từ phía trình duyệt nếu chưa đối chiếu với quyền thật trong phiên đăng nhập.
+   - **Nguyên tắc thiết kế**:
+     - *Xác thực phân cấp Scrum*: phân tách quyền xem, quyền đề xuất vào Backlog, quyền cam kết vào Sprint, quyền phân công người làm và quyền gỡ/xóa công việc. Ví dụ: người không có quyền xóa công việc thì dù ra lệnh qua chat cũng không được cấp nút xóa, hệ thống chỉ mở nút gỡ công việc khỏi Sprint nếu họ có quyền điều phối Sprint.
+     - *Khóa Phạm vi 3 Chiều*: mọi yêu cầu đều đóng dấu **Bộ ba Phạm vi (Tổ chức, Dự án, Người dùng)**. Không bất kỳ truy vấn cache hay truy vấn tài liệu nào được phép vượt ra ngoài ranh giới bộ ba này.
+     - *Kiểm soát lưu lượng*: giới hạn tần suất theo cửa sổ trượt (tối đa theo phút) và trần hạn mức token theo ngày cho mỗi người dùng nhằm tránh cạn kiệt tài nguyên do spam hoặc lặp vòng.
+
+3. **Tầng 3 — Vệ sinh Đầu vào & Tường lửa Định tuyến Ý định (Input Guardrail & Intent Firewall Layer)**:
+   - **Mục tiêu thiết kế**: Ngăn chặn tấn công tiêm nhiễm chỉ thị (Prompt Injection) và chặn yêu cầu lạc đề ngay ở cửa ngõ trước khi tốn chi phí gọi mô hình AI.
+   - **Thành phần cốt lõi**:
+     - *Bảo vệ tệp đính kèm*: giải nén có kiểm soát dung lượng, số lượng mục con và độ dài văn bản tối đa (chống tấn công nén nổ bộ nhớ), đồng thời phát hiện tệp PDF dạng ảnh quét thiếu văn bản để cảnh báo sớm.
+     - *Màng lọc An toàn 2 Lớp*: lọc các mẫu câu vượt quyền, đòi tiết lộ khóa bí mật hệ thống hoặc mã kịch bản nguy hiểm ngay cả khi chúng được giấu ngầm bên trong nội dung tài liệu đặc tả (Indirect Prompt Injection), bọc dữ liệu bên ngoài trong vùng phân cách không tin cậy.
+     - *Tường lửa Ý định 10 Nhánh*: phân tách rõ câu chào hỏi, hỏi đáp dự án, lập kế hoạch Sprint, lập Backlog, tinh chỉnh đề xuất, xuất tệp Excel, gỡ/xóa công việc, đẩy kho Backlog, áp dụng Sprint và nhánh **từ chối mặc định** cho mọi yêu cầu ngoài phạm vi Quản lý Dự án. Đặc biệt xử lý chuẩn ngữ nghĩa tiếng Việt để không nhầm lẫn từ ghép (ví dụ phân biệt *"đề xuất"* với hành động *"xuất báo cáo"*).
+
+4. **Tầng 4 — Hoạch định Chọn lọc & Trí nhớ Đánh Chỉ Mục (Selective Planner & Indexed Memory Layer)**:
+   - **Mục tiêu thiết kế**: Giải bài toán cân bằng giữa **chi phí/tốc độ** và **độ chính xác ngữ cảnh** trong hội thoại dài.
+   - **Cơ chế hoạt động**:
+     - Thay vì lúc nào cũng gọi toàn bộ công cụ đọc DB (gây chậm 5–10 giây cho một câu chào đơn giản), Bộ Lập Kế Hoạch phân ra 3 cấp độ: (1) *0 công cụ* cho chào hỏi/từ chối ngoài phạm vi; (2) *Chỉ đọc Trí nhớ Phiên* cho câu hỏi về chính bảng đề xuất vừa sinh ra; (3) *Gọi Chọn lọc Công cụ Mục tiêu* khi câu hỏi nhắc tới số Sprint cụ thể, mã công việc thật hoặc nhân sự dự án.
+     - *Đánh Chỉ mục Trí nhớ Theo Mảnh (`#mem-1..#mem-n`)*: mỗi lượt hội thoại quan trọng được cô đọng thành một mảnh trí nhớ chứa tiêu đề, từ khóa, bản tóm tắt và nội dung chi tiết. Khi sang lượt mới, hệ thống chỉ nạp tối đa vài mảnh liên quan nhất thay vì nhồi nguyên văn lịch sử hàng chục trang.
+     - *Chống Nhiễm Chéo Trí Nhớ*: nếu câu hỏi mới nhắc rõ đối tượng mục tiêu (ví dụ hỏi về Sprint 3 hoặc một mã công việc cụ thể), toàn bộ mảnh trí nhớ mang nhãn Sprint hoặc mã việc khác sẽ tự động bị loại trừ để thông tin quá khứ không tràn sang làm sai lệch hiện tại.
+
+5. **Tầng 5 — Điều phối Tri thức Dự án, RAG & Công cụ Mở rộng (Knowledge Grounding & Tool Orchestration Layer)**:
+   - **Mục tiêu thiết kế**: Buộc Tác tử AI đứng trên đôi chân dữ liệu thật của dự án thay vì suy đoán bằng kiến thức chung trên Internet.
+   - **Cấu trúc gồm 3 nhóm tri thức thật**:
+     - *Nhóm Giao thức Công cụ Mở rộng (MCP Dual-Mode)*: phục vụ song song cả Tác tử nội bộ lẫn công cụ lập trình ngoài thông qua 4 nhóm công cụ: Kho Đặc tả Tài liệu, Danh mục Product Backlog, Lịch sử Chu kỳ & Vận tốc (Velocity) và Năng lực Nhân sự theo thời gian thực.
+     - *Nhóm Tìm kiếm Ngữ nghĩa (Hybrid RAG)*: kết hợp tìm kiếm vector có bộ nhớ đệm ngắn hạn với phương án dự phòng đối khớp từ khóa, đảm bảo luôn trích xuất được đúng đoạn tài liệu đặc tả liên quan kèm mã tài liệu để người dùng nhấp mở xem trước tức thì.
+     - *Nhóm Phân giải Quy chuẩn Động*: tự động đọc Workflow đang bật, danh sách Cột Bảng Kanban, Thứ tự Ưu tiên riêng của từng dự án, Loại công việc và Nhãn dự án thực tế để làm khuôn mẫu ràng buộc cho AI ở tầng sau.
+
+6. **Tầng 6 — Suy luận Đa Mô hình, Hậu kiểm & Tự Phản biện (Multi-Provider Reasoning & Verification Layer)**:
+   - **Mục tiêu thiết kế**: Tách logic nghiệp vụ khỏi một nhà cung cấp mô hình cụ thể và kiểm soát chất lượng đầu ra bằng kỷ luật thuật toán sau khi LLM trả lời.
+   - **Các cơ chế then chốt**:
+     - *Chuyển tiếp Đa Nhà Cung Cấp*: sử dụng một hợp đồng giao tiếp thống nhất ở giữa để có thể chuyển đổi linh hoạt giữa nhiều mô hình đám mây hoặc mô hình chạy nội bộ chỉ bằng thay đổi cấu hình.
+     - *Mẫu Chỉ đạo Động Không Cứng Nhắc*: toàn bộ chỉ dẫn hệ thống được lưu dưới dạng văn bản đặc tả bên ngoài và tự động nạp lại ngay khi chỉnh sửa tệp cấu hình.
+     - *Hội thoại Đa lượt Tự nhiên*: truyền đúng chuỗi luân phiên giữa Người và Trợ lý qua nhiều lượt, kèm khối tổng hợp thỏa thuận phiên và dữ liệu nháp hiện tại.
+     - *Chuỗi Hậu kiểm Tự Phản biện (Post-Processing Guardrails)*: tự động khôi phục dữ liệu có cấu trúc nếu bị cắt ngọn do chạm trần độ dài; tước bỏ các nhãn điều phối nội bộ bị lộ; ép Story Points về chuẩn Fibonacci; xóa sạch các tên thành viên, trạng thái, mức ưu tiên hoặc trích dẫn không có thật; áp dụng logic Kế thừa việc dở dang/Quá hạn (Rollover) và Di chuyển việc từ kho Backlog không tạo bản sao trùng lặp.
+
+7. **Tầng 7 — Lưu trữ Tạm Đàn hồi Redis, Phiên Bền vững & Ghi Nhận Nguyên tử (Resilient Staging & Persistence Layer)**:
+   - **Mục tiêu thiết kế**: Bảo vệ dữ liệu thật bằng mô hình **Con người Xác nhận Cuối cùng (Human-in-the-Loop)**, đạt tốc độ thao tác nháp tức thì nhưng vẫn trường tồn lâu dài.
+   - **Sự phối hợp 3 lớp lưu trữ**:
+     - *Lớp Đệm Nóng Phân tán trên Redis*: giữ toàn bộ kế hoạch nháp, tác vụ nhanh phân rã/phân công và kế hoạch gỡ việc với thời gian sống mặc định 2 giờ; được bọc bởi Bộ Ngắt Mạch để tự động chuyển sang RAM tiến trình nếu Redis gián đoạn.
+     - *Lớp Phiên Hội thoại Bền vững trên CSDL Quan hệ*: lưu đồng bộ toàn bộ cuộc trò chuyện đa lượt và các mảnh `#mem-X` giúp mở lại phiên cũ kể cả sau nhiều ngày, hỗ trợ phân trang ngược tải 12 lượt gần nhất và tái nạp lại Redis khi cache hết hạn.
+     - *Bộ Điều phối Ghi Nhận Nguyên tử*: chỉ thực hiện khi người dùng bấm nút **Áp dụng vào Sprint**, **Đẩy vào Kho Backlog**, **Xác nhận Gỡ/Xóa** hoặc **Xác nhận Tác vụ Nhanh**. Trước khoảnh khắc ghi giao dịch, hệ thống hậu kiểm lại toàn bộ quy chuẩn thực tế (tránh trường hợp một thành viên vừa bị gỡ khỏi dự án trong lúc đang duyệt bản nháp) rồi mới cập nhật đồng bộ xuống CSDL chính.
 
 ---
 
