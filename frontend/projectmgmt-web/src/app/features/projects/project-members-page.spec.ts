@@ -4,6 +4,7 @@ import { Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProjectMembersPageComponent } from './project-members-page';
 import { ProjectManagementService } from '../../core/services/project-management.service';
+import { IdentityService } from '../../core/services/identity.service';
 import { RbacApi } from '../../core/api/rbac.api';
 
 describe('Project member invitation', () => {
@@ -13,6 +14,7 @@ describe('Project member invitation', () => {
     response = new Subject(); invite.mockClear();
     TestBed.configureTestingModule({ providers: [
       { provide: ProjectManagementService, useValue: { currentProject: signal({ id: 'project', members: [] }), addProjectMember: invite } },
+      { provide: IdentityService, useValue: { currentUser: signal(null), authState: signal({ currentUser: null }), hasPermission: () => true } },
       { provide: RbacApi, useValue: {} }
     ] });
   });

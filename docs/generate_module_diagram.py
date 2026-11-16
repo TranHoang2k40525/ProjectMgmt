@@ -1,0 +1,185 @@
+import os
+
+def build_drawio_xml():
+    xml_content = """<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="drawio" version="26.0.0">
+  <diagram name="So-Do-Giao-Tiep-Cac-Module" id="diagram-1">
+    <mxGraphModel dx="1400" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1350" pageHeight="980" background="#ffffff">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- TIÊU ĐỀ SƠ ĐỒ -->
+        <mxCell id="header_box" value="&lt;b style='font-size:18px;'&gt;SƠ ĐỒ GIAO TIẾP VÀ TRAO ĐỔI THÔNG TIN GIỮA CÁC MODULE&lt;/b&gt;&lt;br/&gt;&lt;span style='font-size:12px;color:#555555;'&gt;(Kiến trúc phân ranh giới độc lập • Giao tiếp phi ghép nối qua Hợp đồng trung lập • Bản vẽ đen trắng chuẩn mực)&lt;/span&gt;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontColor=#000000;fontFamily=Segoe UI,Arial,sans-serif;" vertex="1" parent="1">
+          <mxGeometry x="275" y="20" width="800" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- 1. TẦNG ỨNG DỤNG KHÁCH (WEB CLIENT) -->
+        <mxCell id="client" value="&lt;b style='font-size:14px;'&gt;ỨNG DỤNG KHÁCH (WEB CLIENT)&lt;/b&gt;&lt;br/&gt;Giao diện tương tác người dùng • Bảng Kanban &amp; Sprint • Danh sách Backlog • Trung tâm thông báo đẩy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;strokeWidth=2;fontColor=#000000;fontSize=12;fontFamily=Segoe UI,Arial,sans-serif;" vertex="1" parent="1">
+          <mxGeometry x="375" y="90" width="600" height="65" as="geometry" />
+        </mxCell>
+
+        <!-- 2. TẦNG ĐIỀU PHỐI TRUNG TÂM (HOST / COMPOSITION ROOT) -->
+        <mxCell id="host" value="&lt;b style='font-size:14px;'&gt;BỘ ĐIỀU PHỐI HỆ THỐNG TRUNG TÂM (SYSTEM COORDINATOR)&lt;/b&gt;&lt;br/&gt;Tiếp nhận yêu cầu • Quản lý phiên bảo mật • Điều phối giao dịch đa module • Trạm phát tín hiệu thời gian thực" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8f9fa;strokeColor=#000000;strokeWidth=2;fontColor=#000000;fontSize=12;fontFamily=Segoe UI,Arial,sans-serif;" vertex="1" parent="1">
+          <mxGeometry x="375" y="205" width="600" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- 3. MODULE 1: ĐỊNH DANH & BẢO MẬT -->
+        <mxCell id="mod_identity" value="&lt;b style='font-size:13px;'&gt;MODULE 1: ĐỊNH DANH &amp; BẢO MẬT&lt;/b&gt;&lt;hr/&gt;&lt;div align='left' style='padding-left:4px;'&gt;• Quản lý tài khoản, mật khẩu &amp; mã OTP&lt;br/&gt;• Kiểm soát ma trận phân quyền hệ thống &amp; dự án&lt;br/&gt;• Danh mục kỹ năng &amp; độ thành thạo nhân sự&lt;br/&gt;• Hộp thư thông báo &amp; kết nối thời gian thực&lt;/div&gt;" style="swimlane;startSize=26;rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;strokeWidth=1.8;fontColor=#000000;fontSize=11;fontFamily=Segoe UI,Arial,sans-serif;" vertex="1" parent="1">
+          <mxGeometry x="50" y="345" width="340" height="210" as="geometry" />
+        </mxCell>
+
+        <!-- 4. MODULE 2: KẾ HOẠCH & QUẢN TRỊ SPRINT -->
+        <mxCell id="mod_planning" value="&lt;b style='font-size:13px;'&gt;MODULE 2: LẬP KẾ HOẠCH &amp; QUẢN TRỊ SPRINT&lt;/b&gt;&lt;hr/&gt;&lt;div align='left' style='padding-left:4px;'&gt;• Quản lý không gian làm việc Tổ chức &amp; Dự án&lt;br/&gt;• Thiết lập quy trình làm việc &amp; luật chuyển trạng thái&lt;br/&gt;• Chu kỳ Sprint, mục tiêu &amp; phòng thảo luận Sprint&lt;br/&gt;• Cân bằng tải công việc &amp; điều phối phân công&lt;/div&gt;" style="swimlane;startSize=26;rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;strokeWidth=1.8;fontColor=#000000;fontSize=11;fontFamily=Segoe UI,Arial,sans-serif;" vertex="1" parent="1">
+          <mxGeometry x="505" y="345" width="340" height="210" as="geometry" />
+        </mxCell>
+
+        <!-- 5. MODULE 3: THEO DÕI & THỰC THI NHIỆM VỤ -->
+        <mxCell id="mod_delivery" value="&lt;b style='font-size:13px;'&gt;MODULE 3: THỰC THI NHIỆM VỤ &amp; KANBAN&lt;/b&gt;&lt;hr/&gt;&lt;div align='left' style='padding-left:4px;'&gt;• Cây phân cấp nhiệm vụ (Epic, Story, Task, Con)&lt;br/&gt;• Kiểm soát tiêu chí nghiệm thu &amp; tệp đính kèm&lt;br/&gt;• Bảng điều khiển Kanban &amp; lịch sử thay đổi&lt;br/&gt;• Trao đổi bình luận &amp; liên kết phiên bản phát hành&lt;/div&gt;" style="swimlane;startSize=26;rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;strokeWidth=1.8;fontColor=#000000;fontSize=11;fontFamily=Segoe UI,Arial,sans-serif;" vertex="1" parent="1">
+          <mxGeometry x="960" y="345" width="340" height="210" as="geometry" />
+        </mxCell>
+
+        <!-- 6. PHÂN HỆ TRÍ TUỆ NHÂN TẠO (AI ENGINE) -->
+        <mxCell id="mod_ai" value="&lt;b style='font-size:13px;'&gt;PHÂN HỆ TRÍ TUỆ NHÂN TẠO (AI ENGINE)&lt;/b&gt;&lt;br/&gt;• Tự động phân rã yêu cầu lớn thành nhiệm vụ con kèm tiêu chí nghiệm thu&lt;br/&gt;• Thuật toán gợi ý phân bổ nhân sự phù hợp theo kỹ năng và tải việc&lt;br/&gt;• Tiếp nhận phê duyệt của người quản lý (Human-in-the-loop)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8f9fa;strokeColor=#000000;strokeWidth=1.8;dashed=1;fontColor=#000000;fontSize=11;fontFamily=Segoe UI,Arial,sans-serif;" vertex="1" parent="1">
+          <mxGeometry x="960" y="620" width="340" height="95" as="geometry" />
+        </mxCell>
+
+        <!-- 7. KHO LƯU TRỮ CƠ SỞ DỮ LIỆU TẬP TRUNG -->
+        <mxCell id="database" value="&lt;b style='font-size:14px;'&gt;KHO LƯU TRỮ CƠ SỞ DỮ LIỆU TẬP TRUNG (MYSQL DATABASE)&lt;/b&gt;&lt;br/&gt;3 Phân vùng dữ liệu độc lập • Khóa dòng giao dịch đồng thời • Toàn vẹn dữ liệu nghiêm ngặt" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#ffffff;strokeColor=#000000;strokeWidth=2;fontColor=#000000;fontSize=12;fontFamily=Segoe UI,Arial,sans-serif;" vertex="1" parent="1">
+          <mxGeometry x="150" y="620" width="695" height="95" as="geometry" />
+        </mxCell>
+
+        <!-- KHỐI CHÚ GIẢI (LEGEND) -->
+        <mxCell id="legend_box" value="&lt;b&gt;CHÚ THÍCH CÁC KÊNH TRAO ĐỔI&lt;/b&gt;" style="swimlane;startSize=22;rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;strokeWidth=1;fontColor=#000000;fontSize=11;fontFamily=Segoe UI,Arial,sans-serif;" vertex="1" parent="1">
+          <mxGeometry x="150" y="755" width="695" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_line1" value="Luồng dữ liệu đồng bộ (Yêu cầu / Trả lời qua Hợp đồng độc lập)" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#000000;" vertex="1" parent="legend_box">
+          <mxGeometry x="55" y="27" width="350" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_ico1" value="" style="endArrow=classic;html=1;strokeColor=#000000;strokeWidth=1.5;" edge="1" parent="legend_box">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="10" y="37" />
+            <mxPoint x="45" y="37" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg_line2" value="Sự kiện tức thời qua WebSocket / Thông báo đẩy hai chiều" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#000000;" vertex="1" parent="legend_box">
+          <mxGeometry x="55" y="49" width="350" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_ico2" value="" style="endArrow=classic;startArrow=classic;html=1;strokeColor=#000000;strokeWidth=1.5;dashed=1;" edge="1" parent="legend_box">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="10" y="59" />
+            <mxPoint x="45" y="59" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- =================== CÁC ĐƯỜNG KẾT NỐI (EDGES) =================== -->
+
+        <!-- Client <-> Host -->
+        <mxCell id="edge_client_host" value="Gửi lệnh thao tác &amp; Đồng bộ trạng thái tức thời (2 chiều)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;startArrow=classic;endArrow=classic;strokeColor=#000000;strokeWidth=1.8;fontColor=#000000;fontSize=11;" edge="1" parent="1" source="client" target="host">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Host -> Identity -->
+        <mxCell id="edge_host_identity" value="Xác thực phiên &amp; Kiểm tra quyền" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=1.4;fontColor=#000000;fontSize=10;exitX=0.15;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="host" target="mod_identity">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="465" y="305" />
+              <mxPoint x="220" y="305" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Host -> Planning -->
+        <mxCell id="edge_host_planning" value="Quản lý dự án, Sprint &amp; Cột bảng" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=1.4;fontColor=#000000;fontSize=10;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="host" target="mod_planning">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Host -> Delivery -->
+        <mxCell id="edge_host_delivery" value="Thao tác Kanban, cập nhật nhiệm vụ" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=1.4;fontColor=#000000;fontSize=10;exitX=0.85;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="host" target="mod_delivery">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="885" y="305" />
+              <mxPoint x="1130" y="305" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- GIAO TIẾP Planning <-> Identity (Ngang) -->
+        <mxCell id="edge_plan_id_skills" value="Truy vấn kỹ năng nhân sự để phân bổ việc" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=1.3;fontColor=#000000;fontSize=10;exitX=0;exitY=0.35;entryX=1;entryY=0.35;" edge="1" parent="1" source="mod_planning" target="mod_identity">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge_plan_id_roles" value="Tự động cấp quyền quản trị khi tạo dự án mới" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=1.3;fontColor=#000000;fontSize=10;exitX=0;exitY=0.65;entryX=1;entryY=0.65;" edge="1" parent="1" source="mod_planning" target="mod_identity">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- GIAO TIẾP Planning <-> Delivery (Ngang) -->
+        <mxCell id="edge_plan_del_1" value="Gán hoặc trả nhiệm vụ về Backlog" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=1.3;fontColor=#000000;fontSize=10;exitX=1;exitY=0.3;entryX=0;entryY=0.3;" edge="1" parent="1" source="mod_planning" target="mod_delivery">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge_del_plan_1" value="Hỏi luật chuyển trạng thái trước khi đổi cột" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=1.3;fontColor=#000000;fontSize=10;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="mod_delivery" target="mod_planning">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge_del_plan_2" value="Cung cấp tiến độ nhiệm vụ để vẽ biểu đồ Sprint" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=1.3;fontColor=#000000;fontSize=10;exitX=0;exitY=0.7;entryX=1;entryY=0.7;" edge="1" parent="1" source="mod_delivery" target="mod_planning">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- GIAO TIẾP Delivery -> Identity (Vòng lên phía trên không vướng database) -->
+        <mxCell id="edge_del_id_names" value="Tra cứu thông tin hiển thị (Họ tên, Ảnh đại diện)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=1.3;fontColor=#000000;fontSize=10;exitX=0.2;exitY=0;entryX=0.8;entryY=0;" edge="1" parent="1" source="mod_delivery" target="mod_identity">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1028" y="325" />
+              <mxPoint x="322" y="325" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- TƯƠNG TÁC Delivery <-> AI -->
+        <mxCell id="edge_del_ai" value="Chuyển đổi các gợi ý việc con được duyệt thành nhiệm vụ chính thức" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=1.4;fontColor=#000000;fontSize=10;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="mod_delivery" target="mod_ai">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- TƯƠNG TÁC VỚI CƠ SỞ DỮ LIỆU (Thẳng xuống dưới) -->
+        <mxCell id="edge_id_db" value="Lưu tài khoản, phiên &amp; quyền" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=1.4;fontColor=#000000;fontSize=10;exitX=0.5;exitY=1;entryX=0.15;entryY=0;" edge="1" parent="1" source="mod_identity" target="database">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="220" y="585" />
+              <mxPoint x="254" y="585" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="edge_plan_db" value="Lưu cấu hình dự án, Sprint &amp; Khóa số thứ tự" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=1.4;fontColor=#000000;fontSize=10;exitX=0.5;exitY=1;entryX=0.75;entryY=0;" edge="1" parent="1" source="mod_planning" target="database">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Delivery -> DB: Ra ngoài AI, nối vào cạnh phải database -->
+        <mxCell id="edge_del_db" value="Lưu nhiệm vụ &amp; nhật ký" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=1.3;fontColor=#000000;fontSize=10;exitX=0.1;exitY=1;entryX=1;entryY=0.5;" edge="1" parent="1" source="mod_delivery" target="database">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="994" y="585" />
+              <mxPoint x="920" y="585" />
+              <mxPoint x="920" y="668" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
+"""
+    return xml_content
+
+def main():
+    target_dir = r"c:\Users\hoang\Downloads\ProjectMgmt\docs"
+    drawio_file = os.path.join(target_dir, "so-do-giao-tiep-cac-module.drawio")
+    xml_data = build_drawio_xml()
+    with open(drawio_file, "w", encoding="utf-8") as f:
+        f.write(xml_data)
+    print(f"Created: {drawio_file}")
+
+if __name__ == "__main__":
+    main()

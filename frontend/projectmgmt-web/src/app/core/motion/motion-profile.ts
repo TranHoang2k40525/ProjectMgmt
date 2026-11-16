@@ -33,7 +33,6 @@ const PROFILES: Record<MotionProfileName, MotionProfile> = {
 
 export function resolveMotionProfile(url: string): MotionProfile {
   if (url.startsWith('/auth')) return PROFILES.auth;
-  if (url.includes('/admin/ai-governance') || url.includes('/ai-dataops')) return PROFILES.ai;
   if (url.includes('/admin/identity') || url.includes('/profile') || url.includes('/members')) return PROFILES.scanner;
   if (url.includes('/reports')) return PROFILES.data;
   if (url.includes('/roadmap')) return PROFILES.blueprint;

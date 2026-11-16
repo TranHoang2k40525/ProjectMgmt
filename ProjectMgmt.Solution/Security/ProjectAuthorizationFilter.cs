@@ -26,6 +26,10 @@ public sealed class ProjectAuthorizationFilter(PlanningDbContext planning, Proje
         var method = context.HttpContext.Request.Method;
         var path = context.HttpContext.Request.Path.Value ?? "";
         var permission = HttpMethods.IsGet(method) ? "project.read"
+            : path.Contains("/documents", StringComparison.OrdinalIgnoreCase)
+              || path.Contains("/poker", StringComparison.OrdinalIgnoreCase)
+              || path.Contains("/retro", StringComparison.OrdinalIgnoreCase)
+              || path.Contains("/review", StringComparison.OrdinalIgnoreCase) ? "project.read"
             : path.Contains("/boards", StringComparison.Ordinal) || path.Contains("/workflow", StringComparison.Ordinal) ? "project.settings.manage"
             : HttpMethods.IsDelete(method) ? "project.delete" : "project.update";
         if (!await access.AllowsAsync(projectId.Value, permission))

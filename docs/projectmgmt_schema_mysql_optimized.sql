@@ -415,6 +415,21 @@ CREATE TABLE `SprintMemberCapacity` (
     CONSTRAINT `FK_SprintCapacity_Sprint` FOREIGN KEY (`SprintId`) REFERENCES `Sprint`(`Id`) ON DELETE CASCADE
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC COMMENT='BỔ SUNG - AI ASSIGNMENT: trần công suất từng người, tránh gán quá tải';
 
+CREATE TABLE `SprintMessage` (
+    `Id`               CHAR(36)     NOT NULL,
+    `SprintId`         CHAR(36)     NOT NULL COMMENT 'XMOD -> Sprint.Id',
+    `UserId`           CHAR(36)     NOT NULL COMMENT 'XMOD -> User.Id',
+    `Content`          TEXT         NOT NULL,
+    `CreatedAt`        DATETIME(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    `UpdatedAt`        DATETIME(6)  NULL ON UPDATE CURRENT_TIMESTAMP(6),
+    `IsDeleted`        TINYINT(1)   NOT NULL DEFAULT 0,
+    PRIMARY KEY (`Id`),
+    KEY `IX_SprintMessage_SprintId` (`SprintId`),
+    KEY `IX_SprintMessage_UserId` (`UserId`),
+    CONSTRAINT `FK_SprintMessage_Sprint` FOREIGN KEY (`SprintId`) REFERENCES `Sprint`(`Id`) ON DELETE CASCADE
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC COMMENT='Trao đổi & Bình luận chu kỳ Sprint (Realtime Event-Driven)';
+
+
 
 -- =====================================================================================
 -- MODULE 4: ISSUE TRACKING  (module lớn nhất)

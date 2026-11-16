@@ -9,11 +9,13 @@ public class ProjectScopeInfo
     public Guid ProjectId { get; set; }
     public Guid OrganizationId { get; set; }
     public bool IsArchived { get; set; }
+    public Guid CreatedByUserId { get; set; }
+    public Guid LeadUserId { get; set; }
 }
 
 public interface IProjectLookupService
 {
-    Task<IReadOnlyList<ProjectIssueTypeDto>> GetIssueTypesAsync(Guid projectId, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<ProjectStatusDto>> GetStatusesAsync(Guid projectId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<ProjectIssueTypeDto>> GetIssueTypesAsync(Guid projectId);
+    Task<IReadOnlyList<ProjectStatusDto>> GetStatusesAsync(Guid projectId);
     Task<ProjectScopeInfo?> GetProjectScopeAsync(Guid projectId);
 }

@@ -9,7 +9,7 @@ import { environment } from '../../../environments/environment';
 describe('Identity RBAC API mapping', () => {
   let service: IdentityService;
   let http: HttpTestingController;
-  const base = `${environment.apiBaseUrl}/v1`;
+  const base = `${environment.apiBaseUrl}`;
   const permission = { permissionId: 'ad453b64-a07c-477f-bf5e-bdc3946560c6', code: 'project.read' };
   beforeEach(() => {
     TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting(),

@@ -271,6 +271,29 @@ CREATE TABLE `ProjectVersion` (
     CONSTRAINT `FK_ProjectVersion_Project` FOREIGN KEY (`ProjectId`) REFERENCES `Project`(`Id`) ON DELETE CASCADE
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC COMMENT='Tương đương Fix Version / Release của Jira';
 
+CREATE TABLE `ProjectDocument` (
+    `Id`               CHAR(36)      NOT NULL,
+    `ProjectId`        CHAR(36)      NOT NULL,
+    `ParentId`         CHAR(36)      NULL,
+    `Name`             VARCHAR(255)  NOT NULL DEFAULT '',
+    `RelativePath`     VARCHAR(1000) NOT NULL DEFAULT '',
+    `IsDirectory`      TINYINT(1)    NOT NULL DEFAULT 0,
+    `Extension`        VARCHAR(20)   NULL,
+    `FileSize`         BIGINT        NOT NULL DEFAULT 0,
+    `Title`            VARCHAR(250)  NOT NULL,
+    `Content`          LONGTEXT      NULL,
+    `Status`           VARCHAR(20)   NOT NULL DEFAULT 'Draft' COMMENT 'Draft, Review, Approved',
+    `Version`          INT           NOT NULL DEFAULT 1,
+    `CreatedByUserId`  CHAR(36)      NOT NULL,
+    `ApprovedByUserId` CHAR(36)     NULL,
+    `CreatedAt`        DATETIME(6)   NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    `UpdatedAt`        DATETIME(6)   NULL ON UPDATE CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (`Id`),
+    KEY `IX_ProjectDocument_Project` (`ProjectId`),
+    KEY `IX_ProjectDocument_Parent` (`ParentId`),
+    CONSTRAINT `FK_ProjectDocument_Project` FOREIGN KEY (`ProjectId`) REFERENCES `Project`(`Id`) ON DELETE CASCADE
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC COMMENT='Kho tài liệu đặc tả dự án (Spec Hub - Nguồn sự thật 1:1 disk mirror)';
+
 CREATE TABLE `WorkflowStatus` (
     `Id`         CHAR(36)     NOT NULL,
     `ProjectId`  CHAR(36)     NOT NULL,
@@ -414,6 +437,21 @@ CREATE TABLE `SprintMemberCapacity` (
     UNIQUE KEY `UQ_SprintCapacity` (`SprintId`, `UserId`),
     CONSTRAINT `FK_SprintCapacity_Sprint` FOREIGN KEY (`SprintId`) REFERENCES `Sprint`(`Id`) ON DELETE CASCADE
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC COMMENT='BỔ SUNG - AI ASSIGNMENT: trần công suất từng người, tránh gán quá tải';
+
+CREATE TABLE `SprintMessage` (
+    `Id`               CHAR(36)     NOT NULL,
+    `SprintId`         CHAR(36)     NOT NULL COMMENT 'XMOD -> Sprint.Id',
+    `UserId`           CHAR(36)     NOT NULL COMMENT 'XMOD -> User.Id',
+    `Content`          TEXT         NOT NULL,
+    `CreatedAt`        DATETIME(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    `UpdatedAt`        DATETIME(6)  NULL ON UPDATE CURRENT_TIMESTAMP(6),
+    `IsDeleted`        TINYINT(1)   NOT NULL DEFAULT 0,
+    PRIMARY KEY (`Id`),
+    KEY `IX_SprintMessage_SprintId` (`SprintId`),
+    KEY `IX_SprintMessage_UserId` (`UserId`),
+    CONSTRAINT `FK_SprintMessage_Sprint` FOREIGN KEY (`SprintId`) REFERENCES `Sprint`(`Id`) ON DELETE CASCADE
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC COMMENT='Trao đổi & Bình luận chu kỳ Sprint (Realtime Event-Driven)';
+
 
 
 -- =====================================================================================

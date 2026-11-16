@@ -5,25 +5,6 @@ namespace ProjectMgmt.Modules.IdentityExperience.Application.Services;
 
 public class UserLookupService : IUserLookupService, IUserSkillService
 {
-    private static readonly IReadOnlyList<UserDisplayInfo> FallbackUsers = new List<UserDisplayInfo>
-    {
-        new UserDisplayInfo
-        {
-            UserId = Guid.Parse("11111111-0000-0000-0000-000000000001"),
-            DisplayName = "Hoàng Admin (System Lead)"
-        },
-        new UserDisplayInfo
-        {
-            UserId = Guid.Parse("11111111-0000-0000-0000-000000000002"),
-            DisplayName = "Nguyễn Văn Dev (Technical Lead)"
-        },
-        new UserDisplayInfo
-        {
-            UserId = Guid.Parse("11111111-0000-0000-0000-000000000003"),
-            DisplayName = "Trần Thị Scrum (Scrum Master)"
-        }
-    };
-
     private readonly IProfileRepository _profileRepository;
     private readonly ISkillRepository _skillRepository;
 
@@ -35,34 +16,33 @@ public class UserLookupService : IUserLookupService, IUserSkillService
         _skillRepository = skillRepository;
     }
 
-    public async Task<IReadOnlyList<UserDisplayInfo>> GetAllActiveDisplayInfoAsync(
-        CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<UserDisplayInfo>> GetAllActiveDisplayInfoAsync()
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        var users = await GetDisplayInfoAsync(FallbackUsers.Select(u => u.UserId), cancellationToken);
-        return users.Count > 0 ? users : FallbackUsers;
+        var profiles = await _profileRepository.GetAllActiveProfilesAsync();
+        if (profiles.Count > 0)
+        {
+            return profiles.Select(p => new UserDisplayInfo
+            {
+                UserId = p.UserId,
+                DisplayName = !string.IsNullOrWhiteSpace(p.DisplayName) ? p.DisplayName : p.Email,
+                Email = p.Email,
+                AvatarUrl = p.AvatarUrl
+            }).ToList();
+        }
+
+        return Array.Empty<UserDisplayInfo>();
     }
 
     public async Task<IReadOnlyList<UserDisplayInfo>> GetDisplayInfoAsync(
-        IEnumerable<Guid> userIds,
-        CancellationToken cancellationToken = default)
+        IEnumerable<Guid> userIds)
     {
-        cancellationToken.ThrowIfCancellationRequested();
         var results = new List<UserDisplayInfo>();
         foreach (var userId in userIds.Distinct())
         {
-            var user = await GetDisplayInfoAsync(userId, cancellationToken);
+            var user = await GetDisplayInfoAsync(userId);
             if (user is not null)
             {
                 results.Add(user);
-            }
-            else
-            {
-                var fallback = FallbackUsers.FirstOrDefault(f => f.UserId == userId);
-                if (fallback is not null)
-                {
-                    results.Add(fallback);
-                }
             }
         }
 
@@ -70,22 +50,22 @@ public class UserLookupService : IUserLookupService, IUserSkillService
     }
 
     public async Task<UserDisplayInfo?> GetDisplayInfoAsync(
-        Guid userId,
-        CancellationToken cancellationToken = default)
+        Guid userId)
     {
-        cancellationToken.ThrowIfCancellationRequested();
         var details = await _profileRepository.GetProfileDetailsAsync(userId);
         if (details is not null)
         {
             return new UserDisplayInfo
             {
                 UserId = userId,
-                DisplayName = details.Profile.DisplayName,
+                DisplayName = !string.IsNullOrWhiteSpace(details.Profile.DisplayName)
+                    ? details.Profile.DisplayName
+                    : details.User.Email,
                 AvatarUrl = details.Profile.AvatarUrl
             };
         }
 
-        return FallbackUsers.FirstOrDefault(f => f.UserId == userId);
+        return null;
     }
 
     public async Task<IReadOnlyList<UserSkillInfo>> GetUserSkillsAsync(IEnumerable<Guid> userIds)

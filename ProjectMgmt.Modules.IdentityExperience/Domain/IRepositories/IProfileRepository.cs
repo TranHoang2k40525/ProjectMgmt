@@ -15,4 +15,6 @@ public interface IProfileRepository
         Guid userId,
         string avatarUrl,
         DateTime nowUtc);
+
+    Task<IReadOnlyList<ActiveUserProfile>> GetAllActiveProfilesAsync();
 }

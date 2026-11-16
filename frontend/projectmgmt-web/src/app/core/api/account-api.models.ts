@@ -45,5 +45,6 @@ export interface LoginResult extends ApiResult {
   userId?: string | null;
   email?: string | null;
   fullName?: string | null;
+  avatarUrl?: string | null;
   roles?: string[] | null;
 }

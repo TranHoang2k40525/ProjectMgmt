@@ -6,7 +6,7 @@ using ProjectMgmt.Solution.Services;
 
 namespace ProjectMgmt.Solution.Controllers;
 
-[Route("api/v1/projects")]
+[Route("api/projects")]
 [TypeFilter(typeof(ProjectMgmt.Solution.Security.ProjectAuthorizationFilter))]
 public class ProjectsController : ApiControllerBase
 {
@@ -21,6 +21,7 @@ public class ProjectsController : ApiControllerBase
     private readonly IWorkspaceProvisioningService _provisioning;
     private readonly IPermissionEvaluator _permissions;
     private readonly ICurrentUserContext _currentUser;
+    private readonly ProjectMgmt.Solution.Security.ProjectAccess _access;
     private readonly ILogger<ProjectsController> _logger;
 
     public ProjectsController(
@@ -29,6 +30,7 @@ public class ProjectsController : ApiControllerBase
         IWorkspaceProvisioningService provisioning,
         IPermissionEvaluator permissions,
         ICurrentUserContext currentUser,
+        ProjectMgmt.Solution.Security.ProjectAccess access,
         ILogger<ProjectsController> logger)
     {
         _projects = projects;
@@ -36,28 +38,26 @@ public class ProjectsController : ApiControllerBase
         _provisioning = provisioning;
         _permissions = permissions;
         _currentUser = currentUser;
+        _access = access;
         _logger = logger;
     }
 
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<ProjectDto>>> GetAll(
-        [FromQuery] Guid? orgId,
-        CancellationToken cancellationToken)
+        [FromQuery] Guid? orgId)
     {
-        var result = await _management.GetProjectsAsync(orgId, cancellationToken);
+        var result = await _management.GetProjectsAsync(orgId);
         if (!result.IsSuccess) return FromResult(result);
-        var access = HttpContext.RequestServices.GetRequiredService<ProjectMgmt.Solution.Security.ProjectAccess>();
         var visible = new List<ProjectDto>();
         foreach (var project in result.Value)
-            if (await access.AllowsAsync(project.Id)) visible.Add(project);
+            if (await _access.AllowsAsync(project.Id)) visible.Add(project);
         return Ok(visible);
     }
 
     [HttpGet("{projectId:guid}")]
     public async Task<ActionResult<ProjectDto>> GetById(
-        Guid projectId,
-        CancellationToken cancellationToken) =>
-        FromResult(await _management.GetProjectByIdAsync(projectId, cancellationToken));
+        Guid projectId) =>
+        FromResult(await _management.GetProjectByIdAsync(projectId));
 
     [HttpPost]
     public async Task<ActionResult<ProjectDto>> Create(
@@ -75,12 +75,24 @@ public class ProjectsController : ApiControllerBase
                 });
             }
 
-            var allowed = request.OrgId != Guid.Empty
-                && await _permissions.HasPermissionAsync(
-                    _currentUser.UserId.Value,
-                    "project.create",
-                    "Organization",
-                    request.OrgId);
+            var isOrgOwner = false;
+            var orgsResult = await _management.GetOrganizationsAsync();
+            if (orgsResult.IsSuccess)
+            {
+                var targetOrg = orgsResult.Value.FirstOrDefault(o => o.Id == request.OrgId);
+                if (targetOrg is not null && targetOrg.OwnerId == _currentUser.UserId.Value)
+                {
+                    isOrgOwner = true;
+                }
+            }
+
+            var isSystemAdmin = await _permissions.HasPermissionAsync(
+                _currentUser.UserId.Value,
+                "project.create",
+                "System",
+                null);
+
+            var allowed = isOrgOwner || isSystemAdmin;
             if (!allowed)
             {
                 return StatusCode(
@@ -89,7 +101,7 @@ public class ProjectsController : ApiControllerBase
                     {
                         success = false,
                         errorCode = "PROJECT_CREATE_FORBIDDEN",
-                        message = "Bạn không có quyền tạo dự án trong tổ chức này."
+                        message = "Chỉ Chủ tổ chức (Org Owner) mới có quyền tạo dự án và gán Giám đốc dự án."
                     });
             }
 
@@ -117,27 +129,13 @@ public class ProjectsController : ApiControllerBase
     [HttpPut("{projectId:guid}")]
     public async Task<ActionResult<ProjectDto>> Update(
         Guid projectId,
-        [FromBody] UpdateProjectRequestDto request,
-        CancellationToken cancellationToken) =>
-        FromResult(await _management.UpdateProjectAsync(projectId, request, cancellationToken));
+        [FromBody] UpdateProjectRequestDto request) =>
+        FromResult(await _management.UpdateProjectAsync(projectId, request));
 
     [HttpDelete("{projectId:guid}")]
     public async Task<IActionResult> Delete(
-        Guid projectId,
-        CancellationToken cancellationToken) =>
-        FromResult(await _management.DeleteProjectAsync(projectId, cancellationToken));
-
-    [HttpGet("{projectId:guid}/issue-types")]
-    public Task<IReadOnlyList<ProjectIssueTypeDto>> GetIssueTypes(
-        Guid projectId,
-        CancellationToken cancellationToken) =>
-        _projects.GetIssueTypesAsync(projectId, cancellationToken);
-
-    [HttpGet("{projectId:guid}/statuses")]
-    public Task<IReadOnlyList<ProjectStatusDto>> GetStatuses(
-        Guid projectId,
-        CancellationToken cancellationToken) =>
-        _projects.GetStatusesAsync(projectId, cancellationToken);
+        Guid projectId) =>
+        FromResult(await _management.DeleteProjectAsync(projectId));
 
     // ==========================================
     // WORKFLOW TRANSITIONS
@@ -145,16 +143,8 @@ public class ProjectsController : ApiControllerBase
 
     [HttpGet("{projectId:guid}/workflow/transitions")]
     public async Task<ActionResult<IReadOnlyList<WorkflowTransitionItemDto>>> GetWorkflowTransitions(
-        Guid projectId,
-        CancellationToken cancellationToken) =>
-        FromResult(await _management.GetWorkflowTransitionsAsync(projectId, cancellationToken));
-
-    [HttpPost("{projectId:guid}/workflow/transitions")]
-    public async Task<ActionResult<WorkflowTransitionItemDto>> CreateWorkflowTransition(
-        Guid projectId,
-        [FromBody] CreateWorkflowTransitionRequestDto request,
-        CancellationToken cancellationToken) =>
-        FromResult(await _management.CreateWorkflowTransitionAsync(projectId, request, cancellationToken));
+        Guid projectId) =>
+        FromResult(await _management.GetWorkflowTransitionsAsync(projectId));
 
     // ==========================================
     // BOARDS
@@ -162,14 +152,12 @@ public class ProjectsController : ApiControllerBase
 
     [HttpGet("{projectId:guid}/boards")]
     public async Task<ActionResult<IReadOnlyList<BoardDto>>> GetBoards(
-        Guid projectId,
-        CancellationToken cancellationToken) =>
-        FromResult(await _management.GetBoardsAsync(projectId, cancellationToken));
+        Guid projectId) =>
+        FromResult(await _management.GetBoardsAsync(projectId));
 
     [HttpPost("{projectId:guid}/boards")]
     public async Task<ActionResult<BoardDto>> CreateBoard(
         Guid projectId,
-        [FromBody] CreateBoardRequestDto request,
-        CancellationToken cancellationToken) =>
-        FromResult(await _management.CreateBoardAsync(projectId, request, cancellationToken));
+        [FromBody] CreateBoardRequestDto request) =>
+        FromResult(await _management.CreateBoardAsync(projectId, request));
 }

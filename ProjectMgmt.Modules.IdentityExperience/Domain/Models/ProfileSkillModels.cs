@@ -9,6 +9,14 @@ public class ProfileDetails
     public List<UserSkillDetails> Skills { get; set; } = [];
 }
 
+public class ActiveUserProfile
+{
+    public Guid UserId { get; set; }
+    public string DisplayName { get; set; } = string.Empty;
+    public string? AvatarUrl { get; set; }
+    public string Email { get; set; } = string.Empty;
+}
+
 public class UserSkillDetails
 {
     public UserSkill UserSkill { get; set; } = new();

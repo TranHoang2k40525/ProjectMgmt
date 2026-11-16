@@ -326,16 +326,12 @@ public class AllowAllPermissionEvaluator : IPermissionEvaluator
 
 public class FakeProjectLookupService : IProjectLookupService
 {
-    public Task<IReadOnlyList<ProjectIssueTypeDto>> GetIssueTypesAsync(
-        Guid projectId,
-        CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<ProjectIssueTypeDto>> GetIssueTypesAsync(Guid projectId)
     {
         return Task.FromResult<IReadOnlyList<ProjectIssueTypeDto>>([]);
     }
 
-    public Task<IReadOnlyList<ProjectStatusDto>> GetStatusesAsync(
-        Guid projectId,
-        CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<ProjectStatusDto>> GetStatusesAsync(Guid projectId)
     {
         return Task.FromResult<IReadOnlyList<ProjectStatusDto>>([]);
     }

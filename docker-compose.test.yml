@@ -11,7 +11,7 @@ services:
       ASPNETCORE_HTTP_PORTS: 8080
     volumes:
       - type: bind
-        source: ${PROJECTMGMT_TEST_CONFIG_PATH:?Set PROJECTMGMT_TEST_CONFIG_PATH in .env.test}
+        source: ${PROJECTMGMT_TEST_CONFIG_PATH:-./ProjectMgmt.Solution/appsettings.Staging.example.json}
         target: /app/appsettings.Staging.json
         read_only: true
     ports:

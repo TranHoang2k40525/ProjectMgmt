@@ -8,7 +8,7 @@ namespace ProjectMgmt.Solution.Controllers;
 
 [ApiController]
 [Authorize]
-[Route("api/v1/notifications")]
+[Route("api/notifications")]
 public class NotificationsController : ControllerBase
 {
     private static readonly Action<ILogger, string, Exception?> LogEndpointFailure =

@@ -1,0 +1,92 @@
+================================================================================
+BIÊN BẢN HỌP LẬP KẾ HOẠCH SPRINT TIẾP THEO (SPRINT PLANNING MEETING NOTES)
+================================================================================
+Dự án: Hệ thống Quản lý Dự án Scrum Agile Enterprise (Mã dự án: QLDA)
+Chủ đề trọng tâm: Hoàn thiện và mở rộng Module Trợ Lý AI Agent, MCP Server & RAG Spec Hub
+Thời gian họp: 09:00 - 11:30
+Hình thức: Họp trực tiếp kết hợp trực tuyến
+Chủ trì (Project Lead / Scrum Master): Hoàng Team
+Thành phần tham dự:
+- Hoàng Team (Kiến trúc sư Hệ thống / Backend Lead - C# .NET 10, MCP Server, Redis, MySQL)
+- Vũ Hoàng Nam (Kỹ sư Frontend Chính - Angular, Signals, UI/UX, GSAP)
+- Lê Thu Hà (Kỹ sư Fullstack / Data & Analytics - Biểu đồ, Excel Export, Capacity Planning)
+- Nguyễn Minh Tuấn (Kỹ sư AI & Backend - RAG Vector Qdrant, Multi-Provider LLM, Prompt Guardrails)
+- Đỗ Thùy Linh (Chuyên viên Kiểm thử QA / Automation Test & Bảo mật)
+
+--------------------------------------------------------------------------------
+1. MỤC TIÊU SPRINT TIẾP THEO (SPRINT GOAL)
+--------------------------------------------------------------------------------
+Nâng cấp toàn diện Module Trợ Lý AI (AI Sprint Planner & Project Assistant) đạt chuẩn vận hành thực tế: tối ưu hóa bộ 6 công cụ nội trình MCP Server, nâng cao độ chính xác truy xuất ngữ nghĩa RAG trên kho tài liệu Spec Hub, hoàn thiện cơ chế lưu trữ tạm thời Redis Staging có khóa đồng thời (Distributed Lock), và cải tiến trải nghiệm giao diện Modal Chat AI toàn màn hình kèm đối chiếu trích dẫn đặc tả trực quan.
+
+--------------------------------------------------------------------------------
+2. NỘI DUNG THẢO LUẬN & CÁC HẠNG MỤC CÔNG VIỆC CẦN TRIỂN KHAI TRONG SPRINT TỚI
+--------------------------------------------------------------------------------
+
+Hạng mục 1: Tối ưu hóa bộ 6 công cụ MCP Server nội trình và Định tuyến Ý định Thông minh (Intent Router)
+- Tham chiếu tài liệu đặc tả: mcp-server-guide.md (Mục 2, Mục 3) và README.md (Mục 3).
+- Epic liên kết: Hệ thống AI Agent, MCP Server & Gợi ý Thông minh.
+- Nội dung thống nhất:
+  + Hoàng Team và Nguyễn Minh Tuấn rà soát lại toàn bộ 6 công cụ MCP nội trình gồm: spec_hub_search, backlog_get_stories, sprint_get_history_and_velocity, team_get_dev_capacities, project_get_active_config và sprint_commit_plan.
+  + Cần bổ sung cơ chế Định tuyến Ý định (Intent Router) phân tách rõ 6 luồng yêu cầu: lập kế hoạch Sprint (sprint_plan), thêm việc vào kho Backlog (backlog_intake), hỏi đáp về bảng đề xuất đang mở (current_proposal_qa), chào hỏi ngắn (short_greeting), xuất tệp bảng tính (excel_export) và tra cứu trạng thái dự án (project_qa).
+  + Đặc biệt, với các câu chào hỏi xã giao hoặc câu hỏi giải thích trực tiếp về các công việc đang hiển thị trên bảng đề xuất AI, hệ thống phải phản hồi tức thì dưới 1 giây mà không gọi thừa công cụ MCP, giúp tiết kiệm tối đa hạn ngạch Token.
+- Phân công dự kiến:
+  + Công việc con Backend (Hoàng Team - 8 giờ): Tinh chỉnh bộ phân loại Intent Router và chuẩn hóa dữ liệu trả về của 6 công cụ MCP Server.
+  + Công việc con AI/Backend (Nguyễn Minh Tuấn - 6 giờ): Thiết lập cơ chế chọn lọc công cụ MCP theo đúng ý định và ghi nhật ký thời gian thực thi từng bước.
+  + Công việc con QA (Đỗ Thùy Linh - 4 giờ): Kiểm thử các kịch bản hỏi đáp ngắn, hỏi đáp bảng đề xuất và kiểm chứng số lượng lệnh gọi MCP thực tế.
+- Tiêu chí nghiệm thu (Acceptance Criteria):
+  + Câu chào ngắn hoặc câu hỏi về bảng đề xuất hiện tại không kích hoạt truy vấn MCP dư thừa, thời gian phản hồi dưới 1 giây.
+  + Mỗi lệnh gọi công cụ MCP đều hiển thị rõ tên công cụ, tham số truy vấn và thời gian xử lý tính bằng mili-giây trên dòng thời gian suy nghĩ.
+
+Hạng mục 2: Nâng cấp đường ống RAG Đa tầng trên Spec Hub và Trích dẫn Đặc tả Tương tác (Interactive Citations)
+- Tham chiếu tài liệu đặc tả: Bản đặc tả về quản lý dự án.txt (Mục II, Mục IV) và README.md (Mục 4).
+- Epic liên kết: Hệ thống AI Agent, MCP Server & Gợi ý Thông minh.
+- Nội dung thống nhất:
+  + Nguyễn Minh Tuấn phụ trách nâng cấp thuật toán tìm kiếm kết hợp (Hybrid Search) giữa Vector Qdrant và bộ lọc từ khóa dự phòng (Keyword Fallback) khi tra cứu các tệp tài liệu trong Spec Hub (.md, .txt, .docx, .pdf).
+  + Vũ Hoàng Nam xây dựng tính năng hiển thị thẻ trích dẫn tài liệu (Document Citations Chips) ngay bên dưới câu trả lời hội thoại của Trợ Lý AI và bên trong từng dòng công việc đề xuất.
+  + Khi người dùng nhấp vào thẻ tài liệu, ngăn kéo đối chiếu (Split-View Spec Drawer) mở ngay bên phải hộp thoại AI, tự động cuộn mượt đến đúng tiêu đề mục (hỗ trợ đối sánh linh hoạt cả số Ả Rập 1, 2, 3 lẫn số La Mã I, II, III, IV) và tô sáng đoạn văn bản trích dẫn.
+- Phân công dự kiến:
+  + Công việc con Backend (Nguyễn Minh Tuấn - 8 giờ): Chuẩn hóa đầu ra DocumentCitations trong luồng hội thoại AI và tăng độ chính xác trích xuất phân đoạn tài liệu Spec Hub.
+  + Công việc con Frontend (Vũ Hoàng Nam - 8 giờ): Xây dựng thẻ mở tài liệu trực tiếp trên khung chat AI và bộ định vị 4 tầng tự động cuộn tới đúng mục tài liệu trong ngăn kéo đối chiếu.
+  + Công việc con QA (Đỗ Thùy Linh - 4 giờ): Kiểm thử độ chính xác khi nhảy tới các mục đánh số La Mã và số Ả Rập trên các tài liệu dài.
+- Tiêu chí nghiệm thu (Acceptance Criteria):
+  + Khi người dùng yêu cầu liệt kê hoặc phân tích tài liệu đặc tả, câu trả lời của AI hiển thị đầy đủ các nút bấm mở tài liệu kèm vị trí mục trích dẫn.
+  + Nhấp vào thẻ trích dẫn mở ngay khung xem tài liệu đối chiếu song song và cuộn chính xác tới mục được tham chiếu.
+
+Hạng mục 3: Cải tiến Giao diện Modal Trợ Lý AI Toàn màn hình và Thanh Chỉ báo Hành động Trực tiếp
+- Tham chiếu tài liệu đặc tả: README.md (Mục 2, Mục 6) và Bản đặc tả về quản lý dự án.txt (Mục III).
+- Epic liên kết: Hệ thống AI Agent, MCP Server & Gợi ý Thông minh.
+- Nội dung thống nhất:
+  + Vũ Hoàng Nam mở rộng kích thước hộp thoại Trợ Lý AI lên 96vw x 94vh và bổ sung nút phóng toàn màn hình 100vw x 100vh để người dùng thoải mái làm việc với bảng đề xuất nhiều công việc.
+  + Gom toàn bộ các nút thao tác phê duyệt ("Làm lại toàn bộ", "Đẩy vào Kho Backlog", "Áp dụng vào Sprint tiếp theo") lên thanh công cụ cố định phía trên bảng đề xuất (Unified Proposal Command Header), loại bỏ hoàn toàn thanh nút đáy gây chật chội.
+  + Hiển thị trạng thái hành động chi tiết trực tiếp ngay cạnh nhãn "Đang suy nghĩ" (ví dụ: "Đang suy nghĩ · 1.2s — Đang đọc đặc tả: mcp-server-guide.md") để người dùng theo dõi thời gian thực từng bước AI đang làm.
+  + Sửa triệt để lỗi đóng/mở danh sách "Lịch sử Phiên làm việc" khi người dùng bấm ra vùng trống bên ngoài.
+- Phân công dự kiến:
+  + Công việc con Frontend (Vũ Hoàng Nam - 10 giờ): Thiết kế lại khung Modal AI 96vw x 94vh, thanh điều khiển gộp trên đầu bảng đề xuất và thanh trạng thái suy nghĩ thời gian thực.
+  + Công việc con QA (Đỗ Thùy Linh - 4 giờ): Kiểm thử khả năng co giãn giao diện trên màn hình chuẩn, chế độ toàn màn hình và thao tác đóng hộp thoại lịch sử phiên.
+- Tiêu chí nghiệm thu (Acceptance Criteria):
+  + Giao diện chat AI rộng rãi, hỗ trợ phóng toàn màn hình và không còn thanh nút rời rạc ở đáy bảng đề xuất.
+  + Thanh "Đang suy nghĩ" cập nhật liên tục hành động cụ thể đang diễn ra qua luồng SSE.
+  + Bấm chuột ra ngoài hộp thoại Lịch sử phiên tự động đóng gọn danh sách lịch sử.
+
+Hạng mục 4: Hoàn thiện Cơ chế Lưu tạm Redis Staging, Khóa Phân tán và Xuất Bảng tính Excel Đa phạm vi từ Hội thoại AI
+- Tham chiếu tài liệu đặc tả: mcp-server-guide.md (Mục 4, Mục 5) và README.md (Mục 5).
+- Epic liên kết: Báo cáo Vận tốc, Biểu đồ Burndown & Phân tích Năng suất.
+- Nội dung thống nhất:
+  + Hoàng Team kiểm tra cơ chế lưu nháp đề xuất AI trên Redis (TTL 30 phút, tự động chuyển đổi sang MemoryCache khi Redis gián đoạn) và khóa đồng thời (Distributed Lock) ngăn chặn ghi đè khi hai quản lý cùng bấm áp dụng kế hoạch Sprint.
+  + Lê Thu Hà triển khai tính năng xuất báo cáo Excel (.xlsx) thông minh ngay từ câu lệnh chat với AI: hệ thống tự động nhận diện người dùng muốn xuất riêng 1 Sprint cụ thể (ví dụ Sprint 1, Sprint 2, Sprint 3), chỉ xuất kho Backlog, chỉ xuất bảng đề xuất AI hay xuất toàn bộ dự án.
+  + Bổ sung bộ lọc từ khóa thông minh để phân biệt chính xác cụm động từ "đề xuất" (gợi ý công việc) với lệnh "xuất Excel / tải file", tránh việc người dùng hỏi "nội dung các task bạn đề xuất là gì" bị nhận nhầm thành lệnh tải tệp Excel.
+- Phân công dự kiến:
+  + Công việc con Backend (Hoàng Team - 6 giờ): Kiểm toán luồng Commit Transaction từ Redis Staging xuống MySQL và khóa đồng thời trên từng phiên đề xuất.
+  + Công việc con Fullstack (Lê Thu Hà - 8 giờ): Xây dựng bộ nhận diện phạm vi xuất Excel trong hội thoại AI và định dạng bảng tính chuyên nghiệp có phân cấp công việc cha - việc con.
+  + Công việc con QA (Đỗ Thùy Linh - 4 giờ): Kiểm thử xuất Excel theo từng Sprint riêng biệt và kiểm thử câu hỏi chứa từ "đề xuất" không kích hoạt nhầm tính năng tải tệp.
+- Tiêu chí nghiệm thu (Acceptance Criteria):
+  + Yêu cầu xuất Excel cho một Sprint cụ thể hoặc kho Backlog tạo ra tệp .xlsx chỉ chứa đúng phạm vi được yêu cầu, có màu trạng thái và tổng kết Story Points.
+  + Câu hỏi tra cứu có chứa từ "đề xuất" được định tuyến chính xác vào luồng hỏi đáp bảng đề xuất, tuyệt đối không tự ý tải tệp Excel.
+
+--------------------------------------------------------------------------------
+3. QUYẾT ĐỊNH CHUNG & ĐỊNH MỨC NĂNG LỰC (CAPACITY)
+--------------------------------------------------------------------------------
+- Thời lượng Sprint tiếp theo: 2 tuần (14 ngày).
+- Tổng điểm Story Points mục tiêu của đội ngũ: khoảng 26 - 32 Story Points (dựa trên vận tốc trung bình các Sprint trước).
+- Tất cả các User Story trước khi đưa vào Sprint phải được bóc tách đầy đủ việc con (Frontend / Backend / QA), gán đúng thành viên theo chuyên môn và liên kết rõ ràng tới tài liệu trong Spec Hub.
+================================================================================

@@ -40,6 +40,7 @@ public class CreateOrganizationDto
     public string Name { get; set; } = string.Empty;
     public string Slug { get; set; } = string.Empty;
     public Guid OwnerId { get; set; }
+    public List<Guid>? MemberUserIds { get; set; }
 }
 
 public class ProjectDto
@@ -88,6 +89,11 @@ public class ProjectDto
     public bool IsDeleted { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public string? BoardName { get; set; }
+    public string? BoardType { get; set; }
+    public string? WorkflowName { get; set; }
+    public string? ManagementType { get; set; }
+    public string? WorkflowTemplateId { get; set; }
 }
 
 public class CreateProjectRequestDto
@@ -115,6 +121,7 @@ public class CreateProjectRequestDto
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public Guid LeadUserId { get; set; }
+    public List<Guid>? MemberUserIds { get; set; }
 }
 
 public class UpdateProjectRequestDto

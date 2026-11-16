@@ -22,4 +22,7 @@
     <Project Path="ProjectMgmt.Solution/ProjectMgmt.Solution.csproj" />
     <Project Path="ProjectMgmt.Tests/ProjectMgmt.Tests.csproj" />
   </Folder>
+  <Folder Name="/Tools/">
+    <Project Path="ProjectMgmt.McpServer/ProjectMgmt.McpServer.csproj" />
+  </Folder>
 </Solution>

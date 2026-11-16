@@ -130,4 +130,22 @@ public class ProfileRepository : IProfileRepository
             };
         });
     }
+
+    public async Task<IReadOnlyList<ActiveUserProfile>> GetAllActiveProfilesAsync()
+    {
+        return await (from user in _context.Users.AsNoTracking()
+                      join profile in _context.UserProfiles.AsNoTracking() on user.Id equals profile.UserId into profiles
+                      from profile in profiles.DefaultIfEmpty()
+                      where user.IsActive
+                      orderby profile != null && !string.IsNullOrWhiteSpace(profile.DisplayName) ? profile.DisplayName : user.Email
+                      select new ActiveUserProfile
+                      {
+                          UserId = user.Id,
+                          DisplayName = profile != null && !string.IsNullOrWhiteSpace(profile.DisplayName)
+                              ? profile.DisplayName
+                              : user.Email,
+                          AvatarUrl = profile != null ? profile.AvatarUrl : null,
+                          Email = user.Email
+                      }).ToListAsync();
+    }
 }

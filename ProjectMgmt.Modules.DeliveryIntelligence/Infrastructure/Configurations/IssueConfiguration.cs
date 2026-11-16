@@ -160,6 +160,27 @@ public class IssueConfiguration : IEntityTypeConfiguration<Issue>
             .HasColumnType("tinyint(1)")
             .HasDefaultValue(false);
 
+        builder.Property(entity => entity.IsBlocked)
+            .HasColumnName("IsBlocked")
+            .HasColumnType("tinyint(1)")
+            .HasDefaultValue(false);
+
+        builder.Property(entity => entity.BlockReason)
+            .HasColumnName("BlockReason")
+            .HasColumnType("varchar(500)");
+
+        builder.Property(entity => entity.BlockedAt)
+            .HasColumnName("BlockedAt")
+            .HasColumnType("datetime(6)");
+
+        builder.Property(entity => entity.EstimatedHours)
+            .HasColumnName("EstimatedHours")
+            .HasColumnType("decimal(5,2)");
+
+        builder.Property(entity => entity.RemainingHours)
+            .HasColumnName("RemainingHours")
+            .HasColumnType("decimal(5,2)");
+
         builder.Property(entity => entity.CreatedAt)
             .HasColumnName("CreatedAt")
             .HasColumnType("datetime(6)")
@@ -172,31 +193,18 @@ public class IssueConfiguration : IEntityTypeConfiguration<Issue>
         builder.Property(entity => entity.UpdatedAt).Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
 
         builder.HasIndex(entity => new { entity.ProjectId, entity.IssueNumber }, "UQ_Issue_Key").IsUnique();
-
         builder.HasIndex(entity => new { entity.ProjectId, entity.SprintId, entity.RankOrder }, "IX_Issue_Backlog");
-
         builder.HasIndex(entity => new { entity.SprintId, entity.StatusId }, "IX_Issue_Sprint_Status");
-
         builder.HasIndex(entity => new { entity.AssigneeId, entity.StatusId }, "IX_Issue_Assignee");
-
         builder.HasIndex(entity => entity.ParentId, "IX_Issue_Parent");
-
         builder.HasIndex(entity => entity.EpicId, "IX_Issue_Epic");
-
         builder.HasIndex(entity => entity.AiGenerationLogId, "IX_Issue_AiLog");
-
         builder.HasIndex(entity => new { entity.ProjectId, entity.ResolvedAt }, "IX_Issue_Resolved");
-
         builder.HasIndex(entity => new { entity.ProjectId, entity.IsDeleted, entity.CreatedAt }, "IX_Issue_Project_Recent");
-
         builder.HasIndex(entity => new { entity.SprintId, entity.StatusId, entity.IsDeleted, entity.RankOrder }, "IX_Issue_Board_Filter");
-
         builder.HasIndex(entity => new { entity.AssigneeId, entity.IsDeleted, entity.StatusId, entity.DueDate }, "IX_Issue_Assignee_Workload");
-
         builder.HasIndex(entity => new { entity.ProjectId, entity.IsDeleted, entity.DueDate }, "IX_Issue_Project_Due");
-
         builder.HasIndex(entity => new { entity.ReporterId, entity.CreatedAt }, "IX_Issue_Reporter_Created");
-
         builder.HasIndex(entity => new { entity.Title, entity.Description }, "FT_Issue_Search").IsFullText();
 
         builder.HasOne<Issue>()

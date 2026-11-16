@@ -286,6 +286,246 @@ namespace DeliveryIntelligence.Infrastructure.Migrations
                     b.ToView("vw_AiBreakdownQuality", (string)null);
                 });
 
+            modelBuilder.Entity("DeliveryIntelligence.Domain.Entities.AiConversationMemoryEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)")
+                        .HasColumnName("Id")
+                        .UseCollation("utf8mb4_0900_ai_ci");
+
+                    MySqlPropertyBuilderExtensions.HasCharSet(b.Property<Guid>("Id"), "utf8mb4");
+
+                    b.Property<string>("AnchorKey")
+                        .IsRequired()
+                        .HasColumnType("varchar(32)")
+                        .HasColumnName("AnchorKey");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasColumnType("varchar(50)")
+                        .HasColumnName("Category");
+
+                    b.Property<string>("ContentJson")
+                        .IsRequired()
+                        .HasColumnType("longtext")
+                        .HasColumnName("ContentJson");
+
+                    b.Property<Guid>("ConversationSessionId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("ConversationSessionId")
+                        .UseCollation("utf8mb4_0900_ai_ci");
+
+                    MySqlPropertyBuilderExtensions.HasCharSet(b.Property<Guid>("ConversationSessionId"), "utf8mb4");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("CreatedAtUtc")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
+
+                    b.Property<string>("Keywords")
+                        .IsRequired()
+                        .HasColumnType("varchar(500)")
+                        .HasColumnName("Keywords");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("OrganizationId")
+                        .UseCollation("utf8mb4_0900_ai_ci");
+
+                    MySqlPropertyBuilderExtensions.HasCharSet(b.Property<Guid>("OrganizationId"), "utf8mb4");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("ProjectId")
+                        .UseCollation("utf8mb4_0900_ai_ci");
+
+                    MySqlPropertyBuilderExtensions.HasCharSet(b.Property<Guid>("ProjectId"), "utf8mb4");
+
+                    b.Property<string>("SessionId")
+                        .IsRequired()
+                        .HasColumnType("varchar(120)")
+                        .HasColumnName("SessionId");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasColumnType("varchar(600)")
+                        .HasColumnName("Summary");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("varchar(220)")
+                        .HasColumnName("Title");
+
+                    b.Property<int>("TurnIndex")
+                        .HasColumnType("int")
+                        .HasColumnName("TurnIndex");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("UserId")
+                        .UseCollation("utf8mb4_0900_ai_ci");
+
+                    MySqlPropertyBuilderExtensions.HasCharSet(b.Property<Guid>("UserId"), "utf8mb4");
+
+                    b.HasKey("Id")
+                        .HasName("PRIMARY");
+
+                    b.HasIndex(new[] { "ConversationSessionId", "AnchorKey" }, "IX_AiConversationMemoryEntry_SessionAnchor");
+
+                    b.HasIndex(new[] { "OrganizationId", "ProjectId", "UserId", "SessionId" }, "IX_AiConversationMemoryEntry_TenantLock");
+
+                    b.ToTable("AiConversationMemoryEntry", null, t =>
+                        {
+                            t.HasComment("Chỉ mục trí nhớ đánh mã trỏ (#mem-X) cho từng phiên Trợ Lý AI");
+                        });
+
+                    MySqlEntityTypeBuilderExtensions.HasCharSet(b, "utf8mb4");
+                    MySqlEntityTypeBuilderExtensions.UseCollation(b, "utf8mb4_0900_ai_ci");
+                });
+
+            modelBuilder.Entity("DeliveryIntelligence.Domain.Entities.AiConversationSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)")
+                        .HasColumnName("Id")
+                        .UseCollation("utf8mb4_0900_ai_ci");
+
+                    MySqlPropertyBuilderExtensions.HasCharSet(b.Property<Guid>("Id"), "utf8mb4");
+
+                    b.Property<string>("ConversationHistoryJson")
+                        .IsRequired()
+                        .HasColumnType("longtext")
+                        .HasColumnName("ConversationHistoryJson");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("CreatedAtUtc")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
+
+                    b.Property<string>("CreatedByName")
+                        .IsRequired()
+                        .HasColumnType("varchar(150)")
+                        .HasColumnName("CreatedByName");
+
+                    b.Property<DateTime?>("DeletedAtUtc")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("DeletedAtUtc");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false)
+                        .HasColumnName("IsDeleted");
+
+                    b.Property<string>("LastIntent")
+                        .IsRequired()
+                        .HasColumnType("varchar(50)")
+                        .HasColumnName("LastIntent");
+
+                    b.Property<int>("MemoryCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0)
+                        .HasColumnName("MemoryCount");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("Model");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("OrganizationId")
+                        .UseCollation("utf8mb4_0900_ai_ci");
+
+                    MySqlPropertyBuilderExtensions.HasCharSet(b.Property<Guid>("OrganizationId"), "utf8mb4");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("ProjectId")
+                        .UseCollation("utf8mb4_0900_ai_ci");
+
+                    MySqlPropertyBuilderExtensions.HasCharSet(b.Property<Guid>("ProjectId"), "utf8mb4");
+
+                    b.Property<string>("ProposalJson")
+                        .IsRequired()
+                        .HasColumnType("longtext")
+                        .HasColumnName("ProposalJson");
+
+                    b.Property<string>("RecommendedTarget")
+                        .IsRequired()
+                        .HasColumnType("varchar(30)")
+                        .HasColumnName("RecommendedTarget");
+
+                    b.Property<string>("SessionId")
+                        .IsRequired()
+                        .HasColumnType("varchar(120)")
+                        .HasColumnName("SessionId");
+
+                    b.Property<Guid?>("TargetSprintId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("TargetSprintId")
+                        .UseCollation("utf8mb4_0900_ai_ci");
+
+                    MySqlPropertyBuilderExtensions.HasCharSet(b.Property<Guid?>("TargetSprintId"), "utf8mb4");
+
+                    b.Property<int>("TaskCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0)
+                        .HasColumnName("TaskCount");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("varchar(300)")
+                        .HasColumnName("Title");
+
+                    b.Property<decimal>("TotalStoryPoints")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(8,2)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("TotalStoryPoints");
+
+                    b.Property<int>("TurnCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0)
+                        .HasColumnName("TurnCount");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("UpdatedAtUtc")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)")
+                        .HasColumnName("UserId")
+                        .UseCollation("utf8mb4_0900_ai_ci");
+
+                    MySqlPropertyBuilderExtensions.HasCharSet(b.Property<Guid>("UserId"), "utf8mb4");
+
+                    b.HasKey("Id")
+                        .HasName("PRIMARY");
+
+                    b.HasIndex(new[] { "OrganizationId", "ProjectId", "UserId", "IsDeleted", "UpdatedAtUtc" }, "IX_AiConversationSession_TenantUserProject");
+
+                    b.HasIndex(new[] { "SessionId" }, "UQ_AiConversationSession_SessionId")
+                        .IsUnique();
+
+                    b.ToTable("AiConversationSession", null, t =>
+                        {
+                            t.HasComment("Phiên làm việc hội thoại đa lượt của Trợ Lý AI, khóa cứng theo (OrganizationId, ProjectId, UserId)");
+                        });
+
+                    MySqlEntityTypeBuilderExtensions.HasCharSet(b, "utf8mb4");
+                    MySqlEntityTypeBuilderExtensions.UseCollation(b, "utf8mb4_0900_ai_ci");
+                });
+
             modelBuilder.Entity("DeliveryIntelligence.Domain.Entities.AiDataCleaningRule", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1168,6 +1408,14 @@ namespace DeliveryIntelligence.Infrastructure.Migrations
 
                     MySqlPropertyBuilderExtensions.HasCharSet(b.Property<Guid?>("AssigneeId"), "utf8mb4");
 
+                    b.Property<string>("BlockReason")
+                        .HasColumnType("varchar(500)")
+                        .HasColumnName("BlockReason");
+
+                    b.Property<DateTime?>("BlockedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("BlockedAt");
+
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("datetime(6)")
@@ -1190,6 +1438,10 @@ namespace DeliveryIntelligence.Infrastructure.Migrations
 
                     MySqlPropertyBuilderExtensions.HasCharSet(b.Property<Guid?>("EpicId"), "utf8mb4");
 
+                    b.Property<decimal?>("EstimatedHours")
+                        .HasColumnType("decimal(5,2)")
+                        .HasColumnName("EstimatedHours");
+
                     b.Property<bool>("IsAiAssigned")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("tinyint(1)")
@@ -1203,6 +1455,12 @@ namespace DeliveryIntelligence.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("IsAiGenerated")
                         .HasComment("Sub-task do AI Breakdown sinh ra");
+
+                    b.Property<bool>("IsBlocked")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false)
+                        .HasColumnName("IsBlocked");
 
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()
@@ -1255,6 +1513,10 @@ namespace DeliveryIntelligence.Infrastructure.Migrations
                         .HasColumnType("decimal(30,15)")
                         .HasColumnName("RankOrder")
                         .HasComment("Chèn giữa = trung bình cộng 2 rank kề. Job rebalance khi khoảng cách < 1e-9");
+
+                    b.Property<decimal?>("RemainingHours")
+                        .HasColumnType("decimal(5,2)")
+                        .HasColumnName("RemainingHours");
 
                     b.Property<Guid>("ReporterId")
                         .HasColumnType("char(36)")
@@ -1934,6 +2196,17 @@ namespace DeliveryIntelligence.Infrastructure.Migrations
                         .HasConstraintName("FK_ActivityLog_Issue");
                 });
 
+            modelBuilder.Entity("DeliveryIntelligence.Domain.Entities.AiConversationMemoryEntry", b =>
+                {
+                    b.HasOne("DeliveryIntelligence.Domain.Entities.AiConversationSession", "Session")
+                        .WithMany("Memories")
+                        .HasForeignKey("ConversationSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Session");
+                });
+
             modelBuilder.Entity("DeliveryIntelligence.Domain.Entities.AiDataQualityFlag", b =>
                 {
                     b.HasOne("DeliveryIntelligence.Domain.Entities.AiDataCleaningRule", null)
@@ -2124,6 +2397,11 @@ namespace DeliveryIntelligence.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("FK_IssueWatcher_Issue");
+                });
+
+            modelBuilder.Entity("DeliveryIntelligence.Domain.Entities.AiConversationSession", b =>
+                {
+                    b.Navigation("Memories");
                 });
 #pragma warning restore 612, 618
         }

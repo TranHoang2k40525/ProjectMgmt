@@ -1,6 +1,6 @@
-import { of, throwError } from 'rxjs';
-import { describe, beforeEach, it, expect, vi } from 'vitest';
 import { TestBed } from '@angular/core/testing';
+import { of, throwError } from 'rxjs';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RbacAdminPageComponent } from './rbac-admin-page';
 import { IdentityService } from '../../core/services/identity.service';
 import { FormBuilder } from '@angular/forms';
@@ -51,11 +51,17 @@ describe('RBAC administration', () => {
   });
   it('keeps the create role form open when saving fails', () => {
     component.openRoleModal();
-    component.roleForm.setValue({ name: 'Auditor', description: 'Review' });
+    component.roleForm.patchValue({ name: 'Auditor', description: 'Review' });
     service.createRole.mockReturnValue(throwError(() => new Error('forbidden')));
     component.submitNewRole();
     expect(component.showRoleModal).toBe(true);
     expect(component.roleForm.value.name).toBe('Auditor');
     expect(component.loading()).toBe(false);
+  });
+  it('filters users based on search query', () => {
+    component.searchQuery = 'User';
+    expect(component.filteredUsers.length).toBe(1);
+    component.searchQuery = 'nobody';
+    expect(component.filteredUsers.length).toBe(0);
   });
 });
