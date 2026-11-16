@@ -51,10 +51,48 @@ public sealed class QdrantVectorSearchProvider : IExternalVectorSearchProvider
 
     private async Task<float[]?> GenerateEmbeddingAsync(string text, CancellationToken ct)
     {
-        if (_aiOptions == null || string.IsNullOrWhiteSpace(_aiOptions.Gemini.ApiKey) || _aiOptions.Gemini.ApiKey.StartsWith("YOUR_", StringComparison.OrdinalIgnoreCase))
+        if (_aiOptions == null) return null;
+
+        var provider = _aiOptions.Provider?.Trim().ToLowerInvariant() ?? string.Empty;
+
+        // 1. Ưu tiên theo Provider AI đang được người dùng lựa chọn cấu hình
+        if (provider == "openai" && !string.IsNullOrWhiteSpace(_aiOptions.OpenAi.ApiKey) && !_aiOptions.OpenAi.ApiKey.StartsWith("YOUR_", StringComparison.OrdinalIgnoreCase))
         {
-            return null;
+            return await GenerateOpenAiEmbeddingAsync(text, ct);
         }
+
+        if ((provider == "local" || provider == "ollama") && !string.IsNullOrWhiteSpace(_aiOptions.Local.Endpoint))
+        {
+            return await GenerateOllamaEmbeddingAsync(text, ct);
+        }
+
+        if (provider == "gemini" && !string.IsNullOrWhiteSpace(_aiOptions.Gemini.ApiKey) && !_aiOptions.Gemini.ApiKey.StartsWith("YOUR_", StringComparison.OrdinalIgnoreCase))
+        {
+            return await GenerateGeminiEmbeddingAsync(text, ct);
+        }
+
+        // 2. Dự phòng đa nhà cung cấp: nếu provider chính chưa có key, kiểm tra các provider khác có key sẵn sàng
+        if (!string.IsNullOrWhiteSpace(_aiOptions.Gemini.ApiKey) && !_aiOptions.Gemini.ApiKey.StartsWith("YOUR_", StringComparison.OrdinalIgnoreCase))
+        {
+            return await GenerateGeminiEmbeddingAsync(text, ct);
+        }
+
+        if (!string.IsNullOrWhiteSpace(_aiOptions.OpenAi.ApiKey) && !_aiOptions.OpenAi.ApiKey.StartsWith("YOUR_", StringComparison.OrdinalIgnoreCase))
+        {
+            return await GenerateOpenAiEmbeddingAsync(text, ct);
+        }
+
+        if (!string.IsNullOrWhiteSpace(_aiOptions.Local.Endpoint))
+        {
+            return await GenerateOllamaEmbeddingAsync(text, ct);
+        }
+
+        return null;
+    }
+
+    private async Task<float[]?> GenerateGeminiEmbeddingAsync(string text, CancellationToken ct)
+    {
+        if (_aiOptions == null) return null;
 
         try
         {
@@ -92,7 +130,93 @@ public sealed class QdrantVectorSearchProvider : IExternalVectorSearchProvider
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "[QdrantVectorSearch] Không thể tạo vector embedding cho văn bản.");
+            _logger.LogWarning(ex, "[QdrantVectorSearch] Không thể tạo Gemini vector embedding.");
+            return null;
+        }
+    }
+
+    private async Task<float[]?> GenerateOpenAiEmbeddingAsync(string text, CancellationToken ct)
+    {
+        if (_aiOptions == null) return null;
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient("AiClient");
+            var endpoint = _aiOptions.OpenAi.Endpoint.TrimEnd('/');
+            var url = $"{endpoint}/v1/embeddings";
+
+            var body = new
+            {
+                input = text,
+                model = "text-embedding-3-small"
+            };
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = JsonContent.Create(body)
+            };
+            request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {_aiOptions.OpenAi.ApiKey}");
+
+            using var response = await client.SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode) return null;
+
+            var json = await response.Content.ReadFromJsonAsync<JsonObject>(cancellationToken: ct);
+            var data = json?["data"]?.AsArray();
+            var values = data?[0]?["embedding"]?.AsArray();
+            if (values == null) return null;
+
+            var vector = new float[values.Count];
+            for (int i = 0; i < values.Count; i++)
+            {
+                vector[i] = (float)(values[i]?.GetValue<double>() ?? 0.0);
+            }
+            return vector;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[QdrantVectorSearch] Không thể tạo OpenAI vector embedding.");
+            return null;
+        }
+    }
+
+    private async Task<float[]?> GenerateOllamaEmbeddingAsync(string text, CancellationToken ct)
+    {
+        if (_aiOptions == null) return null;
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient("AiClient");
+            var endpoint = _aiOptions.Local.Endpoint.TrimEnd('/');
+            var url = $"{endpoint}/api/embeddings";
+
+            var body = new
+            {
+                model = "nomic-embed-text",
+                prompt = text
+            };
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = JsonContent.Create(body)
+            };
+
+            using var response = await client.SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode) return null;
+
+            var json = await response.Content.ReadFromJsonAsync<JsonObject>(cancellationToken: ct);
+            var values = json?["embedding"]?.AsArray();
+            if (values == null) return null;
+
+            var vector = new float[values.Count];
+            for (int i = 0; i < values.Count; i++)
+            {
+                vector[i] = (float)(values[i]?.GetValue<double>() ?? 0.0);
+            }
+            return vector;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[QdrantVectorSearch] Không thể tạo Ollama vector embedding.");
             return null;
         }
     }
