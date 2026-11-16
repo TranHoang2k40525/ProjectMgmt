@@ -134,22 +134,28 @@ public sealed class MultiProviderAiModelClient : IAiModelClient
     {
         var m = (rawModel ?? string.Empty).Trim().ToLowerInvariant().Replace(" ", "-");
         if (m.StartsWith("models/")) m = m["models/".Length..];
-        if (string.IsNullOrEmpty(m) || m.Contains("2.5") || m.Contains("2.0") || m.Contains("1.5") || m.Contains("preview"))
-        {
-            return "gemini-3-flash-preview";
-        }
-        if (m.Contains("cao") || m.Contains("high") || m.Contains("pro") || m.Contains("3.6"))
-        {
-            return "gemini-3-flash-preview";
-        }
-        if (m.Contains("3.5"))
+        
+        if (string.IsNullOrEmpty(m))
         {
             return "gemini-3.5-flash";
         }
+
+        // Map các alias hoặc tên mô hình cũ đã deprecated sang phiên bản hiện hành ổn định
+        if (m.Contains("2.5") || m.Contains("2.0") || m.Contains("1.5"))
+        {
+            return "gemini-3.5-flash";
+        }
+
+        if (m.Contains("cao") || m.Contains("high") || m.Contains("pro"))
+        {
+            return "gemini-3.5-flash";
+        }
+
         if (m.Contains("lite"))
         {
-            return "gemini-3.1-flash-lite-preview";
+            return "gemini-3.1-flash-lite";
         }
+
         return m;
     }
 
@@ -164,19 +170,18 @@ public sealed class MultiProviderAiModelClient : IAiModelClient
         var candidateModels = new List<string>
         {
             primaryModel,
-            "gemini-3-flash-preview",
-            "gemini-3.1-flash-lite-preview",
-            "gemini-flash-latest",
             "gemini-3.5-flash",
-            "gemini-3.6-flash"
-        }.Distinct().ToList();
+            "gemini-3.8-flash",
+            "gemini-flash-latest"
+        }.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
         Exception? lastException = null;
         var streamCompleted = false;
 
         foreach (var model in candidateModels)
         {
-            var url = $"{settings.Endpoint.TrimEnd('/')}/v1beta/models/{model}:streamGenerateContent?alt=sse&key={settings.ApiKey}";
+            // Bảo mật: Không truyền API key trên query string để tránh lộ lọt trong URL log, chỉ dùng HTTP header
+            var url = $"{settings.Endpoint.TrimEnd('/')}/v1beta/models/{model}:streamGenerateContent?alt=sse";
 
             var contents = new List<object>();
             foreach (var msg in prompt.Messages)
@@ -351,6 +356,9 @@ public sealed class MultiProviderAiModelClient : IAiModelClient
         using var reader = new StreamReader(stream, Encoding.UTF8);
 
         string? line;
+        var currentToolName = string.Empty;
+        var currentToolId = string.Empty;
+
         while ((line = await reader.ReadLineAsync(ct)) != null)
         {
             if (string.IsNullOrWhiteSpace(line) || !line.StartsWith("data: ")) continue;
@@ -362,7 +370,16 @@ public sealed class MultiProviderAiModelClient : IAiModelClient
                 var doc = JsonNode.Parse(dataJson);
                 var type = doc?["type"]?.GetValue<string>();
 
-                if (type == "content_block_delta")
+                if (type == "content_block_start")
+                {
+                    var block = doc?["content_block"];
+                    if (block?["type"]?.GetValue<string>() == "tool_use")
+                    {
+                        currentToolName = block["name"]?.GetValue<string>() ?? string.Empty;
+                        currentToolId = block["id"]?.GetValue<string>() ?? string.Empty;
+                    }
+                }
+                else if (type == "content_block_delta")
                 {
                     var delta = doc?["delta"];
                     var deltaType = delta?["type"]?.GetValue<string>();
@@ -381,9 +398,14 @@ public sealed class MultiProviderAiModelClient : IAiModelClient
                         var partialJson = delta?["partial_json"]?.GetValue<string>();
                         if (!string.IsNullOrEmpty(partialJson))
                         {
-                            await onChunk(AiStreamChunk.ToolCall(string.Empty, string.Empty, partialJson));
+                            await onChunk(AiStreamChunk.ToolCall(currentToolName, currentToolId, partialJson));
                         }
                     }
+                }
+                else if (type == "content_block_stop")
+                {
+                    currentToolName = string.Empty;
+                    currentToolId = string.Empty;
                 }
                 else if (type == "message_delta")
                 {
