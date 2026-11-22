@@ -747,24 +747,24 @@ Hai service:
 
 ```mermaid
 sequenceDiagram
-  actor U as PO/PM/Tech Lead
-  participant API as .NET API
-  participant DB as MySQL
-  participant JOB as Background Worker
-  participant AI as Breakdown Service
-  participant ISSUE as Issue Contract
-  U->>API: Request breakdown(issueId, options)
-  API->>DB: AiGenerationLog = Pending
-  API-->>U: 202 + generationId
-  JOB->>DB: Pending -> Processing
-  JOB->>AI: Structured input + schema + versions
-  AI-->>JOB: JSON subTasks
-  JOB->>JOB: Validate/sanitize/schema check
-  JOB->>DB: SuggestedTasks + raw response + Completed
-  API-->>U: SignalR/poll completed
-  U->>API: Edit / Reject / Apply
-  API->>ISSUE: CreateIssueAsync for accepted tasks
-  API->>DB: user action + edited content + applied count
+  actor U as Người điều phối (PO / PM / Lead)
+  participant API as Cổng Dịch vụ API
+  participant DB as Cơ sở Dữ liệu Hệ thống
+  participant JOB as Tiến trình Xử lý Nền
+  participant AI as Động cơ Phân rã AI
+  participant ISSUE as Dịch vụ Quản lý Công việc
+  U->>API: Gửi yêu cầu phân rã công việc kèm cấu hình
+  API->>DB: Khởi tạo nhật ký xử lý trạng thái chờ
+  API-->>U: Phản hồi tiếp nhận kèm mã tiến trình
+  JOB->>DB: Cập nhật trạng thái bắt đầu xử lý
+  JOB->>AI: Gửi dữ liệu đầu vào có cấu trúc và quy chuẩn
+  AI-->>JOB: Trả về danh mục việc con đề xuất
+  JOB->>JOB: Tự kiểm tra, làm sạch và xác thực cấu trúc
+  JOB->>DB: Lưu trữ danh mục đề xuất và cập nhật hoàn tất
+  API-->>U: Thông báo hoàn tất phân rã
+  U->>API: Rà soát / Chỉnh sửa / Phê duyệt
+  API->>ISSUE: Ghi nhận chính thức các công việc được duyệt
+  API->>DB: Cập nhật nhật ký phê duyệt và số lượng công việc
 ```
 
 #### Output contract tối thiểu

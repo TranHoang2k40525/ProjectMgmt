@@ -24,8 +24,7 @@ public class DatasetReviewService : IDatasetReviewService
     public async Task<Result<DatasetSampleDto>> ApproveAsync(
         Guid sampleId,
         ApproveSampleDto request,
-        Guid reviewerUserId,
-        CancellationToken cancellationToken = default)
+        Guid reviewerUserId)
     {
         ArgumentNullException.ThrowIfNull(request);
         if (request.QualityScore is < 0 or > 1)
@@ -38,7 +37,7 @@ public class DatasetReviewService : IDatasetReviewService
             return Result<DatasetSampleDto>.Failure(Error.Validation("SAMPLE_REVIEW_NOTE_TOO_LONG", "Ghi chú duyệt tối đa 1000 ký tự."));
         }
 
-        var (sample, blocked) = await EditableSampleAsync(sampleId, cancellationToken);
+        var (sample, blocked) = await EditableSampleAsync(sampleId);
         if (blocked is not null)
         {
             return Result<DatasetSampleDto>.Failure(blocked);
@@ -54,7 +53,7 @@ public class DatasetReviewService : IDatasetReviewService
             return Result<DatasetSampleDto>.Failure(ReviewErrors.PiiNotChecked);
         }
 
-        if (await HasBlockingFlagsAsync([sample.Id], cancellationToken))
+        if (await HasBlockingFlagsAsync([sample.Id]))
         {
             return Result<DatasetSampleDto>.Failure(ReviewErrors.OpenBlockingFlags);
         }
@@ -64,15 +63,14 @@ public class DatasetReviewService : IDatasetReviewService
         sample.IsPiiRedacted = true;
         sample.QualityScore = request.QualityScore is null ? null : Math.Round(request.QualityScore.Value, 3, MidpointRounding.AwayFromZero);
         Stamp(sample, reviewerUserId, request.Note);
-        await _data.SaveChangesAsync(cancellationToken);
+        await _data.SaveChangesAsync();
         return Result.Success(DatasetService.ToDto(sample));
     }
 
     public async Task<Result<DatasetSampleDto>> RejectAsync(
         Guid sampleId,
         RejectSampleDto request,
-        Guid reviewerUserId,
-        CancellationToken cancellationToken = default)
+        Guid reviewerUserId)
     {
         ArgumentNullException.ThrowIfNull(request);
         if (string.IsNullOrWhiteSpace(request.Note) || request.Note.Trim().Length > NoteMaxLength)
@@ -80,7 +78,7 @@ public class DatasetReviewService : IDatasetReviewService
             return Result<DatasetSampleDto>.Failure(Error.Validation("SAMPLE_REJECT_NOTE_REQUIRED", "Nhập lý do từ chối (tối đa 1000 ký tự)."));
         }
 
-        var (sample, blocked) = await EditableSampleAsync(sampleId, cancellationToken);
+        var (sample, blocked) = await EditableSampleAsync(sampleId);
         if (blocked is not null)
         {
             return Result<DatasetSampleDto>.Failure(blocked);
@@ -89,32 +87,31 @@ public class DatasetReviewService : IDatasetReviewService
         sample!.QualityStatus = DatasetRules.Quality.Rejected;
         sample.ReviewStatus = DatasetRules.Review.Rejected;
         Stamp(sample, reviewerUserId, request.Note);
-        await _data.SaveChangesAsync(cancellationToken);
+        await _data.SaveChangesAsync();
         return Result.Success(DatasetService.ToDto(sample));
     }
 
     public async Task<Result<IReadOnlyList<QualityFlagDto>>> GetVersionFlagsAsync(
         Guid versionId,
-        bool unresolvedOnly,
-        CancellationToken cancellationToken = default)
+        bool unresolvedOnly)
     {
-        if (await _data.GetVersionAsync(versionId, cancellationToken) is null)
+        if (await _data.GetVersionAsync(versionId) is null)
         {
             return Result<IReadOnlyList<QualityFlagDto>>.Failure(DataOpsErrors.VersionNotFound);
         }
 
-        var samples = await _data.GetVersionSamplesAsync(versionId, cancellationToken);
-        var rules = (await _data.GetRulesAsync(activeOnly: false, cancellationToken)).ToDictionary(r => r.Id);
-        IReadOnlyList<QualityFlagDto> result = (await _data.GetFlagsAsync(samples.Select(s => s.Id), unresolvedOnly, cancellationToken))
+        var samples = await _data.GetVersionSamplesAsync(versionId);
+        var rules = (await _data.GetRulesAsync(activeOnly: false)).ToDictionary(r => r.Id);
+        IReadOnlyList<QualityFlagDto> result = (await _data.GetFlagsAsync(samples.Select(s => s.Id), unresolvedOnly))
             .Select(flag => DataCleaningService.ToDto(flag, rules.GetValueOrDefault(flag.RuleId)))
             .ToList();
         return Result.Success(result);
     }
 
-    public async Task<Result<DatasetVersionDto>> FreezeAsync(Guid versionId, FreezeVersionDto request, CancellationToken cancellationToken = default)
+    public async Task<Result<DatasetVersionDto>> FreezeAsync(Guid versionId, FreezeVersionDto request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var version = await _data.GetVersionAsync(versionId, cancellationToken);
+        var version = await _data.GetVersionAsync(versionId);
         if (version is null)
         {
             return Result<DatasetVersionDto>.Failure(DataOpsErrors.VersionNotFound);
@@ -125,7 +122,7 @@ public class DatasetReviewService : IDatasetReviewService
             return Result<DatasetVersionDto>.Failure(Error.Conflict("DATASET_VERSION_ALREADY_FROZEN", "Version đã được đóng băng."));
         }
 
-        var samples = await _data.GetVersionSamplesAsync(versionId, cancellationToken);
+        var samples = await _data.GetVersionSamplesAsync(versionId);
         var pending = samples.Count(s => s.QualityStatus is not (DatasetRules.Quality.Approved or DatasetRules.Quality.Rejected));
         if (pending > 0)
         {
@@ -138,7 +135,7 @@ public class DatasetReviewService : IDatasetReviewService
             return Result<DatasetVersionDto>.Failure(Error.Conflict("FREEZE_NO_APPROVED_SAMPLES", "Version chưa có mẫu nào được duyệt."));
         }
 
-        if (approved.Any(s => !s.IsPiiRedacted) || await HasBlockingFlagsAsync(approved.Select(s => s.Id), cancellationToken))
+        if (approved.Any(s => !s.IsPiiRedacted) || await HasBlockingFlagsAsync(approved.Select(s => s.Id)))
         {
             return Result<DatasetVersionDto>.Failure(Error.Conflict("FREEZE_QUALITY_CONDITIONS", "Mẫu đã duyệt còn PII chưa kiểm hoặc flag Error/PII chưa xử lý."));
         }
@@ -151,7 +148,7 @@ public class DatasetReviewService : IDatasetReviewService
         version.Checksum = ManifestChecksum(approved);
         version.IsFrozen = true;
         version.FrozenAt = _clock.GetUtcNow().UtcDateTime;
-        await _data.SaveChangesAsync(cancellationToken);
+        await _data.SaveChangesAsync();
         return Result.Success(DatasetService.ToDto(version));
     }
 
@@ -167,23 +164,23 @@ public class DatasetReviewService : IDatasetReviewService
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(manifest))).ToLowerInvariant();
     }
 
-    private async Task<(AiDatasetSample? Sample, Error? Blocked)> EditableSampleAsync(Guid sampleId, CancellationToken cancellationToken)
+    private async Task<(AiDatasetSample? Sample, Error? Blocked)> EditableSampleAsync(Guid sampleId)
     {
-        var sample = await _data.GetSampleAsync(sampleId, cancellationToken);
+        var sample = await _data.GetSampleAsync(sampleId);
         if (sample is null)
         {
             return (null, DataOpsErrors.SampleNotFound);
         }
 
-        var version = await _data.GetVersionAsync(sample.DatasetVersionId, cancellationToken);
+        var version = await _data.GetVersionAsync(sample.DatasetVersionId);
         return version is null || version.IsFrozen ? (sample, DataOpsErrors.VersionFrozen) : (sample, null);
     }
 
     /// <summary>Flag chặn duyệt: Severity Error hoặc thuộc rule PiiDetection mà chưa xử lý.</summary>
-    private async Task<bool> HasBlockingFlagsAsync(IEnumerable<Guid> sampleIds, CancellationToken cancellationToken)
+    private async Task<bool> HasBlockingFlagsAsync(IEnumerable<Guid> sampleIds)
     {
-        var rules = (await _data.GetRulesAsync(activeOnly: false, cancellationToken)).ToDictionary(r => r.Id);
-        return (await _data.GetFlagsAsync(sampleIds, unresolvedOnly: true, cancellationToken))
+        var rules = (await _data.GetRulesAsync(activeOnly: false)).ToDictionary(r => r.Id);
+        return (await _data.GetFlagsAsync(sampleIds, unresolvedOnly: true))
             .Any(flag => flag.Severity == "Error" || rules.GetValueOrDefault(flag.RuleId)?.RuleType == "PiiDetection");
     }
 

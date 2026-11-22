@@ -9,4 +9,7 @@ public class WorkflowStatus
     public string ColorHex { get; set; } = string.Empty;
     public int OrderIndex { get; set; }
     public bool IsInitial { get; set; }
+    public bool IsDone { get; set; }
+    public bool IsActiveWork { get; set; }
+    public bool IsCanceled { get; set; }
 }

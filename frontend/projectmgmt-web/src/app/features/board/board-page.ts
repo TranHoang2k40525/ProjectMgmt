@@ -1,22 +1,26 @@
 import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, OnInit, AfterViewInit, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { DragDropModule, CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
 import { gsap } from 'gsap';
 import { Flip } from 'gsap/Flip';
+import { apiErrorMessage } from '../../core/http/api-error-message';
 import { ProjectManagementService, WorkItem } from '../../core/services/project-management.service';
 import { IdentityService } from '../../core/services/identity.service';
 import { ToastService } from '../../core/services/toast.service';
+import { AiQuickActionService } from '../../core/services/ai-quick-action.service';
 import { ContextMenuComponent, ContextMenuItemAction } from '../../shared/components/context-menu.component';
 
 gsap.registerPlugin(Flip);
 
 import { NoProjectStateComponent } from '../../shared/components/no-project-state/no-project-state.component';
+import { CardTiltDirective } from '../../shared/motion/card-tilt.directive';
 
 @Component({
   selector: 'app-board-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, DragDropModule, ContextMenuComponent, NoProjectStateComponent],
+  imports: [CommonModule, FormsModule, RouterLink, DragDropModule, ContextMenuComponent, NoProjectStateComponent, CardTiltDirective],
   templateUrl: './board-page.html',
   styleUrl: './board-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -28,6 +32,7 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
   private readonly identityService = inject(IdentityService);
   readonly projectService = inject(ProjectManagementService);
   readonly toastService = inject(ToastService);
+  readonly aiQuickAction = inject(AiQuickActionService);
 
   readonly projectMembers = computed(() => this.projectService.currentProject()?.members ?? []);
   readonly activeSprint = computed(() => this.projectService.sprints().find(s => s.status === 'active') ?? null);
@@ -50,13 +55,99 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
 
   readonly items = this.projectService.workItems;
   readonly epics = this.projectService.epics;
+  readonly canCreateIssue = this.projectService.canCreateIssue;
+  readonly canEditIssue = this.projectService.canEditIssue;
+  readonly canDeleteIssue = this.projectService.canDeleteIssue;
+  readonly canTransitionIssue = this.projectService.canTransitionIssue;
+  readonly canAssignIssue = this.projectService.canAssignIssue;
+  readonly canRankBacklog = this.projectService.canRankBacklog;
+  readonly canAiBreakdown = this.projectService.canAiBreakdown;
+  readonly canAiAssign = this.projectService.canAiAssign;
 
-  readonly filteredItems = computed(() => {
-    let list = this.items();
+  readonly boardTitle = computed(() => {
+    const p = this.projectService.currentProject();
+    if ((p as any)?.boardTabTitle) {
+      const t = (p as any).boardTabTitle;
+      return t.startsWith('Bảng ') ? t : `Bảng ${t}`;
+    }
+    if ((p as any)?.workflowName) {
+      const w = (p as any).workflowName;
+      return w.startsWith('Bảng ') ? w : `Bảng ${w}`;
+    }
+    if ((p as any)?.boardName) {
+      const bn = (p as any).boardName;
+      return bn.startsWith('Bảng ') ? bn : `Bảng ${bn}`;
+    }
+    if (typeof localStorage !== 'undefined' && p?.id) {
+      const saved = localStorage.getItem(`projectmgmt.workflow-name.${p.id}`)
+        || localStorage.getItem(`projectmgmt.workflow-name.${p.id.toLowerCase()}`);
+      if (saved) return saved.startsWith('Bảng ') ? saved : `Bảng ${saved}`;
+    }
+    if (typeof sessionStorage !== 'undefined' && p?.id) {
+      const saved = sessionStorage.getItem(`projectmgmt.workflow-name.${p.id}`)
+        || sessionStorage.getItem(`projectmgmt.workflow-name.${p.id.toLowerCase()}`);
+      if (saved) return saved.startsWith('Bảng ') ? saved : `Bảng ${saved}`;
+    }
+    if ((p as any)?.boardName) return (p as any).boardName;
+    if ((p as any)?.managementType === 'Kanban' || p?.type === 'Kanban') return 'Bảng Kanban';
+    if ((p as any)?.managementType) return `Bảng ${(p as any).managementType}`;
+    return 'Bảng Scrum';
+  });
+
+  readonly isKanbanBoard = computed(() => {
+    const p = this.projectService.currentProject();
+    const title = this.boardTitle().toLowerCase();
+    const wName = ((p as any)?.workflowName || '').toLowerCase();
+    const tId = ((p as any)?.workflowTemplateId || '').toLowerCase();
+    return (p as any)?.boardType === 'Kanban' || (p as any)?.managementType === 'Kanban' || p?.type === 'Kanban' || title.includes('kanban') || wName.includes('kanban') || tId.includes('kanban');
+  });
+
+  readonly currentWorkflowName = computed(() => this.boardTitle().replace(/^Bảng\s+/i, '').trim());
+
+  private isBoardCardEligible(item: WorkItem): boolean {
+    const typeLower = (item.issueType || '').trim().toLowerCase();
+    return !item.parentId && typeLower !== 'epic' && typeLower !== 'sub-task' && typeLower !== 'subtask';
+  }
+
+  /**
+   * Phạm vi thẻ hiển thị trên Bảng:
+   * - Kanban: toàn bộ đầu việc thực thi (loại trừ Epic, Sub-task con và các việc thuộc Sprint đã đóng).
+   * - Scrum: chỉ hiển thị đầu việc thuộc Sprint đang chạy; nếu chưa có Sprint đang chạy thì trả về rỗng.
+   */
+  readonly boardScopeItems = computed(() => {
+    const eligible = this.items().filter(i => this.isBoardCardEligible(i));
+    if (this.isKanbanBoard()) {
+      const completedSprintIds = new Set(
+        this.projectService.sprints()
+          .filter(s => s.status === 'completed')
+          .map(s => s.id)
+      );
+      return completedSprintIds.size > 0
+        ? eligible.filter(i => !i.sprintId || !completedSprintIds.has(i.sprintId))
+        : eligible;
+    }
+
+    const active = this.activeSprint();
+    if (!active) {
+      return [];
+    }
+    return eligible.filter(i => i.sprintId === active.id);
+  });
+
+  readonly hasActiveFilters = computed(() => {
+    return !!(
+      this.searchQuery().trim() ||
+      this.selectedAssigneeFilter() ||
+      this.selectedTypeFilter() ||
+      this.selectedStatusTab()
+    );
+  });
+
+  readonly searchAndFacetFilteredItems = computed(() => {
+    let list = this.boardScopeItems();
     const query = this.searchQuery().trim().toLowerCase();
     const assignee = this.selectedAssigneeFilter();
     const type = this.selectedTypeFilter();
-    const statusTab = this.selectedStatusTab();
 
     if (query) {
       list = list.filter(i =>
@@ -74,22 +165,147 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
       list = list.filter(i => i.issueType === type);
     }
 
-    if (statusTab) {
-      list = list.filter(i => i.statusName === statusTab);
-    }
-
     return list;
   });
 
-  readonly toDoItems = computed(() => this.filteredItems().filter(i => i.statusName === 'To Do'));
-  readonly inProgressItems = computed(() => this.filteredItems().filter(i => i.statusName === 'In Progress'));
-  readonly codeReviewItems = computed(() => this.filteredItems().filter(i => i.statusName === 'Code Review'));
-  readonly doneItems = computed(() => this.filteredItems().filter(i => i.statusName === 'Done'));
+  readonly filteredItems = computed(() => {
+    const list = this.searchAndFacetFilteredItems();
+    const statusTab = this.selectedStatusTab();
+    if (!statusTab) {
+      return list;
+    }
+    const normalizedTab = statusTab.trim().toLowerCase();
+    return list.filter(i => (i.statusName || '').trim().toLowerCase() === normalizedTab);
+  });
+
+  readonly workflowStatuses = this.projectService.orderedStatuses;
+
+  readonly boardColumns = computed(() => {
+    const statuses = this.workflowStatuses();
+    if (statuses.length === 0) {
+      return [
+        { id: 'st-1', name: 'To Do', colorHex: '#64748B' },
+        { id: 'st-2', name: 'In Progress', colorHex: '#3B82F6' },
+        { id: 'st-3', name: 'Code Review', colorHex: '#8B5CF6' },
+        { id: 'st-4', name: 'Done', colorHex: '#10B981' }
+      ];
+    }
+    return statuses;
+  });
+
+  getTabCount(statusName: string): number {
+    const normalized = statusName.trim().toLowerCase();
+    return this.searchAndFacetFilteredItems().filter(i => (i.statusName || '').trim().toLowerCase() === normalized).length;
+  }
+
+  getColumnItems(statusName: string): WorkItem[] {
+    const all = this.filteredItems().filter(i => (i.statusName || '').trim().toLowerCase() === statusName.trim().toLowerCase());
+    return [...all].sort((a, b) => {
+      if (a.isBlocked && !b.isBlocked) return -1;
+      if (!a.isBlocked && b.isBlocked) return 1;
+      return 0;
+    });
+  }
+
+  clearFilters(): void {
+    this.searchQuery.set('');
+    this.selectedAssigneeFilter.set(null);
+    this.selectedTypeFilter.set(null);
+    this.selectedStatusTab.set(null);
+  }
+
+  readonly issueTypes = computed(() => {
+    const custom = this.projectService.customIssueTypes()
+      .filter(t => !t.isSubtask && !['epic', 'sub-task', 'subtask'].includes(t.name.trim().toLowerCase()))
+      .map(t => t.name);
+    return custom.length > 0 ? custom : ['Story', 'Task', 'Bug'];
+  });
+
+  getIssueTypeIcon(type: string): string {
+    const typeName = type || '';
+    const custom = this.projectService.customIssueTypes().find(t =>
+      t.name.toLowerCase() === typeName.toLowerCase() ||
+      ((typeName.toLowerCase() === 'sub-task' || typeName.toLowerCase() === 'subtask') && (t.isSubtask || t.name.toLowerCase() === 'subtask' || t.name.toLowerCase() === 'sub-task'))
+    );
+    if (custom?.icon && custom.icon !== 'task') return custom.icon;
+    const map: Record<string, string> = {
+      'story': 'bookmark',
+      'task': 'task_alt',
+      'bug': 'bug_report',
+      'use-case': 'schema',
+      'epic': 'bolt',
+      'sub-task': 'subdirectory_arrow_right',
+      'subtask': 'subdirectory_arrow_right'
+    };
+    return map[typeName.toLowerCase()] || custom?.icon || 'task_alt';
+  }
+
+  getIssueTypeColor(type: string): string {
+    const typeName = type || '';
+    const custom = this.projectService.customIssueTypes().find(t =>
+      t.name.toLowerCase() === typeName.toLowerCase() ||
+      ((typeName.toLowerCase() === 'sub-task' || typeName.toLowerCase() === 'subtask') && (t.isSubtask || t.name.toLowerCase() === 'subtask' || t.name.toLowerCase() === 'sub-task'))
+    );
+    if (custom?.color) return custom.color;
+    const map: Record<string, string> = {
+      'story': '#65BA43',
+      'task': '#4BADE8',
+      'bug': '#E5493A',
+      'epic': '#904EE2',
+      'sub-task': '#4BADE8',
+      'subtask': '#4BADE8'
+    };
+    return map[typeName.toLowerCase()] || '#4BADE8';
+  }
+
+  // --- Blocker Management ---
+  readonly showBlockModal = signal<boolean>(false);
+  readonly blockingItem = signal<WorkItem | null>(null);
+  blockReasonInput = '';
+
+  openBlockModal(item: WorkItem, event?: Event): void {
+    if (event) event.stopPropagation();
+    if (!this.canEditIssue()) return;
+    this.blockingItem.set(item);
+    this.blockReasonInput = '';
+    this.showBlockModal.set(true);
+  }
+
+  confirmBlock(): void {
+    if (!this.canEditIssue()) return;
+    const item = this.blockingItem();
+    const reason = this.blockReasonInput.trim();
+    if (!item || !reason) return;
+    this.projectService.blockIssue(item.id, reason).subscribe({
+      next: () => {
+        this.showBlockModal.set(false);
+        this.toastService.warning('Báo Chặn (Blocker)', `Đã gắn cờ cản trở cho ${item.issueKey}`);
+      },
+      error: (err) => this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể báo chặn.'))
+    });
+  }
+
+  unblock(item: WorkItem, event?: Event): void {
+    if (event) event.stopPropagation();
+    if (!this.canEditIssue()) return;
+    this.projectService.unblockIssue(item.id).subscribe({
+      next: () => this.toastService.success('Đã Gỡ Chặn', `Đã mở lại tiến độ cho ${item.issueKey}`),
+      error: (err) => this.toastService.error('Lỗi', apiErrorMessage(err, 'Không thể gỡ chặn.'))
+    });
+  }
+
+  readonly toDoItems = computed(() => this.getColumnItems('To Do'));
+  readonly inProgressItems = computed(() => this.getColumnItems('In Progress'));
+  readonly codeReviewItems = computed(() => this.getColumnItems('Code Review'));
+  readonly doneItems = computed(() => this.getColumnItems('Done'));
 
   ngOnInit(): void {
     const currentProj = this.projectService.currentProject();
-    if (currentProj?.id && (!currentProj.members || currentProj.members.length === 0)) {
-      this.projectService.loadProjectMembers(currentProj.id).subscribe();
+    if (currentProj?.id) {
+      if (!currentProj.members || currentProj.members.length === 0) {
+        this.projectService.loadProjectMembers(currentProj.id).subscribe();
+      }
+      this.projectService.loadWorkspace(currentProj.id);
     }
   }
 
@@ -121,13 +337,14 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
   // CDK Drag & Drop Handler
   onDrop(event: CdkDragDrop<WorkItem[]>, targetStatus: string): void {
     if (event.previousContainer === event.container) {
+      if (!this.canRankBacklog()) return;
       const ordered = [...event.container.data]; moveItemInArray(ordered, event.previousIndex, event.currentIndex);
       this.projectService.reorderWorkItems(ordered.map(i => i.id)); return;
     }
+    if (!this.canTransitionIssue()) return;
     const item = event.item.data as WorkItem;
     if (item && item.statusName !== targetStatus) {
       this.animateBoardChange(() => this.projectService.updateWorkItemStatus(item.id, targetStatus));
-      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     }
   }
 
@@ -147,43 +364,36 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
 
     switch (event.action) {
       case 'status':
-        if (event.value) {
-          const val = event.value;
-          const statusMap: Record<string, string> = {
-            'TO_DO': 'To Do',
-            'IN_PROGRESS': 'In Progress',
-            'CODE_REVIEW': 'Code Review',
-            'DONE': 'Done'
-          };
-          const targetStatus = statusMap[val] || val;
+        if (event.value && this.canTransitionIssue()) {
+          const targetStatus = event.value;
           this.animateBoardChange(() => this.projectService.updateWorkItemStatus(item.id, targetStatus));
-          this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
         }
         break;
 
       case 'assign': {
+        if (!this.canAssignIssue()) break;
         const myName = this.identityService.authState().currentUser?.displayName || 'Tôi';
         this.projectService.updateWorkItemAssignee(item.id, myName);
-        this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
         break;
       }
 
       case 'ai-breakdown':
-        this.projectService.activeDrawerTask.set(item);
-        this.toastService.info('AI Breakdown', `Đang mở gợi ý phân rã Sub-task cho [${item.issueKey}]`);
+        if (!this.canAiBreakdown()) break;
+        this.aiQuickAction.triggerBreakdown(item);
         break;
 
       case 'ai-assign':
-        this.projectService.activeDrawerTask.set(item);
-        this.toastService.info('AI Assign', `Đang tính toán điểm ứng viên cho [${item.issueKey}]`);
+        if (!this.canAiAssign()) break;
+        this.aiQuickAction.triggerAssignSuggestion(item);
         break;
 
       case 'copy':
         navigator.clipboard?.writeText?.(`${item.issueKey}: ${item.title}`);
-        this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
+        this.toastService.success('Đã sao chép', `Đã chép [${item.issueKey}] vào bộ nhớ tạm.`);
         break;
 
       case 'delete':
+        if (!this.canDeleteIssue()) break;
         this.animateBoardChange(() => this.projectService.deleteWorkItem(item.id));
         this.toastService.warning('Đã Xóa', `Đã xóa công việc [${item.issueKey}]`);
         break;
@@ -193,6 +403,7 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
   // Double Click for Quick Inline Editing
   startInlineEdit(item: WorkItem, event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canEditIssue()) return;
     this.projectService.activeDrawerTask.set(null);
     this.inlineEditingTaskId.set(item.id);
     this.inlineTitleValue.set(item.title);
@@ -200,12 +411,15 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
 
   saveInlineEdit(taskId: string, event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canEditIssue()) {
+      this.inlineEditingTaskId.set(null);
+      return;
+    }
     const newTitle = this.inlineTitleValue().trim();
     if (newTitle) {
       const item = this.items().find(i => i.id === taskId);
       if (item) {
         this.projectService.updateWorkItem({ ...item, title: newTitle });
-        this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
       }
     }
     this.inlineEditingTaskId.set(null);
@@ -231,41 +445,58 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
   // Quick Inline Status Shift
   moveStatus(task: WorkItem, direction: 'prev' | 'next', event?: Event): void {
     if (event) event.stopPropagation();
-    const statuses: string[] = ['To Do', 'In Progress', 'Code Review', 'Done'];
-    const idx = statuses.indexOf(task.statusName);
+    if (!this.canTransitionIssue()) return;
+    const statuses = this.boardColumns().map(s => s.name);
+    const normalized = (task.statusName || '').trim().toLowerCase();
+    const idx = statuses.findIndex(s => s.trim().toLowerCase() === normalized);
     if (direction === 'next' && idx < statuses.length - 1) {
       const nextStatus = statuses[idx + 1];
       this.animateBoardChange(() => this.projectService.updateWorkItemStatus(task.id, nextStatus));
-      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     } else if (direction === 'prev' && idx > 0) {
       const prevStatus = statuses[idx - 1];
       this.animateBoardChange(() => this.projectService.updateWorkItemStatus(task.id, prevStatus));
-      this.toastService.info('Lùi Trạng Thái', `Công việc [${task.issueKey}] về ${prevStatus}`);
     }
   }
 
   updateInlineStatus(taskId: string, statusName: string, event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canTransitionIssue()) return;
     this.animateBoardChange(() => this.projectService.updateWorkItemStatus(taskId, statusName));
-    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
   }
 
   updateInlineAssignee(taskId: string, assigneeName: string, event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canAssignIssue()) return;
     this.projectService.updateWorkItemAssignee(taskId, assigneeName);
     this.toastService.info('Gán Người Xử Lý', `Đã gán cho ${assigneeName}`);
   }
 
   updateInlinePriority(taskId: string, priority: WorkItem['priority'], event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canEditIssue()) return;
     this.projectService.updateWorkItemPriority(taskId, priority);
     this.toastService.info('Đổi Mức Ưu Tiên', `Độ ưu tiên: ${priority}`);
   }
 
+  isDoneStatus(statusName?: string | null): boolean {
+    return this.projectService.isDoneStatusName(statusName);
+  }
+
   getSubtaskCount(parentId: string): { total: number; done: number } {
     const subs = this.items().filter(i => i.parentId === parentId);
-    const done = subs.filter(i => i.statusName === 'Done').length;
+    const done = subs.filter(i => i.isDone || this.isDoneStatus(i.statusName)).length;
     return { total: subs.length, done };
+  }
+
+  getAssigneeAvatar(name?: string, itemAvatar?: string): string | null {
+    return this.projectService.getMemberAvatar(name, itemAvatar);
+  }
+
+  getAssigneeInitials(name?: string): string {
+    if (!name) return 'U';
+    const parts = name.trim().split(' ');
+    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+    return (parts[parts.length - 2][0] + parts[parts.length - 1][0]).toUpperCase();
   }
 
   closeAllPopups(): void {
@@ -280,23 +511,34 @@ export class BoardPage implements OnInit, AfterViewInit, OnDestroy {
 
   assignToMe(taskId: string, event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canAssignIssue()) {
+      this.activeMenuTaskId.set(null);
+      return;
+    }
     const myName = this.identityService.authState().currentUser?.displayName || 'Tôi';
     this.projectService.updateWorkItemAssignee(taskId, myName);
-    this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
     this.activeMenuTaskId.set(null);
   }
 
   cloneItem(taskId: string, event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canCreateIssue()) {
+      this.activeMenuTaskId.set(null);
+      return;
+    }
     const cloned = this.projectService.cloneWorkItem(taskId);
     if (cloned) {
-      this.toastService.info('Đang lưu thay đổi', 'Vui lòng chờ xác nhận từ máy chủ.');
+      this.toastService.success('Nhân bản', 'Đã tạo bản sao công việc thành công.');
     }
     this.activeMenuTaskId.set(null);
   }
 
   deleteItem(taskId: string, event?: Event): void {
     if (event) event.stopPropagation();
+    if (!this.canDeleteIssue()) {
+      this.activeMenuTaskId.set(null);
+      return;
+    }
     this.animateBoardChange(() => this.projectService.deleteWorkItem(taskId));
     this.toastService.warning('Đã Xóa Công Việc', 'Công việc đã xóa khỏi bảng.');
     this.activeMenuTaskId.set(null);

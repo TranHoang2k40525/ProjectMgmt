@@ -38,7 +38,7 @@ public class IssueTransitionApiMySqlTests(TransitionApiFixture fixture) : IClass
 {
     private HttpClient As(Guid userId) => fixture.Factory!.CreateClientFor(userId);
 
-    private static string Url(Guid issueId) => $"/api/v1/issues/{issueId}/transition";
+    private static string Url(Guid issueId) => $"/api/issues/{issueId}/transition";
 
     [MySqlFact]
     public async Task ViewerCannotTransitionAndDeveloperCan()

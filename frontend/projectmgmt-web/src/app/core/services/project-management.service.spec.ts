@@ -178,4 +178,16 @@ describe('Project API integration and state', () => {
     expect(service.projectStatuses()).toEqual(before);
   });
 
+  it('orders workflow statuses by orderIndex and detects custom Done status metadata', () => {
+    service.projectStatuses.set([
+      { id: '3', name: 'Phát hành', category: 'Done', isInitial: false, isDone: true, orderIndex: 3 },
+      { id: '1', name: 'Mới tạo', category: 'ToDo', isInitial: true, isDone: false, orderIndex: 1 },
+      { id: '2', name: 'Kiểm thử', category: 'InProgress', isInitial: false, isActiveWork: true, orderIndex: 2 }
+    ]);
+
+    expect(service.orderedStatuses().map(s => s.name)).toEqual(['Mới tạo', 'Kiểm thử', 'Phát hành']);
+    expect(service.isDoneStatusName('Phát hành')).toBe(true);
+    expect(service.isDoneStatusName('Kiểm thử')).toBe(false);
+  });
+
 });

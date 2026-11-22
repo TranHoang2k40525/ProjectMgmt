@@ -67,6 +67,9 @@ export class RouteTransitionLayerComponent implements AfterViewInit, OnDestroy {
 
   private play(url: string): void {
     if (this.preferences.reduceMotion()) return;
+    if (url.includes('/settings') || url.includes('/workflow') || url.includes('/boards') || url.includes('/members')) {
+      return;
+    }
 
     const root = this.elementRef.nativeElement.querySelector<HTMLElement>('.route-transition');
     if (!root) return;

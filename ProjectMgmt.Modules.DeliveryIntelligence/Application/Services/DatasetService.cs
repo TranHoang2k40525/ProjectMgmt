@@ -21,10 +21,10 @@ public class DatasetService : IDatasetService
         _clock = clock;
     }
 
-    public async Task<IReadOnlyList<DatasetDto>> ListDatasetsAsync(CancellationToken cancellationToken = default) =>
-        (await _data.GetDatasetsAsync(cancellationToken)).Select(ToDto).ToList();
+    public async Task<IReadOnlyList<DatasetDto>> ListDatasetsAsync() =>
+        (await _data.GetDatasetsAsync()).Select(ToDto).ToList();
 
-    public async Task<Result<DatasetDto>> CreateDatasetAsync(CreateDatasetDto request, Guid actorUserId, CancellationToken cancellationToken = default)
+    public async Task<Result<DatasetDto>> CreateDatasetAsync(CreateDatasetDto request, Guid actorUserId)
     {
         ArgumentNullException.ThrowIfNull(request);
         var code = request.Code.Trim().ToLowerInvariant();
@@ -45,7 +45,7 @@ public class DatasetService : IDatasetService
         }
 
         var languages = request.Languages.Select(l => l.Trim().ToLowerInvariant()).Where(l => l.Length is >= 2 and <= 10).Distinct().ToList();
-        if (await _data.DatasetCodeExistsAsync(code, cancellationToken))
+        if (await _data.DatasetCodeExistsAsync(code))
         {
             return Result<DatasetDto>.Failure(DataOpsErrors.DatasetCodeDuplicate);
         }
@@ -61,26 +61,26 @@ public class DatasetService : IDatasetService
             CreatedBy = actorUserId,
             CreatedAt = Now()
         };
-        await _data.AddDatasetAsync(dataset, cancellationToken);
-        await _data.SaveChangesAsync(cancellationToken);
+        await _data.AddDatasetAsync(dataset);
+        await _data.SaveChangesAsync();
         return Result.Success(ToDto(dataset));
     }
 
-    public async Task<Result<IReadOnlyList<DatasetVersionDto>>> ListVersionsAsync(Guid datasetId, CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyList<DatasetVersionDto>>> ListVersionsAsync(Guid datasetId)
     {
-        if (await _data.GetDatasetAsync(datasetId, cancellationToken) is null)
+        if (await _data.GetDatasetAsync(datasetId) is null)
         {
             return Result<IReadOnlyList<DatasetVersionDto>>.Failure(DataOpsErrors.DatasetNotFound);
         }
 
-        IReadOnlyList<DatasetVersionDto> result = (await _data.GetVersionsAsync(datasetId, cancellationToken)).Select(ToDto).ToList();
+        IReadOnlyList<DatasetVersionDto> result = (await _data.GetVersionsAsync(datasetId)).Select(ToDto).ToList();
         return Result.Success(result);
     }
 
-    public async Task<Result<DatasetVersionDto>> CreateVersionAsync(Guid datasetId, CreateDatasetVersionDto request, CancellationToken cancellationToken = default)
+    public async Task<Result<DatasetVersionDto>> CreateVersionAsync(Guid datasetId, CreateDatasetVersionDto request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (await _data.GetDatasetAsync(datasetId, cancellationToken) is null)
+        if (await _data.GetDatasetAsync(datasetId) is null)
         {
             return Result<DatasetVersionDto>.Failure(DataOpsErrors.DatasetNotFound);
         }
@@ -91,7 +91,7 @@ public class DatasetService : IDatasetService
             return Result<DatasetVersionDto>.Failure(Error.Validation("DATASET_VERSION_TAG_INVALID", "VersionTag có dạng v1.0 hoặc v1.0.0."));
         }
 
-        if (await _data.VersionTagExistsAsync(datasetId, tag, cancellationToken))
+        if (await _data.VersionTagExistsAsync(datasetId, tag))
         {
             return Result<DatasetVersionDto>.Failure(Error.Conflict("DATASET_VERSION_DUPLICATE", "Dataset đã có version này."));
         }
@@ -104,18 +104,18 @@ public class DatasetService : IDatasetService
             Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
             CreatedAt = Now()
         };
-        await _data.AddVersionAsync(version, cancellationToken);
-        await _data.SaveChangesAsync(cancellationToken);
+        await _data.AddVersionAsync(version);
+        await _data.SaveChangesAsync();
         return Result.Success(ToDto(version));
     }
 
-    public async Task<Result<DatasetVersionDto>> GetVersionAsync(Guid versionId, CancellationToken cancellationToken = default)
+    public async Task<Result<DatasetVersionDto>> GetVersionAsync(Guid versionId)
     {
-        var version = await _data.GetVersionAsync(versionId, cancellationToken);
+        var version = await _data.GetVersionAsync(versionId);
         return version is null ? Result<DatasetVersionDto>.Failure(DataOpsErrors.VersionNotFound) : Result.Success(ToDto(version));
     }
 
-    public async Task<Result<PagedResultDto<DatasetSampleDto>>> ListSamplesAsync(Guid versionId, SampleQueryDto query, CancellationToken cancellationToken = default)
+    public async Task<Result<PagedResultDto<DatasetSampleDto>>> ListSamplesAsync(Guid versionId, SampleQueryDto query)
     {
         ArgumentNullException.ThrowIfNull(query);
         if (query.Page < 1 || query.PageSize is < 1 or > SampleFilter.MaxPageSize)
@@ -123,7 +123,7 @@ public class DatasetService : IDatasetService
             return Result<PagedResultDto<DatasetSampleDto>>.Failure(Error.Validation("SAMPLE_PAGE_INVALID", $"Trang từ 1, mỗi trang 1–{SampleFilter.MaxPageSize} mẫu."));
         }
 
-        if (await _data.GetVersionAsync(versionId, cancellationToken) is null)
+        if (await _data.GetVersionAsync(versionId) is null)
         {
             return Result<PagedResultDto<DatasetSampleDto>>.Failure(DataOpsErrors.VersionNotFound);
         }
@@ -137,7 +137,7 @@ public class DatasetService : IDatasetService
             SplitType = query.SplitType,
             Page = query.Page,
             PageSize = query.PageSize
-        }, cancellationToken);
+        });
         return Result.Success(new PagedResultDto<DatasetSampleDto>
         {
             Items = page.Items.Select(ToDto).ToList(),
@@ -147,13 +147,13 @@ public class DatasetService : IDatasetService
         });
     }
 
-    public async Task<Result<DatasetSampleDto>> GetSampleAsync(Guid sampleId, CancellationToken cancellationToken = default)
+    public async Task<Result<DatasetSampleDto>> GetSampleAsync(Guid sampleId)
     {
-        var sample = await _data.GetSampleAsync(sampleId, cancellationToken);
+        var sample = await _data.GetSampleAsync(sampleId);
         return sample is null ? Result<DatasetSampleDto>.Failure(DataOpsErrors.SampleNotFound) : Result.Success(ToDto(sample));
     }
 
-    public async Task<Result<DatasetSampleDto>> AddSampleAsync(Guid versionId, SaveDatasetSampleDto request, CancellationToken cancellationToken = default)
+    public async Task<Result<DatasetSampleDto>> AddSampleAsync(Guid versionId, SaveDatasetSampleDto request)
     {
         var invalid = Validate(request);
         if (invalid is not null)
@@ -161,7 +161,7 @@ public class DatasetService : IDatasetService
             return Result<DatasetSampleDto>.Failure(invalid);
         }
 
-        var version = await _data.GetVersionAsync(versionId, cancellationToken);
+        var version = await _data.GetVersionAsync(versionId);
         if (version is null)
         {
             return Result<DatasetSampleDto>.Failure(DataOpsErrors.VersionNotFound);
@@ -173,7 +173,7 @@ public class DatasetService : IDatasetService
         }
 
         var hash = SampleHasher.Compute(request.Instruction, request.InputJson, request.OutputJson);
-        if (await _data.SampleHashExistsAsync(versionId, hash, null, cancellationToken))
+        if (await _data.SampleHashExistsAsync(versionId, hash, null))
         {
             return Result<DatasetSampleDto>.Failure(DataOpsErrors.SampleDuplicate);
         }
@@ -185,13 +185,13 @@ public class DatasetService : IDatasetService
             CreatedAt = Now()
         };
         Apply(sample, request, hash);
-        await _data.AddSampleAsync(sample, cancellationToken);
+        await _data.AddSampleAsync(sample);
         version.SampleCount++;
-        await _data.SaveChangesAsync(cancellationToken);
+        await _data.SaveChangesAsync();
         return Result.Success(ToDto(sample));
     }
 
-    public async Task<Result<DatasetSampleDto>> UpdateSampleAsync(Guid sampleId, SaveDatasetSampleDto request, CancellationToken cancellationToken = default)
+    public async Task<Result<DatasetSampleDto>> UpdateSampleAsync(Guid sampleId, SaveDatasetSampleDto request)
     {
         var invalid = Validate(request);
         if (invalid is not null)
@@ -199,20 +199,20 @@ public class DatasetService : IDatasetService
             return Result<DatasetSampleDto>.Failure(invalid);
         }
 
-        var sample = await _data.GetSampleAsync(sampleId, cancellationToken);
+        var sample = await _data.GetSampleAsync(sampleId);
         if (sample is null)
         {
             return Result<DatasetSampleDto>.Failure(DataOpsErrors.SampleNotFound);
         }
 
-        var version = await _data.GetVersionAsync(sample.DatasetVersionId, cancellationToken);
+        var version = await _data.GetVersionAsync(sample.DatasetVersionId);
         if (version is null || version.IsFrozen)
         {
             return Result<DatasetSampleDto>.Failure(DataOpsErrors.VersionFrozen);
         }
 
         var hash = SampleHasher.Compute(request.Instruction, request.InputJson, request.OutputJson);
-        if (await _data.SampleHashExistsAsync(sample.DatasetVersionId, hash, sample.Id, cancellationToken))
+        if (await _data.SampleHashExistsAsync(sample.DatasetVersionId, hash, sample.Id))
         {
             return Result<DatasetSampleDto>.Failure(DataOpsErrors.SampleDuplicate);
         }
@@ -220,8 +220,8 @@ public class DatasetService : IDatasetService
         Apply(sample, request, hash);
         sample.UpdatedAt = Now();
         // Flag (kể cả đã xử lý) mô tả nội dung cũ; nội dung mới phải được chạy rule lại từ đầu.
-        _data.RemoveFlags(await _data.GetFlagsAsync([sample.Id], unresolvedOnly: false, cancellationToken));
-        await _data.SaveChangesAsync(cancellationToken);
+        _data.RemoveFlags(await _data.GetFlagsAsync([sample.Id], unresolvedOnly: false));
+        await _data.SaveChangesAsync();
         return Result.Success(ToDto(sample));
     }
 

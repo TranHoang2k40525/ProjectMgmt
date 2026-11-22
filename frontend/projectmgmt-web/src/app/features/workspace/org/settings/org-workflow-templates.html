@@ -1,0 +1,167 @@
+<app-section-state [loading]="loading()" [error]="error()" [rows]="4" (retry)="load()">
+  <div class="space-y-6">
+    <section [class]="ui.card" aria-labelledby="custom-templates-title">
+      <div class="mb-1 flex flex-wrap items-center justify-between gap-3">
+        <h2 id="custom-templates-title" [class]="ui.sectionTitle">Mẫu của tổ chức</h2>
+        <button type="button" [class]="ui.primaryButton" (click)="openNew()">
+          <span class="material-symbols-outlined text-[18px]" aria-hidden="true">add</span>
+          Tạo mẫu mới
+        </button>
+      </div>
+      <p [class]="ui.hint" class="mb-4">Mẫu mặc định được chọn sẵn khi tạo dự án. Sửa hoặc xóa mẫu không ảnh hưởng tới dự án đã tạo.</p>
+      @if (custom().length > 0) {
+        <ul class="space-y-3">
+          @for (template of custom(); track template.id) {
+            <ng-container *ngTemplateOutlet="templateRow; context: { $implicit: template }" />
+          }
+        </ul>
+      } @else {
+        <p class="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 text-pretty">
+          Tổ chức chưa có mẫu riêng. Tạo mẫu mới hoặc bắt đầu từ một mẫu có sẵn bên dưới.
+        </p>
+      }
+    </section>
+
+    <section [class]="ui.card" aria-labelledby="preset-templates-title">
+      <h2 id="preset-templates-title" [class]="ui.sectionTitle">Mẫu có sẵn</h2>
+      <p [class]="ui.hint" class="mb-4">Không sửa trực tiếp được; chọn “Dùng làm mẫu” để tạo bản sao và chỉnh theo nhóm.</p>
+      <ul class="space-y-3">
+        @for (template of presets(); track template.id) {
+          <ng-container *ngTemplateOutlet="templateRow; context: { $implicit: template }" />
+        }
+      </ul>
+    </section>
+  </div>
+</app-section-state>
+
+<ng-template #templateRow let-template>
+  <li class="flex flex-col gap-3 rounded-xl border border-slate-200 p-3 sm:flex-row sm:items-center dark:border-slate-700"
+      [class.border-primary-container]="template.isDefault">
+    <div class="min-w-0 flex-1">
+      <p class="flex flex-wrap items-center gap-2">
+        <span class="font-semibold text-slate-900 dark:text-white">{{ template.name }}</span>
+        <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{{ template.managementType }}</span>
+        @if (template.isDefault) {
+          <span class="rounded-full bg-primary-container px-2 py-0.5 text-[11px] font-semibold text-white">Mặc định</span>
+        }
+      </p>
+      <ol class="mt-2 flex flex-wrap gap-1.5" [attr.aria-label]="'Trạng thái của ' + template.name">
+        @for (status of template.statuses; track status.name) {
+          <li class="rounded border px-1.5 py-0.5 text-xs"
+              [class.border-slate-200]="status.category === 'ToDo'" [class.bg-slate-50]="status.category === 'ToDo'"
+              [class.border-blue-200]="status.category === 'InProgress'" [class.bg-blue-50]="status.category === 'InProgress'"
+              [class.border-emerald-200]="status.category === 'Done'" [class.bg-emerald-50]="status.category === 'Done'"
+              [title]="categoryLabel(status.category)">
+            {{ status.name }}<span class="sr-only"> ({{ categoryLabel(status.category) }})</span>
+          </li>
+        }
+      </ol>
+    </div>
+    <div class="flex flex-wrap gap-1 sm:justify-end">
+      @if (!template.isDefault) {
+        <button type="button" [class]="ui.ghostButton" [disabled]="busyId() === template.id" (click)="setDefault(template)">Đặt mặc định</button>
+      }
+      @if (template.isPreset) {
+        <button type="button" [class]="ui.secondaryButton" (click)="openFrom(template)">Dùng làm mẫu</button>
+      } @else {
+        <button type="button" [class]="ui.secondaryButton" (click)="openFrom(template)" [attr.aria-label]="'Sửa mẫu ' + template.name">Sửa</button>
+        @if (!template.isDefault) {
+          <button type="button" [class]="ui.dangerButton" class="h-9" [disabled]="busyId() === template.id" (click)="remove(template)"
+                  [attr.aria-label]="'Xóa mẫu ' + template.name">Xóa</button>
+        }
+      }
+    </div>
+  </li>
+</ng-template>
+
+@if (draft(); as current) {
+  <app-modal-shell [heading]="current.id ? 'Sửa mẫu workflow' : 'Tạo mẫu workflow'" size="lg"
+                   description="Các trạng thái theo thứ tự công việc đi qua; nhóm quyết định cách tính tiến độ."
+                   (closeRequested)="closeEditor()">
+    <form id="template-form" (ngSubmit)="save()" novalidate class="space-y-5">
+      <div class="grid gap-4 sm:grid-cols-[1fr_auto]">
+        <div>
+          <label for="template-name" [class]="ui.label">Tên mẫu</label>
+          <input id="template-name" name="name" cdkFocusInitial [class]="ui.input" maxlength="60" [ngModel]="current.name" (ngModelChange)="updateDraft({ name: $event })"
+                 [attr.aria-invalid]="showErrors() && !!draftErrors().name" [attr.aria-describedby]="showErrors() && draftErrors().name ? 'template-name-error' : null" />
+          @if (showErrors() && draftErrors().name) { <p id="template-name-error" [class]="ui.fieldError">{{ draftErrors().name }}</p> }
+        </div>
+        <fieldset>
+          <legend [class]="ui.label">Loại hình</legend>
+          <div class="flex gap-2">
+            @for (type of managementTypes; track type) {
+              <label class="flex h-10 cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-3 text-sm has-[:checked]:border-primary-container has-[:checked]:bg-primary-fixed dark:border-slate-700">
+                <input type="radio" name="managementType" class="accent-[#2d6a4f]" [value]="type" [ngModel]="current.managementType"
+                       (ngModelChange)="updateDraft({ managementType: $event })" />
+                {{ type }}
+              </label>
+            }
+          </div>
+        </fieldset>
+      </div>
+
+      <div role="group" aria-labelledby="template-statuses-title">
+        <div class="mb-2 flex items-center justify-between gap-2">
+          <h3 id="template-statuses-title" [class]="ui.label" class="!mb-0">Trạng thái <span class="font-normal text-slate-500 tabular-nums">({{ current.statuses.length }}/{{ maxStatuses }})</span></h3>
+          <button type="button" [class]="ui.ghostButton" (click)="addStatus()" [disabled]="current.statuses.length >= maxStatuses">
+            <span class="material-symbols-outlined text-[18px]" aria-hidden="true">add</span>
+            Thêm trạng thái
+          </button>
+        </div>
+        <ol class="space-y-2">
+          @for (status of current.statuses; track $index; let index = $index, first = $first, last = $last) {
+            <li class="grid grid-cols-[auto_1fr] gap-2 rounded-xl border border-slate-200 p-2 sm:grid-cols-[auto_1fr_11rem_auto] sm:items-start dark:border-slate-700">
+              <span class="flex h-10 w-6 items-center justify-center text-xs font-bold text-slate-400 tabular-nums" aria-hidden="true">{{ index + 1 }}</span>
+              <div>
+                <label class="sr-only" [for]="'status-name-' + index">Tên trạng thái {{ index + 1 }}</label>
+                <input [id]="'status-name-' + index" [name]="'status-name-' + index" [class]="ui.input" maxlength="40" placeholder="Tên trạng thái"
+                       [ngModel]="status.name" (ngModelChange)="renameStatus(index, $event)"
+                       [attr.aria-invalid]="showErrors() && !!draftErrors().statuses[index]"
+                       [attr.aria-describedby]="showErrors() && draftErrors().statuses[index] ? 'status-error-' + index : null" />
+                @if (showErrors() && draftErrors().statuses[index]) {
+                  <p [id]="'status-error-' + index" [class]="ui.fieldError">{{ draftErrors().statuses[index] }}</p>
+                }
+              </div>
+              <div class="col-start-2 sm:col-start-auto">
+                <label class="sr-only" [for]="'status-category-' + index">Nhóm của trạng thái {{ index + 1 }}</label>
+                <select [id]="'status-category-' + index" [name]="'status-category-' + index" [class]="ui.select"
+                        [ngModel]="status.category" (ngModelChange)="setCategory(index, $event)">
+                  @for (category of categories; track category[0]) {
+                    <option [value]="category[0]">{{ category[1] }}</option>
+                  }
+                </select>
+              </div>
+              <div class="col-start-2 flex gap-1 sm:col-start-auto">
+                <button type="button" [id]="'status-up-' + index" [class]="ui.ghostButton" class="!px-2" [disabled]="first" (click)="move(index, -1)"
+                        [attr.aria-label]="'Đưa ' + (status.name || 'trạng thái ' + (index + 1)) + ' lên trên'">
+                  <span class="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_upward</span>
+                </button>
+                <button type="button" [id]="'status-down-' + index" [class]="ui.ghostButton" class="!px-2" [disabled]="last" (click)="move(index, 1)"
+                        [attr.aria-label]="'Đưa ' + (status.name || 'trạng thái ' + (index + 1)) + ' xuống dưới'">
+                  <span class="material-symbols-outlined text-[18px]" aria-hidden="true">arrow_downward</span>
+                </button>
+                <button type="button" [class]="ui.dangerButton" class="!px-2" [disabled]="current.statuses.length <= 2" (click)="removeStatus(index)"
+                        [attr.aria-label]="'Xóa ' + (status.name || 'trạng thái ' + (index + 1))">
+                  <span class="material-symbols-outlined text-[18px]" aria-hidden="true">delete</span>
+                </button>
+              </div>
+            </li>
+          }
+        </ol>
+      </div>
+
+      @if (showErrors() && draftErrors().form) {
+        <p role="alert" class="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">{{ draftErrors().form }}</p>
+      }
+      @if (saveError()) {
+        <p role="alert" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/40 dark:text-red-300">{{ saveError() }}</p>
+      }
+    </form>
+    <ng-container modal-footer>
+      <button type="button" [class]="ui.secondaryButton" (click)="closeEditor()">Hủy</button>
+      <button type="submit" form="template-form" [class]="ui.primaryButton" [disabled]="saving()">
+        {{ saving() ? 'Đang lưu…' : (current.id ? 'Lưu thay đổi' : 'Tạo mẫu') }}
+      </button>
+    </ng-container>
+  </app-modal-shell>
+}

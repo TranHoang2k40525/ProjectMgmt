@@ -11,6 +11,7 @@ public interface IProfileServices
         Stream content,
         long length,
         string? contentType);
+    Task<AvatarResult> DeleteAvatarAsync(Guid userId);
 }
 
 public interface IAvatarStorage

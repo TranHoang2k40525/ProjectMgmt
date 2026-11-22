@@ -5,20 +5,19 @@ using ProjectMgmt.ProjectManagement.Contracts;
 
 namespace ProjectMgmt.Solution.Services;
 
-public sealed class PlanningWorkflowValidationService(PlanningDbContext db) : IWorkflowValidationService
+public class PlanningWorkflowValidationService(PlanningDbContext db) : IWorkflowValidationService
 {
     public async Task<WorkflowTransitionCheck> CheckTransitionAsync(
         Guid projectId,
         Guid fromStatusId,
-        Guid toStatusId,
-        CancellationToken cancellationToken = default)
+        Guid toStatusId)
     {
         var from = await db.WorkflowStatuses
             .AsNoTracking()
-            .SingleOrDefaultAsync(s => s.Id == fromStatusId && s.ProjectId == projectId, cancellationToken);
+            .SingleOrDefaultAsync(s => s.Id == fromStatusId && s.ProjectId == projectId);
         var to = await db.WorkflowStatuses
             .AsNoTracking()
-            .SingleOrDefaultAsync(s => s.Id == toStatusId && s.ProjectId == projectId, cancellationToken);
+            .SingleOrDefaultAsync(s => s.Id == toStatusId && s.ProjectId == projectId);
 
         if (from is null || to is null)
         {
@@ -45,12 +44,11 @@ public sealed class PlanningWorkflowValidationService(PlanningDbContext db) : IW
         var transition = await db.WorkflowTransitions
             .AsNoTracking()
             .FirstOrDefaultAsync(
-                t => t.ProjectId == projectId && t.FromStatusId == fromStatusId && t.ToStatusId == toStatusId,
-                cancellationToken);
+                t => t.ProjectId == projectId && t.FromStatusId == fromStatusId && t.ToStatusId == toStatusId);
 
         var hasAnyTransitions = await db.WorkflowTransitions
             .AsNoTracking()
-            .AnyAsync(t => t.ProjectId == projectId, cancellationToken);
+            .AnyAsync(t => t.ProjectId == projectId);
 
         var allowed = transition is not null || !hasAnyTransitions;
 
@@ -64,19 +62,17 @@ public sealed class PlanningWorkflowValidationService(PlanningDbContext db) : IW
     }
 }
 
-public sealed class PlanningReleaseLookupService(PlanningDbContext db) : IProjectReleaseLookupService
+public class PlanningReleaseLookupService(PlanningDbContext db) : IProjectReleaseLookupService
 {
-    public async Task<IReadOnlyList<ProjectComponentDto>> GetComponentsAsync(
-        Guid projectId,
-        CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<ProjectComponentDto>> GetComponentsAsync(Guid projectId)
     {
         var components = await db.ProjectComponents
             .AsNoTracking()
             .Where(c => c.ProjectId == projectId)
             .OrderBy(c => c.Name)
-            .ToListAsync(cancellationToken);
+            .ToListAsync();
 
-        if (components.Count == 0 && await db.Projects.AsNoTracking().AnyAsync(p => p.Id == projectId, cancellationToken))
+        if (components.Count == 0 && await db.Projects.AsNoTracking().AnyAsync(p => p.Id == projectId))
         {
             var seeded = new List<ProjectComponent>
             {
@@ -98,7 +94,7 @@ public sealed class PlanningReleaseLookupService(PlanningDbContext db) : IProjec
                 }
             };
             db.ProjectComponents.AddRange(seeded);
-            await db.SaveChangesAsync(cancellationToken);
+            await db.SaveChangesAsync();
             components = seeded;
         }
 
@@ -107,17 +103,15 @@ public sealed class PlanningReleaseLookupService(PlanningDbContext db) : IProjec
             .ToList();
     }
 
-    public async Task<IReadOnlyList<ProjectVersionDto>> GetVersionsAsync(
-        Guid projectId,
-        CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<ProjectVersionDto>> GetVersionsAsync(Guid projectId)
     {
         var versions = await db.ProjectVersions
             .AsNoTracking()
             .Where(v => v.ProjectId == projectId)
             .OrderBy(v => v.Name)
-            .ToListAsync(cancellationToken);
+            .ToListAsync();
 
-        if (versions.Count == 0 && await db.Projects.AsNoTracking().AnyAsync(p => p.Id == projectId, cancellationToken))
+        if (versions.Count == 0 && await db.Projects.AsNoTracking().AnyAsync(p => p.Id == projectId))
         {
             var seeded = new List<ProjectVersion>
             {
@@ -143,7 +137,7 @@ public sealed class PlanningReleaseLookupService(PlanningDbContext db) : IProjec
                 }
             };
             db.ProjectVersions.AddRange(seeded);
-            await db.SaveChangesAsync(cancellationToken);
+            await db.SaveChangesAsync();
             versions = seeded;
         }
 

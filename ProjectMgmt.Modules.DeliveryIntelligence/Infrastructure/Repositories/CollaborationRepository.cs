@@ -13,48 +13,48 @@ public class CollaborationRepository : ICollaborationRepository
         _context = context;
     }
 
-    public async Task<IReadOnlyList<Comment>> GetCommentsAsync(Guid issueId, CancellationToken cancellationToken = default) =>
+    public async Task<IReadOnlyList<Comment>> GetCommentsAsync(Guid issueId) =>
         await _context.Comments
             .AsNoTracking()
             .Where(comment => comment.IssueId == issueId)
             .OrderBy(comment => comment.CreatedAt)
-            .ToListAsync(cancellationToken);
+            .ToListAsync();
 
-    public Task<Comment?> GetCommentAsync(Guid commentId, CancellationToken cancellationToken = default) =>
-        _context.Comments.SingleOrDefaultAsync(comment => comment.Id == commentId, cancellationToken);
+    public Task<Comment?> GetCommentAsync(Guid commentId) =>
+        _context.Comments.SingleOrDefaultAsync(comment => comment.Id == commentId);
 
-    public async Task AddCommentAsync(Comment comment, CancellationToken cancellationToken = default) =>
-        await _context.Comments.AddAsync(comment, cancellationToken);
+    public async Task AddCommentAsync(Comment comment) =>
+        await _context.Comments.AddAsync(comment);
 
-    public async Task<IReadOnlyList<Attachment>> GetAttachmentsAsync(Guid issueId, CancellationToken cancellationToken = default) =>
+    public async Task<IReadOnlyList<Attachment>> GetAttachmentsAsync(Guid issueId) =>
         await _context.Attachments
             .AsNoTracking()
             .Where(attachment => attachment.IssueId == issueId)
             .OrderBy(attachment => attachment.CreatedAt)
-            .ToListAsync(cancellationToken);
+            .ToListAsync();
 
-    public Task<Attachment?> GetAttachmentAsync(Guid attachmentId, CancellationToken cancellationToken = default) =>
-        _context.Attachments.SingleOrDefaultAsync(attachment => attachment.Id == attachmentId, cancellationToken);
+    public Task<Attachment?> GetAttachmentAsync(Guid attachmentId) =>
+        _context.Attachments.SingleOrDefaultAsync(attachment => attachment.Id == attachmentId);
 
-    public async Task AddAttachmentAsync(Attachment attachment, CancellationToken cancellationToken = default) =>
-        await _context.Attachments.AddAsync(attachment, cancellationToken);
+    public async Task AddAttachmentAsync(Attachment attachment) =>
+        await _context.Attachments.AddAsync(attachment);
 
     public void RemoveAttachment(Attachment attachment) => _context.Attachments.Remove(attachment);
 
-    public async Task<IReadOnlyList<IssueWatcher>> GetWatchersAsync(Guid issueId, CancellationToken cancellationToken = default) =>
+    public async Task<IReadOnlyList<IssueWatcher>> GetWatchersAsync(Guid issueId) =>
         await _context.IssueWatchers
             .AsNoTracking()
             .Where(watcher => watcher.IssueId == issueId)
             .OrderBy(watcher => watcher.CreatedAt)
-            .ToListAsync(cancellationToken);
+            .ToListAsync();
 
-    public Task<IssueWatcher?> GetWatcherAsync(Guid issueId, Guid userId, CancellationToken cancellationToken = default) =>
-        _context.IssueWatchers.SingleOrDefaultAsync(watcher => watcher.IssueId == issueId && watcher.UserId == userId, cancellationToken);
+    public Task<IssueWatcher?> GetWatcherAsync(Guid issueId, Guid userId) =>
+        _context.IssueWatchers.SingleOrDefaultAsync(watcher => watcher.IssueId == issueId && watcher.UserId == userId);
 
-    public async Task AddWatcherAsync(IssueWatcher watcher, CancellationToken cancellationToken = default) =>
-        await _context.IssueWatchers.AddAsync(watcher, cancellationToken);
+    public async Task AddWatcherAsync(IssueWatcher watcher) =>
+        await _context.IssueWatchers.AddAsync(watcher);
 
     public void RemoveWatcher(IssueWatcher watcher) => _context.IssueWatchers.Remove(watcher);
 
-    public Task SaveChangesAsync(CancellationToken cancellationToken = default) => _context.SaveChangesAsync(cancellationToken);
+    public Task SaveChangesAsync() => _context.SaveChangesAsync();
 }

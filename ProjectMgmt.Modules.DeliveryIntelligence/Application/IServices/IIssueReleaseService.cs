@@ -9,13 +9,13 @@ namespace DeliveryIntelligence.Application.IServices;
 /// </summary>
 public interface IIssueReleaseService
 {
-    Task<Result<IssueReleaseLinksDto>> GetLinksAsync(Guid issueId, CancellationToken cancellationToken = default);
+    Task<Result<IssueReleaseLinksDto>> GetLinksAsync(Guid issueId);
 
-    Task<Result<IssueReleaseLinksDto>> AddComponentAsync(Guid issueId, Guid componentId, Guid actorUserId, CancellationToken cancellationToken = default);
+    Task<Result<IssueReleaseLinksDto>> AddComponentAsync(Guid issueId, Guid componentId, Guid actorUserId);
 
-    Task<Result<IssueReleaseLinksDto>> RemoveComponentAsync(Guid issueId, Guid componentId, Guid actorUserId, CancellationToken cancellationToken = default);
+    Task<Result<IssueReleaseLinksDto>> RemoveComponentAsync(Guid issueId, Guid componentId, Guid actorUserId);
 
-    Task<Result<IssueReleaseLinksDto>> AddVersionAsync(Guid issueId, AddIssueVersionDto request, Guid actorUserId, CancellationToken cancellationToken = default);
+    Task<Result<IssueReleaseLinksDto>> AddVersionAsync(Guid issueId, AddIssueVersionDto request, Guid actorUserId);
 
-    Task<Result<IssueReleaseLinksDto>> RemoveVersionAsync(Guid issueId, Guid versionId, string linkType, Guid actorUserId, CancellationToken cancellationToken = default);
+    Task<Result<IssueReleaseLinksDto>> RemoveVersionAsync(Guid issueId, Guid versionId, string linkType, Guid actorUserId);
 }

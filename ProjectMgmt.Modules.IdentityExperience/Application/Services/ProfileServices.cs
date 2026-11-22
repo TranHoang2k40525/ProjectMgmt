@@ -201,6 +201,26 @@ public class ProfileServices : IProfileServices
         };
     }
 
+    public async Task<AvatarResult> DeleteAvatarAsync(Guid userId)
+    {
+        var update = await _profileRepository.UpdateAvatarUrlAsync(
+            userId,
+            null!,
+            _timeProvider.GetUtcNow().UtcDateTime);
+        if (!update.Updated)
+        {
+            return AvatarFailure("IDENTITY_PROFILE_NOT_FOUND", "Không tìm thấy hồ sơ người dùng.");
+        }
+
+        await _avatarStorage.DeleteAsync(update.PreviousAvatarUrl);
+        return new AvatarResult
+        {
+            Success = true,
+            Message = "Đã xóa ảnh đại diện.",
+            AvatarUrl = null
+        };
+    }
+
     private static ProfileDto Map(ProfileDetails details)
     {
         return new ProfileDto

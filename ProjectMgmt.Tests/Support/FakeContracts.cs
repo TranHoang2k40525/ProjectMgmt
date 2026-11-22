@@ -9,13 +9,13 @@ namespace ProjectMgmt.Tests.Support;
 /// </summary>
 public class SharedProjectLookupService : IProjectLookupService
 {
-    public Task<IReadOnlyList<ProjectIssueTypeDto>> GetIssueTypesAsync(Guid projectId, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<ProjectIssueTypeDto>> GetIssueTypesAsync(Guid projectId)
     {
         IReadOnlyList<ProjectIssueTypeDto> result = SharedTestData.IssueTypes.Where(type => type.ProjectId == projectId).ToList();
         return Task.FromResult(result);
     }
 
-    public Task<IReadOnlyList<ProjectStatusDto>> GetStatusesAsync(Guid projectId, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<ProjectStatusDto>> GetStatusesAsync(Guid projectId)
     {
         IReadOnlyList<ProjectStatusDto> result = SharedTestData.Statuses.Where(status => status.ProjectId == projectId).ToList();
         return Task.FromResult(result);
@@ -32,17 +32,17 @@ public class SharedProjectLookupService : IProjectLookupService
 
 public class SharedUserLookupService : IUserLookupService
 {
-    public Task<IReadOnlyList<UserDisplayInfo>> GetAllActiveDisplayInfoAsync(CancellationToken cancellationToken = default) =>
+    public Task<IReadOnlyList<UserDisplayInfo>> GetAllActiveDisplayInfoAsync() =>
         Task.FromResult(SharedTestData.Users);
 
-    public Task<IReadOnlyList<UserDisplayInfo>> GetDisplayInfoAsync(IEnumerable<Guid> userIds, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<UserDisplayInfo>> GetDisplayInfoAsync(IEnumerable<Guid> userIds)
     {
         var ids = userIds.ToHashSet();
         IReadOnlyList<UserDisplayInfo> result = SharedTestData.Users.Where(user => ids.Contains(user.UserId)).ToList();
         return Task.FromResult(result);
     }
 
-    public Task<UserDisplayInfo?> GetDisplayInfoAsync(Guid userId, CancellationToken cancellationToken = default) =>
+    public Task<UserDisplayInfo?> GetDisplayInfoAsync(Guid userId) =>
         Task.FromResult(SharedTestData.Users.SingleOrDefault(user => user.UserId == userId));
 }
 
@@ -55,7 +55,7 @@ public class SharedIssueNumberGenerator : IIssueNumberGenerator
         [SharedTestData.OtherProjectId] = SharedTestData.IssueCounter(SharedTestData.OtherProjectId)
     };
 
-    public Task<int> ReserveNextAsync(Guid projectId, CancellationToken cancellationToken = default)
+    public Task<int> ReserveNextAsync(Guid projectId)
     {
         lock (_counters)
         {
@@ -70,7 +70,7 @@ public class SharedWorkflowValidationService : IWorkflowValidationService
 {
     public Dictionary<(Guid From, Guid To), string> RequiredPermissions { get; } = [];
 
-    public Task<WorkflowTransitionCheck> CheckTransitionAsync(Guid projectId, Guid fromStatusId, Guid toStatusId, CancellationToken cancellationToken = default)
+    public Task<WorkflowTransitionCheck> CheckTransitionAsync(Guid projectId, Guid fromStatusId, Guid toStatusId)
     {
         var from = SharedTestData.Statuses.SingleOrDefault(s => s.Id == fromStatusId && s.ProjectId == projectId);
         var to = SharedTestData.Statuses.SingleOrDefault(s => s.Id == toStatusId && s.ProjectId == projectId);
@@ -95,7 +95,7 @@ public class SharedReleaseLookupService : IProjectReleaseLookupService
     public static readonly Guid V1VersionId = Guid.Parse("c0de0000-0000-0000-0009-000000000001");
     public static readonly Guid V2VersionId = Guid.Parse("c0de0000-0000-0000-0009-000000000002");
 
-    public Task<IReadOnlyList<ProjectComponentDto>> GetComponentsAsync(Guid projectId, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<ProjectComponentDto>> GetComponentsAsync(Guid projectId)
     {
         IReadOnlyList<ProjectComponentDto> all =
         [
@@ -106,7 +106,7 @@ public class SharedReleaseLookupService : IProjectReleaseLookupService
         return Task.FromResult<IReadOnlyList<ProjectComponentDto>>(all.Where(c => c.ProjectId == projectId).ToList());
     }
 
-    public Task<IReadOnlyList<ProjectVersionDto>> GetVersionsAsync(Guid projectId, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<ProjectVersionDto>> GetVersionsAsync(Guid projectId)
     {
         IReadOnlyList<ProjectVersionDto> all =
         [
@@ -121,7 +121,7 @@ public class RecordingIssueNotifier : DeliveryIntelligence.Application.IServices
 {
     public List<DeliveryIntelligence.Application.IServices.IssueNotification> Sent { get; } = [];
 
-    public Task NotifyAsync(DeliveryIntelligence.Application.IServices.IssueNotification notification, CancellationToken cancellationToken = default)
+    public Task NotifyAsync(DeliveryIntelligence.Application.IServices.IssueNotification notification)
     {
         Sent.Add(notification);
         return Task.CompletedTask;

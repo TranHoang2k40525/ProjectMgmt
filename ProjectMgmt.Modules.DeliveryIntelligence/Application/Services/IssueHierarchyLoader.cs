@@ -23,9 +23,9 @@ public class IssueHierarchyLoader
         _projects = projects;
     }
 
-    public async Task<IReadOnlyDictionary<Guid, IssueTypeLevel>> GetTypesAsync(Guid projectId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyDictionary<Guid, IssueTypeLevel>> GetTypesAsync(Guid projectId)
     {
-        var types = await _projects.GetIssueTypesAsync(projectId, cancellationToken);
+        var types = await _projects.GetIssueTypesAsync(projectId);
         return types.ToDictionary(
             type => type.Id,
             type => new IssueTypeLevel(type.Id, type.Name, type.HierarchyLevel, type.IsSubtask));
@@ -37,20 +37,19 @@ public class IssueHierarchyLoader
         IssueTypeLevel type,
         Guid? parentId,
         Guid? epicId,
-        IReadOnlyDictionary<Guid, IssueTypeLevel> types,
-        CancellationToken cancellationToken = default)
+        IReadOnlyDictionary<Guid, IssueTypeLevel> types)
     {
         IssueHierarchyNode? parent = null;
         if (parentId.HasValue)
         {
-            parent = await GetNodeAsync(parentId.Value, types, cancellationToken);
+            parent = await GetNodeAsync(parentId.Value, types);
             if (parent is null)
             {
                 return Rejected("ISSUE_PARENT_NOT_FOUND", "Không tìm thấy công việc cha.");
             }
         }
 
-        List<Guid> ancestors = parent is null ? [] : await GetAncestorIdsAsync(parent, cancellationToken);
+        List<Guid> ancestors = parent is null ? [] : await GetAncestorIdsAsync(parent);
         var violation = IssueHierarchyRules.ValidateParent(issueId, projectId, type, parent, ancestors);
         if (violation is not null)
         {
@@ -67,7 +66,7 @@ public class IssueHierarchyLoader
             return new IssuePlacement(null, null, null);
         }
 
-        var epic = await GetNodeAsync(epicId.Value, types, cancellationToken);
+        var epic = await GetNodeAsync(epicId.Value, types);
         violation = epic is null
             ? new IssueRuleViolation("ISSUE_EPIC_LINK_INVALID", "Không tìm thấy Epic.")
             : IssueHierarchyRules.ValidateEpic(issueId, projectId, type, epic);
@@ -76,10 +75,9 @@ public class IssueHierarchyLoader
 
     public async Task<IssueHierarchyNode?> GetNodeAsync(
         Guid issueId,
-        IReadOnlyDictionary<Guid, IssueTypeLevel> types,
-        CancellationToken cancellationToken = default)
+        IReadOnlyDictionary<Guid, IssueTypeLevel> types)
     {
-        var issue = await _issues.GetByIdAsync(issueId, cancellationToken: cancellationToken);
+        var issue = await _issues.GetByIdAsync(issueId);
         return issue is null ? null : ToNode(issue, types);
     }
 
@@ -89,14 +87,14 @@ public class IssueHierarchyLoader
             : null;
 
     /// <summary>Id các tổ tiên phía trên <paramref name="node"/> (không gồm chính nó), dừng khi gặp vòng lặp dữ liệu cũ.</summary>
-    public async Task<List<Guid>> GetAncestorIdsAsync(IssueHierarchyNode node, CancellationToken cancellationToken = default)
+    public async Task<List<Guid>> GetAncestorIdsAsync(IssueHierarchyNode node)
     {
         var ancestors = new List<Guid>();
         var nextId = node.ParentId;
         while (nextId.HasValue && ancestors.Count < MaxDepth && !ancestors.Contains(nextId.Value))
         {
             ancestors.Add(nextId.Value);
-            var next = await _issues.GetByIdAsync(nextId.Value, includeDeleted: true, cancellationToken);
+            var next = await _issues.GetByIdAsync(nextId.Value, includeDeleted: true);
             nextId = next?.ParentId;
         }
 

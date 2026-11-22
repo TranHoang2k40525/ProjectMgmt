@@ -37,9 +37,9 @@ public class IssueTrackingService : IIssueTrackingService
         _listValidator = listValidator;
     }
 
-    public async Task<Result<IssueDetailDto>> GetAsync(Guid issueId, CancellationToken cancellationToken = default)
+    public async Task<Result<IssueDetailDto>> GetAsync(Guid issueId)
     {
-        var issue = await _issues.GetByIdAsync(issueId, cancellationToken: cancellationToken);
+        var issue = await _issues.GetByIdAsync(issueId);
         return issue is null
             ? Result<IssueDetailDto>.Failure(IssueErrors.NotFound)
             : Result.Success(IssueMapper.ToDetail(issue));
@@ -47,8 +47,7 @@ public class IssueTrackingService : IIssueTrackingService
 
     public async Task<Result<PagedResultDto<IssueListItemDto>>> ListAsync(
         Guid projectId,
-        IssueListQueryDto query,
-        CancellationToken cancellationToken = default)
+        IssueListQueryDto query)
     {
         ArgumentNullException.ThrowIfNull(query);
         if (projectId == Guid.Empty)
@@ -63,7 +62,7 @@ public class IssueTrackingService : IIssueTrackingService
             return Result<PagedResultDto<IssueListItemDto>>.Failure(ToError(validation));
         }
 
-        var page = await _issues.ListAsync(IssueMapper.ToFilter(projectId, query), cancellationToken);
+        var page = await _issues.ListAsync(IssueMapper.ToFilter(projectId, query));
         return Result.Success(new PagedResultDto<IssueListItemDto>
         {
             Items = page.Items.Select(issue => IssueMapper.ToListItem(issue)).ToList(),
@@ -76,8 +75,7 @@ public class IssueTrackingService : IIssueTrackingService
     public async Task<Result<IssueDetailDto>> UpdateAsync(
         Guid issueId,
         UpdateIssueDto request,
-        Guid actorUserId,
-        CancellationToken cancellationToken = default)
+        Guid actorUserId)
     {
         var validation = ValidateUpdate(request);
         if (validation.IsFailure)
@@ -85,7 +83,7 @@ public class IssueTrackingService : IIssueTrackingService
             return Result<IssueDetailDto>.Failure(validation.Error);
         }
 
-        var issue = await _issues.GetByIdAsync(issueId, cancellationToken: cancellationToken);
+        var issue = await _issues.GetByIdAsync(issueId);
         if (issue is null)
         {
             return Result<IssueDetailDto>.Failure(IssueErrors.NotFound);
@@ -114,19 +112,19 @@ public class IssueTrackingService : IIssueTrackingService
 
         var previousAssignee = issue.AssigneeId;
         IssueMapper.ApplyUpdate(issue, request, now);
-        await _history.RecordAssignmentAsync(issue, previousAssignee, issue.AssigneeId, actorUserId, now, cancellationToken: cancellationToken);
+        await _history.RecordAssignmentAsync(issue, previousAssignee, issue.AssigneeId, actorUserId, now);
         foreach (var change in changes)
         {
-            await _issues.AddActivityAsync(change, cancellationToken);
+            await _issues.AddActivityAsync(change);
         }
 
-        await _issues.SaveChangesAsync(cancellationToken);
+        await _issues.SaveChangesAsync();
         return Result.Success(IssueMapper.ToDetail(issue));
     }
 
-    public async Task<Result> DeleteAsync(Guid issueId, Guid actorUserId, CancellationToken cancellationToken = default)
+    public async Task<Result> DeleteAsync(Guid issueId, Guid actorUserId)
     {
-        var issue = await _issues.GetByIdAsync(issueId, cancellationToken: cancellationToken);
+        var issue = await _issues.GetByIdAsync(issueId);
         if (issue is null)
         {
             return Result.Failure(IssueErrors.NotFound);
@@ -136,7 +134,7 @@ public class IssueTrackingService : IIssueTrackingService
         var removed = new List<Issue> { issue };
         for (var index = 0; index < removed.Count; index++)
         {
-            foreach (var child in await _issues.GetChildrenAsync(removed[index].Id, cancellationToken))
+            foreach (var child in await _issues.GetChildrenAsync(removed[index].Id))
             {
                 if (removed.TrueForAll(existing => existing.Id != child.Id))
                 {
@@ -151,16 +149,15 @@ public class IssueTrackingService : IIssueTrackingService
             item.UpdatedAt = now;
             await _issues.AddActivityAsync(
                 IssueActivities.Create(item.Id, actorUserId, IssueActivities.Deleted, now,
-                    detail: item.Id == issue.Id ? null : new { deletedWithIssueId = issue.Id }),
-                cancellationToken);
+                    detail: item.Id == issue.Id ? null : new { deletedWithIssueId = issue.Id }));
         }
 
-        foreach (var linked in await _issues.GetByEpicAsync(issue.Id, cancellationToken))
+        foreach (var linked in await _issues.GetByEpicAsync(issue.Id))
         {
             linked.EpicId = null;
         }
 
-        await _issues.SaveChangesAsync(cancellationToken);
+        await _issues.SaveChangesAsync();
         return Result.Success();
     }
 

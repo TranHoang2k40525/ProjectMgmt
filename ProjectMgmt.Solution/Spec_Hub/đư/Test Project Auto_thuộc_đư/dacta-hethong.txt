@@ -1,0 +1,6 @@
+﻿# 1. Mục tiêu (Objective)
+Mô tả mục tiêu kỹ thuật...
+
+# 2. Tiêu chí nghiệm thu (Acceptance Criteria)
+- Tiêu chí 1
+- Tiêu chí 2

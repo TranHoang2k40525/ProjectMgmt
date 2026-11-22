@@ -11,10 +11,10 @@ const os = require('node:os');
     const response = await fetch('http://localhost:5084' + url, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
     assert(response.ok, `${method} ${url}: ${response.status}`); return response.json();
   }
-  const session = await api('POST', '/api/v1/auth/login', { email: process.env.WORKSPACE_TEST_EMAIL, password: process.env.WORKSPACE_TEST_PASSWORD });
+  const session = await api('POST', '/api/auth/login', { email: process.env.WORKSPACE_TEST_EMAIL, password: process.env.WORKSPACE_TEST_PASSWORD });
   const suffix = Date.now().toString(36);
-  const org = await api('POST', '/api/v1/organizations', { name: `Browser test ${suffix}`, slug: `browser-${suffix}` }, session.accessToken);
-  const project = await api('POST', '/api/v1/projects', { orgId: org.id, name: 'Browser persistence test', projectKey: `B${suffix.slice(-7).toUpperCase()}` }, session.accessToken);
+  const org = await api('POST', '/api/organizations', { name: `Browser test ${suffix}`, slug: `browser-${suffix}` }, session.accessToken);
+  const project = await api('POST', '/api/projects', { orgId: org.id, name: 'Browser persistence test', projectKey: `B${suffix.slice(-7).toUpperCase()}` }, session.accessToken);
   const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
   try {
     const page = await browser.newPage(); await page.setViewport({ width: 1500, height: 1050 });
@@ -67,7 +67,7 @@ const os = require('node:os');
     await page.waitForFunction(() => ng.getComponent(document.querySelector('app-board-page')).projectService.workItems()[0]?.statusName === 'In Progress', { timeout: 12000 });
     await idle('app-board-page');
     await page.reload({ waitUntil: 'networkidle2' }); await idle('app-board-page');
-    assert.equal((await api('GET', `/api/v1/issues/${task.id}`, undefined, session.accessToken)).statusName, 'In Progress');
+    assert.equal((await api('GET', `/api/issues/${task.id}`, undefined, session.accessToken)).statusName, 'In Progress');
     results.push('real mouse drag between Kanban columns persists');
     await page.goto(`http://localhost:4200/issues/${task.id}`, { waitUntil: 'networkidle2' });
     await page.waitForSelector('textarea[aria-label="Bình luận mới"]');

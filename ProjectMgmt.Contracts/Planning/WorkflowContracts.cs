@@ -18,6 +18,5 @@ public interface IWorkflowValidationService
     Task<WorkflowTransitionCheck> CheckTransitionAsync(
         Guid projectId,
         Guid fromStatusId,
-        Guid toStatusId,
-        CancellationToken cancellationToken = default);
+        Guid toStatusId);
 }

@@ -73,7 +73,7 @@ public class IssueReleaseApiMySqlTests(TransitionApiFixture fixture) : IClassFix
     [MySqlFact]
     public async Task LinksPersistAndRespectPermissions()
     {
-        var url = $"/api/v1/issues/{SharedTestData.StoryIssueId}";
+        var url = $"/api/issues/{SharedTestData.StoryIssueId}";
         var viewer = fixture.Factory!.CreateClientFor(SharedTestData.ViewerUserId);
         var developer = fixture.Factory!.CreateClientFor(SharedTestData.DeveloperUserId);
 
