@@ -65,6 +65,19 @@ public sealed class UpdateTextContentRequest
     [Required] public string Content { get; set; } = "";
 }
 
+public sealed class UploadSpecFileRequest
+{
+    public IFormFile? File { get; set; }
+    public Guid? ParentId { get; set; }
+}
+
+public sealed class UploadMultipleSpecFilesRequest
+{
+    public List<IFormFile> Files { get; set; } = [];
+    public Guid? ParentId { get; set; }
+    public List<string>? RelativePaths { get; set; }
+}
+
 public sealed class SpecTreeNodeDto
 {
     public Guid Id { get; set; }
@@ -538,10 +551,13 @@ public class ProjectDocumentsController(
 
     [HttpPost("projects/{projectId:guid}/documents/files/upload")]
     [RequestSizeLimit(50_000_000)] // 50MB
-    public async Task<IActionResult> UploadFile(Guid projectId, [FromForm] IFormFile file, [FromForm] Guid? parentId)
+    public async Task<IActionResult> UploadFile(Guid projectId, [FromForm] UploadSpecFileRequest request)
     {
         if (!await access.AllowsAsync(projectId, "project.settings.manage") && !await access.AllowsAsync(projectId, "issue.create"))
             return Forbid();
+
+        var file = request.File;
+        var parentId = request.ParentId;
 
         if (file is null || file.Length == 0)
         {
@@ -659,12 +675,14 @@ public class ProjectDocumentsController(
     [RequestSizeLimit(100_000_000)] // 100MB
     public async Task<IActionResult> UploadMultipleFiles(
         Guid projectId,
-        [FromForm] List<IFormFile> files,
-        [FromForm] Guid? parentId,
-        [FromForm] List<string>? relativePaths)
+        [FromForm] UploadMultipleSpecFilesRequest request)
     {
         if (!await access.AllowsAsync(projectId, "project.settings.manage") && !await access.AllowsAsync(projectId, "issue.create"))
             return Forbid();
+
+        var files = request.Files;
+        var parentId = request.ParentId;
+        var relativePaths = request.RelativePaths;
 
         if (files == null || files.Count == 0)
         {
