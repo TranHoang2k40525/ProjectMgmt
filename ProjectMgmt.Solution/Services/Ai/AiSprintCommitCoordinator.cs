@@ -9,6 +9,7 @@ using DeliveryIntelligence.Domain.Entities;
 using DeliveryIntelligence.Infrastructure;
 using IdentityExperience.Application.IServices;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Planning.Domain.Entities;
@@ -865,8 +866,7 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
                 await _deliveryDb.ActivityLogs.AddRangeAsync(newLogs, ct);
             }
 
-            await _planningDb.SaveChangesAsync(ct);
-            await _deliveryDb.SaveChangesAsync(ct);
+            await CommitChangesAtomicallyAsync(ct);
 
             if (!string.IsNullOrWhiteSpace(request.SessionId))
             {
@@ -1526,8 +1526,7 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
         if (newRequiredSkills.Count > 0) await _deliveryDb.IssueRequiredSkills.AddRangeAsync(newRequiredSkills, ct);
         if (newLogs.Count > 0) await _deliveryDb.ActivityLogs.AddRangeAsync(newLogs, ct);
 
-        await _planningDb.SaveChangesAsync(ct);
-        await _deliveryDb.SaveChangesAsync(ct);
+        await CommitChangesAtomicallyAsync(ct);
 
         return new AiQuickActionConfirmResponse
         {
@@ -1725,8 +1724,7 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
             CreatedAt = now
         });
 
-        await _planningDb.SaveChangesAsync(ct);
-        await _deliveryDb.SaveChangesAsync(ct);
+        await CommitChangesAtomicallyAsync(ct);
 
         return new AiQuickActionConfirmResponse
         {
@@ -2406,5 +2404,67 @@ public class AiSprintCommitCoordinator : IAiSprintCommitCoordinator
         }
 
         return false;
+    }
+
+    private async Task CommitChangesAtomicallyAsync(CancellationToken ct)
+    {
+        if (_planningDb.Database.IsRelational() && _deliveryDb.Database.IsRelational())
+        {
+            var isSameConnection = ReferenceEquals(
+                _planningDb.Database.GetDbConnection(),
+                _deliveryDb.Database.GetDbConnection());
+
+            if (isSameConnection)
+            {
+                var strategy = _planningDb.Database.CreateExecutionStrategy();
+                await strategy.ExecuteAsync(async () =>
+                {
+                    await using var tx = await _planningDb.Database.BeginTransactionAsync(ct);
+                    await using var deliveryTx = await _deliveryDb.Database.UseTransactionAsync(tx.GetDbTransaction(), ct);
+                    try
+                    {
+                        await _planningDb.SaveChangesAsync(ct);
+                        await _deliveryDb.SaveChangesAsync(ct);
+                        await tx.CommitAsync(ct);
+                    }
+                    catch
+                    {
+                        await tx.RollbackAsync(ct);
+                        _planningDb.ChangeTracker.Clear();
+                        _deliveryDb.ChangeTracker.Clear();
+                        throw;
+                    }
+                });
+                return;
+            }
+            else
+            {
+                var planningStrategy = _planningDb.Database.CreateExecutionStrategy();
+                await planningStrategy.ExecuteAsync(async () =>
+                {
+                    await using var planTx = await _planningDb.Database.BeginTransactionAsync(ct);
+                    await using var delTx = await _deliveryDb.Database.BeginTransactionAsync(ct);
+                    try
+                    {
+                        await _planningDb.SaveChangesAsync(ct);
+                        await _deliveryDb.SaveChangesAsync(ct);
+                        await planTx.CommitAsync(ct);
+                        await delTx.CommitAsync(ct);
+                    }
+                    catch
+                    {
+                        try { await planTx.RollbackAsync(ct); } catch { /* ignore secondary rollback failure */ }
+                        try { await delTx.RollbackAsync(ct); } catch { /* ignore secondary rollback failure */ }
+                        _planningDb.ChangeTracker.Clear();
+                        _deliveryDb.ChangeTracker.Clear();
+                        throw;
+                    }
+                });
+                return;
+            }
+        }
+
+        await _planningDb.SaveChangesAsync(ct);
+        await _deliveryDb.SaveChangesAsync(ct);
     }
 }

@@ -4,20 +4,24 @@ using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using ProjectMgmt.Core.Ai;
 using ProjectMgmt.Core.VectorSearch;
 
 public sealed class QdrantVectorSearchProvider : IExternalVectorSearchProvider
 {
     private readonly QdrantOptions _options;
+    private readonly AiOptions? _aiOptions;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<QdrantVectorSearchProvider> _logger;
 
     public QdrantVectorSearchProvider(
         IOptions<QdrantOptions> options,
         IHttpClientFactory httpClientFactory,
-        ILogger<QdrantVectorSearchProvider> logger)
+        ILogger<QdrantVectorSearchProvider> logger,
+        IOptions<AiOptions>? aiOptions = null)
     {
         _options = options.Value;
+        _aiOptions = aiOptions?.Value;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
     }
@@ -45,6 +49,178 @@ public sealed class QdrantVectorSearchProvider : IExternalVectorSearchProvider
         return client;
     }
 
+    private async Task<float[]?> GenerateEmbeddingAsync(string text, CancellationToken ct)
+    {
+        if (_aiOptions == null) return null;
+
+        var provider = _aiOptions.Provider?.Trim().ToLowerInvariant() ?? string.Empty;
+
+        // 1. Ưu tiên theo Provider AI đang được người dùng lựa chọn cấu hình
+        if (provider == "openai" && !string.IsNullOrWhiteSpace(_aiOptions.OpenAi.ApiKey) && !_aiOptions.OpenAi.ApiKey.StartsWith("YOUR_", StringComparison.OrdinalIgnoreCase))
+        {
+            return await GenerateOpenAiEmbeddingAsync(text, ct);
+        }
+
+        if ((provider == "local" || provider == "ollama") && !string.IsNullOrWhiteSpace(_aiOptions.Local.Endpoint))
+        {
+            return await GenerateOllamaEmbeddingAsync(text, ct);
+        }
+
+        if (provider == "gemini" && !string.IsNullOrWhiteSpace(_aiOptions.Gemini.ApiKey) && !_aiOptions.Gemini.ApiKey.StartsWith("YOUR_", StringComparison.OrdinalIgnoreCase))
+        {
+            return await GenerateGeminiEmbeddingAsync(text, ct);
+        }
+
+        // 2. Dự phòng đa nhà cung cấp: nếu provider chính chưa có key, kiểm tra các provider khác có key sẵn sàng
+        if (!string.IsNullOrWhiteSpace(_aiOptions.Gemini.ApiKey) && !_aiOptions.Gemini.ApiKey.StartsWith("YOUR_", StringComparison.OrdinalIgnoreCase))
+        {
+            return await GenerateGeminiEmbeddingAsync(text, ct);
+        }
+
+        if (!string.IsNullOrWhiteSpace(_aiOptions.OpenAi.ApiKey) && !_aiOptions.OpenAi.ApiKey.StartsWith("YOUR_", StringComparison.OrdinalIgnoreCase))
+        {
+            return await GenerateOpenAiEmbeddingAsync(text, ct);
+        }
+
+        if (!string.IsNullOrWhiteSpace(_aiOptions.Local.Endpoint))
+        {
+            return await GenerateOllamaEmbeddingAsync(text, ct);
+        }
+
+        return null;
+    }
+
+    private async Task<float[]?> GenerateGeminiEmbeddingAsync(string text, CancellationToken ct)
+    {
+        if (_aiOptions == null) return null;
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient("AiClient");
+            var endpoint = _aiOptions.Gemini.Endpoint.TrimEnd('/');
+            var url = $"{endpoint}/v1beta/models/gemini-embedding-001:embedContent";
+
+            var body = new
+            {
+                content = new
+                {
+                    parts = new[] { new { text } }
+                }
+            };
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = JsonContent.Create(body)
+            };
+            request.Headers.TryAddWithoutValidation("x-goog-api-key", _aiOptions.Gemini.ApiKey);
+
+            using var response = await client.SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode) return null;
+
+            var json = await response.Content.ReadFromJsonAsync<JsonObject>(cancellationToken: ct);
+            var values = json?["embedding"]?["values"]?.AsArray();
+            if (values == null) return null;
+
+            var vector = new float[values.Count];
+            for (int i = 0; i < values.Count; i++)
+            {
+                vector[i] = (float)(values[i]?.GetValue<double>() ?? 0.0);
+            }
+            return vector;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[QdrantVectorSearch] Không thể tạo Gemini vector embedding.");
+            return null;
+        }
+    }
+
+    private async Task<float[]?> GenerateOpenAiEmbeddingAsync(string text, CancellationToken ct)
+    {
+        if (_aiOptions == null) return null;
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient("AiClient");
+            var endpoint = _aiOptions.OpenAi.Endpoint.TrimEnd('/');
+            var url = $"{endpoint}/v1/embeddings";
+
+            var body = new
+            {
+                input = text,
+                model = "text-embedding-3-small"
+            };
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = JsonContent.Create(body)
+            };
+            request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {_aiOptions.OpenAi.ApiKey}");
+
+            using var response = await client.SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode) return null;
+
+            var json = await response.Content.ReadFromJsonAsync<JsonObject>(cancellationToken: ct);
+            var data = json?["data"]?.AsArray();
+            var values = data?[0]?["embedding"]?.AsArray();
+            if (values == null) return null;
+
+            var vector = new float[values.Count];
+            for (int i = 0; i < values.Count; i++)
+            {
+                vector[i] = (float)(values[i]?.GetValue<double>() ?? 0.0);
+            }
+            return vector;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[QdrantVectorSearch] Không thể tạo OpenAI vector embedding.");
+            return null;
+        }
+    }
+
+    private async Task<float[]?> GenerateOllamaEmbeddingAsync(string text, CancellationToken ct)
+    {
+        if (_aiOptions == null) return null;
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient("AiClient");
+            var endpoint = _aiOptions.Local.Endpoint.TrimEnd('/');
+            var url = $"{endpoint}/api/embeddings";
+
+            var body = new
+            {
+                model = "nomic-embed-text",
+                prompt = text
+            };
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = JsonContent.Create(body)
+            };
+
+            using var response = await client.SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode) return null;
+
+            var json = await response.Content.ReadFromJsonAsync<JsonObject>(cancellationToken: ct);
+            var values = json?["embedding"]?.AsArray();
+            if (values == null) return null;
+
+            var vector = new float[values.Count];
+            for (int i = 0; i < values.Count; i++)
+            {
+                vector[i] = (float)(values[i]?.GetValue<double>() ?? 0.0);
+            }
+            return vector;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[QdrantVectorSearch] Không thể tạo Ollama vector embedding.");
+            return null;
+        }
+    }
+
     public async Task<bool> IsAvailableAsync(CancellationToken ct = default)
     {
         if (!_options.Enabled) return false;
@@ -70,6 +246,65 @@ public sealed class QdrantVectorSearchProvider : IExternalVectorSearchProvider
         using var client = CreateClient();
         if (client == null) return Array.Empty<VectorSearchResult>();
 
+        // 1. Tạo vector truy vấn thật từ nội dung câu hỏi
+        var queryVector = await GenerateEmbeddingAsync(query, ct);
+        if (queryVector != null && queryVector.Length > 0)
+        {
+            try
+            {
+                var searchBody = new
+                {
+                    vector = queryVector,
+                    limit = topK,
+                    with_payload = true,
+                    filter = new
+                    {
+                        must = new object[]
+                        {
+                            new { key = "project_id", match = new { value = projectId.ToString() } }
+                        }
+                    }
+                };
+
+                var searchResponse = await client.PostAsJsonAsync($"/collections/{_options.CollectionName}/points/search", searchBody, ct);
+                if (searchResponse.IsSuccessStatusCode)
+                {
+                    var searchJson = await searchResponse.Content.ReadFromJsonAsync<JsonObject>(cancellationToken: ct);
+                    var searchPoints = searchJson?["result"]?.AsArray();
+                    if (searchPoints != null && searchPoints.Count > 0)
+                    {
+                        var vectorResults = new List<VectorSearchResult>();
+                        foreach (var point in searchPoints)
+                        {
+                            var id = point?["id"]?.ToString() ?? Guid.NewGuid().ToString("N");
+                            var score = point?["score"]?.GetValue<double>() ?? 0.0;
+                            var payload = point?["payload"]?.AsObject();
+                            if (payload == null) continue;
+
+                            var title = payload["title"]?.ToString() ?? "Untitled Spec";
+                            var content = payload["content"]?.ToString() ?? string.Empty;
+                            var source = payload["source_path"]?.ToString() ?? string.Empty;
+
+                            vectorResults.Add(new VectorSearchResult
+                            {
+                                Id = id,
+                                Title = title,
+                                ContentSnippet = content.Length > 300 ? content[..300] + "..." : content,
+                                SourcePath = source,
+                                Score = Math.Round(score, 4)
+                            });
+                        }
+                        return vectorResults;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[QdrantVectorSearch] Vector search lỗi, chuyển sang fallback scroll.");
+            }
+        }
+
+        // 2. Fallback dự phòng scroll nếu chưa sinh được vector
         var filterBody = new
         {
             limit = topK,
@@ -84,7 +319,7 @@ public sealed class QdrantVectorSearchProvider : IExternalVectorSearchProvider
         };
 
         var response = await client.PostAsJsonAsync($"/collections/{_options.CollectionName}/points/scroll", filterBody, ct);
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode) return Array.Empty<VectorSearchResult>();
 
         var jsonNode = await response.Content.ReadFromJsonAsync<JsonObject>(cancellationToken: ct);
         var points = jsonNode?["result"]?["points"]?.AsArray();
@@ -107,7 +342,7 @@ public sealed class QdrantVectorSearchProvider : IExternalVectorSearchProvider
                 Title = title,
                 ContentSnippet = content.Length > 300 ? content[..300] + "..." : content,
                 SourcePath = source,
-                Score = 0.95
+                Score = 0.50
             });
         }
         return results;
@@ -137,12 +372,16 @@ public sealed class QdrantVectorSearchProvider : IExternalVectorSearchProvider
             foreach (var kv in metadata) payload[kv.Key] = kv.Value;
         }
 
+        // Tạo vector embedding cho đoạn văn bản để Qdrant index chuẩn xác
+        var vector = await GenerateEmbeddingAsync($"{title}\n{content}", ct);
+
+        object pointObj = vector != null
+            ? new { id = chunkId, vector = vector, payload = payload }
+            : new { id = chunkId, payload = payload };
+
         var body = new
         {
-            points = new[]
-            {
-                new { id = chunkId, payload = payload }
-            }
+            points = new[] { pointObj }
         };
 
         var res = await client.PutAsJsonAsync($"/collections/{_options.CollectionName}/points", body, ct);

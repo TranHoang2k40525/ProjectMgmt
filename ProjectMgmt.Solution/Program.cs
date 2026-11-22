@@ -372,7 +372,8 @@ builder.Services.AddHttpClient("AiClient", client =>
     client.Timeout = TimeSpan.FromSeconds(180);
 });
 builder.Services.AddScoped<IAiModelClient, MultiProviderAiModelClient>();
-builder.Services.AddScoped<IExternalStagingProvider, StackExchangeRedisStagingProvider>();
+// Đăng ký Singleton cho Redis Staging Provider để ConnectionMultiplexer dùng chung toàn ứng dụng, tránh socket exhaustion
+builder.Services.AddSingleton<IExternalStagingProvider, StackExchangeRedisStagingProvider>();
 builder.Services.AddScoped<IExternalVectorSearchProvider, QdrantVectorSearchProvider>();
 builder.Services.AddScoped<IExternalTraceExporter, LangfuseTraceExporter>();
 builder.Services.AddScoped<ISpecKeywordFallbackProvider, SpecHubKeywordFallbackProvider>();
@@ -396,6 +397,7 @@ builder.Services.AddScoped<IAiTaskQuickActionService, AiTaskQuickActionService>(
 
 var app = builder.Build();
 
+if (!builder.Configuration.GetValue<bool>("LocalDevelopment:SkipStartupSeed"))
 using (var scope = app.Services.CreateScope())
 {
     try
