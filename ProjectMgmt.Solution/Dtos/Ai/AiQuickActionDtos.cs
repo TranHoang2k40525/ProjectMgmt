@@ -155,3 +155,4 @@ public sealed class AiQuickActionConfirmResponse
     public string? AssignedUserName { get; set; }
     public List<AiCreatedIssueItemDto> CreatedIssues { get; set; } = [];
 }
+

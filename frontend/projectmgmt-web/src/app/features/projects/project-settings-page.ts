@@ -218,7 +218,6 @@ export type ProjectSettingsTab = 'general' | 'issue-types' | 'labels' | 'priorit
               <div class="flex items-center justify-between mb-4">
                 <div>
                   <h2>Các loại công việc trong dự án</h2>
-                  <p class="text-sm text-slate-500">Được lưu trữ động ở backend và database. Bạn có thể tự do thêm, sửa tên, màu sắc, biểu tượng Material Symbols.</p>
                 </div>
                 <button type="button" (click)="openAddIssueTypeModal()" class="btn btn-primary flex items-center gap-1.5">
                   <span class="material-symbols-outlined text-[18px]">add</span>
@@ -268,7 +267,6 @@ export type ProjectSettingsTab = 'general' | 'issue-types' | 'labels' | 'priorit
               <div class="flex items-center justify-between mb-4">
                 <div>
                   <h2>Danh sách nhãn dán (Labels)</h2>
-                  <p class="text-sm text-slate-500">Gán vào User Story, Task, Bug để phân loại module (frontend, backend, auth, v.v.). Lưu trữ động tại backend.</p>
                 </div>
                 <button type="button" (click)="openAddLabelModal()" class="btn btn-primary flex items-center gap-1.5">
                   <span class="material-symbols-outlined text-[18px]">add</span>
@@ -1346,7 +1344,7 @@ export class ProjectSettingsPage implements OnInit {
           }
         }
       },
-      error: () => {}
+      error: () => { }
     });
     this.projectService.loadProjectPriorities(this.projectId).subscribe();
   }

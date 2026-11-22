@@ -130,7 +130,7 @@ export class AppShellComponent {
   readonly headerSearchResults = computed(() => {
     const query = this.headerSearchQuery().trim().toLowerCase();
     if (!query) return [];
-    return this.projectService.workItems().filter(i => 
+    return this.projectService.workItems().filter(i =>
       i.title.toLowerCase().includes(query) || i.issueKey.toLowerCase().includes(query)
     ).slice(0, 5);
   });
@@ -328,7 +328,7 @@ export class AppShellComponent {
       error: () => this.toastService.error('Dự án', 'Không thể tải dự án. Mở danh sách dự án để thử lại.')
     });
     afterNextRender(() => this.revealActiveProjectTab());
-    this.identity.getUnreadCount().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ error: () => {} });
+    this.identity.getUnreadCount().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ error: () => { } });
 
     this.router.events.pipe(
       filter((event): event is NavigationEnd => event instanceof NavigationEnd),

@@ -76,3 +76,4 @@ public sealed class AiConfirmTaskRemovalResponse
     public int TotalAffectedCount { get; set; }
     public List<string> AffectedIssueKeys { get; set; } = [];
 }
+

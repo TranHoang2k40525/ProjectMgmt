@@ -89,7 +89,6 @@ import { presetWorkflowTemplates } from '../workspace/data/workflow-presets';
       <!-- 1. MẪU WORKFLOW CHUẨN TỪ DATABASE -->
       <div class="card">
         <h3>Áp dụng mẫu quy trình</h3>
-        <p class="hint">Áp dụng đúng danh sách bước trạng thái, luồng chuyển tiếp và cột Board của mẫu quy trình đã chọn từ cơ sở dữ liệu.</p>
         <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
           <select id="workflowTemplate" class="form-control sm:max-w-md" [ngModel]="selectedTemplateId()" (ngModelChange)="onTemplateChange($event)">
             @for (tpl of availableWorkflowTemplates(); track tpl.id) {

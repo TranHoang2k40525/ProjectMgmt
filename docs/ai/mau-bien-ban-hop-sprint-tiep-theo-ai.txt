@@ -90,3 +90,4 @@ Hạng mục 4: Hoàn thiện Cơ chế Lưu tạm Redis Staging, Khóa Phân t�
 - Tổng điểm Story Points mục tiêu của đội ngũ: khoảng 26 - 32 Story Points (dựa trên vận tốc trung bình các Sprint trước).
 - Tất cả các User Story trước khi đưa vào Sprint phải được bóc tách đầy đủ việc con (Frontend / Backend / QA), gán đúng thành viên theo chuyên môn và liên kết rõ ràng tới tài liệu trong Spec Hub.
 ================================================================================
+
